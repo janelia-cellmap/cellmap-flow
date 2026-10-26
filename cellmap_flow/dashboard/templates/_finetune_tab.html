@@ -1101,6 +1101,15 @@
         <label class="form-check-label small" for="publishLoraCopy">Also upload <code>model.pt2</code>, so it can be LoRA-finetuned on a server</label>
         <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
       </div>
+      {# A smaller copy for the browser (finetune.distill): a funlib UNet with
+         a tenth of the model's parameters or fewer, trained on a cluster GPU
+         to reproduce its output, and added to the repository when it is
+         done. The model is published without waiting for it. #}
+      <div class="form-check" title="Worth it for a model too big for the browser (the 800M-parameter UNets) or slow in it. The small copy is a funlib UNet trained to reproduce this model's output on the data it was finetuned on; the card says how close it came.">
+        <input class="form-check-input" type="checkbox" id="publishSmallCopy" autocomplete="off">
+        <label class="form-check-label small" for="publishSmallCopy">Also publish a smaller copy for the browser</label>
+        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU for up to 3 hours, then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
+      </div>
       {% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
         <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
@@ -1131,6 +1140,14 @@
         <div>
           <div class="publish-result-head"><span>Open on this dataset</span><button type="button" class="btn btn-link btn-sm" data-copy="publishDatasetLink">Copy</button></div>
           <a id="publishDatasetLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>The smaller copy, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallRef">Copy</button></div>
+          <code id="publishSmallRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try the smaller copy in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallTryLink">Copy</button></div>
+          <a id="publishSmallTryLink" target="_blank" rel="noopener"></a>
         </div>
       </div>
     </div>

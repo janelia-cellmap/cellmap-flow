@@ -449,6 +449,13 @@ def _answer(publish):
                                        _app_dataset(get_session().dataset_path)))
         answer.update(server_ref=publish["repo"], no_browser=publish["no_browser"], at=publish["at"],
                       created=publish["created"], private=publish["private"])
+        small = publish.get("small")
+        if small:
+            answer.update(small_status=small["status"], small_step=small.get("step"), small_file=small.get("file"),
+                          small_error=small.get("error"))
+            if small["status"] == "done":
+                links = published_links(publish["repo"], small["folder"], PUBLIC_APP, None)
+                answer.update(small_ref=links["ref"], small_try_link=links["try_link"])
     return answer
 
 
@@ -483,12 +490,16 @@ def start_publish(name):
         return _error(refused["error"], refused["status"])
     hf = get_session().huggingface
     with hf["lock"]:
-        if hf["publishes"].get(name, {}).get("status") == "running":
+        earlier = hf["publishes"].get(name, {})
+        if earlier.get("status") == "running":
             return _error(f"{name} is being published already: wait for it to finish.", 409)
+        # Its training writes where a new one would, and its upload is to come.
+        if (earlier.get("small") or {}).get("status") == "running":
+            return _error(f"The smaller copy of {name} is still being made: wait for it to finish.", 409)
         publish = {"repo": repo, "folder": name, "status": "running", "step": "exporting", "file": None,
                    "fraction": None, "no_browser": None}
         hf["publishes"][name] = publish
-    _start_thread(_run, hf, publish, job, who, body.private, body.include_dataset, body.lora_copy)
+    _start_thread(_run, hf, publish, job, who, body.private, body.include_dataset, body.lora_copy, body.small_copy)
     return jsonify(_answer(publish))
 
 
@@ -500,24 +511,44 @@ def publish_status(name):
         return _error(f"No model finetuned on this server is named {name}", 404)
     publish = get_session().huggingface["publishes"].get(name)
     answer = _answer(publish) if publish else {"success": True, "status": "none"}
-    # What Also upload model.pt2 costs for this model: its weights in float32
-    # once the finetune is folded in, as its training logged their count.
+    # What the panel's options cost for this model, from its network's size
+    # as its training logged it: model.pt2 is its weights again in float32;
+    # the smaller copy has distill's share of its parameters (at most the
+    # browser's size), in four files of 4, 2, 1 and 1 bytes a parameter
+    # (onnx_web's fp32, fp16, int8w and int8w_fp16).
+    from cellmap_flow.finetune import distill
+
     parameters = job.network_parameters
-    return jsonify({**answer, "lora_copy_bytes": 4 * parameters if parameters else None})
+    small = min(distill.TEACHER_SHARE * parameters, distill.BROWSER_PARAMETERS) if parameters else None
+    return jsonify({**answer, "lora_copy_bytes": 4 * parameters if parameters else None,
+                    "small_copy_bytes": round(8 * small) if small else None, "small_copy_hours": distill.HOURS})
 
 
-def _run(hf, publish, job, who, private, include_dataset, lora_copy):
+def _run(hf, publish, job, who, private, include_dataset, lora_copy, small_copy):
     """The publish itself: the export, the files (portable.publish's card
     and manifest, then the export's: its server form's at the root, without
     model.pt2 unless ``lora_copy``, its browser form's in the folder), the
-    commit, and done; or failed, with why."""
+    commit, and done; or failed, with why. With ``small_copy``, the smaller
+    copy finetune.distill trains meanwhile follows in a commit of its own
+    (_publish_small): its training takes hours, and the model is published
+    without waiting for it."""
+    from cellmap_flow.finetune import distill, export_web
+
     def update(**fields):
         with hf["lock"]:
             publish.update(fields)
 
+    small_job, small = None, None
+    if small_copy:
+        try:
+            small_job = distill.start_distill(job.model_yaml_path, job.corrections_path, job.output_dir)
+            small = {"status": "running", "step": "distilling"}
+        except (ValueError, RuntimeError) as e:
+            small = {"status": "failed", "error": f"The smaller copy could not start: {e}"}
+
     try:
         served = yaml.safe_load(Path(job.model_yaml_path).read_text())
-        export = _export(job)
+        export = _wait(export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir), "export")
         folder, manifest, no_browser = export["folder"], export["manifest"], export["no_browser"]
         export_dir = Path(export["dir"])
         # The export always writes model.pt2 where torch.export can; it is
@@ -543,7 +574,7 @@ def _run(hf, publish, job, who, private, include_dataset, lora_copy):
         update(folder=folder)
         created, is_private = _commit(who["token"], publish["repo"], private, files,
                                       f"Publish {folder} from cellmap-flow", update)
-        update(status="done", created=created, private=is_private, at=published_at, no_browser=no_browser)
+        update(status="done", created=created, private=is_private, at=published_at, no_browser=no_browser, small=small)
         opens = (f"with no browser form ({no_browser})" if no_browser
                  else f"and in the browser as {ref_of(publish['repo'], folder)}")
         logger.info(f"Published {folder} to {HUB}/{publish['repo']}{' (a new repository)' if created else ''}: "
@@ -554,19 +585,48 @@ def _run(hf, publish, job, who, private, include_dataset, lora_copy):
         # The traceback for what is not Hugging Face's answer: an export or a
         # file that is not what it should be.
         logger.error(error, exc_info=_hub_status(e) is None and not _unreachable(e))
+        return
+    if small_job:
+        _publish_small(hf, publish, who, pub, small_job)
 
 
-def _export(job):
-    """The model exported by finetune.export_web's cluster job, waited for:
-    its export_status answer, done. Raises RuntimeError with the export's
-    error."""
+def _publish_small(hf, publish, who, pub, small_job):
+    """The smaller copy, once its training job is done: its manifest and
+    files, and the card again with it, in a commit of its own to the
+    published repository; or failed, with why, the model staying published."""
+    def update(**fields):
+        with hf["lock"]:
+            publish["small"] = {**publish["small"], **fields}
+
+    try:
+        state = _wait(small_job, "smaller copy")
+        small = {"folder": state["folder"], "manifest": state["manifest"], "published_at": _iso(_now())}
+        pub = {**pub, "small": small}
+        files = [(f["path"], f["text"].encode()) for f in publication_files(pub)]
+        files += [(f"{small['folder']}/{v['file']}", Path(state["dir"]) / small["folder"] / v["file"])
+                  for v in small["manifest"]["variants"]]
+        _commit(who["token"], publish["repo"], False, files, f"Add {small['folder']}, a smaller copy, from cellmap-flow",
+                update)
+        update(status="done", folder=small["folder"])
+        logger.info(f"Published {small['folder']}, a smaller copy of {pub['folder']}, to {HUB}/{publish['repo']}: "
+                    f"it opens in the browser as {ref_of(publish['repo'], small['folder'])}")
+    except Exception as e:
+        error = _publish_error(e, publish["repo"], who["via"], publish["small"].get("file"))
+        update(status="failed", error=error)
+        logger.error(f"The smaller copy of {pub['folder']} was not published: {error}",
+                     exc_info=_hub_status(e) is None and not _unreachable(e))
+
+
+def _wait(export, what):
+    """``export`` (an export_web.WebExport: the export's job, or distill's)
+    followed until it is done: its export_status answer. Raises
+    RuntimeError with its error."""
     from cellmap_flow.finetune import export_web
 
-    export = export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir)
     while (state := export_web.export_status(export))["status"] == "running":
         time.sleep(EXPORT_POLL_SECONDS)
     if state["status"] != "done":
-        raise RuntimeError(f"its export failed: {state['error']}")
+        raise RuntimeError(f"its {what} failed: {state['error']}")
     return state
 
 

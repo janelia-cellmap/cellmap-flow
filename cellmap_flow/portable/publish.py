@@ -17,6 +17,10 @@ what ``publication_files`` gives and the model's own files beside them:
     metadata.json, model.ts,   a server's publish only: the network as
     model.pt2, ...             cellmap-models exports one, as cellmap's own
                                model repositories hold it (finetune.export_web)
+    <folder>-small/...         a server's publish, when asked: a smaller copy
+                               for the browser (finetune.distill), its
+                               manifest and .onnx files, a commit of its own
+                               once its training is done, with the card again
 
 <folder> is the model's name. The manifest is the catalog's format, so the
 folder is a model like any of cellmap/onnx-web-models': both modes load it
@@ -55,6 +59,10 @@ records of the model:
                                  there is no browser form, or None}``; with
                                  no browser form the manifest has no variants
                                  and only describes the model
+    small                        a smaller copy distilled from the model, or
+                                 None: ``{"folder", "manifest", "published_at"}``,
+                                 the manifest finetune.distill's export
+                                 wrote, its ``distillation`` block saying how
 
 Nothing here reads or writes a file or the network: the callers upload.
 """
@@ -321,7 +329,9 @@ def model_card(pub: dict) -> str:
     if server:
         open_it.append(f"- On a server, in *Add a model* (the dashboard's Models tab): `{pub['repo']}`, its TorchScript.")
         if not browser:
-            about += [f"It has no copy for the browser. {server['no_browser'].rstrip('.')}.", ""]
+            # With a smaller copy, the browser has that one instead.
+            instead = " Its smaller copy, below, does." if pub.get("small") else ""
+            about += [f"It has no copy for the browser. {server['no_browser'].rstrip('.')}.{instead}", ""]
         trains = (", `model.pt2` the torch.export program a LoRA finetune of it trains"
                   if "model.pt2" in server["files"] else "")
         about += [
@@ -363,17 +373,69 @@ def model_card(pub: dict) -> str:
         *open_it,
         "",
         *about,
+        *(_small_section(pub) if pub.get("small") else []),
     ])
 
 
+def small_manifest(pub: dict) -> dict:
+    """The manifest uploaded as ``<small folder>/manifest.json``: the
+    smaller copy's, as distill's export wrote it, with a "published" block
+    that names it, the model it was distilled from (its browser ref, or the
+    repository a server opens it by) and what that one was finetuned from."""
+    small = pub["small"]
+    teacher = ref_of(pub["repo"], pub["folder"]) if _has_browser_form(pub) else pub["repo"]
+    block = {
+        "name": small["folder"],
+        "distilled_from": teacher,
+        "finetuned_from": pub.get("finetuned_from"),
+        "published_at": small["published_at"],
+        "app": f"cellmap-flow {pub['app_version']} ({pub['where']})",
+    }
+    manifest = {k: v for k, v in small["manifest"].items() if k != "published"}
+    return {**manifest, "published": {k: v for k, v in block.items() if v is not None}}
+
+
+def _small_section(pub: dict) -> List[str]:
+    """The card's lines on the smaller copy: what it is, how close it came
+    to the model on blocks it never trained on, and the links that open it
+    in the browser."""
+    small = pub["small"]
+    m, how = small["manifest"], small["manifest"].get("distillation") or {}
+    ref = ref_of(pub["repo"], small["folder"])
+    links = app_links(PUBLIC_APP, ref, pub.get("dataset"))
+    params, teacher = m.get("params"), how.get("teacher_params")
+    size = f" with {params:,} parameters" + (f" ({100 * params / teacher:.2g}% of this model's)" if teacher else "") if params else ""
+    start = {"pruned": "started from this model's strongest channels",
+             "random": "started from random weights"}.get(how.get("init"), "")
+    close = how.get("distilled") or {}
+    agreement = (f" On blocks it never trained on it differs from this model's output by {close['mean_abs']:.3g} on "
+                 f"average, and {close['flip_frac']:.1%} of its voxels fall on the other side of 0."
+                 if "mean_abs" in close and "flip_frac" in close else "")
+    return [
+        "## A smaller copy",
+        "",
+        f"`{small['folder']}/` is a smaller copy of this model for the browser: a funlib UNet{size}, "
+        f"{start + ' and ' if start else ''}trained to reproduce this model's output on the data it was finetuned on."
+        f"{agreement}",
+        "",
+        f"- [Try the smaller copy in the browser]({links['try_link']}).",
+        f"- Anywhere cellmap-flow takes a model: `{ref}`.",
+        "",
+    ]
+
+
 def publication_files(pub: dict) -> List[dict]:
-    """The card and the browser form's manifest of the publish ``pub``, by
+    """The card and the browser forms' manifests of the publish ``pub``, by
     their path in the repository, in the order they are uploaded: ``[{"path",
     "text"}]``. The model's files are the caller's to add after them, from
     its own bytes: a server's export's at the root (``pub["server"]``'s
-    files), and ``<folder>/<file>`` for each variant of ``pub["manifest"]``."""
+    files), ``<folder>/<file>`` for each variant of ``pub["manifest"]``, and
+    the smaller copy's in its folder."""
     files = [{"path": "README.md", "text": model_card(pub)}]
     if _has_browser_form(pub):
         manifest = json.dumps(published_manifest(pub), indent=2, ensure_ascii=False) + "\n"
         files.append({"path": f"{pub['folder']}/manifest.json", "text": manifest})
+    if pub.get("small"):
+        manifest = json.dumps(small_manifest(pub), indent=2, ensure_ascii=False) + "\n"
+        files.append({"path": f"{pub['small']['folder']}/manifest.json", "text": manifest})
     return files

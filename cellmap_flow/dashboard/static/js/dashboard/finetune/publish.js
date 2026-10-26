@@ -67,6 +67,10 @@ export function initPublish() {
   const loraBox = document.getElementById("publishLoraCopy");
   const loraCost = document.getElementById("publishLoraCost");
   const loraCostAnyModel = loraCost ? loraCost.textContent : "";
+  // The server's only too: a smaller copy, trained on the cluster.
+  const smallBox = document.getElementById("publishSmallCopy");
+  const smallCost = document.getElementById("publishSmallCost");
+  const smallCostAnyModel = smallCost ? smallCost.textContent : "";
   const publishBtn = document.getElementById("publishBtn");
   const statusLine = document.getElementById("publishStatus");
   const result = document.getElementById("publishResult");
@@ -76,6 +80,8 @@ export function initPublish() {
     ref: document.getElementById("publishRef"),
     try_link: document.getElementById("publishTryLink"),
     dataset_link: document.getElementById("publishDatasetLink"),
+    small_ref: document.getElementById("publishSmallRef"),
+    small_try_link: document.getElementById("publishSmallTryLink"),
   };
 
   let model = null;  // the model the panel publishes (the job's)
@@ -175,15 +181,22 @@ export function initPublish() {
         ? `Adds ${formatMb(answer.lora_copy_bytes / 1e6)} for this model: a second copy of its weights, in the upload and on Hugging Face.`
         : loraCostAnyModel;
     }
-    running = answer.status === "running";
+    if (smallCost && "small_copy_bytes" in answer) {
+      smallCost.textContent = answer.small_copy_bytes
+        ? `Trains it on one cluster GPU for up to ${answer.small_copy_hours} hours, then adds it to the repository: about ${formatMb(answer.small_copy_bytes / 1e6)} in its four files for this model.`
+        : smallCostAnyModel;
+    }
+    running = answer.status === "running" || answer.small_status === "running";
     publishBtn.disabled = running || !signedIn();
-    if (running) {
+    if (answer.status === "running") {
       const fraction = typeof answer.fraction === "number" ? `: ${Math.round(100 * answer.fraction)}%` : "";
       say(`${STEP_WORDS[answer.step] || "Publishing"}${answer.file ? ` ${answer.file}` : ""}${fraction}…`);
       startPolling();
       return;
     }
-    stopPolling();
+    // The smaller copy follows the publish by hours: asked on until it is in.
+    if (answer.small_status === "running") startPolling();
+    else stopPolling();
     if (answer.status === "failed") say(answer.error);
     if (answer.status === "done") {
       const how = answer.created === true ? " (a new repository)" : answer.created === false ? " (a new commit)" : "";
@@ -195,9 +208,21 @@ export function initPublish() {
       // A server's model the browser cannot run (too big for an .onnx file,
       // a 2D model) is published for servers alone, and the export says why.
       const browser = answer.no_browser ? ` It has no copy for the browser. ${answer.no_browser.replace(/\.?$/, ".")}` : "";
-      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.${seen}${browser}`);
+      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.${seen}${browser}${smallLine(answer)}`);
     }
     showResult(answer.status === "done" ? answer : null);
+  }
+
+  // Where the smaller copy has got, after the model's own publish.
+  function smallLine(answer) {
+    if (answer.small_status === "running") {
+      return answer.small_step === "distilling"
+        ? " The smaller copy is training on the cluster (it can take hours); this page can stay closed meanwhile, but the dashboard must keep running."
+        : ` The smaller copy: ${STEP_WORDS[answer.small_step] || "publishing"}${answer.small_file ? ` ${answer.small_file}` : ""}…`;
+    }
+    if (answer.small_status === "failed") return ` The smaller copy was not published: ${answer.small_error}`;
+    if (answer.small_status === "done") return " The smaller copy is in the repository too.";
+    return "";
   }
 
   // The refs and links of a publish that is done, each row only where the
@@ -221,7 +246,7 @@ export function initPublish() {
       const answer = await getAnswer(publishUrl(name));
       if (stale() || name !== model) return false;
       showPublish(answer);
-      return answer.status === "running";
+      return answer.status === "running" || answer.small_status === "running";
     }, { intervalMs: 1000, immediate: false });
   }
 
@@ -316,6 +341,7 @@ export function initPublish() {
         private: privateBox.checked,
         include_dataset: datasetBox.checked,
         ...(loraBox ? { lora_copy: loraBox.checked } : {}),
+        ...(smallBox ? { small_copy: smallBox.checked } : {}),
       }));
     } catch (e) {
       say(`Could not start the publish: ${e.message}`);

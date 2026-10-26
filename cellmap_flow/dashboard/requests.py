@@ -437,13 +437,16 @@ class FinetunePublish(BaseModel):
     dataset's URL can be internal), and, for a server's publish, whether its
     copy of the network includes ``model.pt2`` (``lora_copy``): the program a
     LoRA finetune of the published model attaches to, as cellmap's own
-    repositories ship it, at the cost of uploading the weights a second time.
-    A browser's publish has no such copy."""
+    repositories ship it, at the cost of uploading the weights a second time;
+    and whether a smaller copy for the browser is trained (finetune.distill,
+    a cluster job of hours) and added to the repository once it is done
+    (``small_copy``, off unless asked). A browser's publish has neither."""
 
     repo: Optional[str] = Field(None, max_length=200)
     private: bool = False
     include_dataset: bool = False
     lora_copy: bool = True
+    small_copy: bool = False
 
 
 class HuggingFaceCredentials(BaseModel):

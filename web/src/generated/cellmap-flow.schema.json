@@ -1475,7 +1475,7 @@
       "type": "object"
     },
     "FinetunePublish": {
-      "description": "Where to publish a finetuned model on Hugging Face: ``repo`` as\n``owner/name`` (blank: the signed-in user's, named after the model),\nwhether a repository made for it is ``private`` (a model repository is\npublic otherwise), whether its manifest and model card name the\ndataset it was trained on (``include_dataset``: off unless asked, since a\ndataset's URL can be internal), and, for a server's publish, whether its\ncopy of the network includes ``model.pt2`` (``lora_copy``): the program a\nLoRA finetune of the published model attaches to, as cellmap's own\nrepositories ship it, at the cost of uploading the weights a second time.\nA browser's publish has no such copy.",
+      "description": "Where to publish a finetuned model on Hugging Face: ``repo`` as\n``owner/name`` (blank: the signed-in user's, named after the model),\nwhether a repository made for it is ``private`` (a model repository is\npublic otherwise), whether its manifest and model card name the\ndataset it was trained on (``include_dataset``: off unless asked, since a\ndataset's URL can be internal), and, for a server's publish, whether its\ncopy of the network includes ``model.pt2`` (``lora_copy``): the program a\nLoRA finetune of the published model attaches to, as cellmap's own\nrepositories ship it, at the cost of uploading the weights a second time;\nand whether a smaller copy for the browser is trained (finetune.distill,\na cluster job of hours) and added to the repository once it is done\n(``small_copy``, off unless asked). A browser's publish has neither.",
       "properties": {
         "repo": {
           "anyOf": [
@@ -1499,6 +1499,10 @@
         },
         "lora_copy": {
           "default": true,
+          "type": "boolean"
+        },
+        "small_copy": {
+          "default": false,
           "type": "boolean"
         }
       },

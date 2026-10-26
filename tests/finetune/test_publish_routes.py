@@ -21,7 +21,7 @@ import yaml
 from cellmap_flow.ai_annotate import secrets
 from cellmap_flow.dashboard.routes.finetune import publish as routes
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune import export_web
+from cellmap_flow.finetune import distill, export_web
 
 TOKEN = "hf_pasted0123456789abcdefghijklmnopqrst"
 SAVED = "hf_saved00123456789abcdefghijklmnopqrst"
@@ -151,13 +151,29 @@ def served(make_job, tmp_path, monkeypatch):
                 (out / MODEL / v["file"]).write_bytes(v["variant"].encode() * 100)
         return out
 
+    # The smaller copy's training, done at once too: one fp16 file in <MODEL>-small/.
+    small_variants = [{"variant": "fp16", "file": "small_fp16.onnx", "input_size": [64] * 3, "output_size": [24] * 3}]
+    small_manifest = {**manifest, "params": 100_000, "variants": small_variants,
+                      "distillation": {"teacher": MODEL, "teacher_params": 2_000_000, "init": "random",
+                                       "distilled": {"mean_abs": 0.05, "flip_frac": 0.01}}}
+
+    def start_distill(yaml_path, corrections_dir, run_dir):
+        out = Path(run_dir) / "web_export" / f"{Path(yaml_path).stem}-small"
+        (out / f"{MODEL}-small").mkdir(parents=True)
+        (out / f"{MODEL}-small" / "small_fp16.onnx").write_bytes(b"small" * 100)
+        return out
+
     def export_status(out):
+        if out.name.endswith("-small"):
+            return {"status": "done", "error": None, "dir": str(out), "folder": f"{MODEL}-small",
+                    "manifest": small_manifest}
         return {"status": "done", "error": None, "dir": str(out), "folder": MODEL,
                 "manifest": {**manifest, "variants": [] if export.no_browser else variants},
                 "server": server, "no_browser": export.no_browser}
 
     monkeypatch.setattr(export_web, "start_export", start_export)
     monkeypatch.setattr(export_web, "export_status", export_status)
+    monkeypatch.setattr(distill, "start_distill", start_distill)
     return export
 
 
@@ -171,8 +187,10 @@ def test_a_pasted_token_publishes_the_served_model_in_both_forms_with_its_card_a
     assert (account["signed_in"], account["user"], account["via"]) == (True, "ada", "token")
     assert secrets.redact(TOKEN) == secrets.REDACTED
 
-    # The panel says what model.pt2 adds for this model: its 2M parameters in float32.
-    assert dashboard.get(PUBLISH).get_json() == {"success": True, "status": "none", "lora_copy_bytes": 8_000_000}
+    # The panel says what its options add for this model, of 2M parameters:
+    # model.pt2, their float32; the smaller copy, a tenth of them in four files.
+    status = dashboard.get(PUBLISH).get_json()
+    assert (status["status"], status["lora_copy_bytes"], status["small_copy_bytes"]) == ("none", 8_000_000, 1_600_000)
     started = dashboard.post(PUBLISH, json={"repo": "lab/mito", "include_dataset": True})
     assert started.status_code == 200, started.get_json()
     done = dashboard.get(PUBLISH).get_json()
@@ -307,3 +325,27 @@ def test_a_code_denied_or_expired_says_so(dashboard, hub, monkeypatch, answer):
 
     assert account["signed_in"] is False
     assert account["device"]["status"] == "failed" and account["device"]["error"]
+
+
+def test_a_smaller_copy_follows_the_model_in_a_commit_of_its_own(dashboard, hub, served):
+    """The model is published as asked, then the smaller copy distill
+    trained beside its export: its folder, and the card again naming it."""
+    hub.users[TOKEN] = {"user": "ada"}
+    dashboard.post(CREDENTIALS, json={"token": TOKEN})
+    commits = []
+    create_commit = hub.Api.create_commit
+    hub.Api.create_commit = lambda api, repo, operations, commit_message: (
+        commits.append(sorted(op.path_in_repo for op in operations)), create_commit(api, repo, operations, commit_message))
+
+    dashboard.post(PUBLISH, json={"small_copy": True})
+    done = dashboard.get(PUBLISH).get_json()
+
+    assert (done["status"], done["small_status"]) == ("done", "done"), done
+    assert done["small_ref"] == f"ada/{MODEL}/{MODEL}-small"
+    assert done["small_try_link"].endswith(f"?model=ada/{MODEL}/{MODEL}-small")
+    assert len(commits) == 2 and f"{MODEL}-small/small_fp16.onnx" in commits[1] and "README.md" in commits[1]
+    files = hub.repos[f"ada/{MODEL}"]["files"]
+    published = json.loads(files[f"{MODEL}-small/manifest.json"])["published"]
+    assert published["distilled_from"] == f"ada/{MODEL}/{MODEL}"
+    card = files["README.md"].decode()
+    assert f"`ada/{MODEL}/{MODEL}-small`" in card, "the card names the smaller copy"
