@@ -574,7 +574,7 @@ Cellpose
 ~~~~~~~~
 
 ``type: cellpose`` runs Cellpose 4 (Cellpose-SAM) on each z slice of a
-chunk, in 2D, and serves its cell probability, its flows or its instance
+chunk, in 2D, or on the whole chunk in 3D (``do_3d``, below), and serves its cell probability, its flows or its instance
 masks. It runs
 in the ``cellpose4`` pixi environment unless the entry gives an ``env``:
 the default environment has no Cellpose. ``example/cellpose_sam.yaml``
@@ -644,7 +644,15 @@ serves it on jrc_mus-salivary-1.
        by at least this IoU (0 to 1), so an object keeps one id through the
        chunk's slices. Within a chunk only, and Cellpose then normalizes the
        chunk's slices together rather than each on its own. Another output
-       refuses it.
+       refuses it, and so does 3D.
+   * - ``do_3d``
+     - false
+     - Segment each chunk in 3D (see *In 3D* below). ``slice_size`` and
+       ``context`` then default to 192 and 24, in z too.
+   * - ``flow3d_smooth``
+     - 0 (off)
+     - In 3D, the sigma in voxels of a Gaussian smoothing of the flows, if
+       objects break up along z.
 
 What each output serves:
 
@@ -697,6 +705,35 @@ process) and segment that, or run Cellpose's own distributed
 segmentation (``cellpose.contrib.distributed_segmentation``), which stitches
 objects across blocks.
 
+**In 3D** (``do_3d: true``, Cellpose's ``do_3D``), each chunk is segmented as
+one 3D image:
+
+- Cellpose runs its 2D network on every YX, ZY and ZX plane of the chunk and
+  sums the three into 3D flows.
+- Masks follow those flows in 3D, so an object keeps one id through z, with
+  no slice linking needed.
+- ``flows`` gains a ``flow_z`` channel first: ``flow_z``, ``flow_y``,
+  ``flow_x``, ``cell``. The cell logit is the sum of the three orientations',
+  as in Cellpose.
+- A chunk is a cube with context on every side. The defaults are 192 voxels
+  (``slice_size``) with 24 of context (``context``), so each plane is one
+  256 px tile.
+- With anisotropic voxels, z gets as many nm as y and x, and Cellpose is
+  given the ``anisotropy``.
+- It costs about 3× what slice by slice does for the same voxels: about 5 s
+  for a 192³ chunk on an H100.
+- ``flow3d_smooth`` (a sigma in voxels) smooths the 3D flows first, if objects
+  break up along z. ``stitch_threshold`` is 2D only.
+
+.. code-block:: yaml
+
+    models:
+      cells_3d:
+        type: cellpose
+        voxel_size: 16
+        do_3d: true
+        output: masks
+
 In the dashboard, the Models tab's *Cellpose* panel lists Cellpose-SAM v2
 (``cpsam_v2``) and Cellpose-SAM (``cpsam``); the DINO models are left out,
 as the ``cellpose4`` environment cannot run them. Tick one, enter its voxel
@@ -706,7 +743,9 @@ then *Submit Models*. Its job and layer are named after the model and any
 output but the default (``cellpose_sam_v2``, ``cellpose_sam_v2_masks``),
 so *+ output* runs another output of the same model beside it. Unticking
 stops it; changing the voxel size or the linking of a running one restarts
-it; a reloaded page ticks the running ones with their settings.
+it; a reloaded page ticks the running ones with their settings. A row's *3D*
+box runs it in 3D, as its own job and layer ending in ``_3d``, so a 2D and a
+3D row can be compared side by side.
 
 A finetuned Cellpose model is trained on the flows whatever its output, and
 served after training with its base model's output.

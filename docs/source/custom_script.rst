@@ -93,6 +93,8 @@ If you're using PyTorch and your model is compatible with direct inference via `
 Advanced Usage: Custom Process Function (TensorFlow)
 ----------------------------------------------------
 
+To run TensorFlow models, we suggest installing TensorFlow with conda: ``conda install tensorflow-gpu==2.16.1``.
+
 For advanced use cases or non-standard frameworks like TensorFlow v1, define a `process_chunk` function that handles:
 
 - Rescaling input

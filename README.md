@@ -1,19 +1,9 @@
-**🚧 This repository is still under construction. 🚧**
-
-Please feel free to explore and contribute, but note that there may be frequent changes.
-
-
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png" alt="CellMapFlow Logo" />
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/Status-Under_Construction-orange.svg" alt="Under Construction" /></a>
-</p>
-
-<p align="center">
-  <strong>Real-time inference is performed using Torch/Tensorflow, Dacapo, and bioimage models on local data or any cloud-hosted data.</strong>
+  <strong>Run segmentation models on any EM volume, on disk or in the cloud, and see their predictions in Neuroglancer as you browse. Paint where a model is wrong and finetune it in place.</strong>
 </p>
 
 <p align="center">
@@ -21,99 +11,50 @@ Please feel free to explore and contribute, but note that there may be frequent 
 </p>
 
 <p align="center">
-  🚀 Speed up your data processing from months to minutes!
-</p>
-
-<p align="center">
   <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif" alt="Real-time data processing visualization" />
 </p>
 
-## Try it in your browser
+**[Try it in your browser](https://janelia-cellmap.github.io/cellmap-flow/app/)**, with nothing to install,
+or **[open an example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)**:
+an OpenOrganelle mouse-liver volume with the mitochondria model `setup_53` running on it.
 
-**[janelia-cellmap.github.io/cellmap-flow/app](https://janelia-cellmap.github.io/cellmap-flow/app/)**
-is cellmap-flow with nothing to install: the dashboard as a web page, with the
-models running in your browser. Open a volume, tick a model, and look at its
-predictions in Neuroglancer as you move around. It is the main place to try
-cellmap-flow, and the first place to test a change: every push to `main`
-deploys it. **[Open this example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)** to start from something
-running: an OpenOrganelle mouse-liver volume with the mitochondria model
-`setup_53` on it. A link's query names the volume and the models
-(`?dataset=<url>&model=<name>`), and **Share** in the header copies such a
-link to what you have open: the volume, the models, the view and the
-settings they run with. A model whose last layer you finetuned in the
-browser goes in the link as that layer's weights and is rebuilt where the
-link opens (one whose whole network you trained is left out, and Share says
-so); your paint stays in your browser, and Share says so (the Finetune
-tab's *Download paint (zarr)* saves it as a file to send). The address bar
-itself stays bare, so a new tab starts fresh.
+🚧 Still under construction: expect frequent changes.
 
-- **Data.** Paste the URL of an OME-Zarr volume served with CORS (public S3
-  and GCS buckets are, [OpenOrganelle](https://openorganelle.janelia.org)'s
-  among them; the connect panel's placeholder is one). In Chrome or Edge you
-  can instead browse to, or drop, an OME-Zarr, zarr or N5 folder on your
-  machine: nothing is uploaded, the page reads it itself. A volume on your
-  institution's network (a host with a private address, `10.x` say) opens as
-  it does in Neuroglancer; if Chrome asks whether the site may use your local
-  network, allow it (connecting fails with "Failed to fetch" until you do; the
-  setting is under *Local network access* in the site-information panel
-  beside the address bar).
-- **Models.** ONNX exports of cellmap's networks from
-  [cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models)
-  on Hugging Face, run with onnxruntime-web on your GPU through WebGPU
-  (Chrome, Edge, Safari 26 and later), or on the CPU without it, far slower.
-  The Input normalizers and Postprocess steps are the server dashboard's.
-- **Run on a region.** The *Run* tab runs the served models over a box you
-  draw in the viewer (Ctrl+click two corners), or over the whole volume, on your GPU, and
-  saves each model's predictions as an OME-Zarr, `<model>.zarr`, in a folder
-  on your machine: open it here again as a layer, or copy it to the cluster
-  as it is. The zarr's attributes say which model, settings, volume and
-  region made it. Saving to a folder needs Chrome or Edge; Firefox and Safari
-  save a small run (up to 256 MB) as a zip instead.
-- **Phones.** The viewer fills the screen and the *Dashboard* button in the
-  header opens the controls over it.
-- **Finetuning.** The Finetune tab's *New Volume* adds a paint layer to the
-  viewer; paint background and objects on a few slices with the brush, then
-  *Start Finetuning*. The model's last layer (its output convolution) is
-  trained on the painted voxels, in the tab, in seconds, and the finetuned
-  model is served beside the original, to compare the two; paint where it is
-  still wrong and train again (Shift+R over the viewer does it with the
-  form's settings, as on the server).
-  The paint and the finetuned models stay in the browser, listed on the next
-  visit, and download as a zarr and an `.onnx` for the server mode or for
-  sharing; the `.onnx` carries its manifest, so the server serves it as it
-  is (`type: onnx`), and *Export Config* writes a YAML `cellmap_flow yaml`
-  runs, its models the ONNX files the page ran. The rest of the network
-  stays as exported, except for the 2D models (`setup_53_2d`, `setup_54_2d`),
-  whose whole network the tab can also train on a machine with a GPU.
-  AI-assisted annotation is in the tab too: hover and press Shift+G, and the
-  plane on screen goes to a Gemini image model asked to paint the structure,
-  for review before it is written; the
-  page calls Google with a key or token you paste, kept in the page's memory
-  only, so a reload asks for it again. The patch tools beside it work as on the
-  server: *Seed from Prediction* fills the patch on screen from a model's
-  prediction for you to correct, with *All Background*, *Split Objects* and
-  one *Undo*, and *Mark as Good* keeps the model's output where it is already
-  right; the head trains with the server's losses and distillation.
+## Features
 
-What the server mode below adds is what a browser cannot do: models that are
-not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), a
-finetune of a whole network with LoRA, crops imported from disk, the Pipeline
-Builder and blockwise runs on the cluster.
-[web/README.md](web/README.md) says how the browser mode is built and run
-locally, and the docs'
-[browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html)
-covers using it.
+- **Almost any model.** cellmap's own networks, any model in the
+  [BioImage Model Zoo](https://bioimage.io), Cellpose-SAM in 2D or 3D,
+  fly_organelles checkpoints, DaCapo runs, ONNX exports, and any PyTorch or
+  TensorFlow model through a short Python script. Paste what you have (a path,
+  a zoo nickname, a Hugging Face repo, a Cellpose model name) into the
+  dashboard's *Add a model*, or run `cellmap_flow add REF`: it works out the
+  model's type, the environment it runs in and anything it still needs.
+- **Any volume.** zarr (v2 or v3, OME-Zarr), N5 or Neuroglancer precomputed,
+  on disk or at an `s3://`, `gs://` or `https://` URL. Each model reads the
+  level at its own voxel size, resampled when the volume has none.
+- **Live.** Predictions are computed for what is on screen, nearest first, and
+  kept: panning back, or changing only the postprocessing, reuses them.
+- **Pre- and postprocessing.** Input normalizers and postprocessing steps
+  (thresholds, watersheds, instance ids, Cellpose masks) are chained in the
+  dashboard and redrawn as soon as you apply them.
+- **Which model to start from.** Paint a few objects and some background, and
+  the models are ranked by how well each one already matches the paint.
+- **Finetune in place.** Paint where a model is wrong and train it: with LoRA
+  or the whole network on the cluster, or in the browser on your GPU. The
+  finetuned model is served beside the original to compare. *Seed from
+  Prediction*, AI-assisted annotation and *Mark as Good* make the painting quick.
+- **Whole volumes.** Blockwise runs over a volume on the cluster, or the
+  browser's *Run* tab over a box you draw, saved as OME-Zarr.
+- **Share.** In the browser app, *Share* copies a link that opens the volume,
+  the models, the view and the settings they run with.
+- **In the browser too.** The dashboard as a web page, with the models running
+  on your GPU through WebGPU. The server mode adds what a browser cannot run
+  (PyTorch, TensorFlow, the Zoo, Cellpose, DaCapo), LoRA, and cluster jobs.
+  See [In the browser](https://janelia-cellmap.github.io/cellmap-flow/browser.html).
 
-## Installation
+## Install
 
-### With pixi (recommended)
-
-[pixi](https://pixi.sh) installs cellmap-flow with everything it needs, and
-the separate environments some model families run in. It needs pixi 0.68 or
-later, which reads this lockfile's format: check with `pixi --version`, and
-update with `pixi self-update`, or `brew upgrade pixi` if Homebrew installed
-it. `pixi install` sets up the default environment, and `pixi run` runs a
-command in it:
+With [pixi](https://pixi.sh) 0.68 or later, on Linux (x86-64) or an Apple-silicon Mac:
 
 ```bash
 git clone https://github.com/janelia-cellmap/cellmap-flow.git
@@ -122,395 +63,54 @@ pixi install
 pixi run cellmap_flow view -d data_path
 ```
 
-It installs on Linux (x86-64) and on Apple-silicon Macs. On a Mac:
-- **Compiler:** install Apple's command-line tools first (`xcode-select --install`). The neuroglancer fork used for painting annotations is compiled during `pixi install`.
-- **Model servers:** a Mac has no cluster to submit jobs to, so the dashboard runs each model's server on the Mac itself. Models serve and finetune on Apple's GPU. It is much slower than the cluster's: Cellpose-SAM takes about 35 s for a chunk of 8 slices, so open one x–y panel rather than four, and for Cellpose consider `slices_per_chunk: 1`.
-- **CUDA:** it is Linux-only.
-
-Model families whose dependencies clash with the default environment run in
-their own pixi environment, chosen by the model's type (see
-[Model types](#model-types)); nobody picks one by hand. Each is installed from
-the lockfile the first time a model needs it, before that model's job is
-submitted (several minutes, once; the dashboard's Job Logs shows pixi's
-output meanwhile), so a new user, Fileglancer's included, needs nothing
-beforehand. `pixi run cellmap_flow envs install <name>` installs one ahead of
-time, and `cellmap_flow envs` lists them and what is installed.
-
-### With pip
-
-To install CellMapFlow, you can use pip:
-
-```bash
-pip install cellmap-flow
-```
-
-Note that the basic installation does not include DaCapo and BioImage.io core dependencies. To install CellMapFlow with DaCapo support, use the following command:
-
-```bash
-pip install cellmap-flow[dacapo]
-```
-
-To install CellMapFlow with BioImage.io support, use the following command:
-
-```bash
-pip install cellmap-flow[bioimageio]
-```
-
-To install CellMapFlow with both DaCapo and BioImage.io support, use the following command:
-
-```bash
-pip install cellmap-flow[dacapo,bioimageio]
-```
-
-### Installing from GitHub
-
-To get an unreleased branch without cloning:
-
-```bash
-pip install "cellmap-flow @ git+https://github.com/janelia-cellmap/cellmap-flow.git"
-```
-
-Append `@<branch>` to the URL for a specific branch, and add extras in
-brackets after the name, e.g.
-`"cellmap-flow[dacapo] @ git+https://github.com/janelia-cellmap/cellmap-flow.git@my-branch"`.
-
-For development, clone and install in editable mode instead:
-
-```bash
-git clone https://github.com/janelia-cellmap/cellmap-flow.git
-cd cellmap-flow
-pip install -e .
-```
-
-### Finetuning
-
-Interactive finetuning needs two dependencies that cannot come from PyPI — a
-MinIO server (conda-forge only) and a Neuroglancer fork with voxel-annotation
-support — so `pip install cellmap-flow[finetune]` on its own is not enough.
-See [docs/finetuning.md](docs/finetuning.md) for the full setup.
-
-Any model whose network is plain PyTorch can be finetuned from the dashboard,
-with LoRA or in full: cellmap and Hugging Face exports, fly checkpoints,
-DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, and
-Cellpose (on its flows, from sparsely painted instances). A compiled
-(TorchScript) zoo model is finetuned in full only, and ONNX or TensorFlow ones
-not at all; the Finetune tab offers only what the selected model allows.
+Model families whose dependencies clash (Cellpose, the BioImage Model Zoo,
+fly_organelles) run in pixi environments of their own, installed the first time
+a model needs one. Or `pip install cellmap-flow`, with the extras `[dacapo]`,
+`[bioimageio]` and `[finetune]`. See
+[Installation](https://janelia-cellmap.github.io/cellmap-flow/install.html) for
+Macs, pip and installing from GitHub, and
+[docs/finetuning.md](https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md) for finetuning's extra setup.
 
 ## Usage
 
-`cellmap_flow` has a subcommand for each job; `cellmap_flow <command> --help`
-shows its options, and the [CLI page](docs/source/cli.rst) lists them all,
-with the names they had before 0.3.0.
-
 ```bash
-$ cellmap_flow --help
-
-Commands:
-  blockwise  Run the model a blockwise YAML describes over the whole...
-  dashboard  Serve the dashboard alone, for a viewer already running.
-  doctor     Check the environment: what is installed, what is missing,...
-  add        Resolve a model reference into a model entry, and optionally run it.
-  envs       The environments models run in, besides this one.
-  finetune   The finetune tools.
-  infer      Start a model's inference server, then open the viewer on...
-  models     List the model types and the arguments each takes.
-  plugins    Register, unregister and list plugins.
-  serve      Serve one model's predictions, as an inference job does on...
-  view       Start CellMap Flow viewer with a dataset.
-  yaml       Run multiple model inference jobs from a YAML configuration...
-
-$ cellmap_flow view -d data_path
-$ cellmap_flow yaml config.yaml
-$ cellmap_flow infer huggingface -r cellmap/fly_organelles_run08_438000 -d data_path
-$ cellmap_flow infer cellpose -v 64 -d data_path
-$ cellmap_flow infer bioimage -m conscientious-dromedary -d data_path
-$ cellmap_flow infer fly -c /path/to/run/model_checkpoint_20000 -d data_path
-$ cellmap_flow infer script -s script_path -d data_path
+cellmap_flow view -d data_path
+cellmap_flow yaml config.yaml
+cellmap_flow add conscientious-dromedary
+cellmap_flow add cpsam_v2 -v 64 --run -d data_path
+cellmap_flow blockwise blockwise.yaml
 ```
 
-`view` opens a dataset and you pick models in the dashboard; `yaml` runs the
-models a YAML lists; `infer <type>` runs one model of that type (`cellpose`
-is Cellpose-SAM).
-
-In the dashboard, and in the browser app, *Loaded models* at the top of the
-Models tab lists every model running or starting, wherever it was picked (the
-catalog, Hugging Face, the BioImage Model Zoo, Cellpose, *Add a model*, the
-YAML, a finetune), with where it came from and what it is (the catalog group,
-the repo, the zoo id, the Cellpose model and output, the base a finetune
-started from). The ✕ beside one stops that model alone, with no confirmation:
-its server is killed (in the browser, it is no longer served), its layer is
-taken away and it is unticked, so a Submit does not bring it back; the other
-models, and any box ticked or unticked and not yet submitted, stay as they
-are. Tick it again and Submit to bring it back. A model still starting is
-withdrawn: its job waiting in a queue is killed, and one that comes up anyway
-is stopped. A finetune's model keeps its ✕ disabled while its training job
-is alive, since that job is its server (Cancel it on the Finetune tab); once
-the job has ended, the ✕ takes away the layer left pointing at it.
-The Models tab's *Job Logs* shows each model's server output as it runs: `starting` while it waits in its queue, installs its environment or
-loads, then its status, and `failed to start` with its traceback when it dies
-before serving.
-
-The Input and Postprocess tabs list the input normalizers and postprocessing
-steps; the ticked ones run top to bottom, and dragging a row moves it. An edit
-takes effect only when you press *Apply*, at the top of either tab (or Enter in
-a parameter field), which sends both lists together; until then the bar says
-how many changes are not applied, and the viewer shows the chain as it was.
-The one exception is a model's start: when the chain has no input normalizers
-and the model declares some (an ONNX export's manifest does), starting it from
-the Models tab (Submit, or Add) sets them, and the Input tab shows them ticked
-with a note saying from which model. A chain that has input normalizers is left as it is.
-The browser app does the same; its chain starts with the exports'
-normalization already set.
-
-A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
-disk or at an `s3://`, `gs://` or `https://` URL; public buckets are read
-anonymously, private ones with your AWS or Google credentials. See
-[data paths](docs/source/data_paths.rst).
-
-A model is fed the dataset's level at its own voxel size. When the dataset has
-no such level, the nearest one is resampled to it. `--no-resample` (or
-`resample: false` in a YAML, or unticking the dashboard's *Resample if no scale
-matches the model* box) uses the nearest level as it is instead, and the
-dashboard warns that the model sees the wrong scale.
-
-## Inference engine
-
-Models are served through [chunkmirage](https://github.com/JaneliaSciComp/chunkmirage),
-which keeps each model's output in memory. Panning back to chunks you have
-seen, or changing only the postprocessing, reuses that output instead of
-running the model again. The chunks nearest your view go to the GPU first,
-and chunks you have panned away from are dropped.
-
-- A layer's URL is `zarr://<server>/<model><settings>/zarr`; the served
-  array puts any channel axis first and separates chunk keys with `/`. Only
-  code that reads a server's zarr directly sees this. The
-  `/__control__/...` routes (`model_info`, `restart`) are where they always
-  were.
-- A model that runs in an environment of its own (`env:`) needs chunkmirage
-  installed there, as every environment in `pixi.toml` has. A server
-  started where it is missing fails with a message saying so.
-- Memory: a server keeps up to 16 GiB of predictions.
-  `CELLMAP_FLOW_PREDICTION_CACHE_BYTES` changes that (`0` for none), and
-  `CELLMAP_FLOW_RAW_CACHE_BYTES` (1 GiB) bounds the raw data kept.
-- Servers and dashboards from before chunkmirage (the Flask server, removed
-  in this release) do not mix with these: that dashboard cannot draw these
-  layers, and this one no longer draws that server's. Run both from the
-  same version.
+`view` opens a volume and you pick models in the dashboard; `yaml` runs the
+models a YAML lists; `add` says what a model reference is and prints its YAML
+entry, and with `--run` serves it on a volume; `blockwise` runs a model over a
+whole volume on the cluster. `cellmap_flow --help` lists every command; see
+the [CLI page](https://janelia-cellmap.github.io/cellmap-flow/cli.html).
 
 ## Model types
 
-Each model has a type, which says how it is loaded and which environment its
-server runs in. In a YAML it is the model entry's `type`; on the command line,
-`cellmap_flow infer <type>`; in the dashboard, the Models tab lists the
-CellMap catalog, the `cellmap/*` Hugging Face models, the BioImage Model
-Zoo and Cellpose-SAM. `cellmap_flow models` lists every type and its arguments.
-
-You rarely need to pick the type yourself: `cellmap_flow add REF` works it out
-from what you have, and prints the YAML entry, saying what it still needs. In
-the dashboard, paste the same `REF` into the Models tab's *Add a model* box:
-*Resolve* says what it is and where it runs and asks for anything missing
-(a Cellpose model's voxel size, say), and *Run* starts it, ticked among the
-models, without a YAML or a restart. `REF` is a path (a model script, an
-exported folder, a checkpoint, Cellpose weights, an `.onnx`), a zoo nickname or
-bioimage.io link, a Cellpose model name, a Hugging Face `org/repo`, a folder of
-cellmap/onnx-web-models (`setup_54`, or `cellmap/onnx-web-models/setup_54`), or
-`dacapo:run@iteration`. A whole config YAML is a run, not a model: run it with
-`cellmap_flow yaml`.
-
-A BioImage Model Zoo model, Cellpose-SAM, a Hugging Face repo, and a
-checkpoint run straight away:
-
-```bash
-$ cellmap_flow add conscientious-dromedary
-$ cellmap_flow add cpsam_v2 -v 64
-$ cellmap_flow add cellmap/fly_organelles_run08_438000
-$ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
-```
-
-| Type | For | Runs in |
+| Type | Runs | e.g. |
 |---|---|---|
-| `cellmap` | A folder cellmap_models exported (`metadata.json` + `model.ts`) | this environment |
-| `huggingface` | A Hugging Face repo in that format (the dashboard lists `cellmap/*`; any other model on the Hub needs a script) | this environment |
-| `fly` | A fly_organelles training checkpoint, `.ts` or `model.pt` | `fly` (a `.ts`: this environment) |
-| `cellpose` | Cellpose 4: Cellpose-SAM (`cpsam_v2`, `cpsam`) or finetuned weights | `cellpose4` |
-| `bioimage` | Any BioImage Model Zoo model: id, nickname, DOI, URL or `rdf.yaml` | `bioimageio` |
-| `onnx` | An ONNX export as the browser mode runs it: a folder of cellmap/onnx-web-models, or an `.onnx` file (one finetuned in the browser says its own voxel size; any other needs it) | `onnx` |
-| `dacapo` | A DaCapo run and iteration | this environment (DaCapo does not install in pixi's `dacapo` environment yet: give `env:` a conda environment with it) |
-| `script` | Any model, from a Python script that defines it | this environment |
-| `finetune` | A LoRA adapter or full finetune on top of another model | its base model's |
+| `cellmap`, `huggingface` | cellmap's exported networks, from a folder or a Hugging Face repo | `cellmap/fly_organelles_run08_438000` |
+| `bioimage` | any BioImage Model Zoo model, with its own pre- and postprocessing | `conscientious-dromedary` |
+| `cellpose` | Cellpose-SAM or finetuned Cellpose weights: flows, probability or masks, in 2D or 3D | `cpsam_v2` |
+| `fly` | a fly_organelles training checkpoint | `/path/to/run/model_checkpoint_20000` |
+| `onnx` | an ONNX export, as the browser runs it | `setup_54` |
+| `dacapo` | a DaCapo run | `dacapo:run@iteration` |
+| `script` | anything else, PyTorch or TensorFlow, from a Python script | [example/model_spec.py](https://github.com/janelia-cellmap/cellmap-flow/blob/main/example/model_spec.py) |
+| `finetune` | a LoRA or full finetune of any of the above | made by the Finetune tab |
 
-An entry's `env` overrides where it runs: a pixi environment's name, the path
-of a conda environment, or `current` for this one. `~/.cellmap_flow/envs.yaml`
-maps environment names to conda environments, for machines without pixi:
+Every type's arguments, and the environment each runs in, are in
+[YAML configuration](https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html);
+there are examples in [example/](https://github.com/janelia-cellmap/cellmap-flow/tree/main/example).
 
-```yaml
-cellpose4: /groups/mylab/home/me/miniconda3/envs/cellpose4
-```
+## Documentation
 
-See [YAML configuration](docs/source/yaml_config.rst) for every type's
-arguments, and the examples in [example/](example/).
-
-### Cellpose
-
-`type: cellpose` runs Cellpose 4 on each z slice of a chunk, or in 3D with
-`do_3d: true` (below). Cellpose-SAM sees
-cells best about 30 voxels across, so pick the `voxel_size` (nm) where yours
-are about that size:
-
-```yaml
-models:
-  cells:
-    type: cellpose
-    voxel_size: 64
-    pretrained_model: cpsam_v2   # or cpsam, or the path of finetuned weights
-    output: flows                # the default: all three channels; or probability, or masks
-```
-
-| `output` | Channels | dtype | |
-|---|---|---|---|
-| `flows` (default) | `flow_y`, `flow_x`, `cell` | float32 | "Flows + probability" on the Models tab, not masks: Cellpose's flows towards each object's centre (its `dP`, about -5 to 5), then the cell probability; the layer colours each voxel by its flow's direction, dimmed by `cell` (untick the shader's `flows` box for `cell` alone), and `CellposeMasksPostprocessor` makes masks of them |
-| `probability` | `cell` | float32 | The cell probability alone, 0 to 1 (the sigmoid of Cellpose's logit) |
-| `masks` | `cell` | uint64 | Instance ids, unique within a chunk |
-
-Masks are made chunk by chunk: add `MortonSegmentationRelabeling` to the
-postprocessing so that ids differ between chunks. Each slice's masks are
-separate unless `stitch_threshold` (0 to 1, masks only) links them: a mask
-takes the id of the one in the slice before that it overlaps by at least that
-IoU, within a chunk. Cellpose-SAM's weights are for non-commercial use. See
-[example/cellpose_sam.yaml](example/cellpose_sam.yaml).
-
-**In 3D** (`do_3d: true`, Cellpose's `do_3D`), each chunk is segmented as one
-3D image:
-- Cellpose runs its 2D network on every YX, ZY and ZX plane of the chunk and
-  sums the three into 3D flows.
-- Masks follow those flows in 3D, so an object keeps one id through z, with
-  no slice linking needed.
-- `flows` gains a `flow_z` channel first: `flow_z`, `flow_y`, `flow_x`,
-  `cell`. The cell logit is the sum of the three orientations', as in
-  Cellpose.
-- A chunk is a cube with context on every side. The defaults are 192 voxels
-  with 24 of context, so each plane is one 256 px tile.
-- With anisotropic voxels, z gets as many nm as y and x, and Cellpose is
-  given the `anisotropy`.
-- It costs about 3× what slice by slice does for the same voxels: about 5 s
-  for a 192³ chunk on an H100.
-- `flow3d_smooth` (a sigma in voxels) smooths the 3D flows first, if objects
-  break up along z. `stitch_threshold` is 2D only.
-
-```yaml
-    type: cellpose
-    voxel_size: 16
-    do_3d: true
-    output: masks
-```
-
-In the dashboard, the Models tab's *Cellpose* panel lists `cpsam_v2` and
-`cpsam` (the DINO models need a package the `cellpose4` environment lacks).
-Tick one, give its voxel size (required) and output, and *Submit Models*: it
-runs as `cellpose_sam_v2` for the default *Flows + probability*
-(`cellpose_sam_v2_probability`, `cellpose_sam_v2_masks` for the other outputs,
-so *+ output* can run two side by side). Its *3D* box runs it in 3D, as its
-own job and layer ending in `_3d`, so a 2D and a 3D row can be compared side
-by side.
-
-### BioImage Model Zoo
-
-`type: bioimage` runs a [BioImage Model Zoo](https://bioimage.io) model
-through bioimageio.core, with the model's own pre- and postprocessing. Its
-tile size, halo and output type come from the model's description. No zoo
-model declares the voxel size it was trained at, so cellmap-flow keeps them for
-the zoo's EM models, looked up by hand with their sources
-([bioimage_voxel_sizes.yaml](cellmap_flow/models/bioimage_voxel_sizes.yaml)),
-and runs each at its own unless `voxel_size` says otherwise; any other model
-needs `voxel_size`. A `context` of about 16 voxels hides seams between chunks:
-
-```yaml
-models:
-  mito:
-    type: bioimage
-    model: conscientious-dromedary   # a 3D mitochondria U-Net, trained at 30x8x8 nm (MitoEM)
-    context: [0, 16, 16]
-```
-
-In the dashboard, the Models tab's *BioImage Model Zoo* list searches the
-whole zoo (EM models by default), refreshed from bioimage.io hourly, and fills
-in a ticked model's voxel size with the one it was trained at, saying where
-that number comes from. Models that need prompts or several inputs
-(micro-SAM) are not supported. See [example/bioimage_em.yaml](example/bioimage_em.yaml).
-
-### fly_organelles checkpoints
-
-`type: fly` serves a checkpoint fly_organelles trained. Channel names, voxel
-sizes and tile size are read from the run's folder (its `train.py`, training
-snapshots or `config.yaml`) when the entry does not give them, so the
-checkpoint alone is often enough:
-
-```bash
-cellmap_flow infer fly -c /path/to/run/model_checkpoint_20000 -d data_path
-```
-
-A folder cellmap_models exported is served with `type: cellmap` instead.
-
-### ONNX exports and models finetuned in the browser
-
-`type: onnx` serves the browser mode's models with ONNX Runtime (on the GPU in
-pixi's `onnx` environment), fed as the browser feeds them: a folder of
-[cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models), whose
-`manifest.json` gives the voxel sizes, blocks and channels, or the `.onnx` the
-browser's *Download finetuned model* saves, which carries its manifest. The
-browser's *Export Config* writes such entries, a finetuned model's `path`
-relative to the YAML's folder:
-
-```yaml
-models:
-  mito_aff_setup54_16nm:
-    type: onnx
-    folder: setup_54            # cellmap/onnx-web-models; file: picks a variant, else fp32 at the largest block
-  mito_aff_setup54_16nm-ft1:
-    type: onnx
-    path: mito_aff_setup54_16nm-ft1.onnx
-```
-
-The exports output logits: add a `SigmoidPostprocessor` (the dashboard suggests
-it). Their manifests declare their input normalization, which the dashboard
-sets when one starts with no input normalizers in the chain (see *Usage*). Any other `.onnx` that takes
-`[1, 1, z, y, x]` works too, given its `input_voxel_size`. See
-[example/onnx_web_models.yaml](example/onnx_web_models.yaml).
-
-### DaCapo
-
-```bash
-cellmap_flow infer dacapo -r 20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1 -i 700000 -d /nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
-```
-
-### Custom script
-
-This enables using any model by providing a script e.g. [example/model_spec.py](example/model_spec.py)
-e.g.
-```bash
-cellmap_flow infer script -s /groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py -d /nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0
-```
-
-Define these variables in your script (`cellmap_flow infer script -s path/to/your_script.py`):
-- **model**: 
-  The PyTorch model to be used for inference. 
-- **input_size**: 
-  The voxel shape of the data to be input to the PyTorch model.
-- **output_size**: 
-  The voxel shape of the data in output by the PyTorch model.
-- **input_voxel_size**: 
-  The voxel size of the data input to the model.
-- **output_voxel_size**: 
-  The voxel size of the data output by the model.
-- **output_channels**:
-  The number of channels in the output of the model.
-- **process_chunk** (optional):
-  (Optional) A function that takes a `RawInput` (`cellmap_flow.io.raw`; anything with `to_ndarray_ts(roi)`, as the server's `BlockInput` is) and an ROI and returns the data to be displayed. This can be used to run a TensorFlow model or do other custom data processing.
-
-To run TensorFlow models, we suggest installing TensorFlow via conda: `conda install tensorflow-gpu==2.16.1`
-
-## Run multiple models at once:
-List them in a YAML file ([docs/source/yaml_config.rst](docs/source/yaml_config.rst)) and run
-```bash
-cellmap_flow yaml config.yaml
-```
+[janelia-cellmap.github.io/cellmap-flow](https://janelia-cellmap.github.io/cellmap-flow/):
+[the browser app](https://janelia-cellmap.github.io/cellmap-flow/browser.html),
+[YAML configuration](https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html),
+[data paths](https://janelia-cellmap.github.io/cellmap-flow/data_paths.html),
+[postprocessing](https://janelia-cellmap.github.io/cellmap-flow/post.html),
+[custom scripts](https://janelia-cellmap.github.io/cellmap-flow/custom_script.html),
+[finetuning](https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md) and
+[how it works](https://janelia-cellmap.github.io/cellmap-flow/architecture.html).
