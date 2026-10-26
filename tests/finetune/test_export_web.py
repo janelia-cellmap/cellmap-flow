@@ -79,6 +79,7 @@ def finetuned(request, tmp_path, annotation_volume):
     unflattened, where every layer is an FX interpreter over the weights and
     the transposed convolution stays one.
     """
+    pytest.importorskip("peft")
     import torch
 
     from cellmap_flow.finetune.finetuned_model_templates import generate_finetuned_model_yaml
@@ -225,6 +226,7 @@ def test_a_finetuned_model_exports_as_the_server_serves_it(finetuned, launched):
 @pytest.mark.finetune
 @pytest.mark.parametrize("finetuned", ["cellmap"], indirect=True)
 def test_a_model_too_big_for_the_browser_exports_for_servers_alone(finetuned, launched, monkeypatch):
+    pytest.importorskip("cellmap_models.model_export.onnx_web")
     # Over protobuf's 2 GB as an 800M-parameter UNet is, cheaply: any
     # network is over a cap of no bytes.
     monkeypatch.setattr(export_web, "ONNX_FILE_LIMIT", 0)

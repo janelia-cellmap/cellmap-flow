@@ -129,6 +129,7 @@ def teacher(request, tmp_path, annotation_volume):
     cellmap folder (trained as the unflattened torch.export program, as the
     large cellmap UNets are); "plain" is a network that is not a funlib UNet.
     """
+    pytest.importorskip("peft")
     import torch
 
     from cellmap_flow.finetune.finetuned_model_templates import generate_finetuned_model_yaml

@@ -236,7 +236,8 @@ def export_status(export: WebExport) -> dict:
         result = json.loads(export.result_file.read_text())
         if result.get("error"):
             return {**answer, "status": "failed", "error": result["error"]}
-        return {**answer, "status": "done", **{key: result[key] for key in ("folder", "manifest", "server", "no_browser")}}
+        # A distilled copy's result has a browser form alone: no server form, and no why not.
+        return {**answer, "status": "done", **{key: result.get(key) for key in ("folder", "manifest", "server", "no_browser")}}
     if export.job.get_status() in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED):
         log = tail(export.log_file, 2000)
         return {**answer, "status": "failed",
