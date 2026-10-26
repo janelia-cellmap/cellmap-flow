@@ -375,7 +375,8 @@ id (`HF_OAUTH_CLIENT_ID`, `cellmap_flow/portable/publish.py`) is the URL of
 the app's client metadata document,
 `https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd`
 ([CIMD](https://huggingface.co/docs/hub/oauth#automated-oauth-app-creation)),
-which names the app, says it has no secret and lists the redirect URLs:
+`web/.well-known/oauth-cimd`, which the Pages workflow publishes beside the
+app; it names the app, says it has no secret and lists the redirect URLs:
 `https://janelia-cellmap.github.io/cellmap-flow/app/oauth.html`,
 `http://localhost/oauth.html` and `http://127.0.0.1/oauth.html`. Hugging
 Face takes a loopback `http` redirect on any port with the path as listed,

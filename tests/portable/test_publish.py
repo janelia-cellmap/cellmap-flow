@@ -4,6 +4,7 @@ for a server's export of one model in three precisions (the browser's one
 file is web/test/unit/publish.test.ts's, through publish_calls)."""
 
 import json
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from cellmap_flow.portable import publish
@@ -54,3 +55,15 @@ def test_the_links_carry_the_dataset_and_the_model_as_the_app_reads_them_back():
 
     card = publish.publication_files(_pub(dataset=dataset))[0]["text"]
     assert publish.app_links(publish.PUBLIC_APP, REF, dataset)["dataset_link"] in card, "the card's links are the public app's"
+
+
+def test_the_client_metadata_the_site_serves_names_this_app_and_its_sign_in_pages():
+    # Hugging Face reads the document at the client id's URL (CIMD), which
+    # the Pages workflow publishes from web/.well-known: a sign-in fails
+    # unless it names that same id and lists the page the popup returns to.
+    path = Path(__file__).parents[2] / "web" / ".well-known" / "oauth-cimd"
+    document = json.loads(path.read_text())
+    assert document["client_id"] == publish.HF_OAUTH_CLIENT_ID
+    assert document["client_id"] == f"{publish.PUBLIC_APP}.well-known/oauth-cimd"
+    assert f"{publish.PUBLIC_APP}oauth.html" in document["redirect_uris"]
+    assert document["token_endpoint_auth_method"] == "none"
