@@ -21,4 +21,7 @@ AI-assisted annotation's plane, image, mask and labels are ``ai_annotate.py``
 (the browser calls ``ai_annotate_calls.py``), and the label decisions under
 it and the Finetune tab's box tools are ``fill.py`` (the browser's box tools
 call ``fill_calls.py``).
+A model published to Hugging Face, its card, its manifest's "published"
+block and the app's links to it, is ``publish.py``, which the server's
+publish route calls and the browser's through ``publish_calls.py``.
 """

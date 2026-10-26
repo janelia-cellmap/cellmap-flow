@@ -79,7 +79,7 @@ function hubLinkRef(entry: ModelEntry): string {
 }
 
 /** The ref of the place a model was published to, `<owner>/<repo>/<folder>`. */
-function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
+export function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
   return `${published.repo}/${published.folder}`;
 }
 

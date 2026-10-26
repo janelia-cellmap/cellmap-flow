@@ -21,7 +21,11 @@
 // with the dataset open now ("Open on this dataset"). A model published
 // before (FinetunedRecord.published) answers done from its record, so the
 // panel shows where it is after a reload; publishing it again, to the same
-// repository or another, is a new commit there.
+// repository or another, is a new commit there. The model card, the
+// manifest and those links are cellmap_flow/portable/publish.py's, the
+// Python the server's routes call too, run here through
+// portable/publish_calls.py (Inference.python), so a model published from
+// either mode is described the same way.
 //
 // The token is the user's, kept in this page's memory only, for the reasons
 // ai-annotate/credentials.ts gives for an API key: never in any storage, the
@@ -33,9 +37,10 @@
 import type { AppContext, FinetunedRecord } from "../../contracts";
 import { readVolume } from "../../finetune/volume";
 import type { FinetunePublish } from "../../generated/cellmap-flow";
+import { PYTHON } from "../../generated/python-data";
 import { type PublishProgress, publishError, publishFiles, tokenError, whoIs } from "../../publish/hub";
-import { appLinks, finetunedFrom, HUB, type Publication, publishedFiles, refOf } from "../../publish/model";
-import { HF_OAUTH_CLIENT_ID, listenForSignIn, type SignIn, signInUrl } from "../../publish/oauth";
+import { publicationOf } from "../../publish/model";
+import { listenForSignIn, type SignIn, signInUrl } from "../../publish/oauth";
 import type { Router } from "../router";
 import { badRequest, json, objectBody } from "../router";
 import { pageBase } from "../serving";
@@ -49,9 +54,20 @@ export const SIGN_IN_EVENT = "cellmap-flow:huggingface-sign-in";
  * ending with `-` or `.`, no `--` or `..`, at most 96 characters. */
 const REPO_NAME = /^(?!.*(--|\.\.))[A-Za-z0-9](?:[\w.-]{0,94}[A-Za-z0-9])?$/;
 
-/** The seams: the OAuth app's client id (empty: no Sign in, a token
- * only), the clock, and where SIGN_IN_EVENT goes (the page's document; null
- * where there is none). */
+/** The Python of a publish: its files, and where a published model is. */
+const PUBLISH_CALLS = "cellmap_flow.portable.publish_calls";
+
+/** Where a published model is (portable/publish.py published_links). */
+interface PublishedLinks {
+  ref: string;
+  url: string;
+  try_link: string;
+  dataset_link: string | null;
+}
+
+/** The seams: the sign-in's client id (portable/publish.py's; empty: no
+ * Sign in, a token only), the clock, and where SIGN_IN_EVENT goes (the
+ * page's document; null where there is none). */
 export interface PublishDeps {
   clientId: string;
   now: () => Date;
@@ -85,7 +101,7 @@ interface Job {
 /** Register the routes. */
 export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): void {
   const d: PublishDeps = {
-    clientId: HF_OAUTH_CLIENT_ID,
+    clientId: PYTHON.huggingface.oauth_client_id,
     now: () => new Date(),
     page: () => (typeof document === "undefined" ? null : document),
     ...deps,
@@ -147,7 +163,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
   }
 
   // GET .../credentials: who is signed in, how, and the Sign in popup's URL
-  // (null without an OAuth app: paste a token instead).
+  // (null without a client id: paste a token instead).
   router.get("/api/huggingface/credentials", (_req, _params, ctx) => json(200, account(ctx)));
 
   // POST .../credentials {token}: a pasted access token, checked with
@@ -209,7 +225,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
     const job: Job = { repo, folder: record.name, status: "running", progress: null };
     jobs.set(record.name, job);
     void run(ctx, job, record, who, { private: body.private === true, includeDataset: body.include_dataset === true });
-    return json(200, answerOf(ctx, job));
+    return json(200, await answerOf(ctx, job));
   });
 
   // GET /api/finetune/model/:name/publish: this page's publish of the model
@@ -219,30 +235,38 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
     const record = await recordOf(ctx, params.name);
     if (!record) return json(404, { success: false, error: `No model finetuned in this browser is named ${params.name}` });
     const job = jobs.get(record.name);
-    if (job) return json(200, answerOf(ctx, job));
-    if (record.published) return json(200, answerOf(ctx, { ...record.published, status: "done", progress: null }));
+    if (job) return json(200, await answerOf(ctx, job));
+    if (record.published) return json(200, await answerOf(ctx, { ...record.published, status: "done", progress: null }));
     return json(200, { success: true, status: "none" });
   });
 
-  /** The publish itself: the files (publish/model.ts), the repository and
-   * the commit (publish/hub.ts), then the record's `published`, kept
-   * through the catalog. */
+  /** The publish itself: the card and the manifest (portable/publish.py,
+   * from the record's Publication, publish/model.ts) and the model's bytes,
+   * the repository and the commit (publish/hub.ts), then the record's
+   * `published`, kept through the catalog. */
   async function run(ctx: AppContext, job: Job, record: FinetunedRecord, who: SignedIn, options: { private: boolean; includeDataset: boolean }): Promise<void> {
     try {
       const bytes = await ctx.catalog.modelBytes(record.entry);
-      const p: Publication = {
-        record,
+      const publishedAt = d.now().toISOString();
+      const pub = publicationOf(record, await ctx.catalog.finetuned(), {
         repo: job.repo,
         folder: job.folder,
-        publishedAt: d.now().toISOString(),
-        finetunedFrom: finetunedFrom(record, await ctx.catalog.finetuned()),
+        publishedAt,
         dataset: options.includeDataset ? await trainedOn(ctx, record) : null,
-      };
+      });
+      // The Python's answers before the upload, so that once the commit is
+      // made nothing is left that could fail the publish.
+      const texts = await ctx.infer.python<{ path: string; text: string }[]>(`${PUBLISH_CALLS}:publication`, { pub });
+      const { ref, url } = await linksOf(ctx, job);
+      const files = [
+        ...texts.map(({ path, text }) => ({ path, content: new Blob([text]) })),
+        { path: `${job.folder}/${record.entry.variant.file}`, content: new Blob([bytes]) },
+      ];
       const { created, private: isPrivate } = await publishFiles({
         token: who.token,
         repo: job.repo,
         private: options.private,
-        files: publishedFiles(p, bytes),
+        files,
         title: `Publish ${job.folder} from cellmap-flow`,
         onProgress: (progress) => {
           job.progress = progress;
@@ -252,9 +276,9 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
       // has: it is not kept again. addFinetuned is the catalog's one way to
       // keep a record, and writes the bytes again with it.
       const latest = (await ctx.catalog.finetuned()).find((r) => r.id === record.id);
-      if (latest) await ctx.catalog.addFinetuned({ ...latest, published: { repo: job.repo, folder: job.folder, at: p.publishedAt } }, bytes);
-      Object.assign(job, { status: "done", created, private: isPrivate, at: p.publishedAt });
-      ctx.log(`Published ${job.folder} to ${HUB}/${job.repo} as ${refOf(job.repo, job.folder)}${created ? " (a new repository)" : ""}`);
+      if (latest) await ctx.catalog.addFinetuned({ ...latest, published: { repo: job.repo, folder: job.folder, at: publishedAt } }, bytes);
+      Object.assign(job, { status: "done", created, private: isPrivate, at: publishedAt });
+      ctx.log(`Published ${job.folder} to ${url} as ${ref}${created ? " (a new repository)" : ""}`);
     } catch (e) {
       job.status = "failed";
       job.error = publishError(e, { repo: job.repo, via: who.via, file: job.progress?.file ?? null });
@@ -276,16 +300,19 @@ async function trainedOn(ctx: AppContext, record: FinetunedRecord): Promise<stri
   return volume?.dataset_path ?? ctx.session.state.datasetUrl;
 }
 
-/** A publish as the routes answer it. Done, it says where the model is,
- * with the app's links on this page's own address and the dataset open now. */
-function answerOf(ctx: AppContext, job: Job): Record<string, unknown> {
+/** Where the published model `job` is, with the app's links on this page's
+ * own address and the dataset open now. */
+function linksOf(ctx: AppContext, job: Pick<Job, "repo" | "folder">): Promise<PublishedLinks> {
+  return ctx.infer.python<PublishedLinks>(`${PUBLISH_CALLS}:published_links`, { repo: job.repo, folder: job.folder, app: pageBase(), dataset: ctx.session.state.datasetUrl });
+}
+
+/** A publish as the routes answer it. Done, it says where the model is (linksOf). */
+async function answerOf(ctx: AppContext, job: Job): Promise<Record<string, unknown>> {
   const answer: Record<string, unknown> = { success: true, status: job.status, repo: job.repo, folder: job.folder };
   if (job.status === "running") Object.assign(answer, job.progress ?? { step: "creating", file: null, fraction: null });
   if (job.status === "failed") answer.error = job.error;
   if (job.status === "done") {
-    const ref = refOf(job.repo, job.folder);
-    const links = appLinks(pageBase(), ref, ctx.session.state.datasetUrl);
-    Object.assign(answer, { ref, url: `${HUB}/${job.repo}`, try_link: links.tryLink, dataset_link: links.datasetLink, at: job.at ?? null });
+    Object.assign(answer, await linksOf(ctx, job), { at: job.at ?? null });
     if (job.created !== undefined) answer.created = job.created;
     if (job.private !== undefined) answer.private = job.private;
   }

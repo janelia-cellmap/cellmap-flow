@@ -1,5 +1,17 @@
 {
   "version": "0.3.0",
+  "links": {
+    "model_param": "model",
+    "dataset_param": "dataset"
+  },
+  "huggingface": {
+    "oauth_client_id": "https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd",
+    "oauth_scopes": [
+      "openid",
+      "profile",
+      "contribute-repos"
+    ]
+  },
   "ops": {
     "input_norm": [
       {

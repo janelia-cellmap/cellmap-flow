@@ -5,9 +5,10 @@ The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
 their parameters, the chain a fresh session starts with, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
-ranking's constants, the finetune log's patterns, the unit table and the
-version a model published from the browser names. This script reads them
-from the Python that owns them and writes them to
+ranking's constants, the finetune log's patterns, the unit table, the
+version a model published from the browser names, the query parameters of
+the app's links and the Hugging Face sign-in's client id and scopes. This
+script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
 
@@ -94,7 +95,7 @@ def python_data():
     from cellmap_flow.dashboard.routes.finetune import ai_annotate as ai_routes
     from cellmap_flow.dashboard.routes.finetune import view_labels
     from cellmap_flow.finetune import markers
-    from cellmap_flow.portable import rank
+    from cellmap_flow.portable import publish, rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
@@ -103,8 +104,15 @@ def python_data():
 
     return {
         # The release, which a model published to Hugging Face from the
-        # browser names in its manifest (web/src/publish/model.ts).
+        # browser names in its card and manifest (web/src/publish/model.ts
+        # hands it to cellmap_flow/portable/publish.py).
         "version": cellmap_flow.__version__,
+        # The query parameters of the app's links, which a published model's
+        # card writes (portable/publish.py) and web/src/link.ts reads back.
+        "links": {"model_param": publish.MODEL_PARAM, "dataset_param": publish.DATASET_PARAM},
+        # Sign in with Hugging Face (web/src/publish/oauth.ts), as the
+        # server's sign-in asks for it too.
+        "huggingface": {"oauth_client_id": publish.HF_OAUTH_CLIENT_ID, "oauth_scopes": list(publish.HF_OAUTH_SCOPES)},
         "ops": {
             "input_norm": ops(get_input_normalizers()),
             "postprocess": ops(get_postprocessors_list()),

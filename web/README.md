@@ -357,42 +357,35 @@ storage (`cas-server.xethub.hf.co`) and its S3 bucket answer the browser's
 cross-origin preflights from `janelia-cellmap.github.io` (checked
 2026-10-26 without a token; the upload itself needs one).
 
-**An access token** (the fallback, and the only way until the OAuth app
-below is registered): at <https://huggingface.co/settings/tokens>, *Create
-new token*, type *Write* (or *Fine-grained* with write access to your
-repositories), copy the `hf_…` value and paste it into the panel's *Access
-token* field.
+**An access token** (the fallback): at <https://huggingface.co/settings/tokens>,
+*Create new token*, type *Write* (or *Fine-grained* with write access to
+your repositories), copy the `hf_…` value and paste it into the panel's
+*Access token* field.
 
 **Sign in with Hugging Face** (`src/publish/oauth.ts`): OAuth with PKCE in a
 popup, `oauth.html` beside the page (a build input in `vite.config.ts`), so
-the app keeps its state. The popup goes to Hugging Face's authorize page, and
-on the way back exchanges the code for the token (`@huggingface/hub`'s
-`oauthLoginUrl` and `oauthHandleRedirect`, its PKCE verifier and nonce kept in
-the popup's sessionStorage, not the library's localStorage default) and hands
-the token to the page over a `BroadcastChannel` named for that tab, then
-closes. The button is hidden while `HF_OAUTH_CLIENT_ID` is empty. To register
-the app, at <https://huggingface.co/settings/applications/new>, signed in as
-the account that should own it:
-
-- Application name: `cellmap-flow`; homepage:
-  `https://janelia-cellmap.github.io/cellmap-flow/app/`; a logo if wanted.
-- Scopes: `openid`, `profile` and `contribute-repos` (`HF_OAUTH_SCOPES`):
-  who the user is, and to make repositories and write to those made through
-  the app, no others. A scope the app is not registered with is refused at
-  sign-in. (`write-repos` with `manage-repos` would let the page publish into
-  repositories made by hand too, and change or delete any of the user's.)
-- Redirect URLs, one per line:
-  `https://janelia-cellmap.github.io/cellmap-flow/app/oauth.html`,
-  `http://localhost/oauth.html` and `http://127.0.0.1/oauth.html`. Hugging
-  Face takes a loopback `http` redirect on any port with the path exactly as
-  registered, which covers `npm run dev` and `vite preview` on any port; a
-  page reached any other way (a tunnel's host, a workstation's address) needs
-  its own `…/oauth.html` registered, or a token instead.
-- No client secret: a public app, PKCE only (delete the secret if one was
-  made).
-
-Then put the app's client id (not a secret) in `HF_OAUTH_CLIENT_ID`, rebuild,
-and deploy.
+the app keeps its state. The popup goes to Hugging Face's authorize page
+(`@huggingface/hub`'s `oauthLoginUrl`, its PKCE verifier and nonce kept in
+the popup's sessionStorage, not the library's localStorage default), and on
+the way back exchanges the code for the token itself (the library's
+`oauthHandleRedirect` leaves out the client id, which a public client must
+send), hands the token to the page over a `BroadcastChannel` named for that
+tab, then closes. No OAuth app is registered on anyone's account: the client
+id (`HF_OAUTH_CLIENT_ID`, `cellmap_flow/portable/publish.py`) is the URL of
+the app's client metadata document,
+`https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd`
+([CIMD](https://huggingface.co/docs/hub/oauth#automated-oauth-app-creation)),
+which names the app, says it has no secret and lists the redirect URLs:
+`https://janelia-cellmap.github.io/cellmap-flow/app/oauth.html`,
+`http://localhost/oauth.html` and `http://127.0.0.1/oauth.html`. Hugging
+Face takes a loopback `http` redirect on any port with the path as listed,
+which covers `npm run dev` and `vite preview` on any port; a page reached
+any other way (a tunnel's host, a workstation's address) signs in with a
+token instead. The scopes are `openid`, `profile` and `contribute-repos`
+(`HF_OAUTH_SCOPES`): who the user is, and to make repositories and write to
+those made through the app, no others (`write-repos` with `manage-repos`
+would let the page publish into repositories made by hand too, and change or
+delete any of the user's).
 
 ## Browser requirements
 
