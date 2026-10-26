@@ -83,13 +83,13 @@ What it cannot export, said rather than worked around:
   network's forward (Cellpose, which segments with its own eval): a
   TorchScript of the network would not predict what is served, so the
   export fails. Every other model has its server form.
-- The browser form takes cubes only, at the one block the model is served
-  at: export_onnx_web takes cubic blocks. A 2D model's block is one slice
-  thick, so 2D models have none; nor does one with more than one input
-  channel, as the browser feeds one.
+- The browser form is exported at the block the model is served at, its
+  (z, y, x) shape as it is: a cube, a 2D model's slice (1, y, x), or any
+  other block. None for a model with more than one input channel, as the
+  browser feeds one.
 - What onnx_web rewrites it asserts: Conv3d unpadded, undilated and
-  ungrouped, ConvTranspose3d with kernel and stride 2. Valid-padding U-Nets
-  are; anything else has no browser form, for onnx_web's reason.
+  ungrouped, ConvTranspose3d with kernel equal to stride. Valid-padding
+  U-Nets are; anything else has no browser form, for onnx_web's reason.
 - At most 2 GB of float32 weights in the browser form: onnx_web keeps them
   inside the .onnx file, which protobuf caps there. The large cellmap UNets
   (about 800M parameters, 3.2 GB, such as mito-aff-unet-setup-16) have
@@ -97,9 +97,11 @@ What it cannot export, said rather than worked around:
 - A model without a browser form is still exported, its server form alone,
   and ``no_browser`` says why: the publish uploads that, and its card says
   so.
-- The export runs on the CPU (onnx_web's export and checks are CPU ones,
-  and a TorchScript traced on a GPU keeps that GPU in it), in a job that
-  holds the one GPU launch asks for, as every finetune job does.
+- The network runs on the GPU the job holds when there is one (the one
+  launch asks for, as every finetune job does), for its probes and the
+  outputs the ONNX files are checked against; the server form is traced on
+  the CPU, as a TorchScript traced on a GPU keeps that GPU in it, and
+  onnx_web exports and checks its files on the CPU.
 - The manifest has no ``finetune`` block: the browser cannot finetune the
   exported model further (its head and full-network specs name graph nodes
   and a training graph that onnx_web does not write).
@@ -236,7 +238,8 @@ def export_status(export: WebExport) -> dict:
         result = json.loads(export.result_file.read_text())
         if result.get("error"):
             return {**answer, "status": "failed", "error": result["error"]}
-        return {**answer, "status": "done", **{key: result[key] for key in ("folder", "manifest", "server", "no_browser")}}
+        # A distilled copy's result has a browser form alone: no server form, and no why not.
+        return {**answer, "status": "done", **{key: result.get(key) for key in ("folder", "manifest", "server", "no_browser")}}
     if export.job.get_status() in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED):
         log = tail(export.log_file, 2000)
         return {**answer, "status": "failed",
@@ -275,14 +278,6 @@ def training_block(corrections_dir, input_block, output_block, input_norm):
     return np.ascontiguousarray(raw, dtype=np.float32)[None, None]
 
 
-def _side(block, which) -> int:
-    """The side of a cubic block of voxels; ValueError for any other."""
-    if len(block) != 3 or len(set(block)) != 1:
-        raise ValueError(f"The model's {which} block is {'x'.join(map(str, block))} voxels: export_onnx_web "
-                         "exports cubes only (a 2D model's block is one slice thick)")
-    return int(block[0])
-
-
 def _task(channels) -> str:
     """What the model predicts, for the manifest's ``task``: a single channel's
     name, or the channels' common prefix up to a separator (mito_aff_z, _y,
@@ -292,6 +287,70 @@ def _task(channels) -> str:
     prefix = os.path.commonprefix(list(channels))
     cut = max(prefix.rfind(separator) for separator in "_-.")
     return prefix[:cut] if cut > 0 else "_".join(channels)
+
+
+def finetuned_network(yaml_path):
+    """The finetuned network ``yaml_path`` serves, on the CPU, as the export
+    exports it and the distillation (finetune/distill.py) copies it: its base
+    built as the trainer builds it (model_loading.load_trainable_model), the
+    finetune folded into its weights (export_merged.apply_finetune), every
+    layer a real one. Returns ``(network, finetuned, input_norm)``: the
+    network, the finetuned model's config, and the input normalization the
+    YAML serves it with, as steps.
+
+    Raises:
+        ValueError: the YAML serves no finetuned model, or one served other
+            than by its network's forward (see the module's docstring).
+    """
+    from cellmap_flow.finetune.export_merged import apply_finetune
+    from cellmap_flow.finetune.lora_wrapper import _replace_interpreter_modules
+    from cellmap_flow.finetune.model_loading import load_trainable_model, model_config_from_entry
+    from cellmap_flow.pipeline_spec import normalize_steps
+
+    config, entry = serving_entry(yaml_path)
+    input_norm = list(normalize_steps((config.get("json_data") or {}).get("input_norm")))
+    finetuned = model_config_from_entry(entry)
+    base = finetuned.base_model_config
+    network = apply_finetune(load_trainable_model(base), finetuned.lora_adapter_path, finetuned.weights_path).cpu()
+    _check_served_as_network(base, network)
+    # The leaves torch.export's unflatten left (a TorchScript base's) as the
+    # real layers onnx_web looks for and rewrites; they share the weights.
+    _replace_interpreter_modules(network, transposed=True)
+    return network, finetuned, input_norm
+
+
+def describe(finetuned, geometry, folder, output_class, input_norm, checkpoint=None) -> dict:
+    """What an export says of the model ``finetuned``, whose network has the
+    ``geometry`` and an output of ``output_class`` (probe_output_class), in
+    ``folder``: the browser form's manifest has it at its top, and the
+    server form's metadata.json the same in its terms. ``checkpoint`` says
+    where its weights came from; by default, how it was finetuned from what."""
+    import torch
+
+    from cellmap_flow.finetune.model_loading import root_base_model_dict
+    from cellmap_flow.models.entry import numbers
+
+    root = root_base_model_dict(finetuned)
+    if checkpoint is None:
+        how = "LoRA, merged into the network" if finetuned.lora_adapter_path else "the whole network"
+        base_name = root.get("repo") or root.get("name") or f"a {root.get('type')} model"
+        checkpoint = f"finetuned with cellmap-flow ({how}) from {base_name}"
+    channels = list(geometry.channel_names or (f"channel_{i}" for i in range(geometry.output_channels)))
+    return {
+        "model": folder,
+        "task": _task(channels),
+        "checkpoint": checkpoint,
+        "channels": channels,
+        # The voxel sizes it was trained at (FinetuneModelConfig's
+        # trained_at_geometry), when they are not the base's.
+        "input_voxel_size_nm": numbers(finetuned.input_voxel_size or geometry.input_voxel_size),
+        "output_voxel_size_nm": numbers(finetuned.output_voxel_size or geometry.output_voxel_size),
+        "output": OUTPUT_DESCRIPTIONS[output_class],
+        "input_norm": input_norm,
+        **({"source_repo": root["repo"]} if root.get("repo") else {}),
+        "torch_version": torch.__version__,
+        "exporter": EXPORTER,
+    }
 
 
 def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
@@ -309,56 +368,29 @@ def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
     """
     import torch
 
-    from cellmap_flow.finetune.export_merged import apply_finetune
-    from cellmap_flow.finetune.lora_wrapper import _replace_interpreter_modules
-    from cellmap_flow.finetune.model_loading import load_trainable_model, model_config_from_entry, root_base_model_dict
+    from cellmap_flow.finetune.model_loading import root_base_model_dict
     from cellmap_flow.finetune.trainer.supervised import probe_output_class
-    from cellmap_flow.models.entry import numbers
-    from cellmap_flow.pipeline_spec import normalize_steps
+    from cellmap_flow.utils.device import best_device
 
-    config, entry = serving_entry(yaml_path)
-    input_norm = list(normalize_steps((config.get("json_data") or {}).get("input_norm")))
-    finetuned = model_config_from_entry(entry)
-    base = finetuned.base_model_config
-    geometry = base.geometry
-
-    network = apply_finetune(load_trainable_model(base), finetuned.lora_adapter_path, finetuned.weights_path).cpu()
-    _check_served_as_network(base, network)
-    # The leaves torch.export's unflatten left (a TorchScript base's) as the
-    # real layers onnx_web looks for and rewrites; they share the weights.
-    _replace_interpreter_modules(network, transposed=True)
-
+    network, finetuned, input_norm = finetuned_network(yaml_path)
+    geometry = finetuned.base_model_config.geometry
     block = training_block(corrections_dir, geometry.input_shape, geometry.output_shape, input_norm)
-    with torch.no_grad():
-        output_class = probe_output_class(network, torch.from_numpy(block))
-        output = network(torch.from_numpy(block))
+    # The network runs on the GPU when there is one, in float32 without
+    # TF32 (which rounds a convolution to about the fp32 file's tolerance);
+    # the server form is traced on the CPU (_export_server).
+    device = best_device()
+    network = network.to(device)
+    with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
+        output_class = probe_output_class(network, torch.from_numpy(block).to(device))
+        output = network(torch.from_numpy(block).to(device)).cpu()
 
     folder = folder_name(finetuned.name)
     root = root_base_model_dict(finetuned)
-    how = "LoRA, merged into the network" if finetuned.lora_adapter_path else "the whole network"
-    base_name = root.get("repo") or root.get("name") or f"a {root.get('type')} model"
-    channels = list(geometry.channel_names or (f"channel_{i}" for i in range(geometry.output_channels)))
-    # What both forms say of the model: the browser form's manifest has it
-    # at its top, and the server form's metadata.json the same in its terms.
-    description = {
-        "model": folder,
-        "task": _task(channels),
-        "checkpoint": f"finetuned with cellmap-flow ({how}) from {base_name}",
-        "channels": channels,
-        # The voxel sizes it was trained at (FinetuneModelConfig's
-        # trained_at_geometry), when they are not the base's.
-        "input_voxel_size_nm": numbers(finetuned.input_voxel_size or geometry.input_voxel_size),
-        "output_voxel_size_nm": numbers(finetuned.output_voxel_size or geometry.output_voxel_size),
-        "output": OUTPUT_DESCRIPTIONS[output_class],
-        "input_norm": input_norm,
-        **({"source_repo": root["repo"]} if root.get("repo") else {}),
-        "torch_version": torch.__version__,
-        "exporter": EXPORTER,
-    }
+    description = describe(finetuned, geometry, folder, output_class, input_norm)
 
     input_size, output_size = list(geometry.input_shape), list(output.shape[2:])
     files = _export_server(
-        network, output_dir, input_size, output_size,
+        network.cpu(), output_dir, input_size, output_size,
         _metadata(root, network, geometry, description),
         {
             "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -376,7 +408,7 @@ def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
     )
     server = {"files": files, "input_size": input_size, "output_size": output_size}
     try:
-        manifest = _export_browser(network, Path(output_dir) / folder, folder, geometry, block,
+        manifest = _export_browser(network.to(device), Path(output_dir) / folder, folder, geometry, block,
                                    float(output.abs().max()), description, variants)
     except Exception as e:
         logger.warning("The model has no browser form", exc_info=True)
@@ -461,10 +493,12 @@ def _base_metadata(root) -> dict:
         return json.load(f)
 
 
-def _export_browser(network, folder_dir, folder, geometry, block, scale, description, variants) -> dict:
+def _export_browser(network, folder_dir, folder, geometry, block, scale, description, variants, blocks=None) -> dict:
     """The browser form: export_onnx_web's files of ``network`` and their
-    manifest, with ``description`` at its top, in ``folder_dir``. Returns
-    the manifest.
+    manifest, with ``description`` at its top, in ``folder_dir``, at each of
+    ``blocks`` ((z, y, x) shapes; by default the one ``geometry`` gives),
+    checked on the middle of ``block``, which holds the largest of them, and
+    against ``scale``, its output's largest value. Returns the manifest.
 
     Raises:
         ValueError: the model is one export_onnx_web cannot export (see the
@@ -481,8 +515,6 @@ def _export_browser(network, folder_dir, folder, geometry, block, scale, descrip
 
     from cellmap_flow.models.configs.onnx import parse_manifest
 
-    size = _side(geometry.input_shape, "input")
-    _side(geometry.output_shape, "output")
     if geometry.input_channels != 1:
         raise ValueError(f"The model takes {geometry.input_channels} input channels; the browser feeds one")
     params = sum(p.numel() for p in network.parameters())
@@ -490,8 +522,8 @@ def _export_browser(network, folder_dir, folder, geometry, block, scale, descrip
         raise ValueError(f"The network has {params:,} parameters, {4 * params / 1e9:.1f} GB in float32: "
                          "export_onnx_web keeps the weights in the .onnx file, which protobuf caps at 2 GB")
 
-    rows = export_onnx_web(network, str(folder_dir), folder, [size], variants=variants or VARIANTS,
-                           validation_input=block, manifest_extra=description)
+    rows = export_onnx_web(network, str(folder_dir), folder, blocks or [tuple(geometry.input_shape)],
+                           variants=variants or VARIANTS, validation_input=block, manifest_extra=description)
     for row in rows:
         if row["variant"] == "fp32" and row["max_abs"] > FP32_REL_TOL * max(scale, 1e-6):
             raise ValueError(f"The fp32 export differs from the network by up to {row['max_abs']:.3g}, "

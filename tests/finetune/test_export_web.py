@@ -47,6 +47,19 @@ torch.manual_seed(0)
 model = TinyUNet()
 """
 
+# The same UNet in 2D, on one z-slice: depth-1 kernels, pooling and
+# upsampling in y and x. 1x20x20 in, 1x12x12 out.
+SCRIPT_2D = (SCRIPT.replace("nn.Conv3d(1, 4, 3)", "nn.Conv3d(1, 4, (1, 3, 3))")
+             .replace("nn.MaxPool3d(2)", "nn.MaxPool3d((1, 2, 2))")
+             .replace("nn.Conv3d(4, 8, 3)", "nn.Conv3d(4, 8, (1, 3, 3))")
+             .replace("nn.ConvTranspose3d(8, 4, 2, stride=2)", "nn.ConvTranspose3d(8, 4, (1, 2, 2), stride=(1, 2, 2))")
+             .replace("nn.Conv3d(8, 4, 3)", "nn.Conv3d(8, 4, (1, 3, 3))")
+             .replace("c = (skip.shape[2] - below.shape[2]) // 2", "c = (skip.shape[3] - below.shape[3]) // 2")
+             .replace("skip = skip[:, :, c:c + below.shape[2], c:c + below.shape[3], c:c + below.shape[4]]",
+                      "skip = skip[:, :, :, c:c + below.shape[3], c:c + below.shape[4]]")
+             .replace("Coordinate(20, 20, 20)", "Coordinate(1, 20, 20)")
+             .replace("Coordinate(12, 12, 12)", "Coordinate(1, 12, 12)"))
+
 INPUT_NORM = {"MinMaxNormalizer": {"min_value": 0, "max_value": 255}, "LambdaNormalizer": {"expression": "x*2-1"}}
 
 
@@ -77,8 +90,10 @@ def finetuned(request, tmp_path, annotation_volume):
     The base is the UNet as a script model, which trains as it is, or as a
     cellmap folder, which the trainer trains as the torch.export program
     unflattened, where every layer is an FX interpreter over the weights and
-    the transposed convolution stays one.
+    the transposed convolution stays one; "2d" is the 2D UNet as a script
+    model.
     """
+    pytest.importorskip("peft")
     import torch
 
     from cellmap_flow.finetune.finetuned_model_templates import generate_finetuned_model_yaml
@@ -87,7 +102,8 @@ def finetuned(request, tmp_path, annotation_volume):
     from cellmap_flow.finetune.session.manifest import write_manifest
 
     script = tmp_path / "tiny_unet.py"
-    script.write_text(SCRIPT)
+    script.write_text(SCRIPT_2D if request.param == "2d" else SCRIPT)
+    block = ([1, 20, 20], [1, 12, 12]) if request.param == "2d" else ([20] * 3, [12] * 3)
     base = {"type": "script", "script_path": str(script), "name": "tiny"}
     if request.param == "cellmap":
         base = _cellmap_folder(tmp_path / "tiny", model_config_from_entry(base).config.model)
@@ -108,7 +124,7 @@ def finetuned(request, tmp_path, annotation_volume):
     corrections = tmp_path / "session" / "corrections"
     write_manifest(str(corrections), {
         "kind": "volume_zarr_v1", "volume_zarr_path": volume.path, "raw_dataset_path": volume.raw,
-        "input_size_voxels": [20] * 3, "output_size_voxels": [12] * 3,
+        "input_size_voxels": block[0], "output_size_voxels": block[1],
         "input_voxel_size_nm": [16] * 3, "output_voxel_size_nm": [16] * 3, "input_norm": INPUT_NORM,
     })
     yaml_path = generate_finetuned_model_yaml(
@@ -225,6 +241,7 @@ def test_a_finetuned_model_exports_as_the_server_serves_it(finetuned, launched):
 @pytest.mark.finetune
 @pytest.mark.parametrize("finetuned", ["cellmap"], indirect=True)
 def test_a_model_too_big_for_the_browser_exports_for_servers_alone(finetuned, launched, monkeypatch):
+    pytest.importorskip("cellmap_models.model_export.onnx_web")
     # Over protobuf's 2 GB as an 800M-parameter UNet is, cheaply: any
     # network is over a cap of no bytes.
     monkeypatch.setattr(export_web, "ONNX_FILE_LIMIT", 0)
@@ -239,6 +256,34 @@ def test_a_model_too_big_for_the_browser_exports_for_servers_alone(finetuned, la
     assert (status["server"]["input_size"], status["server"]["output_size"]) == ([20] * 3, [12] * 3)
     x = np.random.default_rng(1).uniform(-1, 1, (1, 1, 20, 20, 20)).astype(np.float32)
     _check_server_form(export.output_dir, x, _served(finetuned.yaml, x))
+
+
+@pytest.mark.finetune
+@pytest.mark.parametrize("finetuned", ["2d"], indirect=True)
+def test_a_2d_model_exports_for_the_browser_on_slices(finetuned, launched):
+    pytest.importorskip("cellmap_models.model_export.student")  # export_onnx_web with blocks
+    ort = pytest.importorskip("onnxruntime")
+
+    from cellmap_flow.models.configs.onnx import parse_manifest
+
+    export = export_web.start_export(finetuned.yaml, finetuned.corrections, finetuned.run)
+    assert export_web.main(["--yaml", str(finetuned.yaml), "--corrections", str(finetuned.corrections),
+                            "--output", str(export.output_dir), "--variants", "fp32"]) == 0
+    status = export_web.export_status(export)
+    assert status["status"] == "done", status["error"]
+    assert status["no_browser"] is None
+
+    # One slice in, one slice out, named and sized as the catalog's 2D models.
+    manifest = parse_manifest(status["manifest"])
+    (variant,) = manifest["variants"]
+    assert variant["input_size"] == [1, 20, 20] and variant["output_size"] == [1, 12, 12]
+    assert "_2d_in20_" in variant["file"]
+    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, 1, 20, 20)).astype(np.float32)
+    session = ort.InferenceSession(str(export.output_dir / status["folder"] / variant["file"]),
+                                   providers=["CPUExecutionProvider"])
+    exported = session.run([manifest["io"]["output"]], {manifest["io"]["input"]: x})[0]
+    served = _served(finetuned.yaml, x)
+    assert np.abs(exported - served).max() <= 1e-5 * np.abs(served).max()
 
 
 @pytest.mark.parametrize("finetuned", ["script"], indirect=True)
