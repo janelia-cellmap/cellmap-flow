@@ -11,17 +11,16 @@ it has seen the sign-in wait.
 
 import json
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
-import cellmap_flow.finetune
 from cellmap_flow.ai_annotate import secrets
 from cellmap_flow.dashboard.routes.finetune import publish as routes
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune import export_web
 
 TOKEN = "hf_pasted0123456789abcdefghijklmnopqrst"
 SAVED = "hf_saved00123456789abcdefghijklmnopqrst"
@@ -125,21 +124,25 @@ def served(make_job, tmp_path, monkeypatch):
 
     started = []
 
-    def start_export(serving_yaml, output_dir, queue, charge_group):
-        started.append(serving_yaml)
-        variants = [{"variant": v, "file": f"model_{v}.onnx", "input_size": [64] * 3, "output_size": [32] * 3}
-                    for v in ("fp32", "fp16")]
-        manifest = {"task": "mito", "channels": ["mito"], "input_voxel_size_nm": [8] * 3,
-                    "output_voxel_size_nm": [8] * 3, "variants": variants}
-        (output_dir / MODEL).mkdir(parents=True)
-        for v in variants:
-            (output_dir / MODEL / v["file"]).write_bytes(v["variant"].encode() * 100)
-        return SimpleNamespace(poll=lambda: {"status": "done", "folder": MODEL, "manifest": manifest})
+    variants = [{"variant": v, "file": f"model_{v}.onnx", "input_size": [64] * 3, "output_size": [32] * 3}
+                for v in ("fp32", "fp16")]
+    manifest = {"task": "mito", "channels": ["mito"], "input_voxel_size_nm": [8] * 3,
+                "output_voxel_size_nm": [8] * 3, "variants": variants}
 
-    export_web = ModuleType("cellmap_flow.finetune.export_web")
-    export_web.start_export = start_export
-    monkeypatch.setitem(sys.modules, "cellmap_flow.finetune.export_web", export_web)
-    monkeypatch.setattr(cellmap_flow.finetune, "export_web", export_web, raising=False)
+    # The export job, done at once: its folder written where start_export says.
+    def start_export(yaml_path, corrections_dir, run_dir):
+        started.append(yaml_path)
+        out = Path(run_dir) / "web_export" / Path(yaml_path).stem
+        (out / MODEL).mkdir(parents=True)
+        for v in variants:
+            (out / MODEL / v["file"]).write_bytes(v["variant"].encode() * 100)
+        return out
+
+    def export_status(out):
+        return {"status": "done", "error": None, "dir": str(out), "folder": MODEL, "manifest": manifest}
+
+    monkeypatch.setattr(export_web, "start_export", start_export)
+    monkeypatch.setattr(export_web, "export_status", export_status)
     return started
 
 

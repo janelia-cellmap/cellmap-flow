@@ -533,14 +533,12 @@ def _export(job):
     Raises RuntimeError with the export's error."""
     from cellmap_flow.finetune import export_web
 
-    output_dir = Path(job.output_dir) / "web_export"
-    export = export_web.start_export(Path(job.model_yaml_path), output_dir,
-                                     queue=job.params.get("queue"), charge_group=job.params.get("charge_group"))
-    while (state := export.poll())["status"] == "running":
+    export = export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir)
+    while (state := export_web.export_status(export))["status"] == "running":
         time.sleep(EXPORT_POLL_SECONDS)
     if state["status"] != "done":
-        raise RuntimeError(f"its export to ONNX failed: {state.get('error')}")
-    return state["folder"], state["manifest"], output_dir / state["folder"]
+        raise RuntimeError(f"its export to ONNX failed: {state['error']}")
+    return state["folder"], state["manifest"], Path(state["dir"]) / state["folder"]
 
 
 def _training(job, entry):
