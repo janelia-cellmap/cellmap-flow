@@ -571,6 +571,11 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* The Publish to Hugging Face panel's fields, the label beside its field. */
+.publish-fields {
+  grid-template-columns: auto 1fr;
+}
+
 /* The AI panel's API key and access token: text fields shown as dots, so a
    browser's password manager does not offer to save them as it does a
    password field's (_finetune_tab.html says why). */

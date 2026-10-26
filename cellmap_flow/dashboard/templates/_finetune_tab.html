@@ -1028,6 +1028,65 @@
        title="The finetuned model as an .onnx file: the base model's graph with the trained weights (its last layer, or its whole network) in it">
       Download finetuned model
     </a>
+    {# Publish to Hugging Face, shown with the Download link
+       (finetune/publish.js): the model, its manifest and a model card
+       uploaded to a repository of the user's own Hugging Face account, with
+       the links that open it. The user signs in in a popup (when the app has
+       a registered OAuth app; web/README.md) or pastes an access token with
+       write access; either is kept in the page's memory only, and the token
+       field is masked by CSS and kept from password managers as the AI
+       panel's are (see there). #}
+    <button type="button" class="btn btn-outline-secondary btn-sm mt-3 ms-2" id="publishFinetunedBtn" style="display: none;"
+            aria-expanded="false" aria-controls="publishPanel"
+            title="Upload the finetuned model to a repository of your own Hugging Face account, and get the links that open it in cellmap-flow">
+      Publish to Hugging Face
+    </button>
+    <div class="mt-2" id="publishPanel" hidden>
+      <div class="d-flex align-items-baseline gap-2 flex-wrap">
+        <span class="text-muted" style="font-size: 0.85rem;" id="hfAccount">Not signed in to Hugging Face</span>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="hfSignInBtn" hidden
+                title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state.">Sign in with Hugging Face</button>
+        <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
+                title="Forgets the Hugging Face token in this page.">Sign out</button>
+      </div>
+      <div class="patch-tools-fields publish-fields" id="hfTokenFields">
+        <label for="hfToken">Access token</label>
+        <input type="text" class="form-control form-control-sm credential-secret" id="hfToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore
+               placeholder="hf_… with write access"
+               title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in this page only: paste it again after a reload.">
+      </div>
+      <div class="text-muted small mt-1" id="hfTokenHint">
+        Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.
+      </div>
+      <div class="patch-tools-fields publish-fields">
+        <label for="publishRepo">Repository</label>
+        <input type="text" class="form-control form-control-sm" id="publishRepo" autocomplete="off" spellcheck="false" maxlength="200"
+               placeholder="you/model-name"
+               title="owner/name: your account or one of your organizations, and the repository's name. One that exists already gets the files as a new commit.">
+      </div>
+      <div class="form-check mt-1">
+        <input class="form-check-input" type="checkbox" id="publishPrivate">
+        <label class="form-check-label small" for="publishPrivate">Private (a new repository is public otherwise)</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="publishIncludeDataset">
+        <label class="form-check-label small" for="publishIncludeDataset">Name the dataset's URL in the model card</label>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+        <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
+        <small class="text-muted" id="publishStatus"></small>
+      </div>
+      <div class="patch-tools-fields publish-fields" id="publishResult" hidden>
+        <label for="publishUrl">Hugging Face</label>
+        <div class="input-group input-group-sm"><input type="text" class="form-control" id="publishUrl" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishUrl">Copy</button></div>
+        <label for="publishRef">Model ref</label>
+        <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="publishRef" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishRef">Copy</button></div>
+        <label for="publishTryLink">Try it in the browser</label>
+        <div class="input-group input-group-sm"><input type="text" class="form-control" id="publishTryLink" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishTryLink">Copy</button></div>
+        <label for="publishDatasetLink" data-dataset-link>Open on this dataset</label>
+        <div class="input-group input-group-sm" data-dataset-link><input type="text" class="form-control" id="publishDatasetLink" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishDatasetLink">Copy</button></div>
+      </div>
+    </div>
     {% endif %}
   </div>
 </div>

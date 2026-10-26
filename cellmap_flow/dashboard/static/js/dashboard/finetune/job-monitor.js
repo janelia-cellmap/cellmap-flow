@@ -4,7 +4,8 @@
 //
 // In the browser mode (lib/page-data isBrowserMode) the job runs in the page
 // (web/src/finetune) and answers the same routes: no corrections path is
-// asked for, and the finetuned model a status names can be downloaded.
+// asked for, and the finetuned model a status names can be downloaded and
+// published to Hugging Face (publish.js).
 //
 // Shift+R restarts the card's job as Restart does, without its confirm
 // (restartFromKey). It arrives three ways: pressed over the viewer in server
@@ -20,6 +21,7 @@ import { poll } from "../../lib/poll.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
+import { initPublish } from "./publish.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
@@ -92,6 +94,7 @@ function showNotification(title, message) {
 export function initJobMonitor({ picker, form, log }) {
   let statusPoller = null;
   const browser = isBrowserMode();
+  const publish = browser ? initPublish() : null;
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
   const card = createJobCard(lossPlot);
@@ -129,11 +132,12 @@ export function initJobMonitor({ picker, form, log }) {
   // Browser mode: the Training Status card's Download finetuned model link
   // (the template's browser-only anchor), pointed at the model a job's status
   // says is served (inference_server_ready with finetuned_model_name) and
-  // shown then; hidden on any other status, and for a job just submitted or
-  // restarted, whose model is not made yet. The page fetches the link on a
-  // click (web/src/rebase.ts), like the Export Config link, and the service
-  // worker relays the GET to the in-page backend. Nothing on the Flask page:
-  // it has no such anchor.
+  // shown then, with Publish to Hugging Face for the same model; hidden on
+  // any other status, and for a job just submitted or restarted, whose model
+  // is not made yet. The page fetches the link on a click
+  // (web/src/rebase.ts), like the Export Config link, and the service worker
+  // relays the GET to the in-page backend. Nothing on the Flask page: it has
+  // no such anchor.
   function showFinetunedDownload(job) {
     if (!browser) return;
     const link = document.getElementById("downloadFinetunedBtn");
@@ -145,6 +149,7 @@ export function initJobMonitor({ picker, form, log }) {
       link.removeAttribute("href");
       link.style.display = "none";
     }
+    publish.showFor(name || null);
   }
 
   // The rest of the page is told when the job's model may have come, gone
