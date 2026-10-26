@@ -46,9 +46,10 @@ export function init({ untick, log }) {
     // one wraps between its words.
     const name = h("span", { class: "loaded-model-name", title: model.name },
       model.name.split(/(?<=[_.-])/).flatMap((part, i) => (i ? [h("wbr"), part] : [part])));
-    // The browser mode's "waiting": no volume is open to run it on yet.
+    // The browser mode's "waiting": no volume is open to run it on yet,
+    // said as what to do.
     const status = model.status && model.status !== "running"
-      ? tag(model.status, model.status === "waiting" ? "It runs on the volume you open in the viewer." : undefined)
+      ? (model.status === "waiting" ? tag("needs a volume", "It runs on the volume you open in the viewer.") : tag(model.status))
       : null;
     if (status) status.classList.add("loaded-model-status");
     const remove = h("button", {
