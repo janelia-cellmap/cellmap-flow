@@ -432,13 +432,18 @@ class FinetunePublish(BaseModel):
     """Where to publish a finetuned model on Hugging Face: ``repo`` as
     ``owner/name`` (blank: the signed-in user's, named after the model),
     whether a repository made for it is ``private`` (a model repository is
-    public otherwise), and whether its manifest and model card name the
+    public otherwise), whether its manifest and model card name the
     dataset it was trained on (``include_dataset``: off unless asked, since a
-    dataset's URL can be internal)."""
+    dataset's URL can be internal), and, for a server's publish, whether its
+    copy of the network includes ``model.pt2`` (``lora_copy``): the program a
+    LoRA finetune of the published model attaches to, as cellmap's own
+    repositories ship it, at the cost of uploading the weights a second time.
+    A browser's publish has no such copy."""
 
     repo: Optional[str] = Field(None, max_length=200)
     private: bool = False
     include_dataset: bool = False
+    lora_copy: bool = True
 
 
 class HuggingFaceCredentials(BaseModel):

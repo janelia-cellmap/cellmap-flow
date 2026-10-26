@@ -488,7 +488,7 @@ def start_publish(name):
         publish = {"repo": repo, "folder": name, "status": "running", "step": "exporting", "file": None,
                    "fraction": None, "no_browser": None}
         hf["publishes"][name] = publish
-    _start_thread(_run, hf, publish, job, who, body.private, body.include_dataset)
+    _start_thread(_run, hf, publish, job, who, body.private, body.include_dataset, body.lora_copy)
     return jsonify(_answer(publish))
 
 
@@ -501,11 +501,11 @@ def publish_status(name):
     return jsonify(_answer(publish) if publish else {"success": True, "status": "none"})
 
 
-def _run(hf, publish, job, who, private, include_dataset):
+def _run(hf, publish, job, who, private, include_dataset, lora_copy):
     """The publish itself: the export, the files (portable.publish's card
-    and manifest, then the export's: its server form's at the root, its
-    browser form's in the folder), the commit, and done; or failed, with
-    why."""
+    and manifest, then the export's: its server form's at the root, without
+    model.pt2 unless ``lora_copy``, its browser form's in the folder), the
+    commit, and done; or failed, with why."""
     def update(**fields):
         with hf["lock"]:
             publish.update(fields)
@@ -515,6 +515,10 @@ def _run(hf, publish, job, who, private, include_dataset):
         export = _export(job)
         folder, manifest, no_browser = export["folder"], export["manifest"], export["no_browser"]
         export_dir = Path(export["dir"])
+        # The export always writes model.pt2 where torch.export can; it is
+        # uploaded when asked, since it is the weights a second time.
+        server = {**export["server"], "no_browser": no_browser,
+                  "files": [f for f in export["server"]["files"] if lora_copy or f != "model.pt2"]}
         published_at = _iso(_now())
         pub = {
             "repo": publish["repo"],
@@ -526,10 +530,10 @@ def _run(hf, publish, job, who, private, include_dataset):
             **_training(job, served["models"][0]),
             "app_version": cellmap_flow.__version__,
             "dataset": _app_dataset(served.get("data_path")) if include_dataset else None,
-            "server": {**export["server"], "no_browser": no_browser},
+            "server": server,
         }
         files = [(f["path"], f["text"].encode()) for f in publication_files(pub)]
-        files += [(name, export_dir / name) for name in export["server"]["files"]]
+        files += [(name, export_dir / name) for name in server["files"]]
         files += [(f"{folder}/{v['file']}", export_dir / folder / v["file"]) for v in manifest["variants"]]
         update(folder=folder)
         created, is_private = _commit(who["token"], publish["repo"], private, files,

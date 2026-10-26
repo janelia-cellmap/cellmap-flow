@@ -62,6 +62,8 @@ export function initPublish() {
   const repoInput = document.getElementById("publishRepo");
   const privateBox = document.getElementById("publishPrivate");
   const datasetBox = document.getElementById("publishIncludeDataset");
+  // The server's only (its publish uploads a copy of the network; the template leaves it out elsewhere).
+  const loraBox = document.getElementById("publishLoraCopy");
   const publishBtn = document.getElementById("publishBtn");
   const statusLine = document.getElementById("publishStatus");
   const result = document.getElementById("publishResult");
@@ -303,6 +305,7 @@ export function initPublish() {
         repo: repoInput.value.trim(),
         private: privateBox.checked,
         include_dataset: datasetBox.checked,
+        ...(loraBox ? { lora_copy: loraBox.checked } : {}),
       }));
     } catch (e) {
       say(`Could not start the publish: ${e.message}`);

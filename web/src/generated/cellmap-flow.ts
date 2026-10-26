@@ -648,14 +648,19 @@ export interface HuggingFaceCredentials {
  * Where to publish a finetuned model on Hugging Face: ``repo`` as
  * ``owner/name`` (blank: the signed-in user's, named after the model),
  * whether a repository made for it is ``private`` (a model repository is
- * public otherwise), and whether its manifest and model card name the
+ * public otherwise), whether its manifest and model card name the
  * dataset it was trained on (``include_dataset``: off unless asked, since a
- * dataset's URL can be internal).
+ * dataset's URL can be internal), and, for a server's publish, whether its
+ * copy of the network includes ``model.pt2`` (``lora_copy``): the program a
+ * LoRA finetune of the published model attaches to, as cellmap's own
+ * repositories ship it, at the cost of uploading the weights a second time.
+ * A browser's publish has no such copy.
  */
 export interface FinetunePublish {
   repo?: string | null;
   private?: boolean;
   include_dataset?: boolean;
+  lora_copy?: boolean;
 }
 /**
  * The provider and model to use (ids the config lists), the target, as

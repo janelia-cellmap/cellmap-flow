@@ -135,7 +135,7 @@ def served(make_job, tmp_path, monkeypatch):
                 for v in ("fp32", "fp16")]
     manifest = {"task": "mito", "channels": ["mito"], "input_voxel_size_nm": [8] * 3,
                 "output_voxel_size_nm": [8] * 3}
-    server = {"files": ["metadata.json", "model.ts", "export_record.json"], "input_size": [64] * 3,
+    server = {"files": ["metadata.json", "model.ts", "model.pt2", "export_record.json"], "input_size": [64] * 3,
               "output_size": [32] * 3}
 
     # The export job, done at once: its files written where start_export says.
@@ -180,7 +180,8 @@ def test_a_pasted_token_publishes_the_served_model_in_both_forms_with_its_card_a
     assert (done["server_ref"], done["no_browser"]) == ("lab/mito", None)
     assert done["try_link"].endswith(f"?model=lab/mito/{MODEL}")
     files = hub.repos["lab/mito"]["files"]
-    model_files = ["metadata.json", "model.ts", "export_record.json", f"{MODEL}/model_fp32.onnx", f"{MODEL}/model_fp16.onnx"]
+    model_files = ["metadata.json", "model.ts", "model.pt2", "export_record.json", f"{MODEL}/model_fp32.onnx",
+                   f"{MODEL}/model_fp16.onnx"]
     assert sorted(files) == sorted(["README.md", f"{MODEL}/manifest.json", *model_files])
     assert hub.from_disk == set(model_files), "the model's files are read from the disk as they are sent"
     published = json.loads(files[f"{MODEL}/manifest.json"])["published"]
@@ -211,14 +212,14 @@ def test_a_model_with_no_browser_form_publishes_its_server_form_alone(dashboard,
     hub.users[TOKEN] = {"user": "ada"}
     dashboard.post(CREDENTIALS, json={"token": TOKEN})
 
-    dashboard.post(PUBLISH, json={"include_dataset": True})
+    dashboard.post(PUBLISH, json={"include_dataset": True, "lora_copy": False})
     done = dashboard.get(PUBLISH).get_json()
 
     assert done["status"] == "done", done
     assert (done["server_ref"], done["no_browser"]) == (f"ada/{MODEL}", served.no_browser)
     assert (done["ref"], done["try_link"], done["dataset_link"]) == (None, None, None), "nothing opens it in the browser"
     files = hub.repos[f"ada/{MODEL}"]["files"]
-    assert sorted(files) == ["README.md", "export_record.json", "metadata.json", "model.ts"]
+    assert sorted(files) == ["README.md", "export_record.json", "metadata.json", "model.ts"], "no model.pt2, as asked"
     card = files["README.md"].decode()
     assert f"`ada/{MODEL}`" in card and served.no_browser in card
     assert "?model=" not in card, "no link to the app, which could not open it"
