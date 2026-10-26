@@ -15,8 +15,11 @@ shared::
 
     https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
 
-A model is named as the Models tab lists it (``setup_53``) or by its
-repository path (``cellmap/onnx-web-models/setup_53``). *Share* in the header
+A model is named as the Models tab lists it (``setup_53``), by its
+repository path (``cellmap/onnx-web-models/setup_53``), or, for a model of
+another Hugging Face repo, as ``<owner>/<repo>/<folder>``. A link may name
+models and no volume (``?model=<owner>/<repo>/<folder>``): they run on the
+first volume you open. *Share* in the header
 copies such a link to what you have open, with the view (position, zoom,
 each layer as shown) and the Input and Postprocess settings the models run
 with, for someone else to open. The address bar itself stays bare, so a new
@@ -32,6 +35,17 @@ predictions to Neuroglancer as a zarr array through a service worker, chunk by
 chunk, as the viewer asks for them. The models are ONNX exports of cellmap's
 networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-models>`_
 on Hugging Face, cached in the browser after the first download.
+
+Other models come in two ways, from the Models tab's *Add a model*. A
+public Hugging Face model repo laid out as cellmap/onnx-web-models is (a
+folder per model, holding its ``manifest.json`` and the ``.onnx`` files it
+names; a model published from the app is one) is added by its ref,
+``<owner>/<repo>/<folder>``, or ``<owner>/<repo>`` when it holds one model,
+or its huggingface.co URL. Its models are then listed under Hugging Face
+after cellmap's, on later visits too. A model sent as a file is opened with
+*Open an .onnx file…*: an ``.onnx`` the app downloaded carries its manifest,
+any other is picked with its ``manifest.json``. It is kept in the browser
+like a finetuned model (below), and nothing is uploaded.
 
 It is the same dashboard as the server's: the same Models, Input and
 Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
@@ -430,8 +444,13 @@ beside a finetuned model under *Loaded models* (see *Usage* on the
 *Download paint* saves the volume as a zarr (zipped, the server's layout, so a server
 session can train on it) and *Download finetuned model* the ``.onnx``, with
 its manifest (voxel sizes, block, channels, input normalization) written into
-the file's metadata, so that the server mode serves the file as it is.
-Nothing leaves your machine unless you download and share it.
+the file's metadata, so that the server mode serves the file as it is and
+another browser opens it with *Open an .onnx file…*.
+Nothing leaves your machine unless you download and share it. *Share* puts a
+finetuned model in its link as its last layer's numbers, rebuilt from its
+base where the link opens; one whose whole network was trained, or that was
+opened from a file, goes in a link only once it has been published to
+Hugging Face, where the link then names it.
 
 To run the same models on the cluster, *Export Config* (in the header) saves
 a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
