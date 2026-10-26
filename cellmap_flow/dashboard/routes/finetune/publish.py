@@ -515,7 +515,9 @@ def publish_status(name):
     # as its training logged it: model.pt2 is its weights again in float32;
     # the smaller copy has distill's share of its parameters (at most the
     # browser's size), in four files of 4, 2, 1 and 1 bytes a parameter
-    # (onnx_web's fp32, fp16, int8w and int8w_fp16).
+    # (onnx_web's fp32, fp16, int8w and int8w_fp16), and trains for
+    # distill's hours, by whether the model can be pruned or not ("pruned",
+    # "random"), which only its job finds out.
     from cellmap_flow.finetune import distill
 
     parameters = job.network_parameters

@@ -138,7 +138,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-2.18.4-pyhd8ed1ab_0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -368,7 +368,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -1014,7 +1014,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-2.18.4-pyhd8ed1ab_0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl
@@ -1273,7 +1273,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -1571,7 +1571,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-2.18.4-pyhd8ed1ab_0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/10/48/4a18f117e05d0bcc3236a6c064c78f5b8c5b5248055a34f6940e7304def6/peft-0.21.1-py3-none-any.whl
@@ -1802,7 +1802,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -2073,7 +2073,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-2.18.4-pyhd8ed1ab_0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/4e/0703722c46447fa03c9425386b3ef3e90254a7c1eb5da654c3c33b210317/pdbpp-0.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -2337,7 +2337,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/4e/0703722c46447fa03c9425386b3ef3e90254a7c1eb5da654c3c33b210317/pdbpp-0.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
@@ -2989,7 +2989,7 @@ environments:
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
       - pypi: git+https://github.com/funkelab/funlib.learn.torch.git#228e15f41d755ee5c7e50cfaa26f7ed5110b55e4
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: git+https://github.com/mzouink/fly-organelles?rev=ab89c10#ab89c10470ab819e0ec232d75f0fb117ad3ba9c2
       - pypi: git+https://github.com/neptunes5thmoon/lsd-lite.git?rev=055892b81851fb78b4664144188c40f2d1f4ef05#055892b81851fb78b4664144188c40f2d1f4ef05
       - pypi: git+https://github.com/saalfeldlab/corditea.git#cb1f64a66615cd5d93b54f671ce7938fbc4624ae
@@ -3247,7 +3247,7 @@ environments:
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
       - pypi: git+https://github.com/funkelab/funlib.learn.torch.git#228e15f41d755ee5c7e50cfaa26f7ed5110b55e4
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: git+https://github.com/mzouink/fly-organelles?rev=ab89c10#ab89c10470ab819e0ec232d75f0fb117ad3ba9c2
       - pypi: git+https://github.com/neptunes5thmoon/lsd-lite.git?rev=055892b81851fb78b4664144188c40f2d1f4ef05#055892b81851fb78b4664144188c40f2d1f4ef05
       - pypi: git+https://github.com/saalfeldlab/corditea.git#cb1f64a66615cd5d93b54f671ce7938fbc4624ae
@@ -3956,7 +3956,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zarr-2.18.4-pyhd8ed1ab_0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/10/48/4a18f117e05d0bcc3236a6c064c78f5b8c5b5248055a34f6940e7304def6/peft-0.21.1-py3-none-any.whl
@@ -4197,7 +4197,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+      - pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -4410,7 +4410,7 @@ packages:
   - zstd >=1.5.7,<1.6.0a0
   license: BSD-3-Clause AND MIT AND EPL-2.0
   purls:
-  - pkg:pypi/backports-zstd?source=hash-mapping
+  - pkg:pypi/backports-zstd?source=compressed-mapping
   run_exports: {}
   size: 241113
   timestamp: 1788491295568
@@ -7075,7 +7075,7 @@ packages:
   license: BSD-2-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/imageio?source=hash-mapping
+  - pkg:pypi/imageio?source=compressed-mapping
   run_exports: {}
   size: 321602
   timestamp: 1791477236274
@@ -8077,7 +8077,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/cffi?source=hash-mapping
+  - pkg:pypi/cffi?source=compressed-mapping
   run_exports: {}
   size: 289165
   timestamp: 1788485306633
@@ -9343,7 +9343,8 @@ packages:
   - __osx >=11.0
   license: MIT
   license_family: MIT
-  purls: []
+  purls:
+  - pkg:pypi/ruff?source=compressed-mapping
   run_exports: {}
   size: 8198789
   timestamp: 1791586611651
@@ -9751,7 +9752,7 @@ packages:
   - ruff ; extra == 'dev'
   - mypy ; extra == 'dev'
   requires_python: '>=3.9'
-- pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=7922cdea75152482816a098059744d671f707757#7922cdea75152482816a098059744d671f707757
+- pypi: git+https://github.com/janelia-cellmap/cellmap-models.git?rev=4b0be0d170df1491f737f2405c79c0381348f69d#4b0be0d170df1491f737f2405c79c0381348f69d
   name: cellmap-models
   version: 0.2.4
   requires_dist:

@@ -183,7 +183,7 @@ export function initPublish() {
     }
     if (smallCost && "small_copy_bytes" in answer) {
       smallCost.textContent = answer.small_copy_bytes
-        ? `Trains it on one cluster GPU for up to ${answer.small_copy_hours} hours, then adds it to the repository: about ${formatMb(answer.small_copy_bytes / 1e6)} in its four files for this model.`
+        ? `Trains it on one cluster GPU, for up to ${answer.small_copy_hours.pruned} hours when the model is a funlib UNet (it starts from the model's own channels) and ${answer.small_copy_hours.random} otherwise (from scratch), then adds it to the repository: about ${formatMb(answer.small_copy_bytes / 1e6)} in its four files for this model.`
         : smallCostAnyModel;
     }
     running = answer.status === "running" || answer.small_status === "running";

@@ -1108,7 +1108,7 @@
       <div class="form-check" title="Worth it for a model too big for the browser (the 800M-parameter UNets) or slow in it. The small copy is a funlib UNet trained to reproduce this model's output on the data it was finetuned on; the card says how close it came.">
         <input class="form-check-input" type="checkbox" id="publishSmallCopy" autocomplete="off">
         <label class="form-check-label small" for="publishSmallCopy">Also publish a smaller copy for the browser</label>
-        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU for up to 3 hours, then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
+        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU, for up to 3 hours when the model is a funlib UNet (it starts from the model's own channels) and 8 otherwise (from scratch), then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
       </div>
       {% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
