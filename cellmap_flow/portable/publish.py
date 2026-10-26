@@ -77,6 +77,30 @@ HF_OAUTH_SCOPES = ("openid", "profile", "contribute-repos")
 MODEL_PARAM = "model"
 DATASET_PARAM = "dataset"
 
+# What both modes' publish routes answer when Hugging Face refuses a token
+# or the user has not given one: fixed sentences, which the browser takes
+# from python-data.json (web/build/export_data.py), and the refusals of a
+# repository and of a publish's token below, which it calls.
+SIGN_IN_FIRST = ("Sign in with Hugging Face, or paste an access token with write access, first: the model is "
+                 "published under your own account.")
+TOKEN_REFUSED = ("Hugging Face does not accept this token: check that it was copied whole and has not expired or "
+                 "been revoked (https://huggingface.co/settings/tokens).")
+READ_ONLY = ("This token can only read. Make one with write access at https://huggingface.co/settings/tokens "
+             "(a Write token) and paste that instead.")
+
+# A Hugging Face repository's name (huggingface_hub's rule, as near as a
+# pattern says it): letters, digits, -, _ and ., not starting or ending
+# with - or ., no -- or .., at most 96 characters.
+_REPO_NAME = re.compile(r"(?!.*(--|\.\.))[A-Za-z0-9](?:[\w.-]{0,94}[A-Za-z0-9])?", re.ASCII)
+
+# How a token Hugging Face no longer takes is replaced, by how it was given:
+# a sign-in, a pasted token, or one saved on the server.
+_ANEW = {
+    "oauth": "sign in again",
+    "token": "paste a new access token",
+    "saved": "run `hf auth login` on this server with a new token",
+}
+
 _CELLMAP_FLOW = "[cellmap-flow](https://github.com/janelia-cellmap/cellmap-flow)"
 
 # What the paint trained, as the card says it, by the publish's
@@ -130,6 +154,41 @@ def published_links(repo: str, folder: str, app: str, dataset: Optional[str]) ->
     ``app_links`` on ``app`` (the page's own address) with ``dataset``."""
     ref = ref_of(repo, folder)
     return {"ref": ref, "url": f"{HUB}/{repo}", **app_links(app, ref, dataset)}
+
+
+def repo_refusal(repo: str, user: str, orgs: List[str]) -> Optional[dict]:
+    """Why a publish to ``repo`` is refused before it starts, as both modes'
+    routes answer: ``{"status", "error"}``, 400 for a name Hugging Face would
+    not take (``owner/name``), 403 for an owner that is neither ``user`` nor
+    one of ``orgs``; None for a repository they may publish to."""
+    owner, _, name = repo.partition("/")
+    if not owner or not _REPO_NAME.fullmatch(name):
+        return {"status": 400, "error": f"{repo} is not a repository name Hugging Face takes: owner/name, the name "
+                                        "of letters, digits, - _ and . (not at its ends), at most 96 characters."}
+    if owner != user and owner not in orgs:
+        yours = ", ".join([user, *orgs])
+        return {"status": 403, "error": f"{owner} is not your account or one of your organizations on Hugging Face "
+                                        f"({yours}): publish under one of those, {user}/{name} for instance."}
+    return None
+
+
+def hub_refusal(status: int, repo: str, via: str) -> Optional[str]:
+    """What a publish to ``repo`` says when Hugging Face refuses its token
+    (401) or its writing there (403), by how the token was given (``via``:
+    "oauth", a sign-in, whose scope reaches only the repositories made
+    through the app; "token", pasted; "saved", on the server). None for any
+    other answer, which each mode words with the Hub's own reason."""
+    if status == 401:
+        return f"Hugging Face did not accept the token: it may have expired or been revoked. To publish, {_ANEW[via]}."
+    if status != 403:
+        return None
+    if via == "oauth":
+        return (f"Hugging Face does not let this sign-in write to {repo}: it may make repositories and write to "
+                "those made through cellmap-flow, and no others. Publish to a new repository, or paste an access "
+                "token that may write to this one.")
+    return (f"This token may not write to {repo}: make one with write access at https://huggingface.co/settings/tokens "
+            "(a Write token, or a fine-grained one that may write to your repositories), or publish to a "
+            "repository it may write to.")
 
 
 def published_manifest(pub: dict) -> dict:

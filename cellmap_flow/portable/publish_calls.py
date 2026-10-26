@@ -17,6 +17,19 @@ def publication(args, arrays):
     return publish.publication_files(args["pub"])
 
 
+def repo_refusal(args, arrays):
+    """``publish.repo_refusal``: why a publish to ``repo`` by ``user`` (of
+    ``orgs``) is refused before it starts, or null."""
+    return publish.repo_refusal(args["repo"], args["user"], args["orgs"])
+
+
+def hub_refusal(args, arrays):
+    """``publish.hub_refusal``: what a publish to ``repo`` says when Hugging
+    Face refuses its token (``status`` 401) or its writing there (403), by
+    ``via``, or null for any other ``status``."""
+    return publish.hub_refusal(args["status"], args["repo"], args["via"])
+
+
 def published_links(args, arrays):
     """``publish.published_links``: where the model ``folder`` of ``repo``
     is (its ref and its repository's page) and the links that open it in

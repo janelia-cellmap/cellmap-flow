@@ -38,7 +38,7 @@ import type { AppContext, FinetunedRecord } from "../../contracts";
 import { readVolume } from "../../finetune/volume";
 import type { FinetunePublish } from "../../generated/cellmap-flow";
 import { PYTHON } from "../../generated/python-data";
-import { type PublishProgress, publishError, publishFiles, tokenError, whoIs } from "../../publish/hub";
+import { hubStatus, type PublishProgress, publishError, publishFiles, tokenError, whoIs } from "../../publish/hub";
 import { publicationOf } from "../../publish/model";
 import { listenForSignIn, type SignIn, signInUrl } from "../../publish/oauth";
 import type { Router } from "../router";
@@ -49,12 +49,8 @@ import { pageBase } from "../serving";
  * {signed_in, error?}); lib/events.js's HUGGINGFACE_SIGN_IN_EVENT names it too. */
 export const SIGN_IN_EVENT = "cellmap-flow:huggingface-sign-in";
 
-/** A Hugging Face repository name (huggingface_hub's rule, as near as a
- * pattern says it): letters, digits, `-`, `_` and `.`, not starting or
- * ending with `-` or `.`, no `--` or `..`, at most 96 characters. */
-const REPO_NAME = /^(?!.*(--|\.\.))[A-Za-z0-9](?:[\w.-]{0,94}[A-Za-z0-9])?$/;
-
-/** The Python of a publish: its files, and where a published model is. */
+/** The Python of a publish: its files, where a published model is, and
+ * what refuses one (the server's route calls the same). */
 const PUBLISH_CALLS = "cellmap_flow.portable.publish_calls";
 
 /** Where a published model is (portable/publish.py published_links). */
@@ -83,7 +79,6 @@ interface SignedIn {
   expiresAt: Date | null;
 }
 
-const READ_ONLY = "This token can only read. Make one with write access at https://huggingface.co/settings/tokens (a Write token) and paste that instead.";
 
 /** One model's publish: where it is going, and how far it has got. */
 interface Job {
@@ -149,7 +144,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
       try {
         const who = await whoIs(answer.token);
         if (who.readOnly) {
-          error = READ_ONLY;
+          error = PYTHON.huggingface.read_only;
         } else {
           signedIn = { token: answer.token, user: who.user, orgs: who.orgs, via: "oauth", expiresAt: answer.expires_at ? new Date(answer.expires_at) : null };
           ctx.log(`Hugging Face: signed in as ${who.user} (kept in this page only)`);
@@ -183,7 +178,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
     }
     try {
       const who = await whoIs(token);
-      if (who.readOnly) return json(403, { success: false, error: READ_ONLY });
+      if (who.readOnly) return json(403, { success: false, error: PYTHON.huggingface.read_only });
       signedIn = { token, user: who.user, orgs: who.orgs, via: "token", expiresAt: null };
       ctx.log(`Hugging Face: signed in as ${who.user} with an access token (kept in this page only)`);
       return json(200, account(ctx));
@@ -208,17 +203,11 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
     if (!record) return json(404, { success: false, error: `No model finetuned in this browser is named ${params.name}` });
     const who = current(ctx);
     if (!who) {
-      return json(401, { success: false, error: "Sign in with Hugging Face, or paste an access token with write access, first: the model is published under your own account." });
+      return json(401, { success: false, error: PYTHON.huggingface.sign_in_first });
     }
     const repo = typeof body.repo === "string" && body.repo.trim() ? body.repo.trim() : `${who.user}/${record.name}`;
-    const [owner, name, ...rest] = repo.split("/");
-    if (!owner || !name || rest.length || !REPO_NAME.test(name)) {
-      return badRequest(`${repo} is not a repository name Hugging Face takes: owner/name, the name of letters, digits, - _ and . (not at its ends), at most 96 characters.`);
-    }
-    if (owner !== who.user && !who.orgs.includes(owner)) {
-      const yours = [who.user, ...who.orgs].join(", ");
-      return json(403, { success: false, error: `${owner} is not your account or one of your organizations on Hugging Face (${yours}): publish under one of those, ${who.user}/${name} for instance.` });
-    }
+    const refused = await ctx.infer.python<{ status: number; error: string } | null>(`${PUBLISH_CALLS}:repo_refusal`, { repo, user: who.user, orgs: who.orgs });
+    if (refused) return json(refused.status, { success: false, error: refused.error });
     if (jobs.get(record.name)?.status === "running") {
       return json(409, { success: false, error: `${record.name} is being published already: wait for it to finish.` });
     }
@@ -280,8 +269,12 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
       Object.assign(job, { status: "done", created, private: isPrivate, at: publishedAt });
       ctx.log(`Published ${job.folder} to ${url} as ${ref}${created ? " (a new repository)" : ""}`);
     } catch (e) {
+      // Hugging Face refusing the token or the repository is worded as the
+      // server words it; anything else (out of reach, the Hub's own reason) here.
+      const status = hubStatus(e);
+      const refused = status === null ? null : await ctx.infer.python<string | null>(`${PUBLISH_CALLS}:hub_refusal`, { status, repo: job.repo, via: who.via });
       job.status = "failed";
-      job.error = publishError(e, { repo: job.repo, via: who.via, file: job.progress?.file ?? null });
+      job.error = refused ?? publishError(e, { repo: job.repo, file: job.progress?.file ?? null });
       ctx.log(job.error);
     }
   }

@@ -45,8 +45,8 @@ Who publishes is one of three tokens, the answers' ``via``:
   Face gives a code, the user enters it at huggingface.co in any browser,
   and the dashboard asks for the token until it is given. The page of a
   dashboard on a cluster node is opened through a tunnel or a proxy, at an
-  address no OAuth app could be registered with, so the browser mode's
-  popup, which returns to the page, cannot work here. A sign-in's token
+  address the app's client metadata cannot list as a redirect, so the
+  browser mode's popup, which returns to the page, cannot work here. A sign-in's token
   expires, so it is kept in memory only and never saved.
 
 Every token, and a sign-in's device code, is registered with
@@ -75,20 +75,17 @@ from cellmap_flow.portable.publish import (
     HF_OAUTH_SCOPES,
     HUB,
     PUBLIC_APP,
+    READ_ONLY,
+    SIGN_IN_FIRST,
+    TOKEN_REFUSED,
+    hub_refusal,
     publication_files,
     published_links,
     ref_of,
+    repo_refusal,
 )
 
 logger = logging.getLogger(__name__)
-
-# A Hugging Face repository's name (huggingface_hub's rule, as near as a
-# pattern says it, and publish.ts's REPO_NAME): letters, digits, -, _ and .,
-# not starting or ending with - or ., no -- or .., at most 96 characters.
-REPO_NAME = re.compile(r"(?!.*(--|\.\.))[A-Za-z0-9](?:[\w.-]{0,94}[A-Za-z0-9])?", re.ASCII)
-
-READ_ONLY = ("This token can only read. Make one with write access at https://huggingface.co/settings/tokens "
-             "(a Write token) and paste that instead.")
 
 UNREACHABLE = ("Hugging Face could not be reached from this server: check its connection to huggingface.co "
                "(a firewall or a proxy may stop it) and try again.")
@@ -153,29 +150,19 @@ def _token_error(e):
     if _unreachable(e):
         return UNREACHABLE
     if _hub_status(e) == 401:
-        return ("Hugging Face does not accept this token: check that it was copied whole and has not expired "
-                "or been revoked (https://huggingface.co/settings/tokens).")
+        return TOKEN_REFUSED
     return f"Hugging Face could not say whose token this is: {_hub_message(e)}"
 
 
 def _publish_error(e, repo, via, file):
     """What went wrong with a publish to ``repo``, by the token's ``via``:
-    publish.ts's publishError, with the server's ways to sign in again."""
+    Hugging Face refusing the token or the repository as both modes word it
+    (hub_refusal), else as publish.ts's publishError says the rest."""
     if _unreachable(e):
         return f"Uploading {file}: {UNREACHABLE}" if file else UNREACHABLE
-    status = _hub_status(e)
-    if status == 401:
-        again = {"saved": "run `hf auth login` on this server with a new token",
-                 "oauth": "sign in again"}.get(via, "paste a new access token")
-        return f"Hugging Face did not accept the token: it may have expired or been revoked. To publish, {again}."
-    if status == 403:
-        if via == "oauth":
-            return (f"Hugging Face does not let this sign-in write to {repo}: it may make repositories and write to "
-                    "those made through cellmap-flow, and no others. Publish to a new repository, or paste an "
-                    "access token that may write to this one.")
-        return (f"This token may not write to {repo}: make one with write access at "
-                "https://huggingface.co/settings/tokens (a Write token, or a fine-grained one that may write to "
-                "your repositories), or publish to a repository it may write to.")
+    refused = hub_refusal(_hub_status(e), repo, via)
+    if refused:
+        return refused
     reason = _hub_message(e)
     return f"Uploading {file} to {repo} failed: {reason}" if file else f"Publishing to {repo} failed: {reason}"
 
@@ -476,17 +463,11 @@ def start_publish(name):
         return _error(f"No model finetuned on this server is named {name}", 404)
     who = _signed_in()
     if who is None:
-        return _error("Sign in with Hugging Face, or paste an access token with write access, first: the model is "
-                      "published under your own account.", 401)
+        return _error(SIGN_IN_FIRST, 401)
     repo = (body.repo or "").strip() or f"{who['user']}/{name}"
-    owner, _, repo_name = repo.partition("/")
-    if not owner or not REPO_NAME.fullmatch(repo_name):
-        return _error(f"{repo} is not a repository name Hugging Face takes: owner/name, the name of letters, digits, "
-                      "- _ and . (not at its ends), at most 96 characters.", 400)
-    if owner != who["user"] and owner not in who["orgs"]:
-        yours = ", ".join([who["user"], *who["orgs"]])
-        return _error(f"{owner} is not your account or one of your organizations on Hugging Face ({yours}): "
-                      f"publish under one of those, {who['user']}/{repo_name} for instance.", 403)
+    refused = repo_refusal(repo, who["user"], who["orgs"])
+    if refused:
+        return _error(refused["error"], refused["status"])
     hf = get_session().huggingface
     with hf["lock"]:
         if hf["publishes"].get(name, {}).get("status") == "running":

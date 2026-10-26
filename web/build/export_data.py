@@ -112,7 +112,14 @@ def python_data():
         "links": {"model_param": publish.MODEL_PARAM, "dataset_param": publish.DATASET_PARAM},
         # Sign in with Hugging Face (web/src/publish/oauth.ts), as the
         # server's sign-in asks for it too.
-        "huggingface": {"oauth_client_id": publish.HF_OAUTH_CLIENT_ID, "oauth_scopes": list(publish.HF_OAUTH_SCOPES)},
+        "huggingface": {
+            "oauth_client_id": publish.HF_OAUTH_CLIENT_ID,
+            "oauth_scopes": list(publish.HF_OAUTH_SCOPES),
+            # What both modes' publish routes answer in fixed words.
+            "sign_in_first": publish.SIGN_IN_FIRST,
+            "token_refused": publish.TOKEN_REFUSED,
+            "read_only": publish.READ_ONLY,
+        },
         "ops": {
             "input_norm": ops(get_input_normalizers()),
             "postprocess": ops(get_postprocessors_list()),

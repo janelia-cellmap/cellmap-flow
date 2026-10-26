@@ -10,7 +10,10 @@
       "openid",
       "profile",
       "contribute-repos"
-    ]
+    ],
+    "sign_in_first": "Sign in with Hugging Face, or paste an access token with write access, first: the model is published under your own account.",
+    "token_refused": "Hugging Face does not accept this token: check that it was copied whole and has not expired or been revoked (https://huggingface.co/settings/tokens).",
+    "read_only": "This token can only read. Make one with write access at https://huggingface.co/settings/tokens (a Write token) and paste that instead."
   },
   "ops": {
     "input_norm": [

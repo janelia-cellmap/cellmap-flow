@@ -14,7 +14,7 @@
 // dashboard/routes/finetune/publish.py's on a server, and answer alike.
 // Where the two differ the credentials answer says so, and the panel goes
 // by it, not by the mode: Sign in opens a popup where it gives an
-// `oauth_url` (the browser's, with a registered OAuth app), and asks for a
+// `oauth_url` (the browser's), and asks for a
 // code to enter at huggingface.co where it offers `device_sign_in` (the
 // server's), followed until the sign-in is done or has failed (`device`);
 // Remember on this server is offered where it says `can_remember`; and a
