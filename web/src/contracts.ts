@@ -322,6 +322,11 @@ export interface FinetunedRecord {
    * no volume here (""), no parameters and no epochs: the training was in
    * the browser the link was made in. */
   from_link?: { name: string };
+  /** Set when the model was published to Hugging Face from this browser
+   * (publish/): the repository and folder it was uploaded to, which is also
+   * its ref (`<repo>/<folder>`), so a link names it there rather than
+   * carrying its weights. */
+  published?: { repo: string; folder: string; at: string };
 }
 
 // ---------------------------------------------------------------------------
