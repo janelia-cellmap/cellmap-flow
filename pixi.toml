@@ -90,11 +90,13 @@ cxx-compiler = "*"
 # not change what deploys.
 neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", rev = "fae54db8c667176a602a34f0d9d1028956009836" }
 # cellmap-models with model_export.onnx_web, which the web export of a model
-# finetuned here runs (finetune/export_web.py), and its export extra: onnx,
-# and onnxruntime for the export's checks. From Marwan's branch until a
-# release has it, so here and not in pyproject, as the fork above; pinned to
-# the commit export_web was written against.
-cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "7922cdea75152482816a098059744d671f707757", extras = ["export"] }
+# finetuned here runs (finetune/export_web.py), and model_export.student,
+# which makes the small copy finetune/distill.py trains, and its export
+# extra: onnx, and onnxruntime for the export's checks. From the branch of
+# its pull request #15 (onto Marwan's onnx-web-export-and-pruning) until a
+# release has them, so here and not in pyproject, as the fork above; pinned
+# to the commit the two were written against.
+cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "4b0be0d170df1491f737f2405c79c0381348f69d", extras = ["export"] }
 
 # Cellpose (Cellpose-SAM, Cellpose 4) lives in an environment of its own,
 # solved separately, where the `cellpose` model type runs and finetunes by

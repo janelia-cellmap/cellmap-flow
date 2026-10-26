@@ -1,8 +1,8 @@
-"""A finetuned model too big for the browser is distilled into a small copy
-(distill): the copy computes nearer the finetuned model than the pruned
-network it starts from, exports for the browser as export_web exports a
-model, and a network the pruning does not cover is refused before any
-training."""
+"""A finetuned model is distilled into a small copy for the browser
+(distill): the copy, pruned from a funlib UNet or a random StandardUnet for
+any other network, computes nearer the finetuned model than it started,
+exports for the browser as export_web exports a model, and a model a small
+copy cannot be made of is refused before any training."""
 
 import json
 from types import SimpleNamespace
@@ -83,7 +83,7 @@ for layer in model.modules():
         nn.init.zeros_(layer.bias)
 """
 
-# Not a funlib UNet. 28^3 in, 24^3 out.
+# Not a funlib UNet. 28^3 in, 24^3 out; PLAIN_2D below is the test's.
 PLAIN = """
 from funlib.geometry import Coordinate
 import torch
@@ -97,6 +97,30 @@ channels = ["mito_aff_y", "mito_aff_x"]
 torch.manual_seed(0)
 model = nn.Sequential(nn.Conv3d(1, 4, 3), nn.ReLU(), nn.Conv3d(4, 2, 3))
 """
+
+# Writes 32 nm voxels from 16 nm ones, which a small copy cannot.
+COARSE = """
+from funlib.geometry import Coordinate
+import torch.nn as nn
+
+input_voxel_size, output_voxel_size = Coordinate(16, 16, 16), Coordinate(32, 32, 32)
+read_shape = Coordinate(28, 28, 28) * input_voxel_size
+write_shape = Coordinate(14, 14, 14) * output_voxel_size
+output_channels = 2
+channels = ["mito_aff_y", "mito_aff_x"]
+model = nn.Sequential(nn.Conv3d(1, 2, 2, stride=2))
+"""
+
+# The plain network in 2D, on one z-slice. 1x28x28 in, 1x24x24 out.
+PLAIN_2D = (PLAIN.replace("Coordinate(28, 28, 28)", "Coordinate(1, 28, 28)")
+            .replace("Coordinate(24, 24, 24)", "Coordinate(1, 24, 24)")
+            .replace("nn.Conv3d(1, 4, 3)", "nn.Conv3d(1, 4, (1, 3, 3))")
+            .replace("nn.Conv3d(4, 2, 3)", "nn.Conv3d(4, 2, (1, 3, 3))"))
+
+# Each teacher's script and its block, in voxels in and out.
+SCRIPTS = {"script": (FUNLIB, (28,) * 3, (12,) * 3), "cellmap": (FUNLIB, (28,) * 3, (12,) * 3),
+           "plain2d": (PLAIN_2D, (1, 28, 28), (1, 24, 24)),
+           "coarse": (COARSE, (28,) * 3, (14,) * 3)}
 
 INPUT_NORM = {"MinMaxNormalizer": {"min_value": 0, "max_value": 255}, "LambdaNormalizer": {"expression": "x*2-1"}}
 
@@ -122,12 +146,14 @@ def _cellmap_folder(path, model, size, out):
 
 @pytest.fixture(params=["script", "cellmap"])
 def teacher(request, tmp_path, annotation_volume):
-    """A LoRA finetune of a UNet, as a run leaves it: its adapter, the YAML
-    that serves it, and the session's corrections it was trained on.
+    """A LoRA finetune of a network, as a run leaves it: its adapter, the
+    YAML that serves it, and the session's corrections it was trained on.
 
     "script" and "cellmap" are the funlib UNet as a script model and as a
     cellmap folder (trained as the unflattened torch.export program, as the
-    large cellmap UNets are); "plain" is a network that is not a funlib UNet.
+    large cellmap UNets are); "plain2d" is a 2D network that is not a funlib
+    UNet (2D, as a 3D StandardUnet student of one takes a minute on the CPU);
+    "coarse" one that writes at another voxel size than it reads.
     """
     pytest.importorskip("peft")
     import torch
@@ -137,12 +163,12 @@ def teacher(request, tmp_path, annotation_volume):
     from cellmap_flow.finetune.model_loading import load_trainable_model, model_config_from_entry
     from cellmap_flow.finetune.session.manifest import write_manifest
 
-    out = 24 if request.param == "plain" else 12
+    text, size, out = SCRIPTS[request.param]
     script = tmp_path / "big_unet.py"
-    script.write_text(PLAIN if request.param == "plain" else FUNLIB)
+    script.write_text(text)
     base = {"type": "script", "script_path": str(script), "name": "big"}
     if request.param == "cellmap":
-        base = _cellmap_folder(tmp_path / "big", model_config_from_entry(base).config.model, 28, out)
+        base = _cellmap_folder(tmp_path / "big", model_config_from_entry(base).config.model, size[0], out[0])
     peft = wrap_model_with_lora(load_trainable_model(model_config_from_entry(base)),
                                 lora_r=2, lora_alpha=4, lora_dropout=0.0)
     with torch.no_grad():
@@ -151,15 +177,19 @@ def teacher(request, tmp_path, annotation_volume):
                 p.fill_(0.1)
     save_lora_adapter(peft, str(tmp_path / "run" / "lora_adapter"))
 
-    labels = np.zeros((48, 48, 48), np.uint8)
-    labels[20:28, 20:28, 20:28] = 2
-    labels[20:28, 20:28, 10:14] = 1
+    # A random StandardUnet reads 1x146x146 for the plain teacher's 1x24x24:
+    # a volume about as large, so that its blocks are mostly raw, not edge.
+    side = 128 if request.param.startswith("plain") else 48
+    labels = np.zeros((side,) * 3, np.uint8)
+    c = side // 2
+    labels[c - 4:c + 4, c - 4:c + 4, c - 4:c + 4] = 2
+    labels[c - 4:c + 4, c - 4:c + 4, c - 14:c - 10] = 1
     raw = np.random.default_rng(0).integers(0, 256, labels.shape, dtype=np.uint8)
     volume = annotation_volume(labels, raw=raw)
     corrections = tmp_path / "session" / "corrections"
     write_manifest(str(corrections), {
         "kind": "volume_zarr_v1", "volume_zarr_path": volume.path, "raw_dataset_path": volume.raw,
-        "input_size_voxels": [28] * 3, "output_size_voxels": [out] * 3,
+        "input_size_voxels": list(size), "output_size_voxels": list(out),
         "input_voxel_size_nm": [16] * 3, "output_voxel_size_nm": [16] * 3, "input_norm": INPUT_NORM,
     })
     yaml_path = generate_finetuned_model_yaml(
@@ -191,15 +221,46 @@ def _run(teacher, run, *flags):
                          "--output", str(run.output_dir), "--workers", "0", "--variants", "fp32", *flags])
 
 
-@pytest.mark.finetune
-def test_a_finetuned_model_distills_into_a_small_copy_that_exports_for_the_browser(teacher, launched):
-    pytest.importorskip("cellmap_models.model_export.prune")
-    pytest.importorskip("cellmap_models.model_export.onnx_web")
-    ort = pytest.importorskip("onnxruntime")
+def _middle(a, shape):
+    """The middle ``shape`` of ``a``'s last three axes."""
+    o = [(n - s) // 2 for n, s in zip(a.shape[-3:], shape)]
+    return a[..., o[0]:o[0] + shape[0], o[1]:o[1] + shape[1], o[2]:o[2] + shape[2]]
+
+
+def _outputs(teacher, run, status, parameters=None):
+    """On a block the student was neither trained nor measured on: the
+    exported fp32 file's output, the kept student's, a student as it starts
+    (the pruned network, or a new random one), and what the server serves
+    there, the middle the student writes of the finetuned model's output."""
+    import onnxruntime as ort
     import torch
 
     from cellmap_flow.finetune.model_loading import model_config_from_entry
     from cellmap_flow.models.configs.onnx import parse_manifest
+
+    manifest = parse_manifest(status["manifest"])
+    # The block it trained at; the others are checked as the export checks them.
+    variant = manifest["variants"][0]
+    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, *variant["input_size"])).astype(np.float32)
+    session = ort.InferenceSession(str(run.output_dir / status["folder"] / variant["file"]),
+                                   providers=["CPUExecutionProvider"])
+    exported = session.run([manifest["io"]["output"]], {manifest["io"]["input"]: x})[0]
+    network, finetuned, _ = export_web.finetuned_network(teacher.yaml)
+    geometry = finetuned.base_model_config.geometry
+    student = distill.make_student(network, geometry, 2, "unbounded", parameters)
+    served_model = model_config_from_entry(export_web.serving_entry(teacher.yaml)[1]).config.model
+    with torch.no_grad():
+        start = student.network(torch.from_numpy(x)).numpy()
+        student.network.load_state_dict(torch.load(run.output_dir / distill.CHECKPOINT_NAME)["state_dict"])
+        kept = student.network(torch.from_numpy(x)).numpy()
+        served = served_model(torch.from_numpy(_middle(x, geometry.input_shape))).numpy()
+    return exported, kept, start, _middle(served, exported.shape[2:])
+
+
+@pytest.mark.finetune
+def test_a_funlib_unet_distills_from_its_pruned_copy_into_one_for_the_browser(teacher, launched):
+    pytest.importorskip("cellmap_models.model_export.student")
+    pytest.importorskip("onnxruntime")
 
     run = distill.start_distill(teacher.yaml, teacher.corrections, teacher.run)
     assert export_web.export_status(run)["status"] == "running"
@@ -210,46 +271,61 @@ def test_a_finetuned_model_distills_into_a_small_copy_that_exports_for_the_brows
     # A tenth of the teacher or less, in a folder of the catalog's beside the
     # finetuned model's own, and closer to the teacher on the held-out
     # blocks than the pruned network it started from.
-    folder = run.output_dir / status["folder"]
-    manifest = parse_manifest(json.loads((folder / "manifest.json").read_text()))
     assert status["folder"] == export_web.folder_name("big_finetuned_20261026_120000") + distill.SUFFIX
     distillation = status["manifest"]["distillation"]
+    assert distillation["init"] == "pruned"
     assert status["manifest"]["params"] <= distillation["teacher_params"] / 10
-    assert distillation["distilled"]["mse"] < 0.7 * distillation["pruned"]["mse"]
+    assert distillation["distilled"]["mse"] < 0.7 * distillation["start"]["mse"]
 
     # Its fp32 file computes what the student it kept computes, and nearer
-    # what the server serves than the pruned network, on a block it was
-    # neither trained nor measured on.
-    variant = manifest["variants"][0]
-    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, *variant["input_size"])).astype(np.float32)
-    session = ort.InferenceSession(str(folder / variant["file"]), providers=["CPUExecutionProvider"])
-    exported = session.run([manifest["io"]["output"]], {manifest["io"]["input"]: x})[0]
-    student = distill.small_copy(distill.teacher_network(teacher.yaml)[0])
-    checkpoint = torch.load(run.output_dir / distill.CHECKPOINT_NAME, weights_only=True)
-    with torch.no_grad():
-        pruned = student.network(torch.from_numpy(x)).numpy()
-        student.network.load_state_dict(checkpoint["state_dict"])
-        kept = student.network(torch.from_numpy(x)).numpy()
-        served = model_config_from_entry(export_web.serving_entry(teacher.yaml)[1]).config.model(
-            torch.from_numpy(x)).numpy()
+    # what the server serves than the pruned network does.
+    exported, kept, start, served = _outputs(teacher, run, status)
     assert np.abs(exported - kept).max() <= 1e-5 * np.abs(kept).max()
-    assert np.mean((exported - served) ** 2) < np.mean((pruned - served) ** 2)
+    assert np.mean((exported - served) ** 2) < np.mean((start - served) ** 2)
 
     # Started again, it carries on from the student it kept.
     run = distill.start_distill(teacher.yaml, teacher.corrections, teacher.run)
     assert _run(teacher, run, "--epochs", "1", "--steps-per-epoch", "2") == 0
     again = export_web.export_status(run)["manifest"]["distillation"]
     assert again["steps"] >= distillation["steps"] > 2
-    assert again["pruned"] == distillation["pruned"]
+    assert again["start"] == distillation["start"]
 
 
-@pytest.mark.parametrize("teacher", ["plain"], indirect=True)
-def test_a_network_the_pruning_does_not_cover_is_refused_before_training(teacher, launched):
-    pytest.importorskip("cellmap_models.model_export.prune")
+@pytest.mark.finetune
+@pytest.mark.parametrize("teacher", ["plain2d"], indirect=True)
+def test_any_other_network_distills_from_a_random_standard_unet_for_the_browser(teacher, launched):
+    pytest.importorskip("cellmap_models.model_export.student")
+    pytest.importorskip("onnxruntime")
+
+    from cellmap_flow.models.configs.onnx import parse_manifest
+
+    run = distill.start_distill(teacher.yaml, teacher.corrections, teacher.run, parameters=20_000)
+    assert _run(teacher, run, "--parameters", "20000", "--epochs", "3", "--steps-per-epoch", "10",
+                "--learning-rate", "3e-3") == 0
+    status = export_web.export_status(run)
+    assert status["status"] == "done", status["error"]
+    distillation = status["manifest"]["distillation"]
+    assert distillation["init"] == "random"
+    assert distillation["distilled"]["mse"] < 0.7 * distillation["start"]["mse"]
+
+    # A 2D StandardUnet whose output, the middle of the teacher's, is the
+    # teacher's 1x24x24, read from more raw around it than the teacher reads;
+    # exported at larger slices too.
+    exported, kept, start, served = _outputs(teacher, run, status, parameters=20_000)
+    assert exported.shape == served.shape == (1, 2, 1, 24, 24)
+    assert np.abs(exported - kept).max() <= 1e-5 * np.abs(kept).max()
+    assert np.mean((exported - served) ** 2) < np.mean((start - served) ** 2)
+    sizes = [v["input_size"] for v in parse_manifest(status["manifest"])["variants"]]
+    assert len(sizes) > 1 and all(size[0] == 1 for size in sizes)
+
+
+@pytest.mark.parametrize("teacher", ["coarse"], indirect=True)
+def test_a_model_a_small_copy_cannot_be_made_of_is_refused_before_training(teacher, launched):
+    pytest.importorskip("cellmap_models.model_export.student")
 
     run = distill.start_distill(teacher.yaml, teacher.corrections, teacher.run)
     assert _run(teacher, run) == 1
     status = export_web.export_status(run)
     assert status["status"] == "failed" and status["error"]
-    # The pruned network is kept before the first step: there is none.
+    # The student is kept before the first step: there is none.
     assert not (run.output_dir / distill.CHECKPOINT_NAME).exists()
