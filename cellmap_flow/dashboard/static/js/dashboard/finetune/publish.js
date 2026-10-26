@@ -5,10 +5,15 @@
 // pasted access token; then the repository (by default the user's own,
 // named after the model), whether a new one is private, and whether the
 // model card names the dataset. Publish starts the upload (on a server, the
-// export to ONNX first), whose progress is polled, and the result is the
-// model's Hugging Face page, its ref and the two links that open it in the
-// app, the model alone and on this dataset, each with a Copy button. A model
-// published before shows where it went when the panel opens.
+// export first: TorchScript for servers, and ONNX for the browser where it
+// can make one), whose progress is polled, and the result is the model's
+// Hugging Face page, its refs and the two links that open it in the app,
+// the model alone and on this dataset, each with a Copy button. A server's
+// publish has a ref for servers, the repository's (its TorchScript), and,
+// with a browser form, the folder's that both modes open and the links; a
+// row the answer gives nothing for is hidden, and the status line says why
+// a publish has no browser form. A model published before shows where it
+// went when the panel opens.
 //
 // The routes are web/src/backend/routes/publish.ts's in the browser and
 // dashboard/routes/finetune/publish.py's on a server, and answer alike.
@@ -31,7 +36,7 @@ const CREDENTIALS = "/api/huggingface/credentials";
 
 // What a running publish is doing, by the step the route answers.
 const STEP_WORDS = {
-  exporting: "Exporting the model to ONNX (a cluster job)",
+  exporting: "Exporting the model (a cluster job)",
   creating: "Making the repository",
   preparing: "Preparing the upload",
   hashing: "Hashing",
@@ -62,6 +67,7 @@ export function initPublish() {
   const result = document.getElementById("publishResult");
   const fields = {
     url: document.getElementById("publishUrl"),
+    server_ref: document.getElementById("publishServerRef"),
     ref: document.getElementById("publishRef"),
     try_link: document.getElementById("publishTryLink"),
     dataset_link: document.getElementById("publishDatasetLink"),
@@ -174,19 +180,25 @@ export function initPublish() {
       const seen = answer.private === true
         ? " Hugging Face shows every file. The repository is private, so its links will not open it: make it public in its Settings on Hugging Face."
         : answer.private === false ? " Hugging Face shows every file, in a public repository." : "";
-      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.${seen}`);
+      // A server's model the browser cannot run (too big for an .onnx file,
+      // a 2D model) is published for servers alone, and the export says why.
+      const browser = answer.no_browser ? ` It has no copy for the browser. ${answer.no_browser.replace(/\.?$/, ".")}` : "";
+      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.${seen}${browser}`);
     }
     showResult(answer.status === "done" ? answer : null);
   }
 
-  // The links of a publish that is done, or none.
+  // The refs and links of a publish that is done, each row only where the
+  // answer gives one (a browser's publish has no server ref, a server's
+  // without a browser form no folder ref or links, and either without a
+  // dataset no dataset link); or none.
   function showResult(answer) {
     result.hidden = !answer;
     for (const [key, el] of Object.entries(fields)) {
       el.textContent = (answer && answer[key]) || "";
       if (el.tagName === "A") el.href = el.textContent || "#";
+      el.parentElement.hidden = !el.textContent;
     }
-    for (const el of result.querySelectorAll("[data-dataset-link]")) el.hidden = !(answer && answer.dataset_link);
   }
 
   // A running publish's progress, every second, until it is done or failed.

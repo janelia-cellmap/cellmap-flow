@@ -22,6 +22,10 @@ HUB = {
     "cellmap/mito": ["README.md", "metadata.json", "model.pt", "model.ts"],
     "cellmap/onnx-web-models": ["README.md", "setup_54/manifest.json", "setup_54/setup_54_in148_fp32.onnx",
                                 "setup_53_2d/manifest.json"],
+    # As a server publishes a model (finetune.export_web): its cellmap-models
+    # export at the root, and its ONNX web export in a folder.
+    "ada/mito-ft": ["README.md", "metadata.json", "model.ts", "model.pt2", "export_record.json",
+                    "mito_ft/manifest.json", "mito_ft/mito_ft_in178_fp32.onnx"],
 }
 
 
@@ -106,6 +110,10 @@ def _models_on_disk(tmp):
     pytest.param("dacapo:my@run@100000", ("dacapo", {"run_name": "my@run", "iteration": 100000}, "my@run_100000", []),
                  id="dacapo-prefix"),
     pytest.param("cellmap/mito", ("huggingface", {"repo": "cellmap/mito"}, "mito", []), id="hub-repo"),
+    pytest.param("ada/mito-ft", ("huggingface", {"repo": "ada/mito-ft"}, "mito-ft", []),
+                 id="published-repo-root-export"),
+    pytest.param("ada/mito-ft/mito_ft", ("onnx", {"repo": "ada/mito-ft", "folder": "mito_ft"}, "mito_ft", []),
+                 id="published-repo-web-export"),
     pytest.param("https://huggingface.co/cellmap/mito/tree/v1",
                  ("huggingface", {"repo": "cellmap/mito", "revision": "v1"}, "mito", []), id="hub-url"),
     pytest.param("affable-shark", ("bioimage", {"model": "affable-shark"}, "affable-shark", []), id="zoo-nickname"),

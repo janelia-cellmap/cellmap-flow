@@ -4,7 +4,8 @@ Hugging Face is huggingface_hub's functions, replaced by ``FakeHub``: who a
 token is, the token ``hf auth login`` saved, and the repositories with the
 files committed to them. The device sign-in's two endpoints are requests'
 POSTs, answered in turn. The export (finetune.export_web) is replaced by one
-that writes a manifest and its files at once. The routes' threads run in
+that writes its files at once: the server form's, and a browser form's
+manifest and variants unless it is told there is none. The routes' threads run in
 the request that starts them, but a device sign-in's, which a test runs when
 it has seen the sign-in wait.
 """
@@ -40,14 +41,17 @@ class _Refused(Exception):
 class FakeHub:
     """Hugging Face as huggingface_hub's functions see it: ``users`` by token
     (``{user, orgs, role}``), the token saved on this machine (``saved``),
-    and ``repos`` by name, each ``{private, files: {path: bytes}}``.
-    ``refuse_commit`` makes a commit fail with that status."""
+    and ``repos`` by name, each ``{private, files: {path: bytes}}``;
+    ``from_disk``, the files the last commit was given as paths to read
+    rather than as bytes. ``refuse_commit`` makes a commit fail with that
+    status."""
 
     def __init__(self):
         self.users = {}
         self.saved = None
         self.logins = []
         self.repos = {}
+        self.from_disk = set()
         self.refuse_commit = None
         hub = self
 
@@ -68,6 +72,7 @@ class FakeHub:
                 assert self.token in hub.users, "committed with a token Hugging Face does not know"
                 if hub.refuse_commit:
                     raise _Refused(hub.refuse_commit)
+                hub.from_disk = {op.path_in_repo for op in operations if not isinstance(op.path_or_fileobj, bytes)}
                 for op in operations:
                     content = op.path_or_fileobj
                     files = hub.repos[repo]["files"]
@@ -111,7 +116,9 @@ def hub(monkeypatch):
 @pytest.fixture
 def served(make_job, tmp_path, monkeypatch):
     """A job serving MODEL, a LoRA finetune of a Hugging Face model, and an
-    export that gives it two variants; returns the exports started."""
+    export that gives its server form and a browser form of two variants,
+    or, with ``no_browser`` set to why, the server form alone. Returns
+    ``{started: the exports started, no_browser}``."""
     yaml_path = tmp_path / "models" / f"{MODEL}.yaml"
     yaml_path.parent.mkdir()
     yaml_path.write_text(yaml.safe_dump({"data_path": "s3://bucket/raw.zarr", "models": [{
@@ -122,31 +129,40 @@ def served(make_job, tmp_path, monkeypatch):
                    inference_server_ready=True)
     get_session().finetune_job_manager = SimpleNamespace(jobs={job.job_id: job})
 
-    started = []
+    export = SimpleNamespace(started=[], no_browser=None)
 
     variants = [{"variant": v, "file": f"model_{v}.onnx", "input_size": [64] * 3, "output_size": [32] * 3}
                 for v in ("fp32", "fp16")]
     manifest = {"task": "mito", "channels": ["mito"], "input_voxel_size_nm": [8] * 3,
-                "output_voxel_size_nm": [8] * 3, "variants": variants}
+                "output_voxel_size_nm": [8] * 3}
+    server = {"files": ["metadata.json", "model.ts", "export_record.json"], "input_size": [64] * 3,
+              "output_size": [32] * 3}
 
-    # The export job, done at once: its folder written where start_export says.
+    # The export job, done at once: its files written where start_export says.
     def start_export(yaml_path, corrections_dir, run_dir):
-        started.append(yaml_path)
+        export.started.append(yaml_path)
         out = Path(run_dir) / "web_export" / Path(yaml_path).stem
-        (out / MODEL).mkdir(parents=True)
-        for v in variants:
-            (out / MODEL / v["file"]).write_bytes(v["variant"].encode() * 100)
+        out.mkdir(parents=True)
+        for name in server["files"]:
+            (out / name).write_bytes(name.encode() * 100)
+        if not export.no_browser:
+            (out / MODEL).mkdir()
+            for v in variants:
+                (out / MODEL / v["file"]).write_bytes(v["variant"].encode() * 100)
         return out
 
     def export_status(out):
-        return {"status": "done", "error": None, "dir": str(out), "folder": MODEL, "manifest": manifest}
+        return {"status": "done", "error": None, "dir": str(out), "folder": MODEL,
+                "manifest": {**manifest, "variants": [] if export.no_browser else variants},
+                "server": server, "no_browser": export.no_browser}
 
     monkeypatch.setattr(export_web, "start_export", start_export)
     monkeypatch.setattr(export_web, "export_status", export_status)
-    return started
+    return export
 
 
-def test_a_pasted_token_publishes_the_served_model_with_its_export_card_and_manifest(dashboard, hub, served, caplog):
+def test_a_pasted_token_publishes_the_served_model_in_both_forms_with_its_card_and_manifest(dashboard, hub, served,
+                                                                                            caplog):
     hub.users[TOKEN] = {"user": "ada", "orgs": ["lab"]}
     caplog.set_level(logging.INFO, logger="cellmap_flow")
 
@@ -161,10 +177,12 @@ def test_a_pasted_token_publishes_the_served_model_with_its_export_card_and_mani
 
     assert done["status"] == "done", done
     assert (done["ref"], done["created"], done["private"]) == (f"lab/mito/{MODEL}", True, False)
+    assert (done["server_ref"], done["no_browser"]) == ("lab/mito", None)
     assert done["try_link"].endswith(f"?model=lab/mito/{MODEL}")
     files = hub.repos["lab/mito"]["files"]
-    assert sorted(files) == sorted(["README.md", f"{MODEL}/manifest.json", f"{MODEL}/model_fp32.onnx",
-                                    f"{MODEL}/model_fp16.onnx"])
+    model_files = ["metadata.json", "model.ts", "export_record.json", f"{MODEL}/model_fp32.onnx", f"{MODEL}/model_fp16.onnx"]
+    assert sorted(files) == sorted(["README.md", f"{MODEL}/manifest.json", *model_files])
+    assert hub.from_disk == set(model_files), "the model's files are read from the disk as they are sent"
     published = json.loads(files[f"{MODEL}/manifest.json"])["published"]
     assert published["finetuned_from"] == "cellmap/mito-base"
     assert (published["finetune_mode"], published["epochs"], published["final_loss"]) == ("lora", 3, 0.25)
@@ -185,7 +203,25 @@ def test_what_is_refused_at_once(dashboard, hub, served):
     assert dashboard.post("/api/finetune/model/nothing/publish", json={}).status_code == 404
     assert dashboard.post(PUBLISH, json={"repo": "ada/-bad-"}).status_code == 400
     assert dashboard.post(PUBLISH, json={"repo": "someone-else/mito"}).status_code == 403
-    assert served == [] and hub.repos == {}, "nothing was exported or made"
+    assert served.started == [] and hub.repos == {}, "nothing was exported or made"
+
+
+def test_a_model_with_no_browser_form_publishes_its_server_form_alone(dashboard, hub, served):
+    served.no_browser = "The network has 812,345,678 parameters, 3.2 GB in float32: over the 2 GB an .onnx file holds"
+    hub.users[TOKEN] = {"user": "ada"}
+    dashboard.post(CREDENTIALS, json={"token": TOKEN})
+
+    dashboard.post(PUBLISH, json={"include_dataset": True})
+    done = dashboard.get(PUBLISH).get_json()
+
+    assert done["status"] == "done", done
+    assert (done["server_ref"], done["no_browser"]) == (f"ada/{MODEL}", served.no_browser)
+    assert (done["ref"], done["try_link"], done["dataset_link"]) == (None, None, None), "nothing opens it in the browser"
+    files = hub.repos[f"ada/{MODEL}"]["files"]
+    assert sorted(files) == ["README.md", "export_record.json", "metadata.json", "model.ts"]
+    card = files["README.md"].decode()
+    assert f"`ada/{MODEL}`" in card and served.no_browser in card
+    assert "?model=" not in card, "no link to the app, which could not open it"
 
 
 def test_a_commit_the_hub_refuses_fails_the_publish(dashboard, hub, served):
