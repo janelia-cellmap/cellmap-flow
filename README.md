@@ -14,9 +14,11 @@
   <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif" alt="Real-time data processing visualization" />
 </p>
 
-**[Try it in your browser](https://janelia-cellmap.github.io/cellmap-flow/app/)**, with nothing to install,
-or **[open an example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)**:
-an OpenOrganelle mouse-liver volume with the mitochondria model `setup_53` running on it.
+**Try it in your browser, with nothing to install:**
+
+- **[Open the app](https://janelia-cellmap.github.io/cellmap-flow/app/)**, then open a volume (a public one, or in Chrome or Edge a folder on your machine) and pick models.
+- **[Open an example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)**,
+  already running: an OpenOrganelle mouse-liver volume with the mitochondria model `setup_53` on it.
 
 🚧 Still under construction: expect frequent changes.
 
