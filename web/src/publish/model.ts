@@ -16,7 +16,7 @@
 // base's task and model, from which entryName would give the base's name),
 // what it was finetuned from (a ref) and how, and when.
 import { FINETUNED_REPO } from "../contracts";
-import type { FinetunedRecord, ModelManifest } from "../contracts";
+import type { FinetunedRecord, ModelManifest, PublishedBlock } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 import { MODEL_PARAM } from "../link";
 import { voxelLabel } from "../models/manifest";
@@ -30,29 +30,16 @@ export const PUBLIC_APP = "https://janelia-cellmap.github.io/cellmap-flow/app/";
 /** Hugging Face's site, where a repository's page is `<HUB>/<owner>/<repo>`. */
 export const HUB = "https://huggingface.co";
 
-/** The manifest's "published" block. `dataset` only when the user asked
- * for it: a dataset's URL can be internal. */
-export interface PublishedBlock {
-  name: string;
-  finetuned_from: string;
-  finetune_mode: "head" | "full";
-  epochs: number;
-  final_loss: number | null;
-  trained_at: string;
-  published_at: string;
-  app: string;
-  dataset?: string;
-}
-
 /** What a publish is: the record of the model, the repository (`owner/name`)
  * and the folder in it, when, what the model was finetuned from (a ref:
- * finetunedFrom), and the dataset's URL to name, or null to name none. */
+ * finetunedFrom; undefined when that is not known), and the dataset's URL
+ * to name, or null to name none. */
 export interface Publication {
   record: FinetunedRecord;
   repo: string;
   folder: string;
   publishedAt: string;
-  finetunedFrom: string;
+  finetunedFrom: string | undefined;
   dataset: string | null;
 }
 
@@ -65,27 +52,43 @@ export function refOf(repo: string, folder: string): string {
  * Hugging Face model's id is its ref), or, for a base finetuned in this
  * browser too, that model's ref where it was published, and failing that
  * the ref of the model it came from, as far back as `records` go. A model
- * that was neither published nor is kept any more leaves its id. */
-export function finetunedFrom(record: FinetunedRecord, records: readonly FinetunedRecord[]): string {
-  let base = record.base;
+ * that was neither published nor is kept any more leaves its id. A model
+ * opened from a file (its base has no id) was finetuned from what its own
+ * manifest's "published" block says, if anything. */
+export function finetunedFrom(record: FinetunedRecord, records: readonly FinetunedRecord[]): string | undefined {
   const seen = new Set<string>();
-  while (base.id.startsWith(`${FINETUNED_REPO}/`) && !seen.has(base.id)) {
+  for (let current = record; ;) {
+    const { base } = current;
+    if (!base.id) return current.entry.manifest.published?.finetuned_from;
+    if (!base.id.startsWith(`${FINETUNED_REPO}/`) || seen.has(base.id)) return base.id;
     seen.add(base.id);
     const parent = records.find((r) => r.id === base.id);
-    if (!parent) break;
+    if (!parent) return base.id;
     if (parent.published) return refOf(parent.published.repo, parent.published.folder);
-    base = parent.base;
+    current = parent;
   }
-  return base.id;
 }
 
-/** The manifest uploaded as `<folder>/manifest.json`. */
-export function publishedManifest(p: Publication): ModelManifest & { published: PublishedBlock } {
+/** How `record` was trained, where it says: its whole network ("full") or
+ * its last layer ("head") in this browser, or as a published manifest it
+ * came with says; undefined for a model whose training was elsewhere and
+ * is not said. */
+function finetuneModeOf(record: FinetunedRecord): string | undefined {
+  const mode = record.params.finetune_mode;
+  return mode === "full" || mode === "head" ? mode : record.entry.manifest.published?.finetune_mode;
+}
+
+/** The manifest uploaded as `<folder>/manifest.json`: the record's entry's,
+ * its one variant (the uploaded file, `source` and all) as it is, and the
+ * "published" block in place of any it had. Its `dataset` only when the
+ * user asked for it: a dataset's URL can be internal. */
+export function publishedManifest(p: Publication): ModelManifest {
   const { record } = p;
+  const mode = finetuneModeOf(record);
   const published: PublishedBlock = {
     name: record.name,
-    finetuned_from: p.finetunedFrom,
-    finetune_mode: record.params.finetune_mode === "full" ? "full" : "head",
+    ...(p.finetunedFrom ? { finetuned_from: p.finetunedFrom } : {}),
+    ...(mode ? { finetune_mode: mode } : {}),
     epochs: record.epochs,
     final_loss: record.final_loss,
     trained_at: record.created_at,
@@ -117,10 +120,20 @@ export function modelCard(p: Publication): string {
   const v = p.record.entry.variant;
   const ref = refOf(p.repo, p.folder);
   const links = appLinks(PUBLIC_APP, ref, p.dataset);
-  const mode = p.record.params.finetune_mode === "full" ? "its whole network" : "its last layer";
+  const mode = { full: "its whole network", head: "its last layer" }[finetuneModeOf(p.record) ?? ""] ?? "its weights";
   const loss = p.record.final_loss === null ? "" : `, to a final loss of ${Number(p.record.final_loss.toPrecision(3))}`;
   const epochs = p.record.epochs ? ` for ${p.record.epochs} epoch(s)${loss}` : "";
-  const trained = p.record.from_link ? "rebuilt in the browser from a shared link" : `trained ${p.record.created_at.slice(0, 10)}`;
+  // A model trained here has its annotation volume; one that came in a
+  // shared link or a file was trained elsewhere.
+  const here = Boolean(p.record.volume);
+  const app = `[cellmap-flow](https://github.com/janelia-cellmap/cellmap-flow) ${PYTHON.version}`;
+  const provenance = here
+    ? `Finetuned in the browser with ${app}${p.finetunedFrom ? ` from \`${p.finetunedFrom}\`` : ""}${m.architecture ? ` (${m.architecture})` : ""}: ` +
+      `${mode} was trained on annotations painted in the browser${epochs} (${p.record.created_at.slice(0, 10)}).` +
+      (p.dataset ? ` The annotations were painted on ${p.dataset}.` : "")
+    : `Published from the browser with ${app}${m.architecture ? ` (${m.architecture})` : ""}` +
+      `${p.finetunedFrom ? `, finetuned from \`${p.finetunedFrom}\`` : ""}: its weights came to that browser ${p.record.from_link ? "in a shared link" : "as a file"}.` +
+      (p.dataset ? ` It was published with ${p.dataset} open.` : "");
   const tags = ["cellmap-flow", "onnx", "electron-microscopy", m.task.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")];
   return [
     "---",
@@ -135,9 +148,7 @@ export function modelCard(p: Publication): string {
       `${m.output ? ` (${m.output})` : ""}, from ${voxelLabel(m.input_voxel_size_nm)} nm voxels to ${voxelLabel(m.output_voxel_size_nm)} nm voxels, ` +
       `in blocks of ${v.input_size.join("×")} voxels in and ${v.output_size.join("×")} out (${v.variant}).`,
     "",
-    `Finetuned in the browser with [cellmap-flow](https://github.com/janelia-cellmap/cellmap-flow) ${PYTHON.version} from ` +
-      `\`${p.finetunedFrom}\`${m.architecture ? ` (${m.architecture})` : ""}: ${mode} was trained on annotations painted in the browser${epochs} (${trained}).` +
-      (p.dataset ? ` The annotations were painted on ${p.dataset}.` : ""),
+    provenance,
     "",
     "## Open it",
     "",

@@ -12,7 +12,7 @@ import { SIGN_IN_EVENT } from "../../src/backend/routes/publish";
 import type { ApiResponse, ModelEntry } from "../../src/contracts";
 import { finetunedRecord } from "../../src/models/finetuned";
 import { parseManifest } from "../../src/models/manifest";
-import { PUBLIC_APP } from "../../src/publish/model";
+import { finetunedFrom, PUBLIC_APP } from "../../src/publish/model";
 import { handOver } from "../../src/publish/oauth";
 import { type FakeContext, fakeContext, request } from "./backend-fakes";
 
@@ -84,7 +84,7 @@ async function withFinetuned(): Promise<{ ctx: FakeContext; base: ModelEntry }> 
   const ctx = fakeContext({ state: { datasetUrl: RAW } });
   const base = ctx.catalog.entries[0];
   const record = finetunedRecord(base, NAME, ONNX.byteLength, {
-    volume: "",
+    volume: "vol-0000abcd-20261026-100000",
     created_at: "2026-10-26T10:00:00.000Z",
     params: { finetune_mode: "head", num_epochs: 20 },
     epochs: 20,
@@ -113,6 +113,7 @@ describe("publishing a model finetuned in the browser", () => {
     const hub = fakeHub({ hf_alice: "alice" });
     vi.stubGlobal("fetch", hub.fetch);
     const { ctx, base } = await withFinetuned();
+    const [kept] = await ctx.catalog.finetuned();
     const router = createRouter({ publish: { now: () => new Date("2026-10-26T12:00:00.000Z") } });
     expect(body(await router.handle(request("POST", "/api/huggingface/credentials", { token: "hf_alice" }), ctx))).toMatchObject({ signed_in: true, user: "alice", via: "token" });
 
@@ -139,6 +140,11 @@ describe("publishing a model finetuned in the browser", () => {
       app: expect.stringMatching(/^cellmap-flow \S+ \(browser\)$/),
       dataset: RAW,
     });
+    // The entry's one variant as it is: the uploaded file, and the Hugging
+    // Face file its bytes were made from, which a last-layer finetune of
+    // the published model needs.
+    expect(manifest.variants).toEqual([{ ...kept.entry.variant }]);
+    expect(manifest.variants[0]).toMatchObject({ file: `${NAME}.onnx`, source: { repo: base.repo, folder: base.folder, file: base.variant.file } });
     // The catalog reads it as any model folder's manifest, with the trained file its one variant.
     const read = parseManifest(manifest, `${ref}/manifest.json`);
     expect(read.variants.map((v) => v.file)).toEqual([`${NAME}.onnx`]);
@@ -195,6 +201,20 @@ describe("publishing a model finetuned in the browser", () => {
     expect(failed.error).not.toContain("hf_alice");
     expect(hub.committed).toHaveLength(0);
     expect((await ctx.catalog.finetuned())[0].published).toBeUndefined();
+  });
+});
+
+describe("what a published model was finetuned from", () => {
+  it("is its base's ref, a published ancestor's, or what the manifest of a model opened from a file says", async () => {
+    const { ctx, base } = await withFinetuned();
+    const [first] = await ctx.catalog.finetuned();
+    const second = finetunedRecord(first.entry, "mito_aff_setup54_16nm-ft2", 8, { volume: "", created_at: "2026-10-26T11:00:00.000Z", params: {}, epochs: 1, final_loss: null });
+    expect(finetunedFrom(second, [first])).toBe(base.id);
+    expect(finetunedFrom(second, [{ ...first, published: { repo: "alice/m", folder: NAME, at: "" } }])).toBe(`alice/m/${NAME}`);
+    const opened = { ...first, base: { id: "", name: "m.onnx", file: "m.onnx" } };
+    expect(finetunedFrom(opened, [])).toBeUndefined();
+    const manifest = { ...first.entry.manifest, published: { name: NAME, finetuned_from: "alice/m/x" } };
+    expect(finetunedFrom({ ...opened, entry: { ...first.entry, manifest } }, [])).toBe("alice/m/x");
   });
 });
 

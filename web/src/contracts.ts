@@ -173,6 +173,25 @@ export interface ModelManifest {
    * Absent from a manifest written before 2026-10-16, whose head the
    * browser finds in the graph itself (finetune/modes.ts). */
   finetune?: FinetuneSpec;
+  /** A model published to Hugging Face from the browser (publish/): its
+   * name, which its entry is listed under (models/manifest.ts hubName),
+   * where it was finetuned from (a model ref) and how, and when; the block
+   * as the publish wrote it. */
+  published?: PublishedBlock;
+}
+
+/** A published model's manifest's "published" block. */
+export interface PublishedBlock {
+  name: string;
+  finetuned_from?: string;
+  finetune_mode?: string;
+  epochs?: number;
+  final_loss?: number | null;
+  trained_at?: string;
+  published_at?: string;
+  app?: string;
+  dataset?: string;
+  [k: string]: unknown;
 }
 
 /** A manifest's `finetune` block: one entry per way to train the model,
