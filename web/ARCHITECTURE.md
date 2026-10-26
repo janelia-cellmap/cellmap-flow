@@ -178,7 +178,7 @@ other once its logic is portable; it is not ported by hand.
 
 | both modes (logic written once) | browser only | server only |
 |---|---|---|
-| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links; publish to Hugging Face | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
+| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config; publish to Hugging Face (card, manifest, links, refusals) | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
 
 Both modes have "a finetune", but not one algorithm: what they share is the
 targets, the sampling plan, the loss definitions and the job card's JSON.
@@ -492,6 +492,17 @@ hand-over of its token to the page, named for the tab. Done, the record gets
 `published` through `Catalog.addFinetuned`, the catalog's one way to keep a
 record. The service worker passes requests with an `Authorization` header to
 the network unkept (sw.ts): its store keys by URL.
+
+The server answers the same routes (`dashboard/routes/finetune/publish.py`)
+with the same panel: it first exports the served finetune to the catalog's
+format as a cluster job (`finetune/export_web.py`: the LoRA adapter or full
+weights folded into the base, then cellmap-models' onnx_web in fp32, fp16
+and int8 weights, checked against PyTorch on the training data), then
+uploads with `huggingface_hub` the files, the same card and manifest from
+`portable/publish.py`, in one commit. It signs in by OAuth's device code
+(the popup cannot return to a cluster node's address), or takes the token
+`huggingface_hub` already has or a pasted one; the credentials answer says
+which the panel offers.
 
 ## State
 
