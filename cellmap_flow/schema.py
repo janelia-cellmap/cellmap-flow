@@ -171,6 +171,12 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/job/<job_id>/stop-early": "both",
     "POST /api/finetune/job/<job_id>/restart": "both",
     "GET /api/finetune/model/<name>/download": "browser",
+    # Publishing a finetuned model to Hugging Face, under the user's account:
+    # the browser's for now; the server's would run it as a cluster job.
+    "GET /api/huggingface/credentials": "browser",
+    "POST /api/huggingface/credentials": "browser",
+    "POST /api/finetune/model/<name>/publish": "browser",
+    "GET /api/finetune/model/<name>/publish": "browser",
     # Good regions
     "GET /api/finetune/good-regions": "both",
     "POST /api/finetune/good-regions/mark-view": "both",
@@ -219,6 +225,8 @@ REQUEST_MODELS: dict[str, str] = {
     "POST /api/finetune/load-crops": "LoadCrops",
     "POST /api/finetune/submit": "FinetuneSubmit",
     "POST /api/finetune/job/<job_id>/restart": "FinetuneRestart",
+    "POST /api/huggingface/credentials": "HuggingFaceCredentials",
+    "POST /api/finetune/model/<name>/publish": "FinetunePublish",
     "POST /api/finetune/ai-annotate/settings": "AIAnnotateSettings",
     "POST /api/finetune/ai-annotate/run": "AIAnnotateRun",
     "POST /api/finetune/ai-annotate/resend": "AIAnnotateResend",

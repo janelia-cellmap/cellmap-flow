@@ -1,6 +1,6 @@
 # The dashboard's routes
 
-Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (47) the server dashboard and the browser app, **stub** (7) both, the browser with a fixed or empty answer in the server's shape, **server** (36) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (5) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
+Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (47) the server dashboard and the browser app, **stub** (7) both, the browser with a fixed or empty answer in the server's shape, **server** (36) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (9) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
 
 | Method | Path | Answered by | Body |
 |---|---|---|---|
@@ -79,6 +79,10 @@ Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m 
 | POST | `/api/finetune/job/<job_id>/stop-early` | both |  |
 | POST | `/api/finetune/job/<job_id>/restart` | both | `FinetuneRestart` |
 | GET | `/api/finetune/model/<name>/download` | browser |  |
+| GET | `/api/huggingface/credentials` | browser |  |
+| POST | `/api/huggingface/credentials` | browser | `HuggingFaceCredentials` |
+| POST | `/api/finetune/model/<name>/publish` | browser | `FinetunePublish` |
+| GET | `/api/finetune/model/<name>/publish` | browser |  |
 | GET | `/api/finetune/good-regions` | both |  |
 | POST | `/api/finetune/good-regions/mark-view` | both |  |
 | POST | `/api/finetune/good-regions/delete` | both |  |

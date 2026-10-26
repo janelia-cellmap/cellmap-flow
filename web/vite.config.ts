@@ -1,5 +1,6 @@
 // The browser build of cellmap-flow: the rendered dashboard (index.html, from
-// build/render.py), its entry src/main.ts, and the service worker src/sw.ts,
+// build/render.py), its entry src/main.ts, the Sign in with Hugging Face
+// popup (oauth.html, src/publish/oauth.ts) and the service worker src/sw.ts,
 // built for any base path (the Pages site serves it under /cellmap-flow/app/).
 //
 // The service worker, sw.js beside the page (chunkmirage's Engine registers it
@@ -44,7 +45,7 @@ export default defineConfig({
     target: "es2022",
     chunkSizeWarningLimit: 1500, // onnxruntime-web and the zstd/blosc codecs (WebAssembly)
     rolldownOptions: {
-      input: { index: resolve(here, "index.html") },
+      input: { index: resolve(here, "index.html"), oauth: resolve(here, "oauth.html") },
     },
   },
   worker: { format: "es" },

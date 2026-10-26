@@ -27,6 +27,9 @@
 //                       model (or the fake) with the user's own credentials,
 //                       its answer staged for review (ai-annotate-job.ts),
 //                       accepted into the paint volume
+//   routes/publish.ts   the Training Status card's Publish to Hugging Face: a
+//                       finetuned model uploaded to the user's own account
+//                       (src/publish), and the Hugging Face sign-in or token
 //
 // Every other /api/ route answers unavailable (router.ts): the Review tab,
 // the pipeline builder's routes, the dashboard's log stream, and the parts
@@ -47,6 +50,7 @@ import { type FinetuneDeps, finetuneRoutes } from "./routes/finetune";
 import { goodRegionRoutes } from "./routes/good-regions";
 import { modelRoutes } from "./routes/models";
 import { pipelineRoutes } from "./routes/pipeline";
+import { type PublishDeps, publishRoutes } from "./routes/publish";
 import { rankRoutes } from "./routes/rank";
 import { viewLabelsRoutes } from "./routes/view-labels";
 import { serveModels, stopServing } from "./serving";
@@ -56,6 +60,8 @@ export interface BackendOptions {
   finetune?: Partial<FinetuneDeps>;
   /** The AI-annotate routes' seams (a fake provider, a plain-JavaScript codec, a memory store, a clock), for tests. */
   aiAnnotate?: Partial<AiAnnotateDeps>;
+  /** The publish routes' seams (an OAuth client id, a clock, the page the sign-in is announced on), for tests. */
+  publish?: Partial<PublishDeps>;
 }
 
 /** The router with every route of the browser mode registered. The finetune
@@ -76,6 +82,7 @@ export function createRouter(options: BackendOptions = {}): Router {
   rankRoutes(router);
   const labels = viewLabelsRoutes(router);
   aiAnnotateRoutes(router, { ...options.aiAnnotate, undo: labels.undo });
+  publishRoutes(router, options.publish);
   router.otherwise((req) =>
     unavailable(
       `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import).`,
