@@ -19,8 +19,15 @@
 // both are kept (parseFinetune). A
 // finetune entry that is not what it should be is left out rather than
 // failing the manifest: the model still runs, without that way to train it.
+//
+// A model finetuned in a browser and then downloaded or published to a
+// Hugging Face repo of its own carries its entry's manifest: one variant,
+// the trained file, whose `source` names the Hugging Face file it was made
+// from (kept, so that it can be finetuned again on that file's finetune
+// block), and, when published, a `published` block whose name is the one
+// it is listed under (hubName).
 import { FINETUNED_REPO } from "../contracts";
-import type { FinetuneSpec, FullFinetuneSpec, HeadFinetuneSpec, ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from "../contracts";
+import type { FinetuneSpec, FullFinetuneSpec, HeadFinetuneSpec, ModelEntry, ModelManifest, ModelVariant, PublishedBlock, Step, VariantName } from "../contracts";
 
 import { HF_REPO, resolveUrl } from "./hf";
 
@@ -79,12 +86,19 @@ export function parseManifest(raw: unknown, where = "manifest.json"): ModelManif
     variants: sortVariants(variants),
     ...provenance(m),
     ...finetuneOf(m),
+    ...publishedOf(m),
   };
 }
 
 function finetuneOf(m: Record<string, unknown>): Pick<ModelManifest, "finetune"> {
   const finetune = parseFinetune(m.finetune);
   return finetune ? { finetune } : {};
+}
+
+// The published block as the publish wrote it, when it has a name.
+function publishedOf(m: Record<string, unknown>): Pick<ModelManifest, "published"> {
+  const block = record(m.published);
+  return block && isString(block.name) ? { published: { ...block } as PublishedBlock } : {};
 }
 
 // The export's provenance, the fields that are there.
@@ -162,6 +176,8 @@ function parseVariant(raw: unknown, dims: number, where: string): ModelVariant |
   for (const key of ["max_abs", "mean_abs", "flip_frac", "ort_cpu_s"] as const) {
     if (typeof v[key] === "number") variant[key] = v[key];
   }
+  const source = record(v.source);
+  if (source && isString(source.repo) && isString(source.folder) && isString(source.file)) variant.source = { repo: source.repo, folder: source.folder, file: source.file };
   return variant;
 }
 
@@ -225,6 +241,37 @@ export function entryName(manifest: ModelManifest): string {
   return `${task}_${model}_${voxelLabel(manifest.input_voxel_size_nm)}nm`;
 }
 
+/** Whether `name` is made as the catalog's names are, so that it can be one:
+ * lower-case letters, digits, underscores and hyphens, beginning with a
+ * letter or digit, with at most one decimal point. entryName puts in at
+ * most one hyphen, and a finetuned series another (`-ft<n>`:
+ * mito_aff_setup54-2d_16nm-ft1), so hyphens are not counted. Such a name is
+ * a URL path segment and a Neuroglancer layer name, and carries no ARGS_KEY
+ * marker (which is upper-case). */
+export function isLayerName(name: string): boolean {
+  return /^[a-z0-9][a-z0-9_.-]*$/.test(name) && name.split(".").length <= 2;
+}
+
+/** The name a Hugging Face entry is listed under, before the catalog makes
+ * the list's names unique (models/index.ts): its manifest's published name
+ * when that is one (isLayerName), since a published model's manifest is its
+ * base's under another model id and entryName would read it as the base's;
+ * else entryName. */
+export function hubName(manifest: ModelManifest): string {
+  const published = manifest.published?.name;
+  return published && isLayerName(published) ? published : entryName(manifest);
+}
+
+/** `wanted`, or when `taken` has it the first `<wanted>_<n>` it does not,
+ * n from 2: how the catalog keeps the list's names unique for the names it
+ * gives (an added repo's entry, models/index.ts; a model opened from a
+ * file, model-file.ts). An underscore and digits keep a layer name one. */
+export function freeName(wanted: string, taken: ReadonlySet<string>): string {
+  let name = wanted;
+  for (let n = 2; taken.has(name); n++) name = `${wanted}_${n}`;
+  return name;
+}
+
 /** "16" for an isotropic voxel size, "16x16x8" otherwise; whole numbers without a decimal point. */
 export function voxelLabel(voxelSize: number[]): string {
   const parts = voxelSize.map((n) => String(Number(n.toFixed(4))));
@@ -237,14 +284,11 @@ function slug(text: string): string {
 
 /** The ModelEntry for `folder`'s manifest with `variant` chosen.
  *
- * For a Hugging Face repo the name follows entryName and the bytes come from
+ * For a Hugging Face repo the name follows hubName and the bytes come from
  * the repo's resolve URL. For FINETUNED_REPO, a model finetuned in this
  * browser (finetuned.ts), the folder is the name (`<base name>-ft<n>`, which
  * is already a layer name) and the "URL" is the byte-cache key of bytes that
- * exist only in this browser: nothing is fetched. Serving re-tunes an entry
- * through this function with the variant chosen for the GPU (backend/
- * serving.ts), and a finetuned manifest has one variant, so a finetuned
- * entry comes through unchanged. */
+ * exist only in this browser: nothing is fetched. */
 export function entryFor(folder: string, manifest: ModelManifest, variant: ModelVariant, repo = HF_REPO): ModelEntry {
   if (repo === FINETUNED_REPO) {
     const id = `${FINETUNED_REPO}/${folder}`;
@@ -252,13 +296,23 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
   }
   return {
     id: `${repo}/${folder}`,
-    name: entryName(manifest),
+    name: hubName(manifest),
     repo,
     folder,
     manifest,
     variant,
     onnxUrl: resolveUrl(`${folder}/${variant.file}`, repo),
   };
+}
+
+/** `entry` with `variant` in place of its own: the bytes that file's, the
+ * name and id kept (the catalog may have given an added repo's entry
+ * another name than hubName's, to keep the list's names unique). Serving
+ * re-tunes an entry so, with the variant chosen for the GPU (backend/
+ * serving.ts), and a finetuned manifest has one variant, so a finetuned
+ * entry comes through unchanged. */
+export function withVariant(entry: ModelEntry, variant: ModelVariant): ModelEntry {
+  return { ...entryFor(entry.folder, entry.manifest, variant, entry.repo), name: entry.name };
 }
 
 /** The byte-cache key a finetuned entry's bytes are kept under, and so its

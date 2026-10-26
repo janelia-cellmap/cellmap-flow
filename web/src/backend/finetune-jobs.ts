@@ -462,7 +462,11 @@ export class FinetuneJobs {
    * job left WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
   private async keep(job: FinetuneJob, result: Finetuned, trained: ModelEntry): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
-    const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
+    // The names of the list's other models are passed over too: a model of
+    // an added repo published as `<base>-ft<n>` would otherwise lose its
+    // name to this one (models/index.ts withUniqueNames) while served.
+    const listed = await ctx.catalog.list().catch(() => [] as ModelEntry[]);
+    const name = nextFinetunedName(entry, await ctx.catalog.finetuned(), listed.map((e) => e.name));
     const record = finetunedRecord(trained, name, result.bytes.byteLength, { volume: volume.id, created_at: this.now().toISOString(), params: job.params, epochs: result.epochs, final_loss: result.finalLoss });
     const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);

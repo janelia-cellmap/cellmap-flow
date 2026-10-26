@@ -9,11 +9,14 @@
 //
 // A model finetuned in this browser (finetuned.ts) has the same fields, its
 // description saying where it came from when its record is known: the
-// catalog keeps the registry's last listing and passes the record in.
+// catalog keeps the registry's last listing and passes the record in. A
+// model of a repo added beside the built-in one says its repo first, so two
+// repos' folders of one name are told apart in the list, and its author is
+// the repo's owner.
 import { FINETUNED_REPO } from "../contracts";
 import type { FinetunedRecord, ModelEntry } from "../contracts";
 
-import { HF_REVISION } from "./hf";
+import { HF_REPO, HF_REVISION } from "./hf";
 import { voxelLabel } from "./manifest";
 
 /** Who exported and uploaded cellmap/onnx-web-models (the other cellmap repos name him in metadata.json too). */
@@ -44,7 +47,7 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     inference_input_shape: v.input_size,
     inference_output_shape: v.output_size,
     description: describe(entry, record),
-    author: finetuned ? FINETUNED_AUTHOR : MODELS_AUTHOR,
+    author: finetuned ? FINETUNED_AUTHOR : entry.repo === HF_REPO ? MODELS_AUTHOR : entry.repo.split("/")[0],
     // The Hub revision for an export; a finetuned model's version is when it was trained.
     version: finetuned ? (record?.created_at ?? null) : HF_REVISION,
     format_version: "1",
@@ -79,7 +82,12 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
  * browser serves it under another: "from a shared link (as
  * mito_aff_setup54_16nm-ft1): mito_aff_setup54_16nm with the link's last
  * layer, 2026-10-16", with no epochs or loss, which stayed with the
- * browser that trained it. */
+ * browser that trained it.
+ *
+ * A model of another repo than HF_REPO says the repo first, and what its
+ * manifest's published block says it was finetuned from: "alice/mito-ft1,
+ * finetuned from cellmap/onnx-web-models/setup_54; mito affinities at 16 nm,
+ * …". */
 export function describe(entry: ModelEntry, record?: FinetunedRecord): string {
   const m = entry.manifest;
   const v = entry.variant;
@@ -96,9 +104,9 @@ export function describe(entry: ModelEntry, record?: FinetunedRecord): string {
       parts.push(m.checkpoint || FINETUNED_AUTHOR);
     }
   } else {
-    parts.push(`${m.task.replace(/_/g, " ")} at ${voxelLabel(m.input_voxel_size_nm)} nm`);
+    if (entry.repo !== HF_REPO) parts.push(m.published?.finetuned_from ? `${entry.repo}, finetuned from ${m.published.finetuned_from}` : entry.repo);
     const network = [m.architecture, m.params > 0 ? `(${(m.params / 1e6).toFixed(1)}M parameters)` : ""].filter(Boolean).join(" ");
-    if (network) parts[0] += `, ${network}`;
+    parts.push(`${m.task.replace(/_/g, " ")} at ${voxelLabel(m.input_voxel_size_nm)} nm${network ? `, ${network}` : ""}`);
   }
   parts.push(`ONNX ${v.variant}, block ${blockLabel(v.input_size)} → ${blockLabel(v.output_size)}, ${v.file_mb.toFixed(1)} MB`);
   if (m.output) parts.push(m.output);

@@ -28,7 +28,7 @@ import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } 
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
 import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
-import { entryFor } from "./models/manifest";
+import { withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import { paintVolumeOf } from "./viewer/layers";
 import { decodeState, encodeState } from "./viewer/share";
@@ -298,7 +298,7 @@ export async function rebuildFinetuned(
   if (isFinetuned(base)) throw new Error(`${model.base} is a model finetuned in this browser, not one from Hugging Face`);
   const variant = base.manifest.variants.find((v) => v.file === model.file);
   if (!variant) log(`The link's ${model.name} was finetuned on ${base.name}'s ${model.file}, which its manifest no longer lists; rebuilding it on ${base.variant.file}`);
-  const source = variant ? entryFor(base.folder, base.manifest, variant, base.repo) : base;
+  const source = variant ? withVariant(base, variant) : base;
   const bytes = await catalog.modelBytes(source);
   const head = headOf(bytes);
   const out = model.bias.length, inChannels = model.weight.length / out;

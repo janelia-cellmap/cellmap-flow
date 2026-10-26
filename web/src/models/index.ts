@@ -1,8 +1,10 @@
 // The model catalog: the models the browser can run, from the Hugging Face
 // repo cellmap/onnx-web-models, one folder per model with a manifest.json
 // and its .onnx files (three block sizes times four precisions for a 3D
-// model, times two for a 2D one), and after them the models finetuned in
-// this browser (finetuned.ts).
+// model, times two for a 2D one), then from the repos added beside it (any
+// public model repo laid out the same way, such as one a model was
+// published to from a browser), and after them the models finetuned in this
+// browser (finetuned.ts).
 //
 // list() reads the repo's folder list from the Hub API and each folder's
 // manifest, keeps them in localStorage for a day (listing-cache.ts), and
@@ -11,9 +13,21 @@
 // ModelEntry with a default variant (fp32, the smallest block: the choice
 // for a GPU nobody has asked yet). Whoever knows the GPU, the inference
 // side, calls chooseVariant again with its limits and swaps the variant in.
+// The added repos are listed the same way, each cached for a day under its
+// own key, without the built-in folder list to fall back on: one that cannot
+// be listed costs only its own entries. A repo is added by resolving a ref
+// of it (the Models tab's Add a model, a link): resolve() lists it on the
+// spot and remembers it (AddedRepos), so the next visit lists it too.
 // Then come the finetuned models' entries, newest first, from their records
 // in IndexedDB (the FinetunedRegistry); addFinetuned() and removeFinetuned()
 // keep that part of the list in step without another load.
+//
+// The added repos come after the built-in catalog and before the finetuned
+// models: the list reads as the models on Hugging Face, cellmap's first and
+// then the others in the order they were added, and then the ones that
+// exist only in this browser, the part addFinetuned and removeFinetuned
+// change. Every name in it is unique (withUniqueNames): a name is a layer's
+// and a served view's, and the dashboard and links name models by it.
 //
 // modelBytes() downloads the chosen file with progress and keeps the bytes
 // in IndexedDB (byte-cache.ts) under the file's URL and ETag, so the next
@@ -26,15 +40,15 @@ import type { Catalog, FinetunedRecord, GpuLimits, ModelEntry, ModelManifest, Mo
 
 import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
 import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry } from "./finetuned";
-import { type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, RateLimitError } from "./hf";
-import { defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
+import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, RateLimitError } from "./hf";
+import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
-import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, modelFolders, parseManifest } from "./manifest";
+import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, modelFolders, parseManifest } from "./manifest";
 
 export { chooseVariant, estimatePeakBytes, isOneSlice, PREFER_SMALL_DOWNLOAD, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "./variant";
-export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, ManifestError, parseManifest } from "./manifest";
+export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, hubName, isLayerName, ManifestError, parseManifest, withVariant } from "./manifest";
 export { FINETUNED_AUTHOR, metadataFor, MODELS_AUTHOR } from "./metadata";
-export { fetchEtag, HF_REPO, HF_REVISION, RateLimitError, resolveUrl } from "./hf";
+export { fetchEtag, HF_REPO, HF_REVISION, hubRef, RateLimitError, resolveUrl } from "./hf";
 export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, modelBytesKey, type ByteCache } from "./byte-cache";
 export { type KeyValueStore, LISTING_TTL_MS, MemoryKeyValueStore } from "./listing-cache";
 export {
@@ -50,10 +64,18 @@ export {
 
 import { metadataFor } from "./metadata";
 
-/** The localStorage key of the cached listing. v2 since the manifests
+/** The localStorage key of `repo`'s cached listing. v2 since the manifests
  * gained their finetune block (2026-10-16): a v1 listing, cached for a day,
  * holds manifests from before it, which would offer the old training only. */
-export const LISTING_KEY = `cellmap-flow:models:${HF_REPO}@${HF_REVISION}:v2`;
+export function listingKey(repo: string): string {
+  return `cellmap-flow:models:${repo}@${HF_REVISION}:v2`;
+}
+
+/** The built-in catalog's. */
+export const LISTING_KEY = listingKey(HF_REPO);
+
+/** The localStorage key of the repos added beside the built-in catalog (AddedRepos). */
+export const ADDED_REPOS_KEY = "cellmap-flow:models:added-repos:v1";
 
 export interface CatalogOptions {
   log: (line: string) => void;
@@ -77,13 +99,16 @@ export interface HfCatalog extends Catalog {
 export function createCatalog(opts: CatalogOptions): HfCatalog {
   const log = opts.log;
   const fetchImpl: FetchLike = opts.fetch ?? ((input, init) => globalThis.fetch(input, init));
-  const listing = new ListingCache(opts.storage ?? defaultKeyValueStore(), LISTING_KEY);
+  const storage = opts.storage ?? defaultKeyValueStore();
+  const listing = new ListingCache(storage, LISTING_KEY);
+  const added = new AddedRepos(storage, ADDED_REPOS_KEY);
   const bytes = opts.bytes ?? openByteCache(globalThis.indexedDB, log);
   const registry = opts.finetuned ?? openFinetunedRegistry(globalThis.indexedDB);
   const now = opts.now ?? Date.now;
 
-  // The list as last built, the Hub's entries then the finetuned ones, for
-  // the page's lifetime; null until a load has succeeded.
+  // The list as last built, the Hub's entries (the built-in catalog's, then
+  // the added repos') then the finetuned ones, for the page's lifetime; null
+  // until a load has succeeded.
   let listed: ModelEntry[] | null = null;
   // A load under way, shared by everyone asking meanwhile; dropped when it
   // settles, so after a failure the next list() tries again (the Hub may
@@ -95,6 +120,8 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   let records: FinetunedRecord[] | null = null;
   // Downloads under way, by URL, so two callers of one model share a download.
   const downloads = new Map<string, Promise<ArrayBuffer>>();
+  // Repos being listed for resolve(), by id, so two refs of one repo share a listing.
+  const adding = new Map<string, Promise<ModelEntry[]>>();
 
   function list(): Promise<ModelEntry[]> {
     if (listed) return Promise.resolve(listed);
@@ -125,29 +152,30 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
 
   // The whole list: the Hub's models, then the finetuned ones. A Hub listing
   // that fails outright fails the list, as before, so the Models tab shows
-  // why; a registry that cannot be read only costs the finetuned entries.
+  // why; an added repo that cannot be listed, or a registry that cannot be
+  // read, only costs its own entries.
   async function load(force: boolean): Promise<ModelEntry[]> {
-    const hub = await loadHub(force);
+    const [hub, others] = await Promise.all([loadHub(force), loadAdded(force)]);
     const kept = await readFinetuned();
-    return [...hub, ...kept.map((r) => r.entry)];
+    return arranged([...hub, ...others], kept);
   }
 
   // The Hub listing: from the cache while fresh, else from the Hub, with the
   // cache (even stale) and the built-in folder list as fallbacks.
   async function loadHub(force: boolean): Promise<ModelEntry[]> {
     const cached = listing.read();
-    if (!force && cached && listing.isFresh(cached, now())) return build(cached.manifests, "the browser's cache");
+    if (!force && cached && listing.isFresh(cached, now())) return build(HF_REPO, cached.manifests, "the browser's cache");
 
     let folders: string[];
     try {
-      folders = modelFolders(await fetchTree(fetchImpl));
+      folders = modelFolders(await fetchTree(fetchImpl, HF_REPO));
       if (folders.length === 0) throw new Error("the listing names no model folder");
     } catch (error) {
       folders = FALLBACK_FOLDERS.slice();
       log(`model catalog: could not list ${HF_REPO} (${message(error)}); using the built-in list of ${folders.length} folders`);
     }
 
-    const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, folder)));
+    const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, HF_REPO, folder)));
     const manifests: Record<string, unknown> = {};
     const failures: string[] = [];
     results.forEach((result, i) => {
@@ -160,7 +188,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (Object.keys(manifests).length === 0) {
       if (cached) {
         log(`model catalog: no manifest could be fetched; showing the list cached on ${new Date(cached.fetchedAt).toISOString()}`);
-        return build(cached.manifests, "the browser's cache (stale)");
+        return build(HF_REPO, cached.manifests, "the browser's cache (stale)");
       }
       const rateLimited = results.some((r) => r.status === "rejected" && r.reason instanceof RateLimitError);
       throw new Error(
@@ -178,22 +206,117 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (failures.length === 0 && !listing.write({ fetchedAt: now(), manifests })) {
       log("model catalog: could not cache the model list (storage blocked or full)");
     }
-    return build(manifests, "Hugging Face");
+    return build(HF_REPO, manifests, "Hugging Face");
   }
 
-  // Entries from raw manifests, folder order; a manifest the parser rejects is logged and left out.
-  function build(manifests: Record<string, unknown>, source: string): ModelEntry[] {
+  // The added repos' entries, in the order they were added. A repo that
+  // cannot be listed is logged and tried again on the next load; one the
+  // Hub says is not there to read (deleted, or made private) is forgotten.
+  async function loadAdded(force: boolean): Promise<ModelEntry[]> {
+    const lists = await Promise.all(
+      added.list().map(async (repo) => {
+        try {
+          return await loadRepo(repo, force);
+        } catch (error) {
+          if (isMissing(error)) {
+            added.remove(repo);
+            new ListingCache(storage, listingKey(repo)).clear();
+            log(`model catalog: ${message(error)}; ${repo} is no longer listed`);
+          } else {
+            log(`model catalog: could not list ${repo} (${message(error)})`);
+          }
+          return [];
+        }
+      }),
+    );
+    return lists.flat();
+  }
+
+  // An added repo's entries: from its cache while fresh, else from the Hub,
+  // with the cache (even stale) to fall back on unless the repo is gone.
+  // Only a folder holding a manifest.json is a model's (a 404 for it is a
+  // folder of something else); any other failure fails the repo's listing,
+  // which is cached only whole. A repo with no model the browser can run is
+  // an error that says why.
+  async function loadRepo(repo: string, force: boolean): Promise<ModelEntry[]> {
+    const cache = new ListingCache(storage, listingKey(repo));
+    const cached = cache.read();
+    let manifests: Record<string, unknown>;
+    let source: string;
+    if (!force && cached && cache.isFresh(cached, now())) {
+      manifests = cached.manifests;
+      source = "the browser's cache";
+    } else {
+      try {
+        manifests = await fetchRepo(repo);
+        source = "Hugging Face";
+        if (!cache.write({ fetchedAt: now(), manifests })) log(`model catalog: could not cache the model list of ${repo} (storage blocked or full)`);
+      } catch (error) {
+        if (!cached || isMissing(error)) throw error;
+        log(`model catalog: could not list ${repo} (${message(error)}); showing the list cached on ${new Date(cached.fetchedAt).toISOString()}`);
+        manifests = cached.manifests;
+        source = "the browser's cache (stale)";
+      }
+    }
+    const skipped: string[] = [];
+    const built = build(repo, manifests, source, skipped);
+    if (built.length === 0) {
+      throw new Error(skipped.length ? `${repo} has no model the browser can run: ${skipped.join("; ")}` : `${repo} has no model folder (a top-level folder with a manifest.json and the .onnx files it names)`);
+    }
+    return built;
+  }
+
+  // `repo`'s raw manifests by folder, from the Hub.
+  async function fetchRepo(repo: string): Promise<Record<string, unknown>> {
+    const folders = modelFolders(await fetchTree(fetchImpl, repo));
+    const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, repo, folder)));
+    const manifests: Record<string, unknown> = {};
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled") manifests[folders[i]!] = result.value;
+      else if (!isMissing(result.reason)) throw result.reason;
+    });
+    return manifests;
+  }
+
+  // Entries from raw manifests, folder order; a manifest the parser rejects
+  // is logged, left out and said in `skipped`.
+  function build(repo: string, manifests: Record<string, unknown>, source: string, skipped: string[] = []): ModelEntry[] {
     const built: ModelEntry[] = [];
     for (const folder of Object.keys(manifests).sort()) {
       try {
         const manifest = parseManifest(manifests[folder], `${folder}/manifest.json`);
-        built.push(entryFor(folder, manifest, chooseVariant(manifest, UNKNOWN_LIMITS)));
+        built.push(entryFor(folder, manifest, chooseVariant(manifest, UNKNOWN_LIMITS), repo));
       } catch (error) {
-        log(`model catalog: skipping ${folder}: ${message(error)}`);
+        log(`model catalog: skipping ${repo === HF_REPO ? "" : `${repo}/`}${folder}: ${message(error)}`);
+        skipped.push(message(error));
       }
     }
-    log(`model catalog: ${built.length} models from ${source}`);
+    log(`model catalog: ${built.length} models ${repo === HF_REPO ? "" : `of ${repo} `}from ${source}`);
     return built;
+  }
+
+  // `repo` listed afresh for resolve() and remembered, its entries put in
+  // the list where its own were, or after the other repos' (added last):
+  // the first ref of a repo adds it, and a ref of a folder the list does
+  // not have looks again, in case the folder is newer than the cached
+  // listing (a second model published to the repo).
+  function addRepo(repo: string): Promise<ModelEntry[]> {
+    let pending = adding.get(repo);
+    if (!pending) {
+      pending = (async () => {
+        const entries = await loadRepo(repo, true);
+        if (!added.add(repo)) log(`model catalog: could not remember ${repo} (storage blocked or full); it is listed until the page is closed`);
+        await settled();
+        const hub = (listed ?? []).filter((e) => !isFinetuned(e));
+        const at = hub.findIndex((e) => e.repo === repo);
+        const others = hub.filter((e) => e.repo !== repo);
+        others.splice(at === -1 ? others.length : at, 0, ...entries);
+        listed = arranged(others, records ?? []);
+        return listed.filter((e) => e.repo === repo);
+      })().finally(() => adding.delete(repo));
+      adding.set(repo, pending);
+    }
+    return pending;
   }
 
   // The registry's records into `records`, newest first. A registry that
@@ -218,17 +341,40 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
 
   // `list` with its finetuned part replaced by `records`' entries.
   function withFinetuned(list: ModelEntry[], kept: FinetunedRecord[]): ModelEntry[] {
-    return [...list.filter((e) => !isFinetuned(e)), ...kept.map((r) => r.entry)];
+    return arranged(list.filter((e) => !isFinetuned(e)), kept);
   }
 
   /** The entry `ref` names: its id ("cellmap/onnx-web-models/setup_54",
    * which is also repo/folder, or "finetuned/mito_aff_setup54_16nm-ft1"),
-   * its folder ("setup_54") or its name ("mito_aff_setup54_16nm"). */
+   * a folder of the built-in catalog ("setup_54"), its name
+   * ("mito_aff_setup54_16nm"), or any other form hubRef reads (a prefix, a
+   * huggingface.co URL). A ref of a repo the list does not have adds the
+   * repo (addRepo); `<owner>/<repo>` alone names the repo's one model, and
+   * is refused with the refs of its models when it has several. The place
+   * a model kept here was published to names that model, whose bytes are
+   * here already. */
   async function resolve(ref: string): Promise<ModelEntry | null> {
-    const key = ref.trim().replace(/\/+$/, "");
+    const key = bareRef(ref);
     if (!key) return null;
     const all = await list();
-    return all.find((e) => e.id === key || e.folder === key || e.name === key) ?? null;
+    const target = hubRef(key);
+    const id = target?.folder ? `${target.repo}/${target.folder}` : key;
+    const known = all.find((e) => e.id === id || e.name === key || (e.repo === HF_REPO && e.folder === key));
+    if (known) return known;
+    if (!target) return null;
+    const published = records?.find((r) => r.published?.repo === target.repo && r.published.folder === target.folder);
+    if (published) return published.entry;
+    let entries = all.filter((e) => e.repo === target.repo);
+    const missing = target.folder !== null && !entries.some((e) => e.folder === target.folder);
+    if (target.repo !== HF_REPO && (entries.length === 0 || missing)) entries = await addRepo(target.repo);
+    const refs = entries.map((e) => e.id).join(", ");
+    if (target.folder === null) {
+      if (entries.length === 1) return entries[0]!;
+      throw new Error(`${target.repo} holds ${entries.length} models, one a folder: add one as ${target.repo}/<folder> (${refs})`);
+    }
+    const entry = entries.find((e) => e.folder === target.folder);
+    if (!entry) throw new Error(`${target.repo} has no model folder ${target.folder} (a folder with a manifest.json); it has ${refs}`);
+    return entry;
   }
 
   function modelBytes(entry: ModelEntry, onProgress?: Progress): Promise<ArrayBuffer> {
@@ -373,10 +519,35 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     }
     await settled();
     if (records) records = records.filter((r) => r.id !== id);
-    if (listed) listed = listed.filter((e) => e.id !== id);
+    if (listed) listed = withFinetuned(listed, records ?? []);
   }
 
   return { list, refresh, resolve, metadataFor: metadataOf, chooseVariant: chooseFor, modelBytes, addFinetuned, finetuned, removeFinetuned };
+}
+
+/** The list of `hub`, the Hub's entries in their order (the built-in
+ * catalog's, then the added repos'), and `kept`'s, the finetuned models',
+ * with every name unique (withUniqueNames). */
+function arranged(hub: ModelEntry[], kept: FinetunedRecord[]): ModelEntry[] {
+  return withUniqueNames([...hub, ...kept.map((r) => r.entry)]);
+}
+
+/** `list` with no two names alike. The built-in catalog's names and the
+ * finetuned models' are kept as they are: links and the server name the
+ * one, and the other's id, folder and byte-cache key are made of the name.
+ * An added repo's entry takes its hubName, or when that is taken the first
+ * free `<name>_<n>` (manifest.ts freeName), in list order. The names are
+ * worked out afresh each time, so one taken by a model finetuned since
+ * moves its holder on, and one freed again gives it back. */
+function withUniqueNames(list: ModelEntry[]): ModelEntry[] {
+  const kept = (e: ModelEntry) => e.repo === HF_REPO || isFinetuned(e);
+  const taken = new Set(list.filter(kept).map((e) => e.name));
+  return list.map((e) => {
+    if (kept(e)) return e;
+    const name = freeName(hubName(e.manifest), taken);
+    taken.add(name);
+    return name === e.name ? e : { ...e, name };
+  });
 }
 
 /** modelBytes's progress callback: bytes so far, and the total when the server said (null otherwise). */

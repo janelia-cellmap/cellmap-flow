@@ -9,13 +9,20 @@
       <p class="loaded-models-empty mb-0" id="loadedModelsEmpty">None yet: tick models below and press Submit Models.</p>
     </section>
 
-    <!-- Add any model by reference (models/resolve.py) -->
+    <!-- Add any model by reference (models/resolve.py; in the browser mode
+         web/src/models/index.ts resolve, which reads Hugging Face refs only) -->
     <div class="add-model mb-3">
       <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>
       <div class="d-flex gap-2">
+        {% if mode == "browser" %}
+        <input type="text" class="form-control form-control-sm" id="addModelRef"
+               placeholder="owner/repo/folder on Hugging Face, or setup_54..."
+               title="A model folder of any public Hugging Face model repo laid out as cellmap/onnx-web-models is (owner/repo/folder, a folder with a manifest.json and its .onnx files), the repo alone when it holds one model, its huggingface.co URL, or a folder of cellmap/onnx-web-models (setup_54). The repo's models are listed under Hugging Face from then on.">
+        {% else %}
         <input type="text" class="form-control form-control-sm" id="addModelRef"
                placeholder="Hugging Face repo, zoo model, Cellpose model, path..."
                title="Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.">
+        {% endif %}
         <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
       </div>
       <div id="addModelResult" class="add-model-result mt-2" hidden>

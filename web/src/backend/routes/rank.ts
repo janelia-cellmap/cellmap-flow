@@ -44,7 +44,7 @@ import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
-import { entryFor } from "../../models/manifest";
+import { withVariant } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
@@ -449,7 +449,7 @@ async function servedForRanking(ctx: AppContext, entry: ModelEntry, inputNorm?: 
   const current = !inputNorm && ctx.infer.served().find((s) => s.entry.id === entry.id);
   if (current) return { served: current, chain: ctx.session.state.chain, release: async () => {} };
   const limits = { ...(await ctx.infer.gpuLimits()), maxBufferSize: null };
-  const tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
+  const tuned = withVariant(entry, ctx.catalog.chooseVariant(entry.manifest, limits));
   const chain: Chain = { input_norm: inputNorm ?? entry.manifest.input_norm, postprocess: [] };
   const served = await ctx.infer.serve(tuned, chain, (await blobFor(chain)).blob, () => ctx.catalog.modelBytes(tuned));
   return { served, chain, release: () => served.dispose() };

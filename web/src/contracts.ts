@@ -138,11 +138,12 @@ export interface ModelVariant {
   mean_abs?: number;
   flip_frac?: number;
   ort_cpu_s?: number;
-  /** A model finetuned in this browser: the Hugging Face file its bytes
-   * were made from (FINETUNED_REPO entries only, since 2026-10-16). Its
-   * graph is that file's, byte for byte but for the weights trained, so
-   * the base's finetune block (ModelManifest.finetune) describes it by
-   * that file's name, and its finetune files are in that folder. */
+  /** A model finetuned in a browser: the Hugging Face file its bytes were
+   * made from (FINETUNED_REPO entries since 2026-10-16, and the manifests
+   * of such a model downloaded or published, which keep it). Its graph is
+   * that file's, byte for byte but for the weights trained, so the base's
+   * finetune block (ModelManifest.finetune) describes it by that file's
+   * name, and its finetune files are in that folder. */
   source?: { repo: string; folder: string; file: string };
 }
 
@@ -173,6 +174,25 @@ export interface ModelManifest {
    * Absent from a manifest written before 2026-10-16, whose head the
    * browser finds in the graph itself (finetune/modes.ts). */
   finetune?: FinetuneSpec;
+  /** A model published to Hugging Face from the browser (publish/): its
+   * name, which its entry is listed under (models/manifest.ts hubName),
+   * where it was finetuned from (a model ref) and how, and when; the block
+   * as the publish wrote it. */
+  published?: PublishedBlock;
+}
+
+/** A published model's manifest's "published" block. */
+export interface PublishedBlock {
+  name: string;
+  finetuned_from?: string;
+  finetune_mode?: string;
+  epochs?: number;
+  final_loss?: number | null;
+  trained_at?: string;
+  published_at?: string;
+  app?: string;
+  dataset?: string;
+  [k: string]: unknown;
 }
 
 /** A manifest's `finetune` block: one entry per way to train the model,
@@ -268,7 +288,13 @@ export interface Catalog {
   list(): Promise<ModelEntry[]>;
   /** The same, fetched afresh from the Hub (the dashboard's Refresh button). */
   refresh(): Promise<ModelEntry[]>;
-  /** An entry from a reference the dashboard sends: an id, a repo/folder, or a name. */
+  /** An entry from a reference the dashboard or a link sends: an id, a
+   * repo/folder, a name, or any form models/hf.ts hubRef reads. A ref of a
+   * repo the list does not have is looked up on the Hub, and the repo's
+   * models join the list, this visit and the next. Null for a ref that
+   * names no model the browser can run; an Error saying why for one that
+   * names a repo whose model cannot be had (no such public repo, no such
+   * folder in it, several folders where one was meant, rate-limited). */
   resolve(ref: string): Promise<ModelEntry | null>;
   /** The manifest as /api/huggingface-models shows a repo's metadata.json. */
   metadataFor(entry: ModelEntry): Record<string, unknown>;
