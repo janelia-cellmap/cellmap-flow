@@ -172,11 +172,11 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/job/<job_id>/restart": "both",
     "GET /api/finetune/model/<name>/download": "browser",
     # Publishing a finetuned model to Hugging Face, under the user's account:
-    # the browser's for now; the server's would run it as a cluster job.
-    "GET /api/huggingface/credentials": "browser",
-    "POST /api/huggingface/credentials": "browser",
-    "POST /api/finetune/model/<name>/publish": "browser",
-    "GET /api/finetune/model/<name>/publish": "browser",
+    # the browser's model from the page, the server's exported by a cluster job.
+    "GET /api/huggingface/credentials": "both",
+    "POST /api/huggingface/credentials": "both",
+    "POST /api/finetune/model/<name>/publish": "both",
+    "GET /api/finetune/model/<name>/publish": "both",
     # Good regions
     "GET /api/finetune/good-regions": "both",
     "POST /api/finetune/good-regions/mark-view": "both",
