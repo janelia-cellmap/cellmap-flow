@@ -475,19 +475,23 @@ credentials`: pasted, or from the Sign in popup; checked with whoAmI, kept
 in the routes' closure, which is the page's memory), and a publish of a
 finetuned model by its name (`/api/finetune/model/:name/publish`, a job the
 POST starts and the GET follows, as a finetune is, since an upload can
-outlast the service worker's API_TIMEOUT_MS). `model.ts` is what is
-uploaded: the model card, the record's manifest with its `published` block,
-the catalog's bytes, and the app links (share-link.ts's `shareLink` for the
-one with a dataset); `hub.ts` is `@huggingface/hub` (a chunk of its own,
-imported when first used): whoAmI, createRepo (409, there already: a new
-commit) and uploadFilesWithProgress, with the library's errors put in words
-that say what to do; `oauth.ts` is the sign-in (OAuth with PKCE in a popup,
-`oauth.html`, a second input of the build), the popup's script and the
-BroadcastChannel hand-over of its token to the page, named for the tab.
-Done, the record gets `published` through `Catalog.addFinetuned`, the
-catalog's one way to keep a record. The service worker passes requests with
-an `Authorization` header to the network unkept (sw.ts): its store keys by
-URL.
+outlast the service worker's API_TIMEOUT_MS). What is uploaded is the model
+card and the record's manifest with its `published` block, which
+`cellmap_flow/portable/publish.py` writes for both modes (through
+`portable/publish_calls.py`, `Inference.python`, as are the app links the
+answer gives, in share-link.ts's format), and the catalog's bytes;
+`model.ts` is what the Python is handed, the record's Publication (how the
+model came here, what it was finetuned from and how); `hub.ts` is
+`@huggingface/hub` (a chunk of its own, imported when first used): whoAmI,
+createRepo (409, there already: a new commit) and uploadFilesWithProgress,
+with the library's errors put in words that say what to do; `oauth.ts` is
+the sign-in (OAuth with PKCE in a popup, `oauth.html`, a second input of the
+build, with the client id the URL of the app's client metadata document, so
+no OAuth app is registered), the popup's script and the BroadcastChannel
+hand-over of its token to the page, named for the tab. Done, the record gets
+`published` through `Catalog.addFinetuned`, the catalog's one way to keep a
+record. The service worker passes requests with an `Authorization` header to
+the network unkept (sw.ts): its store keys by URL.
 
 ## State
 

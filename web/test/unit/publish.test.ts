@@ -4,17 +4,23 @@
 // Hugging Face: the files one publish commits, the manifest among them read
 // back as the catalog reads one, the record that says where the model went,
 // the refusals, and the Sign in popup's hand-over to the page. A refusal is
-// checked by its status, not its words.
+// checked by its status, not its words. The card, the manifest and the
+// links are cellmap_flow/portable/publish.py's, run in node's Pyodide
+// (pyodide.ts): without it (no network for numpy's wheel) the publishes skip.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createRouter } from "../../src/backend";
 import { SIGN_IN_EVENT } from "../../src/backend/routes/publish";
 import type { ApiResponse, ModelEntry } from "../../src/contracts";
+import { PYTHON } from "../../src/generated/python-data";
 import { finetunedRecord } from "../../src/models/finetuned";
 import { parseManifest } from "../../src/models/manifest";
-import { finetunedFrom, PUBLIC_APP } from "../../src/publish/model";
-import { handOver } from "../../src/publish/oauth";
+import { finetunedFrom } from "../../src/publish/model";
+import { exchange, handOver } from "../../src/publish/oauth";
 import { type FakeContext, fakeContext, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
+
+const python = await portablePython();
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -114,7 +120,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("publishing a model finetuned in the browser", () => {
+describe.skipIf(!python)("publishing a model finetuned in the browser", () => {
   it("commits the model card, the manifest and the ONNX file, and keeps where they went in the record", async () => {
     const hub = fakeHub({ hf_alice: "alice" });
     vi.stubGlobal("fetch", hub.fetch);
@@ -155,11 +161,13 @@ describe("publishing a model finetuned in the browser", () => {
     const read = parseManifest(manifest, `${ref}/manifest.json`);
     expect(read.variants.map((v) => v.file)).toEqual([`${NAME}.onnx`]);
     expect(read.channels).toEqual(base.manifest.channels);
-    // The card links to the public app, the model alone and on the dataset (asked for here).
+    // The card links to the public app, not this page's address, with the
+    // model alone and on the dataset (asked for here).
     const card = new TextDecoder().decode(files.get("README.md"));
     expect(card.startsWith("---\nlibrary_name: onnx\n")).toBe(true);
-    expect(card).toContain(`${PUBLIC_APP}?model=${ref}`);
-    expect(card).toContain(`${PUBLIC_APP}?dataset=${RAW}&model=${ref}`);
+    expect(card).toContain(`/?model=${ref})`);
+    expect(card).toContain(`/?dataset=${RAW}&model=${ref})`);
+    expect(card).not.toContain("localhost");
 
     const [record] = await ctx.catalog.finetuned();
     expect(record.published).toEqual({ repo: `alice/${NAME}`, folder: NAME, at: "2026-10-26T12:00:00.000Z" });
@@ -182,7 +190,7 @@ describe("publishing a model finetuned in the browser", () => {
     const router = createRouter();
     expect((await router.handle(request("POST", `/api/finetune/model/${NAME}/publish`, {}), ctx)).status).toBe(401);
     expect((await router.handle(request("POST", "/api/huggingface/credentials", { token: "hf_revoked" }), ctx)).status).toBe(401);
-    expect(body(await router.handle(request("GET", "/api/huggingface/credentials"), ctx))).toMatchObject({ signed_in: false, oauth_url: null });
+    expect(body(await router.handle(request("GET", "/api/huggingface/credentials"), ctx))).toMatchObject({ signed_in: false, oauth_url: expect.stringContaining("/oauth.html?") });
 
     await router.handle(request("POST", "/api/huggingface/credentials", { token: "hf_alice" }), ctx);
     expect((await router.handle(request("POST", `/api/finetune/model/${NAME}/publish`, { repo: `bob/${NAME}` }), ctx)).status).toBe(403);
@@ -242,5 +250,26 @@ describe("Sign in with Hugging Face", () => {
       via: "oauth",
       expires_at: "2099-01-01T00:00:00.000Z",
     });
+  });
+
+  it("exchanges the code that came back to this sign-in, sending the client id, and refuses one that did not", async () => {
+    const sent: Record<string, string>[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init: RequestInit = {}) => {
+      sent.push(Object.fromEntries(new URLSearchParams(String(init.body))));
+      return new Response(JSON.stringify({ access_token: "hf_oauth_alice", expires_in: 3600 }), { status: 200 });
+    });
+    const redirect = "http://localhost/oauth.html";
+    const kept = { channel: "c", codeVerifier: "the-verifier", nonce: "n1" };
+    const back = (nonce: string) => new URLSearchParams({ code: "the-code", state: JSON.stringify({ nonce, redirectUri: redirect }) });
+    expect(await exchange(back("n1"), kept, redirect)).toEqual({ token: "hf_oauth_alice", expires_at: expect.any(String) });
+    expect(sent).toEqual([{
+      grant_type: "authorization_code",
+      code: "the-code",
+      redirect_uri: redirect,
+      code_verifier: "the-verifier",
+      client_id: PYTHON.huggingface.oauth_client_id,
+    }]);
+    await expect(exchange(back("another"), kept, redirect)).rejects.toThrow();
+    expect(sent).toHaveLength(1);
   });
 });

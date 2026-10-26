@@ -13,8 +13,8 @@
 //    Hugging Face's authorize URL, keeps the PKCE code verifier, the nonce and
 //    the channel id in the popup's sessionStorage, and goes there.
 // 3. The user signs in and allows the app; Hugging Face sends the popup back
-//    to oauth.html with a code, which oauthHandleRedirect exchanges for the
-//    token with the verifier.
+//    to oauth.html with a code, which the popup exchanges for the token with
+//    the verifier (exchange).
 // 4. The popup posts the token (or why there is none) on a BroadcastChannel
 //    named after the id (handOver), and closes. The page heard it
 //    (listenForSignIn), checks the token with whoAmI and keeps it.
@@ -24,37 +24,28 @@
 // opener is null by the time the popup is back on this origin.
 //
 // What is stored where: oauthLoginUrl would put the code verifier and the
-// nonce in localStorage (huggingface.co:oauth:code_verifier and :nonce, read
-// back and removed by oauthHandleRedirect, but left behind when the exchange
-// fails before it gets that far). Here both are handed to it in an object
-// instead (its `localStorage` option) and kept in the popup's sessionStorage,
-// which is the popup's alone and goes when it closes; they are removed as
-// soon as the popup is back. Neither is the token, and the library writes
-// the token nowhere: it is in the popup's memory, then the channel's
-// message, then the page's memory. (So the way back calls
-// oauthHandleRedirect itself: oauthHandleRedirectIfPresent looks for the
-// nonce in localStorage whatever it is given, and would find none.)
+// nonce in localStorage (huggingface.co:oauth:code_verifier and :nonce).
+// Here both are handed to it in an object instead (its `localStorage`
+// option) and kept in the popup's sessionStorage, which is the popup's alone
+// and goes when it closes; they are removed as soon as the popup is back.
+// Neither is the token, which is in the popup's memory, then the channel's
+// message, then the page's memory.
 //
-// Without a registered OAuth app there is no client id (HF_OAUTH_CLIENT_ID
-// is empty) and no Sign in button: a pasted access token is the only way.
-// web/README.md says how the app is registered.
+// The app is a public one (no secret, PKCE) that nobody registers: its
+// client id is the URL of the client metadata document the app serves
+// (CIMD), which lists the redirect URLs oauth.html is reached at. The id and
+// the scopes are cellmap_flow/portable/publish.py's (HF_OAUTH_CLIENT_ID,
+// HF_OAUTH_SCOPES, which say why those scopes), the server's sign-in's too.
+import { PYTHON } from "../generated/python-data";
 import { message } from "../shared/message";
 
-/** The client id of the Hugging Face OAuth app (a public app: no secret,
- * PKCE). Empty until one is registered (web/README.md, "Publishing a model
- * to Hugging Face"); while it is, the panel offers no Sign in. */
-export const HF_OAUTH_CLIENT_ID = "";
-
-/** What the sign-in asks for: who the user is (openid, profile), and to
- * create repositories and write to those made through this app
- * (contribute-repos), which is all a publish does. Not write-repos or
- * manage-repos: with those a page could change or delete any of the user's
- * repositories. The app must be registered with these scopes. */
-export const HF_OAUTH_SCOPES = "openid profile contribute-repos";
-
 /** The popup's page, beside the app's (vite.config.ts builds it). Its URL
- * without a query is the redirect URL registered for the app. */
+ * without a query is the redirect URL the client metadata document lists. */
 export const SIGN_IN_PAGE = "oauth.html";
+
+/** Where Hugging Face exchanges a code for a token (its
+ * openid-configuration's token_endpoint). */
+const TOKEN_ENDPOINT = "https://huggingface.co/oauth/token";
 
 /** What the popup hands the page: the token and when it expires, or why
  * there is none. */
@@ -63,6 +54,13 @@ export type SignIn = { token: string; expires_at: string | null } | { error: str
 /** Where the popup keeps the flow's state between leaving for Hugging Face
  * and coming back (its sessionStorage). */
 const KEPT_KEY = "cellmap-flow:huggingface-sign-in";
+
+/** That state: the page's channel, the PKCE code verifier and the nonce. */
+interface Kept {
+  channel: string;
+  codeVerifier: string;
+  nonce: string;
+}
 
 function channelName(id: string): string {
   return `cellmap-flow:huggingface-sign-in:${id}`;
@@ -112,7 +110,6 @@ function signInOf(data: unknown): SignIn | null {
 export async function runSignInPopup(say: (text: string) => void): Promise<void> {
   const here = new URL(location.href);
   const redirectUrl = here.origin + here.pathname;
-  const hub = await import("@huggingface/hub");
   if (here.searchParams.has("code") || here.searchParams.has("error")) {
     const kept = takeKept();
     // The code is single-use and the address bar would show it: out of the history.
@@ -123,8 +120,7 @@ export async function runSignInPopup(say: (text: string) => void): Promise<void>
     }
     let signIn: SignIn;
     try {
-      const result = await hub.oauthHandleRedirect({ redirectedUrl: here.href, nonce: kept.nonce, codeVerifier: kept.codeVerifier });
-      signIn = { token: result.accessToken, expires_at: result.accessTokenExpiresAt.toISOString() };
+      signIn = await exchange(here.searchParams, kept, redirectUrl);
     } catch (e) {
       signIn = { error: hubMessage(e) };
     }
@@ -138,19 +134,62 @@ export async function runSignInPopup(say: (text: string) => void): Promise<void>
     return;
   }
   const channel = here.searchParams.get("channel");
-  if (!channel || !HF_OAUTH_CLIENT_ID) {
+  if (!channel) {
     say("Open this page from the Publish panel in cellmap-flow.");
     return;
   }
   // oauthLoginUrl fills these in instead of writing them to localStorage.
   const flow: { codeVerifier?: string; nonce?: string } = {};
-  const url = await hub.oauthLoginUrl({ clientId: HF_OAUTH_CLIENT_ID, scopes: HF_OAUTH_SCOPES, redirectUrl, localStorage: flow });
+  const { oauthLoginUrl } = await import("@huggingface/hub");
+  const url = await oauthLoginUrl({
+    clientId: PYTHON.huggingface.oauth_client_id,
+    scopes: PYTHON.huggingface.oauth_scopes.join(" "),
+    redirectUrl,
+    localStorage: flow,
+  });
   sessionStorage.setItem(KEPT_KEY, JSON.stringify({ channel, codeVerifier: flow.codeVerifier, nonce: flow.nonce }));
   location.replace(url);
 }
 
+/** The way back (`query`, the popup's): the code exchanged for the token,
+ * as @huggingface/hub's oauthHandleRedirect would, but with the client id
+ * in the request, which a public client must send (RFC 6749 §4.1.3) and the
+ * library leaves out. First the error Hugging Face sent back, if any, and
+ * the state's nonce against the one kept, so that only the code this popup
+ * asked for is taken. Throws why there is no token. */
+export async function exchange(query: URLSearchParams, kept: Kept, redirectUrl: string): Promise<SignIn> {
+  const error = query.get("error");
+  if (error) throw new Error(`${error}: ${query.get("error_description") ?? "no reason given"}`);
+  const code = query.get("code");
+  let nonce: unknown = null;
+  try {
+    nonce = (JSON.parse(query.get("state") ?? "null") as { nonce?: unknown } | null)?.nonce;
+  } catch {
+    // not JSON: not this sign-in's state
+  }
+  if (!code || nonce !== kept.nonce) throw new Error("the answer that came back is not to this sign-in");
+  const response = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      // The authorize request's, as the token endpoint checks it.
+      redirect_uri: redirectUrl,
+      code_verifier: kept.codeVerifier,
+      client_id: PYTHON.huggingface.oauth_client_id,
+    }),
+  });
+  const answer = (await response.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
+  if (!response.ok || !answer.access_token) {
+    throw new Error(answer.error_description ?? answer.error ?? `the token request answered HTTP ${response.status}`);
+  }
+  const expiresAt = answer.expires_in ? new Date(Date.now() + answer.expires_in * 1000).toISOString() : null;
+  return { token: answer.access_token, expires_at: expiresAt };
+}
+
 /** The flow's state the popup kept, removed as it is read; null when there is none. */
-function takeKept(): { channel: string; codeVerifier: string; nonce: string } | null {
+function takeKept(): Kept | null {
   const raw = sessionStorage.getItem(KEPT_KEY);
   sessionStorage.removeItem(KEPT_KEY);
   try {

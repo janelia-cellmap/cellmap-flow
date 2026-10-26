@@ -30,6 +30,7 @@ import { message } from "./backend/router";
 import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } from "./contracts";
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
+import { PYTHON } from "./generated/python-data";
 import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
 import { hubName, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
@@ -37,8 +38,10 @@ import { paintVolumeOf } from "./viewer/layers";
 import { decodeState, encodeState } from "./viewer/share";
 import { layersOf, type NgLayer, type NgState, sourceUrl } from "./viewer/state";
 
-export const DATASET_PARAM = "dataset";
-export const MODEL_PARAM = "model";
+// The query's parameters, as a published model's card writes them too
+// (cellmap_flow/portable/publish.py, exported by build/export_data.py).
+export const DATASET_PARAM = PYTHON.links.dataset_param;
+export const MODEL_PARAM = PYTHON.links.model_param;
 
 export interface LinkRequest {
   /** The volume to open, or null when the link names none. */

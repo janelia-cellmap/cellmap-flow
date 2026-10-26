@@ -470,8 +470,7 @@ token with write access: at
 `huggingface.co/settings/tokens <https://huggingface.co/settings/tokens>`__,
 *Create new token* of type *Write* (or a fine-grained one that may write to
 your repositories). Either is kept in the page's memory only and sent only to
-Hugging Face; a reload asks again. *Sign in with Hugging Face* appears once the
-app has its Hugging Face OAuth app; until then, paste a token.
+Hugging Face; a reload asks again.
 
 The repository is ``<you>/<model name>`` unless you type another, yours or one
 of your organizations'. A new repository is **public** unless you tick
