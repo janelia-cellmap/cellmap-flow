@@ -1,0 +1,11 @@
+{
+  "client_id": "https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/oauth-cimd-test/oauth-cimd",
+  "client_name": "cellmap-flow (sign-in test)",
+  "client_uri": "https://janelia-cellmap.github.io/cellmap-flow/app/",
+  "redirect_uris": [
+    "https://janelia-cellmap.github.io/cellmap-flow/app/oauth.html",
+    "http://localhost/oauth.html",
+    "http://127.0.0.1/oauth.html"
+  ],
+  "token_endpoint_auth_method": "none"
+}
