@@ -144,7 +144,7 @@ describe("another Hugging Face repo", () => {
     expect(next.hub.calls.filter((u) => u.includes(ALICE))).toEqual([]);
   });
 
-  it("names a published model by its published name, and breaks a clash with _2 where the built-in and finetuned names stay", async () => {
+  it("names a published model by its published name, breaks a clash with _2 where the built-in and finetuned names stay, and lists the browser's own model for its published copy", async () => {
     const registry = new MemoryFinetunedRegistry();
     const { log } = fakeLog();
     const catalog = createCatalog({ log, fetch: fakeHub({ repos }).fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: registry, now: () => T0 });
@@ -160,5 +160,10 @@ describe("another Hugging Face repo", () => {
     expect(names.slice(-4)).toEqual(["mito_aff_setup54_16nm_2", "nuc_setup56_128nm_2", `${FT}_2`, FT]);
     expect(new Set(names).size).toBe(names.length);
     expect((await catalog.resolve(FT))!.id).toBe(own.id);
+
+    // Once published from here, the own model stands for its copy on the Hub, which is not listed.
+    await catalog.addFinetuned({ ...record, published: { repo: ALICE, folder: FT, at: "2026-10-26T11:00:00.000Z" } }, new ArrayBuffer(8));
+    expect((await catalog.list()).map((e) => e.name)).not.toContain(`${FT}_2`);
+    for (const ref of [`${ALICE}/${FT}`, ALICE]) expect((await catalog.resolve(ref))!.id).toBe(own.id);
   });
 });

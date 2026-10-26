@@ -78,7 +78,8 @@ async function resolveAll(ctx: AppContext, refs: string[]): Promise<{ entries: M
  * from ("huggingface", or "finetuned" for one finetuned in this browser),
  * what it is (the Hugging Face list's folder, or the base it was finetuned
  * from), whether it is served yet ("starting" while the session's restore
- * serves it after a reload), and the Hugging Face row that ticks it (the
+ * serves it after a reload, "waiting" while no dataset is open to serve it
+ * on, as after a link with no dataset), and the Hugging Face row that ticks it (the
  * list's value, the entry's id), which the tab unticks on a remove. Every
  * model can be removed: nothing runs outside the page, and a finetuned one
  * stays kept. */
@@ -86,7 +87,7 @@ export interface LoadedModel {
   name: string;
   source: "huggingface" | "finetuned";
   detail: string | null;
-  status: "running" | "starting";
+  status: "running" | "starting" | "waiting";
   removable: true;
   note: string | null;
   hf_id: string;
@@ -112,7 +113,7 @@ export async function loadedModels(ctx: AppContext): Promise<LoadedModel[]> {
       name: m.name,
       source: finetuned ? "finetuned" : "huggingface",
       detail: finetuned ? (base ? `from ${base}` : null) : m.folder,
-      status: served.some((s) => s.entry.id === m.id) ? "running" : "starting",
+      status: served.some((s) => s.entry.id === m.id) ? "running" : ctx.session.state.datasetUrl ? "starting" : "waiting",
       removable: true,
       note: finetuned ? "Kept in this browser: ✕ stops serving it; tick it under Hugging Face and Submit to serve it again." : null,
       hf_id: m.id,

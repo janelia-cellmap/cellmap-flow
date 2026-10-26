@@ -46,7 +46,10 @@ export function init({ untick, log }) {
     // one wraps between its words.
     const name = h("span", { class: "loaded-model-name", title: model.name },
       model.name.split(/(?<=[_.-])/).flatMap((part, i) => (i ? [h("wbr"), part] : [part])));
-    const status = model.status && model.status !== "running" ? tag(model.status) : null;
+    // The browser mode's "waiting": no volume is open to run it on yet.
+    const status = model.status && model.status !== "running"
+      ? tag(model.status, model.status === "waiting" ? "It runs on the volume you open in the viewer." : undefined)
+      : null;
     if (status) status.classList.add("loaded-model-status");
     const remove = h("button", {
       type: "button", class: "loaded-model-remove", "aria-label": "Remove " + model.name, disabled: !model.removable,
@@ -73,14 +76,17 @@ export function init({ untick, log }) {
     list.replaceChildren(...models.map(row));
     document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
     const startingCount = models.filter((m) => m.status === "starting").length;
+    const waitingCount = models.filter((m) => m.status === "waiting").length;
     const counts = [];
-    if (models.length - startingCount) counts.push((models.length - startingCount) + " running");
+    if (models.length - startingCount - waitingCount) counts.push((models.length - startingCount - waitingCount) + " running");
     if (startingCount) counts.push(startingCount + " starting");
+    if (waitingCount) counts.push(waitingCount + " waiting for a volume");
     document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
     // The Cellpose panel's "N running", after a remove or a Submit as on load.
     const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
     document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
-    starting = startingCount > 0;
+    // Asked again while one waits too: opening a volume serves it.
+    starting = startingCount + waitingCount > 0;
   }
 
   // Quietly: a failed refresh leaves the list as it was.

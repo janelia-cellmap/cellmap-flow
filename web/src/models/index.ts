@@ -312,11 +312,17 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
         const others = hub.filter((e) => e.repo !== repo);
         others.splice(at === -1 ? others.length : at, 0, ...entries);
         listed = arranged(others, records ?? []);
-        return listed.filter((e) => e.repo === repo);
+        return ofRepo(listed, repo);
       })().finally(() => adding.delete(repo));
       adding.set(repo, pending);
     }
     return pending;
+  }
+
+  // `list`'s entries of `repo`: the Hub's, and those of the models kept here
+  // that were published to it, which stand for theirs (arranged).
+  function ofRepo(list: ModelEntry[], repo: string): ModelEntry[] {
+    return list.filter((e) => e.repo === repo || records?.some((r) => r.id === e.id && r.published?.repo === repo));
   }
 
   // The registry's records into `records`, newest first. A registry that
@@ -364,7 +370,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (!target) return null;
     const published = records?.find((r) => r.published?.repo === target.repo && r.published.folder === target.folder);
     if (published) return published.entry;
-    let entries = all.filter((e) => e.repo === target.repo);
+    let entries = ofRepo(all, target.repo);
     const missing = target.folder !== null && !entries.some((e) => e.folder === target.folder);
     if (target.repo !== HF_REPO && (entries.length === 0 || missing)) entries = await addRepo(target.repo);
     const refs = entries.map((e) => e.id).join(", ");
@@ -527,9 +533,12 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
 
 /** The list of `hub`, the Hub's entries in their order (the built-in
  * catalog's, then the added repos'), and `kept`'s, the finetuned models',
- * with every name unique (withUniqueNames). */
+ * with every name unique (withUniqueNames). A Hub entry that a model kept
+ * here was published as is left out: the kept model, the same bytes under
+ * its own name, stands for it (resolve). */
 function arranged(hub: ModelEntry[], kept: FinetunedRecord[]): ModelEntry[] {
-  return withUniqueNames([...hub, ...kept.map((r) => r.entry)]);
+  const publishedHere = new Set(kept.flatMap((r) => (r.published ? [`${r.published.repo}/${r.published.folder}`] : [])));
+  return withUniqueNames([...hub.filter((e) => !publishedHere.has(e.id)), ...kept.map((r) => r.entry)]);
 }
 
 /** `list` with no two names alike. The built-in catalog's names and the
