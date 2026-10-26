@@ -23,8 +23,8 @@ message is pydantic's, after the field's name.
   ``AIAnnotateDecision``: POST /api/finetune/ai-annotate/{settings,run,resend},
   and accept and reject
 - ``FinetunePublish``: POST /api/finetune/model/<name>/publish, and
-  ``HuggingFaceCredentials``: POST /api/huggingface/credentials (the browser
-  answers both for now: web/src/backend/routes/publish.ts)
+  ``HuggingFaceCredentials``: POST /api/huggingface/credentials (both modes
+  answer them: routes/finetune/publish.py, web/src/backend/routes/publish.ts)
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
@@ -442,10 +442,16 @@ class FinetunePublish(BaseModel):
 
 
 class HuggingFaceCredentials(BaseModel):
-    """A Hugging Face access token to publish with (``token``, hf_...), or
-    ``forget`` the one in use: signing out."""
+    """A Hugging Face access token to publish with (``token``, hf_...),
+    which the server also saves when asked to ``remember`` it (where ``hf
+    auth login`` saves one; the browser keeps a token in the page only);
+    ``device``: a sign-in with a code the user enters at huggingface.co, the
+    server's Sign in (the browser's is a popup); or ``forget`` the one in
+    use: signing out."""
 
     token: Optional[str] = Field(None, max_length=4096)
+    remember: bool = False
+    device: bool = False
     forget: bool = False
 
 

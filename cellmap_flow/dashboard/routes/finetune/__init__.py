@@ -19,7 +19,9 @@ dashboard.app registers. Each module has its own:
 - ``ai_annotate``: a hosted model's first guess at one plane, staged for
   the user to accept or reject;
 - ``instance_correction``: instance-correction volumes;
-- ``layers``: adding, removing and renaming viewer layers.
+- ``layers``: adding, removing and renaming viewer layers;
+- ``publish``: signing in to Hugging Face, and publishing a model a job
+  finetuned there, under the user's own account.
 """
 
 from cellmap_flow.dashboard.routes.finetune import (  # noqa: F401  (each adds its routes)
@@ -30,6 +32,7 @@ from cellmap_flow.dashboard.routes.finetune import (  # noqa: F401  (each adds i
     instance_correction,
     layers,
     overlay,
+    publish,
     rank_routes,
     training,
     view_labels,

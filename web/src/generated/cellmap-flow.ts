@@ -631,11 +631,17 @@ export interface FinetuneRestart {
   [k: string]: unknown;
 }
 /**
- * A Hugging Face access token to publish with (``token``, hf_...), or
- * ``forget`` the one in use: signing out.
+ * A Hugging Face access token to publish with (``token``, hf_...),
+ * which the server also saves when asked to ``remember`` it (where ``hf
+ * auth login`` saves one; the browser keeps a token in the page only);
+ * ``device``: a sign-in with a code the user enters at huggingface.co, the
+ * server's Sign in (the browser's is a popup); or ``forget`` the one in
+ * use: signing out.
  */
 export interface HuggingFaceCredentials {
   token?: string | null;
+  remember?: boolean;
+  device?: boolean;
   forget?: boolean;
 }
 /**
@@ -821,10 +827,10 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/job/<job_id>/stop-early", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/job/<job_id>/restart", availability: "both", request: "FinetuneRestart" },
   { method: "GET", path: "/api/finetune/model/<name>/download", availability: "browser", request: null },
-  { method: "GET", path: "/api/huggingface/credentials", availability: "browser", request: null },
-  { method: "POST", path: "/api/huggingface/credentials", availability: "browser", request: "HuggingFaceCredentials" },
-  { method: "POST", path: "/api/finetune/model/<name>/publish", availability: "browser", request: "FinetunePublish" },
-  { method: "GET", path: "/api/finetune/model/<name>/publish", availability: "browser", request: null },
+  { method: "GET", path: "/api/huggingface/credentials", availability: "both", request: null },
+  { method: "POST", path: "/api/huggingface/credentials", availability: "both", request: "HuggingFaceCredentials" },
+  { method: "POST", path: "/api/finetune/model/<name>/publish", availability: "both", request: "FinetunePublish" },
+  { method: "GET", path: "/api/finetune/model/<name>/publish", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/good-regions", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/mark-view", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/delete", availability: "both", request: null },

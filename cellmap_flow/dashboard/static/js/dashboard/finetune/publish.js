@@ -1,19 +1,28 @@
-// Browser mode: Publish to Hugging Face, on the Training Status card beside
-// Download finetuned model, for the same model (job-monitor.js shows both
-// for the model a job's status says is served). The button opens the panel,
-// which says who is signed in to Hugging Face and offers Sign in (a popup,
-// when the app has an OAuth app) or a pasted access token; then the
-// repository (by default the user's own, named after the model), whether a
-// new one is private, and whether the model card names the dataset. Publish
-// starts the upload, whose progress is polled, and the result is the
+// Publish to Hugging Face, on the Training Status card, in both modes, for
+// the model a job's status says is served (job-monitor.js shows it then; in
+// the browser beside Download finetuned model). The button opens the panel,
+// which says who is signed in to Hugging Face and offers Sign in or a
+// pasted access token; then the repository (by default the user's own,
+// named after the model), whether a new one is private, and whether the
+// model card names the dataset. Publish starts the upload (on a server, the
+// export to ONNX first), whose progress is polled, and the result is the
 // model's Hugging Face page, its ref and the two links that open it in the
 // app, the model alone and on this dataset, each with a Copy button. A model
 // published before shows where it went when the panel opens.
 //
-// The routes are web/src/backend/routes/publish.ts's. A pasted token goes
-// to the credentials route at once and the field is emptied once it is
-// taken: the route keeps it in the page's memory, never in storage; nothing
-// here keeps it, logs it or puts it in a message.
+// The routes are web/src/backend/routes/publish.ts's in the browser and
+// dashboard/routes/finetune/publish.py's on a server, and answer alike.
+// Where the two differ the credentials answer says so, and the panel goes
+// by it, not by the mode: Sign in opens a popup where it gives an
+// `oauth_url` (the browser's, with a registered OAuth app), and asks for a
+// code to enter at huggingface.co where it offers `device_sign_in` (the
+// server's), followed until the sign-in is done or has failed (`device`);
+// Remember on this server is offered where it says `can_remember`; and a
+// token it says is "saved" (on the server, by `hf auth login` or Remember)
+// is signed out there, not here. A pasted token goes to the credentials
+// route at once and the field is emptied once it is taken: the route keeps
+// it in memory (the page's, or the dashboard's process's), never in the
+// page's storage; nothing here keeps it, logs it or puts it in a message.
 import { HUGGINGFACE_SIGN_IN_EVENT, listen } from "../../lib/events.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer, postAnswer } from "./requests.js";
@@ -22,6 +31,7 @@ const CREDENTIALS = "/api/huggingface/credentials";
 
 // What a running publish is doing, by the step the route answers.
 const STEP_WORDS = {
+  exporting: "Exporting the model to ONNX (a cluster job)",
   creating: "Making the repository",
   preparing: "Preparing the upload",
   hashing: "Hashing",
@@ -39,6 +49,11 @@ export function initPublish() {
   const tokenFields = document.getElementById("hfTokenFields");
   const tokenHint = document.getElementById("hfTokenHint");
   const tokenInput = document.getElementById("hfToken");
+  const rememberField = document.getElementById("hfRememberField");
+  const rememberBox = document.getElementById("hfRemember");
+  const deviceBox = document.getElementById("hfDevice");
+  const deviceCode = document.getElementById("hfDeviceCode");
+  const deviceLink = document.getElementById("hfDeviceLink");
   const repoInput = document.getElementById("publishRepo");
   const privateBox = document.getElementById("publishPrivate");
   const datasetBox = document.getElementById("publishIncludeDataset");
@@ -57,6 +72,7 @@ export function initPublish() {
   let defaultRepo = "";  // the repository field's default, replaced while the user has not changed it
   let running = false;
   let poller = null;
+  let deviceWatch = null;  // the credentials polled while a sign-in with a code waits
 
   const publishUrl = (name) => `/api/finetune/model/${encodeURIComponent(name)}/publish`;
   const say = (text) => { statusLine.textContent = text || ""; };
@@ -98,17 +114,42 @@ export function initPublish() {
     }
     account = answer;
     const yes = signedIn();
-    accountLine.textContent = yes
-      ? `Signed in to Hugging Face as ${account.user}${account.via === "token" ? " (access token)" : ""}`
-      : "Not signed in to Hugging Face";
-    signInBtn.hidden = yes || !account.oauth_url;
-    signOutBtn.hidden = !yes;
+    const how = {
+      token: " (access token)",
+      saved: " (saved on this server; run hf auth logout there to sign out)",
+    }[account.via] || "";
+    accountLine.textContent = yes ? `Signed in to Hugging Face as ${account.user}${how}` : "Not signed in to Hugging Face";
+    const waiting = !yes && account.device && account.device.status === "pending" ? account.device : null;
+    signInBtn.hidden = yes || Boolean(waiting) || !(account.oauth_url || account.device_sign_in);
+    signOutBtn.hidden = !yes || account.via === "saved";
+    showDevice(waiting);
     tokenFields.hidden = yes;
     tokenHint.hidden = yes;
+    rememberField.hidden = yes || !account.can_remember;
     const fallback = yes && model ? `${account.user}/${model}` : "";
     if (!repoInput.value.trim() || repoInput.value.trim() === defaultRepo) repoInput.value = fallback;
     defaultRepo = fallback;
     publishBtn.disabled = !yes || running;
+  }
+
+  // A sign-in with a code that waits for the user: the code, and the link
+  // to enter it at (Hugging Face's own with the code in it, where it gives
+  // one), followed until the sign-in is done or has failed; or none.
+  function showDevice(device) {
+    deviceBox.hidden = !device;
+    if (!device) return;
+    deviceCode.textContent = device.user_code;
+    deviceLink.href = device.verification_uri_complete || device.verification_uri;
+    deviceLink.textContent = device.verification_uri;
+    if (deviceWatch && deviceWatch.running) return;
+    deviceWatch = poll(async ({ stale }) => {
+      const answer = await getAnswer(CREDENTIALS);
+      if (stale()) return false;
+      showAccount(answer);
+      const followed = answer.success ? answer.device : null;
+      if (followed && followed.status === "failed") say(followed.error);
+      return Boolean(followed && followed.status === "pending");
+    }, { intervalMs: 2000, immediate: false });
   }
 
   function showPublish(answer) {
@@ -171,12 +212,25 @@ export function initPublish() {
     if (!panel.hidden) refresh();
   });
 
-  // The popup is opened in the click itself, so no popup blocker stops it;
-  // it hands its token to the page, which says so (HUGGINGFACE_SIGN_IN_EVENT).
-  signInBtn.addEventListener("click", () => {
-    if (!account || !account.oauth_url) return;
-    const popup = window.open(account.oauth_url, "cellmap-flow-huggingface-sign-in", "popup,width=520,height=720");
-    say(popup ? "Signing in in the Hugging Face window…" : "The browser blocked the sign-in window: allow pop-ups for this page, or paste an access token.");
+  // A popup, where the answer gives its URL: opened in the click itself,
+  // so no popup blocker stops it; it hands its token to the page, which
+  // says so (HUGGINGFACE_SIGN_IN_EVENT). Else a code, which the route asks
+  // Hugging Face for and then waits on (showDevice).
+  signInBtn.addEventListener("click", async () => {
+    if (account && account.oauth_url) {
+      const popup = window.open(account.oauth_url, "cellmap-flow-huggingface-sign-in", "popup,width=520,height=720");
+      say(popup ? "Signing in in the Hugging Face window…" : "The browser blocked the sign-in window: allow pop-ups for this page, or paste an access token.");
+      return;
+    }
+    if (!account || !account.device_sign_in) return;
+    say("Asking Hugging Face for a sign-in code…");
+    try {
+      const answer = await postAnswer(CREDENTIALS, { device: true });
+      say(answer.success ? "" : answer.error);
+      if (answer.success) showAccount(answer);
+    } catch (e) {
+      say(`Could not reach the page's backend: ${e.message}`);
+    }
   });
   listen(HUGGINGFACE_SIGN_IN_EVENT, (event) => {
     const detail = event.detail || {};
@@ -202,7 +256,8 @@ export function initPublish() {
     const token = tokenInput.value.trim();
     if (!token || token === sending) return;
     sending = token;
-    const answer = await postAnswer(CREDENTIALS, { token });
+    const remember = account && account.can_remember ? { remember: rememberBox.checked } : {};
+    const answer = await postAnswer(CREDENTIALS, { token, ...remember });
     if (!answer.success) {
       say(answer.error);
       return;

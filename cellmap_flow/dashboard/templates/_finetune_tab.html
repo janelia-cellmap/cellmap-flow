@@ -1028,15 +1028,20 @@
        title="The finetuned model as an .onnx file: the base model's graph with the trained weights (its last layer, or its whole network) in it">
       Download finetuned model
     </a>
-    {# Publish to Hugging Face, shown with the Download link
-       (finetune/publish.js): the model, its manifest and a model card
-       uploaded to a repository of the user's own Hugging Face account, with
-       the links that open it. The user signs in in a popup (when the app has
-       a registered OAuth app; web/README.md) or pastes an access token with
-       write access; either is kept in the page's memory only, and the token
-       field is masked by CSS and kept from password managers as the AI
-       panel's are (see there). #}
-    <button type="button" class="btn btn-outline-secondary btn-sm mt-3 ms-2" id="publishFinetunedBtn" style="display: none;"
+    {% endif %}
+    {# Publish to Hugging Face, in both modes, shown for the model a status
+       answer says is served (finetune/publish.js): the model, its manifest
+       and a model card uploaded to a repository of the user's own Hugging
+       Face account, with the links that open it. The browser's model is
+       uploaded from the page; the server's is exported to ONNX by a cluster
+       job first, then uploaded from the server. The user signs in (in a
+       popup in the browser; with a code entered at huggingface.co on a
+       server) or pastes an access token with write access. The browser
+       keeps either in the page's memory only; the server in its memory,
+       unless the token is remembered there, and a server signed in with
+       `hf auth login` uses that. The token field is masked by CSS and kept
+       from password managers as the AI panel's are (see there). #}
+    <button type="button" class="btn btn-outline-secondary btn-sm mt-3{% if mode == "browser" %} ms-2{% endif %}" id="publishFinetunedBtn" style="display: none;"
             aria-expanded="false" aria-controls="publishPanel"
             title="Upload the finetuned model to a repository of your own Hugging Face account, and get the links that open it in cellmap-flow">
       Publish to Hugging Face
@@ -1045,18 +1050,30 @@
       <div class="d-flex align-items-baseline gap-2 flex-wrap">
         <span class="text-muted" style="font-size: 0.85rem;" id="hfAccount">Not signed in to Hugging Face</span>
         <button type="button" class="btn btn-outline-primary btn-sm" id="hfSignInBtn" hidden
-                title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state.">Sign in with Hugging Face</button>
+                {% if mode == "browser" %}title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state."{% else %}title="Gives a code to enter at huggingface.co, in any browser; the dashboard is signed in once you have."{% endif %}>Sign in with Hugging Face</button>
         <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
-                title="Forgets the Hugging Face token in this page.">Sign out</button>
+                title="Forgets the Hugging Face token signed in here.">Sign out</button>
+      </div>
+      {# A sign-in with a code (the server's): the code, and where to enter it. #}
+      <div class="small mt-1" id="hfDevice" hidden>
+        Enter <code id="hfDeviceCode"></code> at <a id="hfDeviceLink" target="_blank" rel="noopener"></a>
       </div>
       <div class="patch-tools-fields publish-fields" id="hfTokenFields">
         <label for="hfToken">Access token</label>
         <input type="text" class="form-control form-control-sm credential-secret" id="hfToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore
                placeholder="hf_… with write access"
-               title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in this page only: paste it again after a reload.">
+               {% if mode == "browser" %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in this page only: paste it again after a reload."{% else %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in the dashboard's memory only (paste it again after a restart) unless you tick Remember on this server first."{% endif %}>
+      </div>
+      {# Shown when the credentials answer says a token can be saved where
+         it is used (can_remember: the server's, in huggingface_hub's own
+         file). Ticked before the token is pasted, as it is sent at once. #}
+      <div class="form-check mt-1" id="hfRememberField" hidden
+           title="Saves the token where hf auth login saves it, in your home directory: the dashboard is signed in after a restart, and other Hugging Face tools you run use it too. hf auth logout removes it.">
+        <input class="form-check-input" type="checkbox" id="hfRemember" autocomplete="off">
+        <label class="form-check-label small" for="hfRemember">Remember on this server</label>
       </div>
       <div class="text-muted small mt-1" id="hfTokenHint">
-        Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.
+        {% if mode == "browser" %}Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.{% else %}Make one at huggingface.co/settings/tokens (a Write token). It is sent only to Hugging Face.{% endif %}
       </div>
       <div class="patch-tools-fields publish-fields">
         <label for="publishRepo">Repository</label>
@@ -1097,7 +1114,6 @@
         </div>
       </div>
     </div>
-    {% endif %}
   </div>
 </div>
 

@@ -489,25 +489,25 @@
     {
       "method": "GET",
       "path": "/api/huggingface/credentials",
-      "availability": "browser",
+      "availability": "both",
       "request": null
     },
     {
       "method": "POST",
       "path": "/api/huggingface/credentials",
-      "availability": "browser",
+      "availability": "both",
       "request": "HuggingFaceCredentials"
     },
     {
       "method": "POST",
       "path": "/api/finetune/model/<name>/publish",
-      "availability": "browser",
+      "availability": "both",
       "request": "FinetunePublish"
     },
     {
       "method": "GET",
       "path": "/api/finetune/model/<name>/publish",
-      "availability": "browser",
+      "availability": "both",
       "request": null
     },
     {
@@ -2054,7 +2054,7 @@
       "type": "object"
     },
     "HuggingFaceCredentials": {
-      "description": "A Hugging Face access token to publish with (``token``, hf_...), or\n``forget`` the one in use: signing out.",
+      "description": "A Hugging Face access token to publish with (``token``, hf_...),\nwhich the server also saves when asked to ``remember`` it (where ``hf\nauth login`` saves one; the browser keeps a token in the page only);\n``device``: a sign-in with a code the user enters at huggingface.co, the\nserver's Sign in (the browser's is a popup); or ``forget`` the one in\nuse: signing out.",
       "properties": {
         "token": {
           "anyOf": [
@@ -2067,6 +2067,14 @@
             }
           ],
           "default": null
+        },
+        "remember": {
+          "default": false,
+          "type": "boolean"
+        },
+        "device": {
+          "default": false,
+          "type": "boolean"
         },
         "forget": {
           "default": false,
