@@ -268,7 +268,8 @@ class ModelConfig:
         steps (``[{"name": ..., **params}]``), or None when it declares none.
 
         Asked on every dashboard poll, so it must be cheap and must not
-        raise. Only an onnx model's manifest declares any.
+        raise. An onnx model's manifest declares one, and so does the
+        metadata.json of a model a server published to Hugging Face.
         """
         return None
 

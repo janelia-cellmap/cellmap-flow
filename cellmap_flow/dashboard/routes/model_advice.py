@@ -58,8 +58,9 @@ def _declared_input_norm(model_config):
     ``declared`` form (``{name: params}``, in order), or None; None too for
     a job whose model is not among the session's.
 
-    An onnx model's manifest declares the steps the browser feeds it through;
-    no other type declares any.
+    An onnx model's manifest declares the steps the browser feeds it through,
+    and a model a server published to Hugging Face its metadata.json the
+    steps it was trained with; no other model declares any.
     """
     if model_config is None:
         return None

@@ -494,12 +494,15 @@ record. The service worker passes requests with an `Authorization` header to
 the network unkept (sw.ts): its store keys by URL.
 
 The server answers the same routes (`dashboard/routes/finetune/publish.py`)
-with the same panel: it first exports the served finetune to the catalog's
-format as a cluster job (`finetune/export_web.py`: the LoRA adapter or full
-weights folded into the base, then cellmap-models' onnx_web in fp32, fp16
-and int8 weights, checked against PyTorch on the training data), then
-uploads with `huggingface_hub` the files, the same card and manifest from
-`portable/publish.py`, in one commit. It signs in by OAuth's device code
+with the same panel: it first exports the served finetune as a cluster job
+(`finetune/export_web.py`: the LoRA adapter or full weights folded into the
+base), as a cellmap-models export at the repository's root, which servers
+open by `<owner>/<repo>`, and, where onnx_web can make one, in the catalog's
+format in the model's folder (cellmap-models' onnx_web in fp32, fp16 and
+int8 weights, checked against PyTorch on the training data); then uploads
+with `huggingface_hub` the files, the same card and manifest from
+`portable/publish.py`, in one commit. A model too big for an .onnx file, or
+2D, has the root's export alone, and the answer's links are null. It signs in by OAuth's device code
 (the popup cannot return to a cluster node's address), or takes the token
 `huggingface_hub` already has or a pasted one; the credentials answer says
 which the panel offers.

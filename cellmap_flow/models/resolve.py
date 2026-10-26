@@ -52,7 +52,9 @@ stat, a file name, a regex, or (only when ``online``) one request.
    Online, its file list is read: with ``metadata.json`` and ``model.ts`` it
    is a cellmap-models export, ``huggingface``; a repo of web exports is
    refused with its folders, one of which to add; anything else is refused
-   with what to do instead. Offline, or when the Hub cannot be reached,
+   with what to do instead. A model a server published has both: the
+   export at the root, which ``org/repo`` serves (only the root's files are
+   downloaded), and its web export in a folder, ``org/repo/folder``. Offline, or when the Hub cannot be reached,
    either is taken to be what it looks like, with a note.
 
 6. A BioImage Model Zoo id or nickname (``affable-shark``,

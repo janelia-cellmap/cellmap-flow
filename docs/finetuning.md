@@ -240,10 +240,10 @@ Repeat this annotate-train-review cycle until the model performs well on your da
 
 ## 7. Share the Finetuned Model
 
-Once the finetuned model is served, **Publish to Hugging Face** on the Training Status card puts it in a repository of your own Hugging Face account, where anyone can open it: in the browser app with nothing installed, or on any server, by its ref `<you>/<repo>/<model>`.
+Once the finetuned model is served, **Publish to Hugging Face** on the Training Status card puts it in a repository of your own Hugging Face account, where anyone can open it: on any server by the repository's name, `<you>/<repo>`, and, when it fits in a browser, in the browser app with nothing installed (or on a server again) by its folder's ref `<you>/<repo>/<model>`.
 
 1. Sign in: **Sign in with Hugging Face** shows a code to enter at huggingface.co in any browser. The login `hf auth login` (or `HF_TOKEN`) gave this server is used as it is, and a pasted access token with write access works too; **Remember on this server** saves a pasted one where `hf auth login` does.
 2. Pick the repository (`<you>/<model name>` by default), whether it is private, and whether the model card links the dataset (only a URL is named, never a path on this file system).
-3. **Publish** first exports the model as a cluster job: the LoRA adapter (or the full weights) folded into the network, then ONNX files for the browser's WebGPU in fp32, fp16 and int8 weights, each checked against PyTorch on your raw data. Then it uploads them with a model card and the manifest cellmap-flow reads, and gives the links that open the model.
+3. **Publish** first exports the model as a cluster job: the LoRA adapter (or the full weights) folded into the network, then the network as cellmap-models exports one (`model.ts`, `model.pt2` and `metadata.json` at the repository's root, as cellmap's own model repositories hold them), and ONNX files for the browser's WebGPU in fp32, fp16 and int8 weights in the model's folder, each checked against PyTorch on your raw data. Then it uploads them with a model card and the manifest cellmap-flow reads, and gives the refs and links that open the model.
 
-A model whose network is over 2 GB in fp32 (the 800M-parameter UNets) cannot be exported this way yet, nor a 2D model.
+A model the browser cannot run, whose network is over 2 GB in fp32 (the 800M-parameter UNets) or which is 2D, is published for servers alone: the panel and the card say why it has no browser copy. A Cellpose finetune is not published yet: Cellpose segments with its own eval, which a TorchScript of its network would not reproduce.

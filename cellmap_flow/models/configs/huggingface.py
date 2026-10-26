@@ -1,8 +1,9 @@
 """``HuggingFaceModelConfig``: a cellmap_models export on the Hugging Face Hub.
 
-It is downloaded, then built as a ``CellMapModelConfig``. ``to_dict()``
-adds the repo's ``metadata.json`` for the pipeline builder; building a
-launch command never downloads it.
+It is the export at the repository's root, downloaded (``download_export``),
+then built as a ``CellMapModelConfig``. ``to_dict()`` adds the repo's
+``metadata.json`` for the pipeline builder; building a launch command never
+downloads it.
 """
 
 import logging
@@ -12,6 +13,21 @@ from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import CellMapModelConfig
 
 logger = logging.getLogger(__name__)
+
+
+def download_export(repo, revision=None):
+    """The cellmap_models export at the root of the Hugging Face repository
+    ``repo``, downloaded: its CellmapModel.
+
+    The root's files only. A model a server published
+    (dashboard/routes/finetune/publish.py) has its ONNX web export in a
+    folder beside them, a model of its own (``<repo>/<folder>``, type
+    onnx) whose files are of no use here and can be gigabytes.
+    """
+    from cellmap_models.model_export.cellmap_model import CellmapModel
+    from huggingface_hub import snapshot_download
+
+    return CellmapModel(snapshot_download(repo, revision=revision, ignore_patterns="*/*"))
 
 
 class HuggingFaceModelConfig(ModelConfig):
@@ -78,10 +94,15 @@ class HuggingFaceModelConfig(ModelConfig):
             "scale": self.scale,
         }
 
-    def _get_config(self) -> Config:
-        from cellmap_models.model_export.cellmap_model import get_huggingface_model
+    def declared_input_norm(self):
+        """The input normalization the repo's metadata.json declares as
+        cellmap-flow steps (its ``input_norm``, which a model a server
+        published has: finetune.export_web), or None. Cheap after the first
+        ask, as ``_load_metadata`` is, and never raises."""
+        return self._load_metadata().get("input_norm") or None
 
-        cellmap_model = get_huggingface_model(self.repo, self.revision)
+    def _get_config(self) -> Config:
+        cellmap_model = download_export(self.repo, self.revision)
         config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
         return config
 

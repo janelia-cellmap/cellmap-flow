@@ -1,7 +1,8 @@
 """A model published to Hugging Face (cellmap_flow.portable.publish): the
 card, the manifest and the links that both modes upload and answer, here
-for a server's export of one model in three precisions (the browser's one
-file is web/test/unit/publish.test.ts's, through publish_calls)."""
+for a server's export of one model, its TorchScript and three precisions of
+ONNX, or the TorchScript alone (the browser's one file is
+web/test/unit/publish.test.ts's, through publish_calls)."""
 
 import json
 from pathlib import Path
@@ -14,7 +15,8 @@ REF = f"{REPO}/{FOLDER}"
 
 
 def _pub(**changes):
-    variants = [{"variant": v, "input_size": [1, 556, 556], "output_size": [1, 468, 468], "file": f"mito_{v}.onnx"}
+    # As onnx_web writes a cube's block: its side.
+    variants = [{"variant": v, "input_size": 178, "output_size": 56, "file": f"mito_{v}.onnx"}
                 for v in ("fp32", "fp16", "int8w")]
     manifest = {"model": FOLDER, "task": "mito", "architecture": "UNet", "channels": ["mito"],
                 "input_voxel_size_nm": [16] * 3, "output_voxel_size_nm": [16] * 3, "output": "logits",
@@ -24,10 +26,12 @@ def _pub(**changes):
     return {"repo": REPO, "folder": FOLDER, "published_at": "2026-10-26T12:00:00Z", "manifest": manifest,
             "origin": "trained", "where": "server", "finetuned_from": "cellmap/onnx-web-models/setup_54",
             "finetune_mode": "lora", "epochs": 12, "final_loss": 0.042, "trained_at": "2026-10-26T10:00:00Z",
-            "app_version": "0.3.0", "dataset": None, **changes}
+            "app_version": "0.3.0", "dataset": None,
+            "server": {"files": ["metadata.json", "model.ts", "model.pt2", "export_record.json"],
+                       "input_size": [178] * 3, "output_size": [56] * 3, "no_browser": None}, **changes}
 
 
-def test_a_server_publish_is_a_card_and_a_manifest_naming_every_variant_it_uploads():
+def test_a_server_publish_is_a_card_and_a_manifest_naming_every_file_it_uploads():
     readme, manifest_file = publish.publication_files(_pub())
     assert (readme["path"], manifest_file["path"]) == ("README.md", f"{FOLDER}/manifest.json")
 
@@ -40,10 +44,26 @@ def test_a_server_publish_is_a_card_and_a_manifest_naming_every_variant_it_uploa
     }, "the base's block replaced, and no dataset the user did not ask to name"
 
     card = readme["text"]
-    assert card.startswith("---\nlibrary_name: onnx\n")
     assert all(f"{FOLDER}/mito_{v}.onnx" in card for v in ("fp32", "fp16", "int8w"))
+    assert all(f"`{name}`" in card for name in ("metadata.json", "model.ts", "model.pt2", "export_record.json"))
+    assert f"`{REPO}`" in card and "178×178×178" in card, "the server's ref, and the block in voxels"
     assert f"({publish.PUBLIC_APP}?model={REF})" in card
     assert "dataset=" not in card
+
+
+def test_a_server_publish_with_no_browser_form_is_its_card_alone_and_opens_on_a_server_only():
+    why = "The network has 812,345,678 parameters, 3.2 GB in float32"
+    pub = _pub(dataset="s3://bucket/raw.zarr")
+    pub["manifest"]["variants"] = []
+    pub["server"]["no_browser"] = why
+
+    [readme] = publish.publication_files(pub)
+    assert readme["path"] == "README.md"
+    card = readme["text"]
+    assert f"`{REPO}`" in card and why in card
+    assert publish.PUBLIC_APP not in card and f"`{REF}`" not in card, "nothing the browser would open"
+    assert publish.published_links(REPO, None, publish.PUBLIC_APP, pub["dataset"]) == {
+        "ref": None, "url": f"{publish.HUB}/{REPO}", "try_link": None, "dataset_link": None}
 
 
 def test_the_links_carry_the_dataset_and_the_model_as_the_app_reads_them_back():

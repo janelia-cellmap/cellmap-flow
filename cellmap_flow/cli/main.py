@@ -187,7 +187,7 @@ for _name, _module, _summary in (
     ("export-merged", "cellmap_flow.finetune.export_merged",
      "Fold a finetune into the base model's weights and re-export it at a larger tile."),
     ("export-web", "cellmap_flow.finetune.export_web",
-     "Export a finetuned model for the browser: ONNX files and the catalog's manifest."),
+     "Export a finetuned model to publish: a cellmap-models export, and ONNX files and the catalog's manifest."),
     ("build-corrections", "cellmap_flow.finetune.build_corrections",
      "Build a finetuning corrections directory from a crops manifest, headlessly."),
 ):

@@ -1,37 +1,60 @@
-"""Export a model finetuned on the server for the browser: ONNX files and the catalog's manifest.
+"""Export a model finetuned on the server to publish it: a cellmap-models export for servers, and ONNX files and the catalog's manifest for the browser.
 
 A model finetuned here is served from the YAML its run wrote
 (run_outputs.write_serving_yaml): a ``type: finetune`` entry, its base model
 with a LoRA adapter or a full finetune's weights on top. This turns it into
-a folder laid out as the browser's catalog lays out a model
-(cellmap/onnx-web-models, and a model the browser publishes), so that it can
-be published to Hugging Face and opened in the browser, or served with
-``type: onnx``:
+the files a publish uploads to Hugging Face (dashboard/routes/finetune/publish.py),
+laid out in ``<output>`` as the repository lays them out, in two forms:
 
-- ``<output>/<folder>/manifest.json``: the model's manifest in the catalog's
-  format (web/src/models/manifest.ts parseManifest; the server reads it with
-  models/configs/onnx.py parse_manifest, which checks it here before the
-  export counts as done): its channels, voxel sizes, input normalization,
-  what its output is, the ONNX tensors' names, and one row per variant with
-  its block sizes, its file and how far it is from the PyTorch model;
-- ``<output>/<folder>/<folder>_in<n>_<variant>.onnx``: one file per variant
-  (fp32, fp16, int8w, int8w_fp16, or those ``--variants`` names);
-- ``<output>/result.json``: what the export came to, ``{"folder",
-  "manifest"}`` or ``{"error"}``, which it also prints as the last line of its
-  output; ``<output>/export_log.txt`` is its log when it runs as a job.
+- for servers, always: the network as cellmap-models exports one, as
+  cellmap's own model repositories hold it at their root, which a server
+  opens by the repository's name (``type: huggingface``) and a folder of
+  them serves (``type: cellmap``; export_merged.export_folder):
+  ``<output>/model.ts``, the TorchScript that is served;
+  ``<output>/model.pt2``, the torch.export program a LoRA finetune of it
+  trains, where torch.export can make one; ``<output>/metadata.json``, its
+  channels, voxel sizes and block in cellmap-models' format, and its input
+  normalization in cellmap-flow's (``input_norm``, which a server takes
+  when the model is added); and ``<output>/export_record.json``, how it
+  was exported;
+- for the browser, when export_onnx_web can make one (below): a folder laid
+  out as the browser's catalog lays out a model (cellmap/onnx-web-models,
+  and a model the browser publishes), which the browser opens and a server
+  serves with ``type: onnx``. ``<output>/<folder>/manifest.json`` is the
+  model's manifest in the catalog's format (web/src/models/manifest.ts
+  parseManifest; the server reads it with models/configs/onnx.py
+  parse_manifest, which checks it here before the export counts as done):
+  its channels, voxel sizes, input normalization, what its output is, the
+  ONNX tensors' names, and one row per variant with its block sizes, its
+  file and how far it is from the PyTorch model; and
+  ``<output>/<folder>/<folder>_in<n>_<variant>.onnx`` is one file per
+  variant (fp32, fp16, int8w, int8w_fp16, or those ``--variants`` names).
+
+``<output>/result.json`` says what the export came to, which it also prints
+as the last line of its output, ``{"error"}`` or::
+
+    {"folder": str,             # the model's folder: the browser form's, and its name
+     "manifest": dict,          # the browser form's manifest.json; without one, what it
+                                # would say of the model, with no variants
+     "server": {"files": [str], # the server form's files, in <output>
+                "input_size": [int], "output_size": [int]},  # the block model.ts is traced at
+     "no_browser": str | None}  # why there is no browser form; None when there is one
+
+``<output>/export_log.txt`` is its log when it runs as a job.
 
 How: the base network is built as the trainer builds it
 (model_loading.load_trainable_model), the finetune folded into its weights
-(export_merged.apply_finetune), and the plain network exported with
-cellmap-models' onnx_web (``export_onnx_web``) at the block the model is
-served at. onnx_web rewrites a 3D transposed convolution, which
-onnxruntime-web's WebGPU cannot run, and every Conv3d, which it runs about
-16x slower than Conv2d, into ops it runs fast, and checks each file with
-onnxruntime against the PyTorch network. It checks them on a block
-of the raw the model was trained on, read and normalized as the trainer reads
-and normalizes its patches (data.loader.dataset_from_manifest), centred where
-it draws one from what was annotated; the fp32 file must agree with the
-network to FP32_REL_TOL of the output's scale or the export fails.
+(export_merged.apply_finetune), and the plain network exported at the block
+the model is served at: traced to TorchScript (and exported with
+torch.export) for servers, and exported with cellmap-models' onnx_web
+(``export_onnx_web``) for the browser. onnx_web rewrites a 3D transposed
+convolution, which onnxruntime-web's WebGPU cannot run, and every Conv3d,
+which it runs about 16x slower than Conv2d, into ops it runs fast, and
+checks each file with onnxruntime against the PyTorch network. It checks
+them on a block of the raw the model was trained on, read and normalized as
+the trainer reads and normalizes its patches (data.loader.dataset_from_manifest),
+centred where it draws one from what was annotated; the fp32 file must agree
+with the network to FP32_REL_TOL of the output's scale.
 
 The dashboard starts an export and follows it (routes/finetune/publish.py)::
 
@@ -40,13 +63,14 @@ The dashboard starts an export and follows it (routes/finetune/publish.py)::
     # {"status": "running" | "done" | "failed",
     #  "error": str | None,       # failed: why
     #  "dir": str,                # the export's directory
-    #  "folder": str | None,      # done: the model's folder in it
-    #  "manifest": dict | None}   # done: its manifest.json
+    #  and, done, result.json's "folder", "manifest", "server" and "no_browser"
+    #  (None until then)}
 
 ``start_export`` submits the export as a job (job_manager.submit.launch: on
 LSF when there is bsub, else a process here) in the environment the model
 finetunes in, into ``<run_dir>/web_export/<YAML's name>/``, and returns at
-once; the files to upload are ``<dir>/<folder>/manifest.json`` and
+once; the files to upload are ``<dir>/<file>`` at the repository's root for
+each of the server form's files, and ``<dir>/<folder>/manifest.json`` and
 ``<dir>/<folder>/<file>`` for each of the manifest's variants. From the
 command line::
 
@@ -55,18 +79,27 @@ command line::
 
 What it cannot export, said rather than worked around:
 
-- Cubes only, at the one block the model is served at: export_onnx_web takes
-  cubic blocks. A 2D model's block is one slice thick, so 2D models (and
-  Cellpose) are refused; one input channel only, as the browser feeds one.
+- A model served through its base's own prediction rather than its
+  network's forward (Cellpose, which segments with its own eval): a
+  TorchScript of the network would not predict what is served, so the
+  export fails. Every other model has its server form.
+- The browser form takes cubes only, at the one block the model is served
+  at: export_onnx_web takes cubic blocks. A 2D model's block is one slice
+  thick, so 2D models have none; nor does one with more than one input
+  channel, as the browser feeds one.
 - What onnx_web rewrites it asserts: Conv3d unpadded, undilated and
   ungrouped, ConvTranspose3d with kernel and stride 2. Valid-padding U-Nets
-  are; anything else fails the export with onnx_web's message.
-- At most 2 GB of float32 weights: onnx_web keeps them inside the .onnx
-  file, which protobuf caps there. The large cellmap UNets (about 800M
-  parameters, 3.2 GB, such as mito-aff-unet-setup-16) are refused; no
-  browser would load them either.
-- The export runs on the CPU (onnx_web's export and checks are CPU ones), in
-  a job that holds the one GPU launch asks for, as every finetune job does.
+  are; anything else has no browser form, for onnx_web's reason.
+- At most 2 GB of float32 weights in the browser form: onnx_web keeps them
+  inside the .onnx file, which protobuf caps there. The large cellmap UNets
+  (about 800M parameters, 3.2 GB, such as mito-aff-unet-setup-16) have
+  none; no browser would load them either.
+- A model without a browser form is still exported, its server form alone,
+  and ``no_browser`` says why: the publish uploads that, and its card says
+  so.
+- The export runs on the CPU (onnx_web's export and checks are CPU ones,
+  and a TorchScript traced on a GPU keeps that GPU in it), in a job that
+  holds the one GPU launch asks for, as every finetune job does.
 - The manifest has no ``finetune`` block: the browser cannot finetune the
   exported model further (its head and full-network specs name graph nodes
   and a training graph that onnx_web does not write).
@@ -74,9 +107,10 @@ What it cannot export, said rather than worked around:
   it (probe_output_class): probabilities, a tanh's range, or unbounded; it
   cannot tell logits from distances.
 
-Needs cellmap-models with ``model_export.onnx_web`` (the
+The browser form needs cellmap-models with ``model_export.onnx_web`` (the
 onnx-web-export-and-pruning branch, which pixi.toml's finetune feature
-installs) and its export extra, onnx and onnxruntime, where the export runs.
+installs) and its export extra, onnx and onnxruntime, where the export
+runs; without them there is none, and ``no_browser`` says so.
 """
 
 import argparse
@@ -86,14 +120,18 @@ import os
 import re
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+
+import cellmap_flow
 
 logger = logging.getLogger(__name__)
 
 MODULE = "cellmap_flow.finetune.export_web"
 RESULT_NAME = "result.json"
 LOG_NAME = "export_log.txt"
-# An export of a model that fits in a browser takes minutes on the CPU.
+# An export takes minutes on the CPU: a few forwards of the network at its
+# block and writing its files, 3 GB each for the largest cellmap UNets.
 WALLTIME = "01:00"
 # fp32 is the network's own arithmetic, reordered by onnx_web's rewrites; it
 # agrees to float rounding, far below this share of the output's largest value.
@@ -192,12 +230,13 @@ def export_status(export: WebExport) -> dict:
     """
     from cellmap_flow.jobs.spec import JobStatus, exists_now, tail
 
-    answer = {"status": "running", "error": None, "dir": str(export.output_dir), "folder": None, "manifest": None}
+    answer = {"status": "running", "error": None, "dir": str(export.output_dir),
+              "folder": None, "manifest": None, "server": None, "no_browser": None}
     if exists_now(export.result_file):
         result = json.loads(export.result_file.read_text())
         if result.get("error"):
             return {**answer, "status": "failed", "error": result["error"]}
-        return {**answer, "status": "done", "folder": result["folder"], "manifest": result["manifest"]}
+        return {**answer, "status": "done", **{key: result[key] for key in ("folder", "manifest", "server", "no_browser")}}
     if export.job.get_status() in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED):
         log = tail(export.log_file, 2000)
         return {**answer, "status": "failed",
@@ -256,29 +295,24 @@ def _task(channels) -> str:
 
 
 def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
-    """Export the model ``yaml_path`` serves into ``output_dir``; ``{"folder", "manifest"}``.
+    """Export the model ``yaml_path`` serves into ``output_dir``: its server
+    form, and its browser form where export_onnx_web can make one. Returns
+    result.json's ``{"folder", "manifest", "server", "no_browser"}`` (see the
+    module's docstring).
 
     ``variants``: onnx_web's precisions to write, all of them by default.
 
     Raises:
-        ValueError: the model is one this cannot export (see the module's
-            docstring), or its fp32 file does not agree with it.
+        ValueError: the model is served other than by its network's forward
+            (see the module's docstring), so it has no server form; or the
+            server form does not open as cellmap-models opens an export.
     """
     import torch
-
-    try:
-        from cellmap_models.model_export.onnx_web import VARIANTS, export_onnx_web
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            f"{e}. The web export needs cellmap-models' onnx_web (its onnx-web-export-and-pruning branch, "
-            "which pixi.toml's finetune feature installs) and its export extra, onnx and onnxruntime."
-        ) from e
 
     from cellmap_flow.finetune.export_merged import apply_finetune
     from cellmap_flow.finetune.lora_wrapper import _replace_interpreter_modules
     from cellmap_flow.finetune.model_loading import load_trainable_model, model_config_from_entry, root_base_model_dict
     from cellmap_flow.finetune.trainer.supervised import probe_output_class
-    from cellmap_flow.models.configs.onnx import parse_manifest
     from cellmap_flow.models.entry import numbers
     from cellmap_flow.pipeline_spec import normalize_steps
 
@@ -287,16 +321,9 @@ def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
     finetuned = model_config_from_entry(entry)
     base = finetuned.base_model_config
     geometry = base.geometry
-    size = _side(geometry.input_shape, "input")
-    _side(geometry.output_shape, "output")
-    if geometry.input_channels != 1:
-        raise ValueError(f"The model takes {geometry.input_channels} input channels; the browser feeds one")
 
     network = apply_finetune(load_trainable_model(base), finetuned.lora_adapter_path, finetuned.weights_path).cpu()
-    params = sum(p.numel() for p in network.parameters())
-    if 4 * params >= ONNX_FILE_LIMIT:
-        raise ValueError(f"The network has {params:,} parameters, {4 * params / 1e9:.1f} GB in float32: "
-                         "export_onnx_web keeps the weights in the .onnx file, which protobuf caps at 2 GB")
+    _check_served_as_network(base, network)
     # The leaves torch.export's unflatten left (a TorchScript base's) as the
     # real layers onnx_web looks for and rewrites; they share the weights.
     _replace_interpreter_modules(network, transposed=True)
@@ -304,42 +331,182 @@ def export(yaml_path, corrections_dir, output_dir, variants=None) -> dict:
     block = training_block(corrections_dir, geometry.input_shape, geometry.output_shape, input_norm)
     with torch.no_grad():
         output_class = probe_output_class(network, torch.from_numpy(block))
-        scale = float(network(torch.from_numpy(block)).abs().max())
+        output = network(torch.from_numpy(block))
 
     folder = folder_name(finetuned.name)
     root = root_base_model_dict(finetuned)
     how = "LoRA, merged into the network" if finetuned.lora_adapter_path else "the whole network"
     base_name = root.get("repo") or root.get("name") or f"a {root.get('type')} model"
     channels = list(geometry.channel_names or (f"channel_{i}" for i in range(geometry.output_channels)))
-    rows = export_onnx_web(
-        network, os.path.join(output_dir, folder), folder, [size],
-        variants=variants or VARIANTS, validation_input=block,
-        manifest_extra={
-            "model": folder,
-            "task": _task(channels),
-            "checkpoint": f"finetuned with cellmap-flow ({how}) from {base_name}",
-            "channels": channels,
-            # The voxel sizes it was trained at (FinetuneModelConfig's
-            # trained_at_geometry), when they are not the base's.
-            "input_voxel_size_nm": numbers(finetuned.input_voxel_size or geometry.input_voxel_size),
-            "output_voxel_size_nm": numbers(finetuned.output_voxel_size or geometry.output_voxel_size),
-            "output": OUTPUT_DESCRIPTIONS[output_class],
-            "input_norm": input_norm,
-            **({"source_repo": root["repo"]} if root.get("repo") else {}),
-            "torch_version": torch.__version__,
-            "exporter": EXPORTER,
+    # What both forms say of the model: the browser form's manifest has it
+    # at its top, and the server form's metadata.json the same in its terms.
+    description = {
+        "model": folder,
+        "task": _task(channels),
+        "checkpoint": f"finetuned with cellmap-flow ({how}) from {base_name}",
+        "channels": channels,
+        # The voxel sizes it was trained at (FinetuneModelConfig's
+        # trained_at_geometry), when they are not the base's.
+        "input_voxel_size_nm": numbers(finetuned.input_voxel_size or geometry.input_voxel_size),
+        "output_voxel_size_nm": numbers(finetuned.output_voxel_size or geometry.output_voxel_size),
+        "output": OUTPUT_DESCRIPTIONS[output_class],
+        "input_norm": input_norm,
+        **({"source_repo": root["repo"]} if root.get("repo") else {}),
+        "torch_version": torch.__version__,
+        "exporter": EXPORTER,
+    }
+
+    input_size, output_size = list(geometry.input_shape), list(output.shape[2:])
+    files = _export_server(
+        network, output_dir, input_size, output_size,
+        _metadata(root, network, geometry, description),
+        {
+            "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "exporter": MODULE,
+            "cellmap_flow": cellmap_flow.__version__,
+            "torch": torch.__version__,
+            # A path on this server's disks means nothing to the
+            # repository's readers, so the base is said by its repo only.
+            "finetuned_from": root.get("repo"),
+            "base_type": root.get("type"),
+            "finetune_mode": "lora" if finetuned.lora_adapter_path else "full",
+            "input_shape": input_size,
+            "output_shape": output_size,
         },
     )
+    server = {"files": files, "input_size": input_size, "output_size": output_size}
+    try:
+        manifest = _export_browser(network, Path(output_dir) / folder, folder, geometry, block,
+                                   float(output.abs().max()), description, variants)
+    except Exception as e:
+        logger.warning("The model has no browser form", exc_info=True)
+        return {"folder": folder, "manifest": {**description, "variants": []}, "server": server, "no_browser": _said(e)}
+    return {"folder": folder, "manifest": manifest, "server": server, "no_browser": None}
+
+
+def _check_served_as_network(base, network) -> None:
+    """Raise ValueError unless the finetuned model is served as ``network``'s
+    forward: what a TorchScript of it reproduces. Asked as
+    FinetuneModelConfig asks its base how to serve the trained module
+    (``serve_trained``); a type that predicts through its own process_chunk
+    (Cellpose's eval, which segments) says otherwise."""
+    from cellmap_flow.models.configs.base import Config
+
+    served = Config()
+    base.serve_trained(served, network)
+    if served.model is not network or getattr(served, "process_chunk", None):
+        raise ValueError(f"The model is served through {type(base).__name__}'s own prediction, not its "
+                         "network's forward, so a TorchScript of the network would not predict what is served")
+
+
+def _export_server(network, output_dir, input_size, output_size, metadata, provenance):
+    """The server form: export_merged.export_folder's files in ``output_dir``,
+    opened as cellmap-models opens an export (CellmapModel, which checks
+    metadata.json and that there is a model file) so that done means a
+    server can open it. Returns the files' names."""
+    from cellmap_models.model_export.cellmap_model import CellmapModel
+
+    from cellmap_flow.finetune.export_merged import export_folder
+
+    files = export_folder(network, str(output_dir), input_size, output_size, metadata, provenance)
+    try:
+        CellmapModel(str(output_dir))
+    except ValueError as e:
+        raise ValueError(f"The TorchScript export does not open as a cellmap-models export: {e}") from None
+    return files
+
+
+def _metadata(root, network, geometry, description) -> dict:
+    """The server form's metadata.json: the base's own where the base is a
+    cellmap-models export (its model type, framework, normalization...),
+    else one made from the model's config, with what is this model's put in:
+    its name, channels and voxel sizes, its input normalization as
+    cellmap-flow's steps (``input_norm``, beside cellmap-models' fields,
+    which its reader leaves be), and what it is. export_folder adds the
+    block."""
+    base = _base_metadata(root)
+    # The base's training iterations and author are not this model's.
+    for key in ("iteration", "author"):
+        base.pop(key, None)
+    what = f"{description['model']}: {description['checkpoint']}, exported by {MODULE}."
+    return {
+        "model_type": type(network).__name__,
+        "framework": "torch",
+        "spatial_dims": len(geometry.input_shape),
+        **base,
+        "model_name": description["model"],
+        "in_channels": geometry.input_channels,
+        "out_channels": geometry.output_channels,
+        "channels_names": description["channels"],
+        "input_voxel_size": description["input_voxel_size_nm"],
+        "output_voxel_size": description["output_voxel_size_nm"],
+        "input_norm": description["input_norm"],
+        "description": f"{what} Its base: {base['description']}" if base.get("description") else what,
+    }
+
+
+def _base_metadata(root) -> dict:
+    """The metadata.json of the model ``root`` (a model entry) when it is a
+    cellmap-models export, ``type: cellmap``'s folder or ``type:
+    huggingface``'s repository; {} for a model of another type."""
+    if root.get("type") == "cellmap":
+        path = os.path.join(root["folder_path"], "metadata.json")
+    elif root.get("type") == "huggingface":
+        from huggingface_hub import hf_hub_download
+
+        path = hf_hub_download(root["repo"], "metadata.json", revision=root.get("revision"))
+    else:
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def _export_browser(network, folder_dir, folder, geometry, block, scale, description, variants) -> dict:
+    """The browser form: export_onnx_web's files of ``network`` and their
+    manifest, with ``description`` at its top, in ``folder_dir``. Returns
+    the manifest.
+
+    Raises:
+        ValueError: the model is one export_onnx_web cannot export (see the
+            module's docstring), or its fp32 file does not agree with it.
+        ModuleNotFoundError: there is no onnx_web here.
+    """
+    try:
+        from cellmap_models.model_export.onnx_web import VARIANTS, export_onnx_web
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            f"{e}. The web export needs cellmap-models' onnx_web (its onnx-web-export-and-pruning branch, "
+            "which pixi.toml's finetune feature installs) and its export extra, onnx and onnxruntime."
+        ) from e
+
+    from cellmap_flow.models.configs.onnx import parse_manifest
+
+    size = _side(geometry.input_shape, "input")
+    _side(geometry.output_shape, "output")
+    if geometry.input_channels != 1:
+        raise ValueError(f"The model takes {geometry.input_channels} input channels; the browser feeds one")
+    params = sum(p.numel() for p in network.parameters())
+    if 4 * params >= ONNX_FILE_LIMIT:
+        raise ValueError(f"The network has {params:,} parameters, {4 * params / 1e9:.1f} GB in float32: "
+                         "export_onnx_web keeps the weights in the .onnx file, which protobuf caps at 2 GB")
+
+    rows = export_onnx_web(network, str(folder_dir), folder, [size], variants=variants or VARIANTS,
+                           validation_input=block, manifest_extra=description)
     for row in rows:
         if row["variant"] == "fp32" and row["max_abs"] > FP32_REL_TOL * max(scale, 1e-6):
             raise ValueError(f"The fp32 export differs from the network by up to {row['max_abs']:.3g}, "
                              f"{row['max_abs'] / max(scale, 1e-6):.2e} of its output's scale ({scale:.3g}), "
                              f"over the {FP32_REL_TOL:.0e} tolerance")
-    manifest_path = os.path.join(output_dir, folder, "manifest.json")
-    with open(manifest_path) as f:
-        manifest = json.load(f)
-    parse_manifest(manifest, manifest_path)
-    return {"folder": folder, "manifest": manifest}
+    manifest_path = folder_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    parse_manifest(manifest, str(manifest_path))
+    return manifest
+
+
+def _said(e: Exception) -> str:
+    """``e`` as the result says it: a ValueError's message, which says what
+    to do, else its type too."""
+    return str(e) if isinstance(e, ValueError) else f"{type(e).__name__}: {e}"
 
 
 def _write_result(output_dir: Path, result: dict) -> None:
@@ -366,8 +533,8 @@ def main(argv=None) -> int:
     try:
         result = export(args.yaml, args.corrections, output_dir, variants)
     except Exception as e:
-        logger.exception("The web export failed")
-        result = {"error": str(e) if isinstance(e, ValueError) else f"{type(e).__name__}: {e}"}
+        logger.exception("The export failed")
+        result = {"error": _said(e)}
     _write_result(output_dir, result)
     print(json.dumps(result), flush=True)
     return 1 if "error" in result else 0

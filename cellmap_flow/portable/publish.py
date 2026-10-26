@@ -14,13 +14,20 @@ what ``publication_files`` gives and the model's own files beside them:
     <folder>/<file>.onnx       one per variant of the manifest: the one file
                                a browser trained, or each precision a
                                server's export wrote (fp32, fp16, int8w)
+    metadata.json, model.ts,   a server's publish only: the network as
+    model.pt2, ...             cellmap-models exports one, as cellmap's own
+                               model repositories hold it (finetune.export_web)
 
 <folder> is the model's name. The manifest is the catalog's format, so the
 folder is a model like any of cellmap/onnx-web-models': both modes load it
 by its ref, ``<owner>/<repo>/<folder>``. The "published" block says what the
 manifest alone would not: the model's own name (a manifest finetuned in the
 browser keeps its base's task and model, after which the catalog would
-name it), what it was finetuned from (a ref) and how, and when.
+name it), what it was finetuned from (a ref) and how, and when. A server
+opens the export at the root by the repository's name, ``<owner>/<repo>``
+(type huggingface). A server's publish of a model the browser cannot run
+(too big for an .onnx file, a 2D model) has that export alone: no folder,
+no browser links, and a card that says why.
 
 A publish, ``pub``, is plain JSON, which each mode builds from its own
 records of the model:
@@ -42,6 +49,12 @@ records of the model:
     dataset                      the dataset's URL, or None: only when the
                                  user asked for it, since a dataset's URL can
                                  be internal
+    server                       a server's publish only: its export at the
+                                 root, ``{"files": [names], "input_size",
+                                 "output_size": [voxels], "no_browser": why
+                                 there is no browser form, or None}``; with
+                                 no browser form the manifest has no variants
+                                 and only describes the model
 
 Nothing here reads or writes a file or the network: the callers upload.
 """
@@ -148,10 +161,14 @@ def app_links(app: str, ref: str, dataset: Optional[str]) -> dict:
     }
 
 
-def published_links(repo: str, folder: str, app: str, dataset: Optional[str]) -> dict:
+def published_links(repo: str, folder: Optional[str], app: str, dataset: Optional[str]) -> dict:
     """Where a published model is, as both modes' publish routes answer once
     it is done: its ``ref``, its repository's page (``url``), and
-    ``app_links`` on ``app`` (the page's own address) with ``dataset``."""
+    ``app_links`` on ``app`` (the page's own address) with ``dataset``.
+    ``folder`` None: a server's publish with no browser form, which no ref
+    of a folder and no link opens (null)."""
+    if folder is None:
+        return {"ref": None, "url": f"{HUB}/{repo}", "try_link": None, "dataset_link": None}
     ref = ref_of(repo, folder)
     return {"ref": ref, "url": f"{HUB}/{repo}", **app_links(app, ref, dataset)}
 
@@ -220,7 +237,9 @@ def _voxels(size) -> str:
 
 
 def _block(size) -> str:
-    return "×".join(str(n) for n in size)
+    """A block's size in voxels, z×y×x: one number is a cube's side, as
+    onnx_web's manifests write it."""
+    return "×".join(str(n) for n in (size if isinstance(size, list) else [size] * 3))
 
 
 def _listed(items: List[str]) -> str:
@@ -271,24 +290,62 @@ def _provenance(pub: dict) -> str:
     )
 
 
+def _has_browser_form(pub: dict) -> bool:
+    """Whether ``pub`` uploads the browser form, the model's folder: every
+    browser's publish does, and a server's unless its export says why not."""
+    return not (pub.get("server") or {}).get("no_browser")
+
+
 def model_card(pub: dict) -> str:
     """The model card, README.md: Hugging Face's front matter (the library,
     and tags that find it), then what the model predicts, at what voxel
-    size and in what blocks, what it was finetuned from and how, and how to
-    open it."""
+    size and in what blocks, what it was finetuned from and how, how to
+    open it, and what its files are. A server's publish says first how a
+    server opens its TorchScript, at the root, by the repository's name;
+    and, when it has no browser form, why not."""
     m = pub["manifest"]
-    folder, variants = pub["folder"], m["variants"]
+    folder, variants, server = pub["folder"], m["variants"], pub.get("server")
+    browser = _has_browser_form(pub)
     ref = ref_of(pub["repo"], folder)
     links = app_links(PUBLIC_APP, ref, pub.get("dataset"))
     task = re.sub(r"[^a-z0-9]+", "-", m["task"].lower()).strip("-")
-    tags = [tag for tag in ("cellmap-flow", "onnx", "electron-microscopy", task) if tag]
+    formats = (["onnx"] if browser else []) + (["torchscript"] if server else [])
+    tags = [tag for tag in ("cellmap-flow", *formats, "electron-microscopy", task) if tag]
     output = f" ({m['output']})" if m.get("output") else ""
     trained_on = "trained on" if pub["origin"] == "trained" else "published with"
-    files = _listed([f"`{folder}/{v['file']}`" + (f" ({v['variant']})" if len(variants) > 1 else "") for v in variants])
-    graph = "is the ONNX graph" if len(variants) == 1 else "are the ONNX graph, one file per variant"
+    # The TorchScript is traced at the block the ONNX variants are exported
+    # at, so with them it is one more name at that block.
+    blocks = [{"variant": "TorchScript", "input_size": server["input_size"], "output_size": server["output_size"]},
+              *variants] if server else variants
+    open_it, about = [], []
+    if server:
+        open_it.append(f"- On a server, in *Add a model* (the dashboard's Models tab): `{pub['repo']}`, its TorchScript.")
+        if not browser:
+            about += [f"It has no copy for the browser. {server['no_browser'].rstrip('.')}.", ""]
+        trains = (", `model.pt2` the torch.export program a LoRA finetune of it trains"
+                  if "model.pt2" in server["files"] else "")
+        about += [
+            f"At the repository's root, {_listed([f'`{name}`' for name in server['files']])} are the model as "
+            f"cellmap-models exports one: `model.ts` is its TorchScript{trains}, and `metadata.json` says its voxel "
+            "sizes, block, channels and input normalization.",
+            "",
+        ]
+    if browser:
+        files = _listed([f"`{folder}/{v['file']}`" + (f" ({v['variant']})" if len(variants) > 1 else "") for v in variants])
+        graph = "is the ONNX graph" if len(variants) == 1 else "are the ONNX graph, one file per variant"
+        open_it += [
+            f"- [Try it in the browser]({links['try_link']}): cellmap-flow opens with the model chosen; connect any volume to run it.",
+            *([f"- [Open it on the dataset it was {trained_on}]({links['dataset_link']})."] if links["dataset_link"] else []),
+            f"- Anywhere cellmap-flow takes a model (*Add a model* in the dashboard's Models tab, in the browser or on a server): `{ref}`.",
+        ]
+        about += [
+            f"`{folder}/manifest.json` says the model's voxel sizes, blocks, channels and input normalization in cellmap-flow's "
+            f"format, and {files} {graph}.",
+            "",
+        ]
     return "\n".join([
         "---",
-        "library_name: onnx",
+        f"library_name: {'cellmap-models' if server else 'onnx'}",
         "tags:",
         *(f"- {tag}" for tag in tags),
         "---",
@@ -297,29 +354,26 @@ def model_card(pub: dict) -> str:
         "",
         f"A {m['task']} model for electron microscopy: it predicts {', '.join(m['channels'])}{output}, "
         f"from {_voxels(m['input_voxel_size_nm'])} nm voxels to {_voxels(m['output_voxel_size_nm'])} nm voxels, "
-        f"in blocks of {_blocks(variants)}.",
+        f"in blocks of {_blocks(blocks)}.",
         "",
         _provenance(pub),
         "",
         "## Open it",
         "",
-        f"- [Try it in the browser]({links['try_link']}): cellmap-flow opens with the model chosen; connect any volume to run it.",
-        *([f"- [Open it on the dataset it was {trained_on}]({links['dataset_link']})."] if links["dataset_link"] else []),
-        f"- Anywhere cellmap-flow takes a model (*Add a model* in the dashboard's Models tab, in the browser or on a server): `{ref}`.",
+        *open_it,
         "",
-        f"`{folder}/manifest.json` says the model's voxel sizes, blocks, channels and input normalization in cellmap-flow's "
-        f"format, and {files} {graph}.",
-        "",
+        *about,
     ])
 
 
 def publication_files(pub: dict) -> List[dict]:
-    """The card and the manifest of the publish ``pub``, by their path in
-    the repository, in the order they are uploaded: ``[{"path", "text"}]``.
-    The model's files are the caller's to add after them, from its own
-    bytes: ``<folder>/<file>`` for each variant of ``pub["manifest"]``."""
-    manifest = json.dumps(published_manifest(pub), indent=2, ensure_ascii=False) + "\n"
-    return [
-        {"path": "README.md", "text": model_card(pub)},
-        {"path": f"{pub['folder']}/manifest.json", "text": manifest},
-    ]
+    """The card and the browser form's manifest of the publish ``pub``, by
+    their path in the repository, in the order they are uploaded: ``[{"path",
+    "text"}]``. The model's files are the caller's to add after them, from
+    its own bytes: a server's export's at the root (``pub["server"]``'s
+    files), and ``<folder>/<file>`` for each variant of ``pub["manifest"]``."""
+    files = [{"path": "README.md", "text": model_card(pub)}]
+    if _has_browser_form(pub):
+        manifest = json.dumps(published_manifest(pub), indent=2, ensure_ascii=False) + "\n"
+        files.append({"path": f"{pub['folder']}/manifest.json", "text": manifest})
+    return files

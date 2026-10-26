@@ -25,13 +25,22 @@ the job says how long it trained and to what loss.
 
 A publish is a job in a thread of the dashboard, its steps as the answers
 name them: "exporting", the finetune folded into the base network and
-exported to ONNX at the served block size, by a cluster job of its own
+exported at the served block size, by a cluster job of its own
 (finetune.export_web); "creating", the repository made unless it is there
-already; "uploading" each file and "committing" them, in one commit; and
-"checking", the repository read back, so that done means Hugging Face shows
-each file at the size sent. The model card and the manifest are
-portable.publish's, which the browser's publish writes too; the upload is
-huggingface_hub's.
+already; "hashing" each file, "uploading" each and "committing" them, in one
+commit; and "checking", the repository read back, so that done means
+Hugging Face shows each file at the size sent. The model card and the
+manifest are portable.publish's, which the browser's publish writes too;
+the upload is huggingface_hub's, each model file read from its disk as it
+is sent (by LFS or Xet, whichever the Hub takes), never whole into memory.
+
+What is published is the export's two forms: at the repository's root the
+network as cellmap-models exports one, which a server opens as
+``<owner>/<repo>`` (the answer's ``server_ref``), always; and in the
+model's folder its ONNX web export, which both modes open as
+``<owner>/<repo>/<folder>`` (``ref``, and the app's links), unless the
+export could not make one (a network over the 2 GB an .onnx file holds, a
+2D model), when ``ref`` and the links are null and ``no_browser`` says why.
 
 Who publishes is one of three tokens, the answers' ``via``:
 
@@ -423,8 +432,10 @@ def _served_job(name):
 
 def _answer(publish):
     """A publish as the routes answer it (publish.ts's answerOf). Done, it
-    says where the model is, with the links on the public app (the
-    dashboard is not the app) and the dataset open now."""
+    says where the model is: on a server, by the repository (``server_ref``);
+    and, where it has a browser form, by its folder (``ref``), with the
+    links on the public app (the dashboard is not the app) and the dataset
+    open now, else why not (``no_browser``)."""
     with get_session().huggingface["lock"]:
         publish = dict(publish)
     answer = {"success": True, "status": publish["status"], "repo": publish["repo"], "folder": publish["folder"]}
@@ -433,9 +444,11 @@ def _answer(publish):
     elif publish["status"] == "failed":
         answer["error"] = publish["error"]
     else:
-        answer.update(published_links(publish["repo"], publish["folder"], PUBLIC_APP,
+        browser_folder = None if publish["no_browser"] else publish["folder"]
+        answer.update(published_links(publish["repo"], browser_folder, PUBLIC_APP,
                                        _app_dataset(get_session().dataset_path)))
-        answer.update(at=publish["at"], created=publish["created"], private=publish["private"])
+        answer.update(server_ref=publish["repo"], no_browser=publish["no_browser"], at=publish["at"],
+                      created=publish["created"], private=publish["private"])
     return answer
 
 
@@ -473,7 +486,7 @@ def start_publish(name):
         if hf["publishes"].get(name, {}).get("status") == "running":
             return _error(f"{name} is being published already: wait for it to finish.", 409)
         publish = {"repo": repo, "folder": name, "status": "running", "step": "exporting", "file": None,
-                   "fraction": None}
+                   "fraction": None, "no_browser": None}
         hf["publishes"][name] = publish
     _start_thread(_run, hf, publish, job, who, body.private, body.include_dataset)
     return jsonify(_answer(publish))
@@ -490,15 +503,18 @@ def publish_status(name):
 
 def _run(hf, publish, job, who, private, include_dataset):
     """The publish itself: the export, the files (portable.publish's card
-    and manifest, then the export's files), the commit, and done; or failed,
-    with why."""
+    and manifest, then the export's: its server form's at the root, its
+    browser form's in the folder), the commit, and done; or failed, with
+    why."""
     def update(**fields):
         with hf["lock"]:
             publish.update(fields)
 
     try:
         served = yaml.safe_load(Path(job.model_yaml_path).read_text())
-        folder, manifest, export_dir = _export(job)
+        export = _export(job)
+        folder, manifest, no_browser = export["folder"], export["manifest"], export["no_browser"]
+        export_dir = Path(export["dir"])
         published_at = _iso(_now())
         pub = {
             "repo": publish["repo"],
@@ -510,15 +526,19 @@ def _run(hf, publish, job, who, private, include_dataset):
             **_training(job, served["models"][0]),
             "app_version": cellmap_flow.__version__,
             "dataset": _app_dataset(served.get("data_path")) if include_dataset else None,
+            "server": {**export["server"], "no_browser": no_browser},
         }
         files = [(f["path"], f["text"].encode()) for f in publication_files(pub)]
-        files += [(f"{folder}/{v['file']}", export_dir / v["file"]) for v in manifest["variants"]]
+        files += [(name, export_dir / name) for name in export["server"]["files"]]
+        files += [(f"{folder}/{v['file']}", export_dir / folder / v["file"]) for v in manifest["variants"]]
         update(folder=folder)
         created, is_private = _commit(who["token"], publish["repo"], private, files,
                                       f"Publish {folder} from cellmap-flow", update)
-        update(status="done", created=created, private=is_private, at=published_at)
-        logger.info(f"Published {folder} to {HUB}/{publish['repo']} as {ref_of(publish['repo'], folder)}"
-                    f"{' (a new repository)' if created else ''}")
+        update(status="done", created=created, private=is_private, at=published_at, no_browser=no_browser)
+        opens = (f"with no browser form ({no_browser})" if no_browser
+                 else f"and in the browser as {ref_of(publish['repo'], folder)}")
+        logger.info(f"Published {folder} to {HUB}/{publish['repo']}{' (a new repository)' if created else ''}: "
+                    f"it opens on a server as {publish['repo']}, {opens}")
     except Exception as e:
         error = _publish_error(e, publish["repo"], who["via"], publish["file"])
         update(status="failed", error=error)
@@ -528,17 +548,17 @@ def _run(hf, publish, job, who, private, include_dataset):
 
 
 def _export(job):
-    """The model exported for the web by finetune.export_web's cluster job,
-    waited for: ``(its folder, its manifest, the folder's directory)``.
-    Raises RuntimeError with the export's error."""
+    """The model exported by finetune.export_web's cluster job, waited for:
+    its export_status answer, done. Raises RuntimeError with the export's
+    error."""
     from cellmap_flow.finetune import export_web
 
     export = export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir)
     while (state := export_web.export_status(export))["status"] == "running":
         time.sleep(EXPORT_POLL_SECONDS)
     if state["status"] != "done":
-        raise RuntimeError(f"its export to ONNX failed: {state['error']}")
-    return state["folder"], state["manifest"], Path(state["dir"]) / state["folder"]
+        raise RuntimeError(f"its export failed: {state['error']}")
+    return state
 
 
 def _training(job, entry):
@@ -560,14 +580,15 @@ def _training(job, entry):
 def _finetuned_from(base):
     """The ref of the model ``base`` (a serving YAML's ``base_model``) names,
     as *Add a model* takes it: a Hugging Face model's repo; for a model
-    finetuned here before, where this dashboard published it, else what that
-    one was finetuned from; None for a model known only by its files on this
-    server (a checkpoint, a script)."""
+    finetuned here before, where this dashboard published it (its folder,
+    which both modes open, else its repository, which a server does), else
+    what that one was finetuned from; None for a model known only by its
+    files on this server (a checkpoint, a script)."""
     publishes = get_session().huggingface["publishes"]
     while base.get("type") == "finetune":
         published = publishes.get(base.get("name")) or {}
         if published.get("status") == "done":
-            return ref_of(published["repo"], published["folder"])
+            return published["repo"] if published["no_browser"] else ref_of(published["repo"], published["folder"])
         base = base.get("base_model") or {}
     return base.get("repo") if base.get("type") == "huggingface" else None
 
@@ -587,7 +608,13 @@ def _commit(token, repo, private, files, title, update):
     update(step="creating", file=None, fraction=None)
     created = not api.repo_exists(repo)
     api.create_repo(repo, private=private, exist_ok=True)
-    operations = [CommitOperationAdd(path_in_repo=path, path_or_fileobj=content) for path, content in files]
+    # A local path is hashed as its operation is made, read in chunks, and
+    # later sent from the disk: a 3 GB model.ts is never held in memory.
+    # Hashing that takes a while, so the panel says which file it is.
+    operations = []
+    for path, content in files:
+        update(step="hashing", file=path)
+        operations.append(CommitOperationAdd(path_in_repo=path, path_or_fileobj=content))
     # One file at a time, so the panel can say which; the commit then sends
     # none of them again.
     for operation in operations:

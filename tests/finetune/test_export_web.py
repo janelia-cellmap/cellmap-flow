@@ -1,6 +1,7 @@
-"""A model finetuned on the server exports for the browser (export_web): the
-ONNX files compute what the server serves, in a folder the catalog reads, and
-the dashboard follows the export's job until it says so."""
+"""A model finetuned on the server exports to be published (export_web): a
+cellmap-models export a server opens and ONNX files in a folder the catalog
+reads, each computing what the server serves; a model too big for the browser
+the first alone; and the dashboard follows the export's job until it says so."""
 
 import json
 from types import SimpleNamespace
@@ -143,13 +144,42 @@ def launched(monkeypatch):
     return jobs
 
 
+def _served(yaml_path, x):
+    """What the server serves for ``x``: the YAML's finetuned model, the base with its adapter on."""
+    import torch
+
+    from cellmap_flow.finetune.model_loading import model_config_from_entry
+
+    with torch.no_grad():
+        return model_config_from_entry(export_web.serving_entry(yaml_path)[1]).config.model(torch.from_numpy(x)).numpy()
+
+
+def _check_server_form(directory, x, served):
+    """The export's server form in ``directory`` is a cellmap-models export:
+    served as a folder of them is (type: cellmap), it predicts ``served`` for
+    ``x``; it says its input normalization; and a finetune of it can attach
+    LoRA adapters, as to cellmap's own models."""
+    import torch
+
+    from cellmap_flow.finetune.model_loading import load_trainable_model
+    from cellmap_flow.finetune.trainable import finetune_modes
+    from cellmap_flow.models.registry import build_model
+    from cellmap_flow.pipeline_spec import normalize_steps
+
+    config = build_model({"type": "cellmap", "folder_path": str(directory)}, "published")
+    model = config.config.model
+    with torch.no_grad():
+        exported = model(torch.from_numpy(x).to(next(model.parameters()).device)).cpu().numpy()
+    assert np.abs(exported - served).max() <= 1e-5 * np.abs(served).max()
+    assert json.loads((directory / "metadata.json").read_text())["input_norm"] == list(normalize_steps(INPUT_NORM))
+    assert "lora" in finetune_modes(load_trainable_model(config))
+
+
 @pytest.mark.finetune
 def test_a_finetuned_model_exports_as_the_server_serves_it(finetuned, launched):
     pytest.importorskip("cellmap_models.model_export.onnx_web")
     ort = pytest.importorskip("onnxruntime")
-    import torch
 
-    from cellmap_flow.finetune.model_loading import model_config_from_entry
     from cellmap_flow.models.configs.onnx import parse_manifest
     from cellmap_flow.pipeline_spec import normalize_steps
 
@@ -161,6 +191,11 @@ def test_a_finetuned_model_exports_as_the_server_serves_it(finetuned, launched):
                             "--output", str(export.output_dir)]) == 0
     status = export_web.export_status(export)
     assert status["status"] == "done", status["error"]
+    assert status["no_browser"] is None
+    assert set(status["server"]["files"]) == {"metadata.json", "model.ts", "model.pt2", "export_record.json"}
+    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, 20, 20, 20)).astype(np.float32)
+    served = _served(finetuned.yaml, x)
+    _check_server_form(export.output_dir, x, served)
 
     # The folder is a model of the catalog's: a manifest the server's reader
     # takes, with the model's geometry and normalization, and every variant's file.
@@ -182,13 +217,28 @@ def test_a_finetuned_model_exports_as_the_server_serves_it(finetuned, launched):
     # adapter on, on a block it was not validated on.
     variant = next(v for v in manifest["variants"] if v["variant"] == "fp32")
     assert variant["input_size"] == [20] * 3 and variant["output_size"] == [12] * 3
-    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, 20, 20, 20)).astype(np.float32)
     session = ort.InferenceSession(str(folder / variant["file"]), providers=["CPUExecutionProvider"])
     exported = session.run([manifest["io"]["output"]], {manifest["io"]["input"]: x})[0]
-    entry = export_web.serving_entry(finetuned.yaml)[1]
-    with torch.no_grad():
-        served = model_config_from_entry(entry).config.model(torch.from_numpy(x)).numpy()
     assert np.abs(exported - served).max() <= 1e-5 * np.abs(served).max()
+
+
+@pytest.mark.finetune
+@pytest.mark.parametrize("finetuned", ["cellmap"], indirect=True)
+def test_a_model_too_big_for_the_browser_exports_for_servers_alone(finetuned, launched, monkeypatch):
+    # Over protobuf's 2 GB as an 800M-parameter UNet is, cheaply: any
+    # network is over a cap of no bytes.
+    monkeypatch.setattr(export_web, "ONNX_FILE_LIMIT", 0)
+    export = export_web.start_export(finetuned.yaml, finetuned.corrections, finetuned.run)
+    assert export_web.main(["--yaml", str(finetuned.yaml), "--corrections", str(finetuned.corrections),
+                            "--output", str(export.output_dir)]) == 0
+    status = export_web.export_status(export)
+
+    assert status["status"] == "done", status["error"]
+    assert "2 GB" in status["no_browser"]
+    assert status["manifest"]["variants"] == [] and not (export.output_dir / status["folder"]).exists()
+    assert (status["server"]["input_size"], status["server"]["output_size"]) == ([20] * 3, [12] * 3)
+    x = np.random.default_rng(1).uniform(-1, 1, (1, 1, 20, 20, 20)).astype(np.float32)
+    _check_server_form(export.output_dir, x, _served(finetuned.yaml, x))
 
 
 @pytest.mark.parametrize("finetuned", ["script"], indirect=True)

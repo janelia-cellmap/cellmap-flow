@@ -1033,8 +1033,9 @@
        answer says is served (finetune/publish.js): the model, its manifest
        and a model card uploaded to a repository of the user's own Hugging
        Face account, with the links that open it. The browser's model is
-       uploaded from the page; the server's is exported to ONNX by a cluster
-       job first, then uploaded from the server. The user signs in (in a
+       uploaded from the page; the server's is exported by a cluster job
+       first (TorchScript for servers, and ONNX for the browser where the
+       model fits one), then uploaded from the server. The user signs in (in a
        popup in the browser; with a code entered at huggingface.co on a
        server) or pastes an access token with write access. The browser
        keeps either in the page's memory only; the server in its memory,
@@ -1094,21 +1095,28 @@
         <small class="text-muted" id="publishStatus"></small>
       </div>
       {# One row per link, its name and Copy above the link itself, which
-         wraps: the panel is as narrow as the sidebar. #}
+         wraps: the panel is as narrow as the sidebar. A row the answer
+         gives nothing for is hidden (publish.js): the server ref is a
+         server's publish's, and the folder's ref and the app's links are
+         a browser form's. #}
       <div class="publish-result mt-2" id="publishResult" hidden>
         <div>
           <div class="publish-result-head"><span>Hugging Face</span><button type="button" class="btn btn-link btn-sm" data-copy="publishUrl">Copy</button></div>
           <a id="publishUrl" target="_blank" rel="noopener"></a>
         </div>
         <div>
-          <div class="publish-result-head"><span>Model ref, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishRef">Copy</button></div>
+          <div class="publish-result-head"><span>On a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishServerRef">Copy</button></div>
+          <code id="publishServerRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>In the browser or on a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishRef">Copy</button></div>
           <code id="publishRef"></code>
         </div>
         <div>
           <div class="publish-result-head"><span>Try it in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishTryLink">Copy</button></div>
           <a id="publishTryLink" target="_blank" rel="noopener"></a>
         </div>
-        <div data-dataset-link>
+        <div>
           <div class="publish-result-head"><span>Open on this dataset</span><button type="button" class="btn btn-link btn-sm" data-copy="publishDatasetLink">Copy</button></div>
           <a id="publishDatasetLink" target="_blank" rel="noopener"></a>
         </div>
