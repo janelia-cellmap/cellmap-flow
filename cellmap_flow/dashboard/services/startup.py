@@ -65,6 +65,7 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
             model, host, st_data, dataset_path=dataset_path, postprocess=session.postprocess,
             shader=session.shaders[model], shader_controls=session.shader_controls.get(model), info=info,
             fallback_output_voxel_size=_configured_output_voxel_size(model, info),
+            channel=session.shown_channel(model),
         )
     # The YAML's extra_layers (`cellmap_flow yaml` builds them).
     layers.update(session.extra_layers)

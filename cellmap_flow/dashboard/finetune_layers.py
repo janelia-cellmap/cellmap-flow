@@ -95,11 +95,13 @@ def add_finetuned_layer(job, model_name):
 
     # The server is asked at the address the dashboard reaches it by; the
     # layer's source is the viewers' address. The job's record of its voxel
-    # size stands in for a server too old to report one.
+    # size stands in for a server too old to report one. It opens on the
+    # channel picked to show of the model it finetunes, unless one was
+    # picked for it (Session.shown_channel).
     layer = prediction_layer(
         model_name, inference_job.host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
         color="red", info=fetch_model_info(server_url),
-        fallback_output_voxel_size=job.params.get("output_voxel_size"),
+        fallback_output_voxel_size=job.params.get("output_voxel_size"), channel=session.shown_channel(model_name),
     )
     logger.info(f"Adding neuroglancer layer: {model_name}")
 

@@ -297,7 +297,7 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 model, host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
                 shader=session.shaders.get(model), shader_controls=session.shader_controls.get(model),
                 previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
-                info=fetch_model_info(host),
+                info=fetch_model_info(host), channel=session.shown_channel(model),
             ))
             drawn.append(model)
 

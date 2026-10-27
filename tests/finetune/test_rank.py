@@ -9,7 +9,8 @@ stretched when that scores clearly better; each row gives its threshold
 and input window, what the other normalizations matched and the sigmoid
 its layer needs; Use this model and Fit to Paint set the normalization and
 the sigmoid in one chain set, Fit to Paint for the model seeding the paint
-without a new volume; the paint is carried onto another model's grid.
+without a new volume; the paint is carried onto another model's grid; the
+channel picked is shown, on the model's layer and its finetunes'.
 """
 
 import math
@@ -386,3 +387,34 @@ def test_the_sigmoid_a_ranked_models_layer_needs_and_nothing_else():
     assert display_postprocess("unit", [], False) is None
     assert display_postprocess("unbounded", [], True) is None
 
+
+def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_finetunes_built_after(
+        dashboard, viewer, monkeypatch, make_job):
+    """fly_organelles' layer opened on all_mem, the first of its eight
+    channels, while the paint and the training were for mito."""
+    from cellmap_flow.dashboard import finetune_layers
+    from cellmap_flow.dashboard.routes.finetune import channel as channel_routes
+    from cellmap_flow.viewer.layers import prediction_layer
+
+    info = {"output_channels": 8, "has_channel": True,
+            "channels": ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"]}
+    monkeypatch.setattr(channel_routes, "fetch_model_info", lambda host: info)
+    monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda host: info)
+    session = get_session()
+    session.jobs = [SimpleNamespace(model_name="m", host="http://gpu:8000")]
+    with viewer.txn() as s:
+        s.layers["m"] = prediction_layer("m", "http://gpu:8000", "blob", dataset_path=None, postprocess=[], info=info)
+
+    def position(name):
+        return viewer.state.layers[name].to_json().get("localPosition")
+
+    body = dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 2}).get_json()
+    assert body == {"success": True, "shown": True} and position("m") == [2.5]
+    # A finetune of it opens on the same channel.
+    finetune_layers.add_finetuned_layer(make_job(inference_server_url="http://gpu:9000"), "m_finetuned_1")
+    assert position("m_finetuned_1") == [2.5]
+    # A pick forgotten is not shown again; a channel that is no index is refused.
+    assert dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": None}).get_json() == {
+        "success": True, "shown": False}
+    assert session.shown_channel("m_finetuned_1") is None
+    assert dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": "mito"}).status_code == 400

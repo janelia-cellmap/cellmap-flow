@@ -11,7 +11,8 @@ they all place and shade it the same way:
 - ``prediction_shader_for()``: a shader over the range the chain produces;
   for a flow model's channels, one that shows them all at once.
 - ``prediction_layer()``: the layer itself, a segmentation when the chain
-  ends in labels and an image otherwise.
+  ends in labels and an image otherwise, open on the channel
+  ``display_channel()`` gives, at ``channel_position()``.
 - ``raw_layer()``: the raw data, with the user's shader put back.
 - ``replace_layer()``: a layer drawn again in place of one of the same name,
   keeping what the user set on that one (``carried_layer_json()``).
@@ -172,13 +173,15 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
 
 
 def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader=None, shader_controls=None,
-                     color=None, previous_shader=None, info=None, fallback_output_voxel_size=None):
+                     color=None, previous_shader=None, info=None, fallback_output_voxel_size=None, channel=None):
     """``model``'s layer, overlaid on the raw at ``dataset_path``.
 
     A SegmentationLayer when ``postprocess`` ends in labels. Otherwise an
     ImageLayer with ``shader_controls`` and ``shader``, the user's; without
     one, prediction_shader_for's in ``previous_shader``'s colour or
-    ``color``.
+    ``color``. It opens on ``channel`` when given (the one the Finetune tab
+    picked to show, dashboard Session.shown_channel), else on the one its
+    server names (channel_position).
     """
     info = fetch_model_info(host) if info is None else info
     override = prediction_voxel_override(host, dataset_path, info, fallback_output_voxel_size)
@@ -192,25 +195,39 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     layer = {"source": source, "shader": shader}
     if shader_controls:
         layer["shaderControls"] = shader_controls
-    channel = display_channel(info, postprocess)
-    if channel is not None and flows is None:
-        # Neuroglancer's channel axis is a local dimension, its position the
-        # channel shown; at the channel's centre, as neuroglancer places them.
-        layer["local_position"] = [channel + 0.5]
+    position = channel_position(info, postprocess, channel)
+    if position is not None:
+        layer["local_position"] = position
     return neuroglancer.ImageLayer(**layer)
 
 
-def display_channel(info, postprocess):
-    """The channel a model's layer opens on: the one its server names
-    (``display_channel``, Cellpose's cell probability rather than flow_y),
-    while the chain keeps the model's channels; None otherwise (the first)."""
-    channel = info.get("display_channel")
+def display_channel(info, postprocess, shown=None):
+    """The channel a model's layer opens on: ``shown``, the one picked to
+    show (the Finetune tab's, mito of fly_organelles' eight), else the one
+    its server names (``display_channel``, Cellpose's cell probability
+    rather than flow_y), while the chain keeps the model's channels and the
+    model has that one; None otherwise (the first)."""
+    channel = info.get("display_channel") if shown is None else shown
     channels = info.get("output_channels")
     if channel is None or not channels or not info.get("has_channel", True):
         return None
-    if chain_num_channels(postprocess, channels) != channels:
+    if chain_num_channels(postprocess, channels) != channels or not 0 <= int(channel) < channels:
         return None
     return int(channel)
+
+
+def channel_position(info, postprocess, shown=None):
+    """The local position an image layer of a model opens at: the channel
+    display_channel gives, at its centre, as neuroglancer places them
+    (neuroglancer's channel axis is a local dimension, its position the
+    channel shown). None, which leaves neuroglancer's (the first), without
+    one, and while a flow model's channels are shown together
+    (flow_channels), whose shader reads every one. prediction_layer opens a
+    layer at it, and POST /api/finetune/channel moves a layer shown to it."""
+    channel = display_channel(info, postprocess, shown)
+    if channel is None or flow_channels(info, postprocess) is not None:
+        return None
+    return [channel + 0.5]
 
 
 def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None, view=None):

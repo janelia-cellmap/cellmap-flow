@@ -529,6 +529,12 @@
       "request": null
     },
     {
+      "method": "POST",
+      "path": "/api/finetune/channel",
+      "availability": "both",
+      "request": null
+    },
+    {
       "method": "GET",
       "path": "/api/finetune/view-labels/sources",
       "availability": "both",

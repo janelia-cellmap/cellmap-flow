@@ -29,6 +29,7 @@ URLS = {
     "/api/finetune/ai-annotate/run": "POST",
     "/api/finetune/ai-annotate/settings": "POST",
     "/api/finetune/ai-annotate/status": "GET",
+    "/api/finetune/channel": "POST",
     "/api/finetune/create-volume": "POST",
     "/api/finetune/good-regions": "GET",
     "/api/finetune/good-regions/delete": "POST",
