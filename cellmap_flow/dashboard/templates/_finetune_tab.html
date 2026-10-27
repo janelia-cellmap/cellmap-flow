@@ -567,15 +567,39 @@
     </summary>
     <div class="card-body" style="border-top: 1px solid var(--border);">
       <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.
-        {% if mode == "browser" %}Listed: every model this browser can run (cellmap's, the Hugging Face repos you added, your finetunes); the ticked ones are scored.{% else %}Listed: this session's models, the CellMap catalog and cellmap's Hugging Face models; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
+        {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
       <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
              placeholder="Filter: nuc, 16 nm, mito aff"
              title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
+      {# The Models tab's ways to find a model, over the same lists: its
+         search rule (lib/search.js), its BioImage Zoo filters (EM only,
+         2D/3D; the zoo is server-only), its Hugging Face Refresh and its
+         Add a model (POST /api/finetune/rank/add resolves a reference as
+         POST /api/models/resolve does). rank.js groups the list by the
+         Models tab section each model is under (the candidates' group). #}
+      <div class="d-flex flex-wrap align-items-center column-gap-3 small mb-1">
+        {% if mode != "browser" %}
+        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rankEmOnly">
+          <label class="form-check-label" for="rankEmOnly" title="BioImage Zoo models tagged for electron microscopy only, as the Models tab's zoo list filters them; every other model is EM">EM only</label></div>
+        {% endif %}
+        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rank2d">
+          <label class="form-check-label" for="rank2d" title="Models that read one slice">2D</label></div>
+        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rank3d">
+          <label class="form-check-label" for="rank3d" title="Models that read a volume">3D</label></div>
+        <button type="button" class="btn btn-link btn-sm p-0" id="rankRefresh" title="List the Hugging Face models again, as the Models tab's Refresh does">Refresh</button>
+      </div>
       <small class="d-block text-muted mb-1">Tick
         <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
         <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone">none</button>
         (shown)</small>
       <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
+      <div class="input-group input-group-sm mb-1">
+        <input type="text" class="form-control" id="rankAddRef" autocomplete="off" spellcheck="false"
+               placeholder="Add a model: owner/repo, owner/repo/folder{% if mode != 'browser' %}, a folder, fly:path{% endif %}"
+               title="Any model the Models tab's Add a model takes; it joins the list, ticked, without starting">
+        <button type="button" class="btn btn-outline-secondary" id="rankAddBtn">Add</button>
+      </div>
+      <small class="d-block text-muted mb-2">Cellpose models are not ranked: they predict flows, not objects and background.</small>
       <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
         <button type="button" class="btn btn-primary" id="rankBtn" disabled
                 title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each; only the running ones start ticked{% endif %}; the Models tab and the viewer are left as they were.">

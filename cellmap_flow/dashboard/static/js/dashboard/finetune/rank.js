@@ -186,6 +186,15 @@ export function initRank() {
   const tickAll = document.getElementById("rankTickAll");
   const tickNone = document.getElementById("rankTickNone");
   const candidateList = document.getElementById("rankCandidates");
+  // The Models tab's ways to find a model (the template's): the zoo's EM
+  // only (server mode alone, as the zoo is) and 2D / 3D, its Hugging Face
+  // Refresh and its Add a model.
+  const emOnly = document.getElementById("rankEmOnly");
+  const only2d = document.getElementById("rank2d");
+  const only3d = document.getElementById("rank3d");
+  const refreshBtn = document.getElementById("rankRefresh");
+  const addRef = document.getElementById("rankAddRef");
+  const addBtn = document.getElementById("rankAddBtn");
   const rankBtn = document.getElementById("rankBtn");
   const stopBtn = document.getElementById("rankStopBtn");
   const status = document.getElementById("rankStatus");
@@ -375,18 +384,36 @@ export function initRank() {
     return refreshing;
   }
 
-  // The models the filter shows.
-  function shown() {
-    return candidates.filter((candidate) => matchesFilter(candidate, filter.value));
+  // Whether `candidate` shows: it matches the filter typed, and the 2D / 3D
+  // and EM only boxes, as the Models tab's zoo list filters (neither of 2D
+  // and 3D ticked: either; EM only leaves out the zoo models not tagged EM,
+  // every other model being EM).
+  function visible(candidate) {
+    const dims = [[only2d, 2], [only3d, 3]].filter(([box]) => box.checked).map(([, d]) => d);
+    return matchesFilter(candidate, filter.value)
+      && (!dims.length || dims.includes(candidate.dims))
+      && !(emOnly && emOnly.checked && candidate.em === false);
   }
 
+  // The models the filter shows.
+  function shown() {
+    return candidates.filter(visible);
+  }
+
+  // The list, under a heading for each Models tab section its models are
+  // under (the candidates' group, in the order the route gives them).
   function showCandidates() {
     tickAll.disabled = tickNone.disabled = running;
     const none = candidates.length && !shown().length
       && h("small", { class: "text-muted" }, "No model matches the filter.");
-    candidateList.replaceChildren(none || "", ...candidates.map((candidate, i) => {
+    let group = null;
+    candidateList.replaceChildren(none || "", ...candidates.flatMap((candidate, i) => {
       const id = `rankCandidate${i}`;
-      return h("div", { class: "form-check", hidden: !matchesFilter(candidate, filter.value) },
+      const show = visible(candidate);
+      const heading = show && candidate.group && candidate.group !== group
+        ? h("div", { class: "small fw-semibold text-muted mt-1" }, (group = candidate.group))
+        : null;
+      const item = h("div", { class: "form-check", hidden: !show },
         h("input", {
           type: "checkbox", class: "form-check-input", id, value: candidate.name,
           checked: !unticked.has(candidate.name), disabled: running,
@@ -395,7 +422,49 @@ export function initRank() {
         h("label", { class: "form-check-label", for: id, title: candidate.source || `${candidate.repo}/${candidate.folder}` },
           candidate.name, candidate.volume_model ? " (painted for)" : "", " ",
           h("small", { class: "text-muted" }, describe(candidate))));
+      return heading ? [heading, item] : [item];
     }));
+  }
+
+  // Add a model, as the Models tab's does, to this list (POST
+  // /api/finetune/rank/add resolves the reference and keeps the model in the
+  // session's list), ticked, without starting it.
+  async function addModel() {
+    const ref = addRef.value.trim();
+    if (!ref || running) return;
+    setBusy(addBtn, true, "Adding...");
+    try {
+      const d = await postAnswer("/api/finetune/rank/add", { ref });
+      if (!d.success) {
+        const needs = (d.needs || []).length ? ` It needs ${d.needs.join(", ")}: add it on the Models tab, where you can give them.` : "";
+        say(`Could not add ${ref}: ${d.error || "not a model reference"}.${needs}`, "danger");
+        return;
+      }
+      const name = (d.candidate || d).name;
+      unticked.delete(name);
+      addRef.value = "";
+      await refresh();
+      say(`Added ${name}, ticked: Rank scores it with the others.`, "success");
+    } catch (e) {
+      say(`Could not add ${ref}: ${e.message || e}`, "danger");
+    } finally {
+      setBusy(addBtn, false);
+    }
+  }
+
+  // The Hugging Face models listed again, as the Models tab's Refresh lists
+  // them (the same route in both modes), then this list.
+  async function refreshModels() {
+    if (running) return;
+    setBusy(refreshBtn, true, "Refreshing...");
+    try {
+      await postAnswer("/api/huggingface-models/refresh");
+    } catch (e) {
+      say(`Could not list the Hugging Face models again: ${e.message || e}`, "danger");
+    } finally {
+      setBusy(refreshBtn, false);
+    }
+    await refresh();
   }
 
   function showResults() {
@@ -712,6 +781,10 @@ export function initRank() {
   seedThreshold.addEventListener("change", showMark);
   showMark();
   filter.addEventListener("input", showCandidates);
+  for (const box of [emOnly, only2d, only3d]) if (box) box.addEventListener("change", showCandidates);
+  addBtn.addEventListener("click", addModel);
+  addRef.addEventListener("keydown", (e) => { if (e.key === "Enter") addModel(); });
+  refreshBtn.addEventListener("click", refreshModels);
   // Tick or untick the models shown; the hidden ones keep their ticks.
   tickAll.addEventListener("click", () => {
     for (const candidate of shown()) unticked.delete(candidate.name);
