@@ -110,6 +110,13 @@ export interface SessionState {
    * id in the paint store (a PaintVolume), or null. Tab-scoped like the
    * models; the store's listing is the durable one. */
   paintVolume: string | null;
+  /** The channel each model's layer shows, by model name, as POST
+   * /api/finetune/channel sets it (the training form's Channel, and Use this
+   * model's pick): the channel's index into the model's output channels. A
+   * layer built for the model later opens on it, and so does one for a
+   * model finetuned from it (serving.ts shownChannel). The server's
+   * `shown_channels` on its dashboard session. */
+  shownChannels: Record<string, number>;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that

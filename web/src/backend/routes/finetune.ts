@@ -25,7 +25,9 @@
 // are not affinities (target-call.ts channelChoice, which the models route
 // answers as channel_choice), the one the form's Channel picks
 // (select_channel), and submit refuses such a model without the pick
-// (refuseChannel). The good
+// (refuseChannel); POST /api/finetune/channel shows the channel picked on
+// the model's layer, and on each layer built for it or its finetunes after
+// (the session's shownChannels). The good
 // regions' routes are routes/good-regions.ts, and the patch tools' Label it
 // and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
@@ -68,7 +70,7 @@ import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../view
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, text } from "../router";
-import { pageBase } from "../serving";
+import { pageBase, showChannel } from "../serving";
 import { done, eventStream, requestedOffset, type SseEvent } from "../sse";
 
 /** The seams the routes run through, so they can be tested with a fake run
@@ -222,6 +224,36 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }));
     const rawVoxelSizes = (ctx.infer.dataset()?.levels ?? []).map((level) => level.voxel.slice());
     return json(200, { models, selected_model: models.length === 1 ? models[0].name : null, raw_voxel_sizes: rawVoxelSizes });
+  });
+
+  // POST /api/finetune/channel {model_name, select_channel}: the channel
+  // the session shows for the model (select_channel, its index; null clears
+  // the pick), as the form's Channel and Use this model pick it, so the
+  // layer shows what is trained and ranked. It is kept in the session
+  // (shownChannels) and shown now on the model's layer and on its
+  // finetunes' that follow its pick (serving.ts showChannel); a layer built
+  // for them later opens on it (showLayers). Answers whether a layer was
+  // there to change: none is for a model not served, an output with no
+  // channel axis or a chain that changes the channel count (displayChannel),
+  // and a pick cleared leaves the layers as they are. Refused (400) for a
+  // pick that is not a channel's index or is past the model's channels, and
+  // (404) for a model the browser does not have, which changes nothing.
+  router.post("/api/finetune/channel", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    if (!body) return badRequest("expected a JSON object");
+    const name = typeof body.model_name === "string" ? body.model_name.trim() : "";
+    if (!name) return badRequest("model_name is required");
+    const pick = readSelectChannel(body.select_channel);
+    if ("error" in pick) return badRequest(pick.error);
+    const entry = ctx.infer.served().find((s) => s.entry.name === name)?.entry ?? (await ctx.catalog.list()).find((e) => e.name === name);
+    if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
+    const { channel } = pick, channels = entry.manifest.channels.length;
+    if (channel !== null && channel >= channels) return badRequest(`select_channel ${channel} is not one of ${name}'s output channels: it has ${channels} (0 to ${channels - 1}).`);
+    const shownChannels = { ...ctx.session.state.shownChannels };
+    if (channel === null) delete shownChannels[name];
+    else shownChannels[name] = channel;
+    await ctx.session.update({ shownChannels });
+    return json(200, { success: true, shown: channel !== null && showChannel(ctx, name) });
   });
 
   // POST /api/finetune/create-volume {model_name} or {voxel_size}: a new
@@ -635,14 +667,25 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
   const loss = readLoss(body);
   if ("error" in loss) return loss;
-  const selectChannel = blank(body.select_channel) ? null : Number(body.select_channel);
-  if (selectChannel !== null && !(Number.isInteger(selectChannel) && selectChannel >= 0)) return { error: "select_channel: expected the index of one of the model's output channels, a whole number from 0" };
+  const pick = readSelectChannel(body.select_channel);
+  if ("error" in pick) return pick;
+  const selectChannel = pick.channel;
   const training = mode === "full" ? readFullTraining(body, epochs, learningRate, loss) : readHeadTraining(body, epochs, learningRate, loss);
   if ("error" in training) return training;
   return {
     options: { ...training.options, selectChannel },
     params: { ...training.params, ...(selectChannel === null ? {} : { select_channel: selectChannel }) },
   };
+}
+
+/** A body's select_channel as a channel's index (a whole number from 0, a
+ * string spelling one as the form's select sends it), null when blank (no
+ * channel picked), or why it is neither: whether the model has that channel
+ * is for the route to say, with the model. */
+function readSelectChannel(value: unknown): { channel: number | null } | { error: string } {
+  const channel = blank(value) ? null : Number(value);
+  if (channel !== null && !(Number.isInteger(channel) && channel >= 0)) return { error: "select_channel: expected the index of one of the model's output channels, a whole number from 0" };
+  return { channel };
 }
 
 /** readTraining's head part: the loss fields, and the batch in voxels (batch_pixels). */

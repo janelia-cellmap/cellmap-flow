@@ -164,9 +164,11 @@ export function savedLayerName(model: string): string {
  * since the run writes zarr v2 (infer/engine.ts materialize), so it looks
  * like the live layer and lies where it does: the zarr declares the served
  * level's scale and the box's translation, which Neuroglancer places it by. `keep`
- * is the live layer's shader as the user left it, when there is one. */
-export function savedLayer(served: ServedModel, chain: Chain, folderUrl: string, color: string, keep?: KeptShader): LayerSpec {
+ * is the live layer's shader as the user left it, when there is one, and
+ * `shown` the channel the session shows for the model (serving.ts
+ * shownChannel), which it opens on as the live layer does. */
+export function savedLayer(served: ServedModel, chain: Chain, folderUrl: string, color: string, keep?: KeptShader, shown: number | null = null): LayerSpec {
   const base = folderUrl.endsWith("/") ? folderUrl : `${folderUrl}/`;
   const url = `zarr2://${base}${zarrName(served.entry.name)}/`;
-  return { ...predictionLayer({ ...served, url }, chain, color, keep), name: savedLayerName(served.entry.name) };
+  return { ...predictionLayer({ ...served, url }, chain, color, keep, shown), name: savedLayerName(served.entry.name) };
 }
