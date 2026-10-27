@@ -80,6 +80,8 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(nuc).toMatchObject({ window: null, threshold: 0.5, input_window: [Number(minMax.min_value), Number(minMax.max_value)] });
     expect(nuc.scored_voxels).toBe(nuc.object_voxels + nuc.background_voxels);
     expect(nuc.loss).toBeLessThan(0.3);
+    // The class it was read through, and where that came from: its manifest's text (the fakes' bytes are no network).
+    expect(nuc).toMatchObject({ output_class: "unbounded", output_class_from: "manifest", output_op: null });
     expect(ctx.infer.serves).toHaveLength(1);
 
     const aff = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));

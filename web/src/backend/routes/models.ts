@@ -331,7 +331,11 @@ export function inputNormDifferences(configured: Step[], declared: Record<string
 
 /** One model's entry of /api/model_advice. There is no output probe in the
  * browser (probe_available: false, and a review that says so, which the
- * banner does not show); the input normalization is the one the model's
+ * banner does not show): the output class is the served model's
+ * (ModelInfo.output_class: its network's last op, else its manifest's
+ * text), with where it was read (output_class_from, output_op) as the
+ * server's advice gives it, and the review says which it was. The input
+ * normalization is the one the model's
  * manifest declares, which suggest_input_norm treats as declared metadata:
  * high confidence, and a match when the configured steps are those in
  * that order with the declared values (inputNormDifferences says where
@@ -355,11 +359,17 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
   const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
   const output = manifest.output ?? "";
+  const { output_class, output_class_from, output_op } = served.info;
+  const from = output_class_from === "graph"
+    ? `Its network ends in a ${output_op}, so its output is ${output_class}.`
+    : `Its network's last op does not say what its output is; the model's manifest says: ${output || "not stated"}.`;
   return {
     model: served.entry.name,
     probe_available: false,
     out_channels: served.info.output_channels,
-    output_class: /logit|unbounded|distance/i.test(output) ? "unbounded" : /sigmoid|probab|\[0, ?1\]/i.test(output) ? "unit" : null,
+    output_class: output_class ?? null,
+    output_class_from: output_class_from ?? null,
+    output_op: output_op ?? null,
     output_min: null,
     output_max: null,
     configured_postprocess: stepNames(chain.postprocess),
@@ -369,7 +379,7 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
     input_relabelled_from: null,
     postprocess_review: {
       level: "unknown",
-      message: `No output probe in the browser. The model's manifest says its output is: ${output || "not stated"}.`,
+      message: `No output probe in the browser. ${from}`,
       suggest: [],
     },
     input_norm_suggestion: order.length

@@ -121,10 +121,13 @@ export function rankRoutes(router: Router): void {
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
   // (score_row's, portable/rank.py), the postprocessing its layer needs
-  // (postprocess: needed_postprocess's steps, or null), how long it took,
-  // and a note when some painted chunks lie where the model's level does
-  // not reach. Refused without a dataset, a volume or paint (400), and for
-  // a model the catalog does not have (404).
+  // (postprocess: needed_postprocess's steps, or null), the output class
+  // its output was read as and where that came from (output_class,
+  // output_class_from and output_op, the served model's info: its network's
+  // last op, else its manifest's text; the Output column's title says it),
+  // how long it took, and a note when some painted chunks lie where the
+  // model's level does not reach. Refused without a dataset, a volume or
+  // paint (400), and for a model the catalog does not have (404).
   router.post("/api/finetune/rank/score", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -214,8 +217,10 @@ export function rankRoutes(router: Router): void {
       const seconds = (performance.now() - started) / 1000;
       const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(kept.score.matches)} as normalized)` : "";
       ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0) through ${through(score.input_norm_from)}, ${stepsText(score.input_norm)}${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
+      const { output_class, output_class_from, output_op } = kept.served.info;
       return json(200, {
-        success: true, name, ...score, postprocess, seconds,
+        success: true, name, ...score, postprocess,
+        output_class: output_class ?? null, output_class_from: output_class_from ?? null, output_op: output_op ?? null, seconds,
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
