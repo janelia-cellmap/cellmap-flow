@@ -136,6 +136,20 @@ class CellMapModelConfig(ModelConfig):
         config.block_shape = [*output_shape, metadata.out_channels]
         return config
 
+    def finetune_modes(self):
+        """LoRA and full when its export has a ``model.pt2``, which
+        cellmap_models' ``train()`` unflattens into a module adapters attach
+        to; full only without one, as ``train()`` then hands the trainer the
+        TorchScript, a compiled network that takes no adapter. fly_organelles'
+        copies under /nrs/cellmap/models/saalfeldlab have model.pt and
+        model.ts but no model.pt2: offered LoRA, a job failed at its start
+        (their Hugging Face copies have one). Read from the folder's files,
+        without loading them: the model list asks on every poll."""
+        folder = getattr(self.cellmap_model, "folder_path", None)
+        if folder and os.path.isdir(folder) and not os.path.exists(os.path.join(folder, "model.pt2")):
+            return ("full",)
+        return ("lora", "full")
+
     def declared_geometry(self):
         """Its export's metadata.json's (``metadata_geometry``), read without the model."""
         try:

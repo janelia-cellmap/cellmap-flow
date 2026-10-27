@@ -85,3 +85,19 @@ def test_reads_at_the_shape_the_export_runs_at(monkeypatch, model, shapes, voxel
     served = {"write_shape": list(config.write_shape), "output_voxel_size": list(config.output_voxel_size),
               "output_channels": config.output_channels, "channels": list(config.channels_names)}
     assert declared == (None if shapes else served)
+
+
+@pytest.mark.parametrize("files, modes", [
+    (["model.pt", "model.ts"], ("full",)),
+    (["model.pt2", "model.ts"], ("lora", "full")),
+], ids=["torchscript-only", "with-an-export"])
+def test_lora_is_offered_only_when_the_export_can_take_an_adapter(monkeypatch, tmp_path, files, modes):
+    """fly_organelles' /nrs copies, model.pt and model.ts with no model.pt2,
+    were offered LoRA and failed at the job's start: cellmap_models' train()
+    gives the TorchScript then, which takes no adapter."""
+    cellmap_model = pytest.importorskip("cellmap_models.model_export.cellmap_model")
+    monkeypatch.setattr(cellmap_model, "CellmapModel", lambda folder_path: SimpleNamespace(folder_path=folder_path))
+    for name in files:
+        (tmp_path / name).write_bytes(b"")
+
+    assert CellMapModelConfig(folder_path=str(tmp_path)).finetune_modes() == modes
