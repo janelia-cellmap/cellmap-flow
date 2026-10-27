@@ -31,7 +31,7 @@ from cellmap_flow.jobs.site import current_site
 logger = logging.getLogger(__name__)
 
 # (queue, label, LSF host group backing it), for the queues offered; see
-# SiteProfile.gpu_queues for why these three.
+# SiteProfile.gpu_queues for why these.
 GPU_QUEUES = current_site().gpu_queues
 
 CACHE_TTL_SECONDS = 60

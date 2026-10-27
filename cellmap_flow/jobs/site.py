@@ -17,9 +17,11 @@ from typing import Tuple
 @dataclass(frozen=True)
 class SiteProfile:
     # (queue, label, LSF host group backing it). The only GPU types offered:
-    # Janelia has others (gpu_l4, gpu_rtx8000), but they are not what anyone
-    # wants for inference or finetuning here, and a shorter list is easier to
-    # choose from than a complete one.
+    # Janelia has others (gpu_l4, gpu_b300), but they are not what anyone
+    # wants for inference or finetuning here (the L4s are small and the most
+    # contended, the B300s more than these jobs need), and a shorter list is
+    # easier to choose from than a complete one. The RTX 6000s (Blackwell,
+    # sm_120, which the pixi torch builds for) often have the shortest wait.
     gpu_queues: Tuple[Tuple[str, str, str], ...]
     default_queue: str = "gpu_h100"
     # Who a job is billed to when neither the request nor the dashboard's
@@ -57,6 +59,7 @@ JANELIA = SiteProfile(
         ("gpu_h100", "H100", "h100s"),
         ("gpu_h200", "H200", "h200s"),
         ("gpu_a100", "A100", "a100s"),
+        ("gpu_rtx6000", "RTX 6000", "rtx6000s"),
     ),
 )
 

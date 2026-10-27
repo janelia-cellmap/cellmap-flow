@@ -30,7 +30,8 @@ BHOSTS = {
     "gpu_queues, known, asked, accepting",
     [
         # One retired queue made the whole panel say "LSF not reachable".
-        (None, {"gpu_h100", "gpu_a100"}, None, {"gpu_h100": True, "gpu_a100": True, "gpu_h200": False}),
+        ((("gpu_h100", "H100", "h100s"), ("gpu_h200", "H200", "h200s"), ("gpu_a100", "A100", "a100s")),
+         {"gpu_h100", "gpu_a100"}, None, {"gpu_h100": True, "gpu_a100": True, "gpu_h200": False}),
         ((("gpu_h100", "H100", "h100s"),), {"gpu_h100"}, [["bqueues", "gpu_h100"]], {"gpu_h100": True}),
         (None, set(), None, None),  # no answer at all is still unreachable
     ],
