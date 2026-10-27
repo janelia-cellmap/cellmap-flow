@@ -63,8 +63,15 @@ The dashboard starts an export and follows it (routes/finetune/publish.py)::
     # {"status": "running" | "done" | "failed",
     #  "error": str | None,       # failed: why
     #  "dir": str,                # the export's directory
+    #  "job": {"id": str | None,  # its LSF job's id, None for a process here
+    #          "queued": bool,    # whether it is still waiting for its node
+    #          "log": str,        # its log
+    #          "epoch": int | None, "epochs": int | None},  # a training's epoch, of how many
     #  and, done, result.json's "folder", "manifest", "server" and "no_browser"
     #  (None until then)}
+
+The epoch is the last "Starting epoch N of M" line (markers.EPOCH_START_RE)
+near the end of the log: distill prints them; an export prints none.
 
 ``start_export`` submits the export as a job (job_manager.submit.launch: on
 LSF when there is bsub, else a process here) in the environment the model
@@ -230,9 +237,12 @@ def export_status(export: WebExport) -> dict:
     error, when its job has ended without writing one (killed, out of time or
     memory).
     """
+    from cellmap_flow.finetune.markers import EPOCH_START_RE
     from cellmap_flow.jobs.spec import JobStatus, exists_now, tail
 
-    answer = {"status": "running", "error": None, "dir": str(export.output_dir),
+    job = {"id": getattr(export.job, "job_id", None), "queued": False, "log": str(export.log_file),
+           "epoch": None, "epochs": None}
+    answer = {"status": "running", "error": None, "dir": str(export.output_dir), "job": job,
               "folder": None, "manifest": None, "server": None, "no_browser": None}
     if exists_now(export.result_file):
         result = json.loads(export.result_file.read_text())
@@ -240,10 +250,15 @@ def export_status(export: WebExport) -> dict:
             return {**answer, "status": "failed", "error": result["error"]}
         # A distilled copy's result has a browser form alone: no server form, and no why not.
         return {**answer, "status": "done", **{key: result.get(key) for key in ("folder", "manifest", "server", "no_browser")}}
-    if export.job.get_status() in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED):
+    status = export.job.get_status()
+    if status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.KILLED):
         log = tail(export.log_file, 2000)
         return {**answer, "status": "failed",
                 "error": "The export job ended without a result." + (f" Its log ends:\n{log}" if log else "")}
+    epochs = EPOCH_START_RE.findall(tail(export.log_file) or "")
+    if epochs:
+        job["epoch"], job["epochs"] = (int(n) for n in epochs[-1])
+    job["queued"] = status == JobStatus.PENDING
     return answer
 
 

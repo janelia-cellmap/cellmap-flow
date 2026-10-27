@@ -54,11 +54,13 @@ export function publishedManifest(base: ModelEntry, name: string): unknown {
 }
 
 /** Another repo than cellmap/onnx-web-models as the fake Hub serves it: a
- * folder per manifest, `dirs` more folders without one, a README; or
- * `status` for every request of it (401: there is none, or it is private). */
+ * folder per manifest, `dirs` more folders without one, a README and
+ * `files` more files at its root; or `status` for every request of it
+ * (401: there is none, or it is private). */
 export interface FakeRepo {
   manifests?: Record<string, unknown>;
   dirs?: string[];
+  files?: string[];
   status?: number;
 }
 
@@ -115,7 +117,8 @@ export function fakeHub(options: HubOptions = {}): FakeHub {
     if (repo?.status) return statusResponse(repo.status);
     if (repo && url.endsWith("/tree/main")) {
       const folders = [...Object.keys(repo.manifests ?? {}), ...(repo.dirs ?? [])];
-      return jsonResponse([...folders.map((path) => ({ type: "directory", path })), { type: "file", path: "README.md", size: 900 }]);
+      const files = ["README.md", ...(repo.files ?? [])];
+      return jsonResponse([...folders.map((path) => ({ type: "directory", path })), ...files.map((path) => ({ type: "file", path, size: 900 }))]);
     }
     const repoManifest = repo && /\/raw\/main\/([^/]+)\/manifest\.json$/.exec(url);
     if (repoManifest) return repoManifest[1]! in (repo.manifests ?? {}) ? jsonResponse(repo.manifests![repoManifest[1]!]) : statusResponse(404, "Entry not found");

@@ -37,10 +37,11 @@
 // model's bytes are in that same store or nowhere: there is no download to
 // fall back on, and the error says to train it again.
 import type { Catalog, FinetunedRecord, GpuLimits, ModelEntry, ModelManifest, ModelVariant } from "../contracts";
+import { PYTHON } from "../generated/python-data";
 
 import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
 import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry } from "./finetuned";
-import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, RateLimitError } from "./hf";
+import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError } from "./hf";
 import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
 import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, modelFolders, parseManifest } from "./manifest";
@@ -48,7 +49,7 @@ import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, model
 export { chooseVariant, estimatePeakBytes, isOneSlice, PREFER_SMALL_DOWNLOAD, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "./variant";
 export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, hubName, isLayerName, ManifestError, parseManifest, withVariant } from "./manifest";
 export { FINETUNED_AUTHOR, metadataFor, MODELS_AUTHOR } from "./metadata";
-export { fetchEtag, HF_REPO, HF_REVISION, hubRef, RateLimitError, resolveUrl } from "./hf";
+export { fetchEtag, HF_REPO, HF_REVISION, hubRef, NoBrowserCopyError, RateLimitError, resolveUrl } from "./hf";
 export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, modelBytesKey, type ByteCache } from "./byte-cache";
 export { type KeyValueStore, LISTING_TTL_MS, MemoryKeyValueStore } from "./listing-cache";
 export {
@@ -76,6 +77,40 @@ export const LISTING_KEY = listingKey(HF_REPO);
 
 /** The localStorage key of the repos added beside the built-in catalog (AddedRepos). */
 export const ADDED_REPOS_KEY = "cellmap-flow:models:added-repos:v1";
+
+/** The files at a repo's root of cellmap-models' export for servers, which
+ * a cellmap-flow server opens by the repo's name: cellmap's own model repos
+ * hold them, and so does a model published from a server
+ * (cellmap_flow/finetune/export_web.py), which has a folder for the browser
+ * only when its network fits an .onnx file. */
+const SERVER_FORM = ["metadata.json", "model.ts"];
+
+/** What a server's publish names the folder of a smaller copy for the
+ * browser, after the model's own (cellmap_flow/portable/publish.py
+ * SMALL_SUFFIX): added to the repo once its training on the cluster is done. */
+const SMALL_SUFFIX = PYTHON.huggingface.small_suffix;
+
+/** Why `repo` has no folder `folder` the browser can run, and what to open
+ * instead, where a server's publish explains it; null where it does not.
+ * `entries` are the repo's models; `serverOnly`, whether the repo holds a
+ * model for servers and no model folder at all. The folder's smaller copy
+ * is offered only where the repo has it, so a model folder with its .onnx
+ * files. */
+function noBrowserCopy(repo: string, folder: string, entries: readonly ModelEntry[], serverOnly: boolean): string | null {
+  const ref = `${repo}/${folder}`;
+  if (entries.some((e) => e.folder === folder + SMALL_SUFFIX)) {
+    return `${ref} has no copy for the browser, but its smaller copy does: open ${ref}${SMALL_SUFFIX} instead`;
+  }
+  const model = folder.endsWith(SMALL_SUFFIX) ? entries.find((e) => e.folder === folder.slice(0, -SMALL_SUFFIX.length)) : undefined;
+  if (model || (serverOnly && folder.endsWith(SMALL_SUFFIX))) {
+    const meanwhile = model ? `${model.id} runs in the browser` : `${repo} runs on a cellmap-flow server`;
+    return `${ref} is not on Hugging Face yet: a server's publish adds the smaller copy once its training on the cluster is done, which can take hours, so try again later. Meanwhile ${meanwhile}`;
+  }
+  if (serverOnly) {
+    return `${ref} has no copy for the browser: ${repo} holds the model for cellmap-flow servers (Add a model on a server takes ${repo}). A smaller copy for the browser, if its publish asked for one, is added as ${ref}${SMALL_SUFFIX} once trained`;
+  }
+  return null;
+}
 
 export interface CatalogOptions {
   log: (line: string) => void;
@@ -266,15 +301,20 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     return built;
   }
 
-  // `repo`'s raw manifests by folder, from the Hub.
+  // `repo`'s raw manifests by folder, from the Hub. A repo with none that
+  // holds a model for servers (SERVER_FORM) is a NoBrowserCopyError.
   async function fetchRepo(repo: string): Promise<Record<string, unknown>> {
-    const folders = modelFolders(await fetchTree(fetchImpl, repo));
+    const tree = await fetchTree(fetchImpl, repo);
+    const folders = modelFolders(tree);
     const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, repo, folder)));
     const manifests: Record<string, unknown> = {};
     results.forEach((result, i) => {
       if (result.status === "fulfilled") manifests[folders[i]!] = result.value;
       else if (!isMissing(result.reason)) throw result.reason;
     });
+    if (Object.keys(manifests).length === 0 && SERVER_FORM.every((name) => tree.some((e) => e.type === "file" && e.path === name))) {
+      throw new NoBrowserCopyError(`${repo} has no copy for the browser: it holds a model for cellmap-flow servers (Add a model on a server takes ${repo}). A smaller copy for the browser, if its publish asked for one, is added as a folder of it once trained`);
+    }
     return manifests;
   }
 
@@ -358,7 +398,10 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
    * repo (addRepo); `<owner>/<repo>` alone names the repo's one model, and
    * is refused with the refs of its models when it has several. The place
    * a model kept here was published to names that model, whose bytes are
-   * here already. */
+   * here already. A ref of what a server's publish has no browser copy of
+   * (a model for servers only, a smaller copy not added yet) is a
+   * NoBrowserCopyError saying so, and naming the smaller copy where the
+   * repo has one (noBrowserCopy). */
   async function resolve(ref: string): Promise<ModelEntry | null> {
     const key = bareRef(ref);
     if (!key) return null;
@@ -372,14 +415,26 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (published) return published.entry;
     let entries = ofRepo(all, target.repo);
     const missing = target.folder !== null && !entries.some((e) => e.folder === target.folder);
-    if (target.repo !== HF_REPO && (entries.length === 0 || missing)) entries = await addRepo(target.repo);
+    if (target.repo !== HF_REPO && (entries.length === 0 || missing)) {
+      try {
+        entries = await addRepo(target.repo);
+      } catch (error) {
+        // A repo for servers only, said for the folder asked for.
+        if (error instanceof NoBrowserCopyError && target.folder !== null) throw new NoBrowserCopyError(noBrowserCopy(target.repo, target.folder, [], true)!);
+        throw error;
+      }
+    }
     const refs = entries.map((e) => e.id).join(", ");
     if (target.folder === null) {
       if (entries.length === 1) return entries[0]!;
       throw new Error(`${target.repo} holds ${entries.length} models, one a folder: add one as ${target.repo}/<folder> (${refs})`);
     }
     const entry = entries.find((e) => e.folder === target.folder);
-    if (!entry) throw new Error(`${target.repo} has no model folder ${target.folder} (a folder with a manifest.json); it has ${refs}`);
+    if (!entry) {
+      // cellmap's own catalog has no server publishes in it.
+      const why = target.repo === HF_REPO ? null : noBrowserCopy(target.repo, target.folder, entries, false);
+      throw why ? new NoBrowserCopyError(why) : new Error(`${target.repo} has no model folder ${target.folder} (a folder with a manifest.json); it has ${refs}`);
+    }
     return entry;
   }
 

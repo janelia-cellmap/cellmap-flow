@@ -1055,6 +1055,9 @@
         <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
                 title="Forgets the Hugging Face token signed in here.">Sign out</button>
       </div>
+      {# What Sign in and a pasted token came to, where they were clicked
+         and pasted: a sign-in that could not start, or a token refused. #}
+      <div class="small mt-1" id="hfSignInStatus" role="status" hidden></div>
       {# A sign-in with a code (the server's): the code, and where to enter it. #}
       <div class="small mt-1" id="hfDevice" hidden>
         Enter <code id="hfDeviceCode"></code> at <a id="hfDeviceLink" target="_blank" rel="noopener"></a>
@@ -1115,6 +1118,16 @@
         <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
         <small class="text-muted" id="publishStatus"></small>
       </div>
+    </div>
+    {# The publish of this page's model, outside the panel so that it
+       shows with the panel closed: where it has got (the export's cluster
+       job, each file's upload, the smaller copy's training), why it failed,
+       and once done its links. Hide closes it until the panel is opened or
+       another publish starts (publish.js). #}
+    <div class="publish-progress mt-2" id="publishProgress" role="status" hidden>
+      <div class="publish-result-head"><strong id="publishProgressRepo"></strong><button type="button" class="btn btn-link btn-sm" id="publishProgressClose" title="Hide this until the panel is opened again">Hide</button></div>
+      <div class="small" id="publishStage"></div>
+      <div class="small mt-1" id="publishSmallStage" hidden></div>
       {# One row per link, its name and Copy above the link itself, which
          wraps: the panel is as narrow as the sidebar. A row the answer
          gives nothing for is hidden (publish.js): the server ref is a

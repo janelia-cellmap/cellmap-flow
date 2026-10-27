@@ -118,7 +118,10 @@ def served(make_job, tmp_path, monkeypatch):
     """A job serving MODEL, a LoRA finetune of a Hugging Face model, and an
     export that gives its server form and a browser form of two variants,
     or, with ``no_browser`` set to why, the server form alone. Returns
-    ``{started: the exports started, no_browser}``."""
+    ``{started: the exports started, no_browser, running}``: ``running``,
+    by "model" and "small", the jobs (export_status's ``job``) the export
+    and the smaller copy's training answer running with, one an ask, before
+    they are done."""
     yaml_path = tmp_path / "models" / f"{MODEL}.yaml"
     yaml_path.parent.mkdir()
     yaml_path.write_text(yaml.safe_dump({"data_path": "s3://bucket/raw.zarr", "models": [{
@@ -129,7 +132,7 @@ def served(make_job, tmp_path, monkeypatch):
                    inference_server_ready=True, network_parameters=2_000_000)
     get_session().finetune_job_manager = SimpleNamespace(jobs={job.job_id: job})
 
-    export = SimpleNamespace(started=[], no_browser=None)
+    export = SimpleNamespace(started=[], no_browser=None, running={"model": [], "small": []})
 
     variants = [{"variant": v, "file": f"model_{v}.onnx", "input_size": [64] * 3, "output_size": [32] * 3}
                 for v in ("fp32", "fp16")]
@@ -164,7 +167,10 @@ def served(make_job, tmp_path, monkeypatch):
         return out
 
     def export_status(out):
-        if out.name.endswith("-small"):
+        kind = "small" if out.name.endswith("-small") else "model"
+        if export.running[kind]:
+            return {"status": "running", "error": None, "dir": str(out), "job": export.running[kind].pop(0)}
+        if kind == "small":
             return {"status": "done", "error": None, "dir": str(out), "folder": f"{MODEL}-small",
                     "manifest": small_manifest}
         return {"status": "done", "error": None, "dir": str(out), "folder": MODEL,
@@ -349,3 +355,26 @@ def test_a_smaller_copy_follows_the_model_in_a_commit_of_its_own(dashboard, hub,
     assert published["distilled_from"] == f"ada/{MODEL}/{MODEL}"
     card = files["README.md"].decode()
     assert f"`ada/{MODEL}/{MODEL}-small`" in card, "the card names the smaller copy"
+
+
+def test_a_running_publish_says_which_cluster_job_it_waits_on_and_the_smaller_copys_epoch(dashboard, hub, served,
+                                                                                         monkeypatch):
+    """What the panel polls while the export waits in the queue and runs,
+    and the smaller copy trains beside it: each job, and the epoch."""
+    hub.users[TOKEN] = {"user": "ada"}
+    dashboard.post(CREDENTIALS, json={"token": TOKEN})
+    queued = {"id": "101", "queued": True, "log": "/r/web_export/m/export_log.txt", "epoch": None, "epochs": None}
+    training = {"id": "102", "queued": False, "log": "/r/web_export/m-small/export_log.txt", "epoch": 7, "epochs": 100}
+    served.running = {"model": [queued, {**queued, "queued": False}], "small": [training]}
+    # Between two asks of a job, the panel asks how the publish is going.
+    polled = []
+    monkeypatch.setattr(routes.time, "sleep", lambda seconds: polled.append(dashboard.get(PUBLISH).get_json()))
+
+    dashboard.post(PUBLISH, json={"small_copy": True})
+
+    assert [(p["status"], p["step"]) for p in polled] == [("running", "exporting")] * 3
+    assert polled[0]["small_job"] == training, "the smaller copy's training, from its start"
+    assert [p["job"]["queued"] for p in polled[1:]] == [True, False]
+    assert {p["job"]["id"] for p in polled[1:]} == {"101"}
+    done = dashboard.get(PUBLISH).get_json()
+    assert (done["status"], done["small_status"], done["small_job"]) == ("done", "done", None)

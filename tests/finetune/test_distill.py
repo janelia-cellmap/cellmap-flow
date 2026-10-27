@@ -12,6 +12,7 @@ import pytest
 
 from cellmap_flow.finetune import distill, export_web
 from cellmap_flow.jobs.spec import JobStatus
+from cellmap_flow.portable.publish import SMALL_SUFFIX
 
 # funlib.learn.torch's UNet as its state dict lays it out, in a StandardUnet
 # as fly_organelles wraps one: two levels of two valid convolutions, a 2x max
@@ -271,7 +272,7 @@ def test_a_funlib_unet_distills_from_its_pruned_copy_into_one_for_the_browser(te
     # A tenth of the teacher or less, in a folder of the catalog's beside the
     # finetuned model's own, and closer to the teacher on the held-out
     # blocks than the pruned network it started from.
-    assert status["folder"] == export_web.folder_name("big_finetuned_20261026_120000") + distill.SUFFIX
+    assert status["folder"] == export_web.folder_name("big_finetuned_20261026_120000") + SMALL_SUFFIX
     distillation = status["manifest"]["distillation"]
     assert distillation["init"] == "pruned"
     assert status["manifest"]["params"] <= distillation["teacher_params"] / 10

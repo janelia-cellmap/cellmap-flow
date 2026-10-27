@@ -29,7 +29,11 @@ exported at the served block size, by a cluster job of its own
 (finetune.export_web); "creating", the repository made unless it is there
 already; "hashing" each file, "uploading" each and "committing" them, in one
 commit; and "checking", the repository read back, so that done means
-Hugging Face shows each file at the size sent. The model card and the
+Hugging Face shows each file at the size sent. While it exports, and on a
+failed export, the answer's ``job`` says which cluster job, whether it
+still waits in the queue, and its log (export_web.export_status's); the
+smaller copy's ``small_job`` says the same of its training, with the epoch
+it is on, each followed every EXPORT_POLL_SECONDS. The model card and the
 manifest are portable.publish's, which the browser's publish writes too;
 the upload is huggingface_hub's, each model file read from its disk as it
 is sent (by LFS or Xet, whichever the Hub takes), never whole into memory.
@@ -268,7 +272,12 @@ def _start_device_sign_in():
     }, timeout=30)
     code = answer.json()
     if "device_code" not in code:
-        raise RuntimeError(code.get("error_description") or code.get("error") or f"HTTP {answer.status_code}")
+        why = code.get("error_description") or code.get("error") or f"HTTP {answer.status_code}"
+        # The client id is the public app's metadata document, which Hugging
+        # Face reads: "Client not found" while the app does not serve it.
+        if code.get("error") == "invalid_client":
+            why = f"it does not know cellmap-flow's sign-in ({why})"
+        raise RuntimeError(why)
     register_secret(code["device_code"])
     device = {
         "status": "pending",
@@ -389,8 +398,9 @@ def huggingface_sign_in():
         try:
             _start_device_sign_in()
         except Exception as e:
-            message = UNREACHABLE if _unreachable(e) else f"Hugging Face would not start a sign-in: {_hub_message(e)}"
-            logger.warning(message)
+            message = (UNREACHABLE if _unreachable(e) else
+                       f"Hugging Face would not start a sign-in: {_hub_message(e)}. Paste an access token instead.")
+            logger.warning(f"{message} (client id {HF_OAUTH_CLIENT_ID})")
             return _error(message, 502)
         return jsonify(_account())
     token = (body.token or "").strip()
@@ -440,22 +450,24 @@ def _answer(publish):
         publish = dict(publish)
     answer = {"success": True, "status": publish["status"], "repo": publish["repo"], "folder": publish["folder"]}
     if publish["status"] == "running":
-        answer.update(step=publish["step"], file=publish["file"], fraction=publish["fraction"])
+        answer.update(step=publish["step"], file=publish["file"], fraction=publish["fraction"], job=publish.get("job"))
     elif publish["status"] == "failed":
-        answer["error"] = publish["error"]
+        answer.update(error=publish["error"], job=publish.get("job"))
     else:
         browser_folder = None if publish["no_browser"] else publish["folder"]
         answer.update(published_links(publish["repo"], browser_folder, PUBLIC_APP,
                                        _app_dataset(get_session().dataset_path)))
         answer.update(server_ref=publish["repo"], no_browser=publish["no_browser"], at=publish["at"],
                       created=publish["created"], private=publish["private"])
-        small = publish.get("small")
-        if small:
-            answer.update(small_status=small["status"], small_step=small.get("step"), small_file=small.get("file"),
-                          small_error=small.get("error"))
-            if small["status"] == "done":
-                links = published_links(publish["repo"], small["folder"], PUBLIC_APP, None)
-                answer.update(small_ref=links["ref"], small_try_link=links["try_link"])
+    # The smaller copy trains while the model is published, and is
+    # published after it.
+    small = publish.get("small")
+    if small:
+        answer.update(small_status=small["status"], small_step=small.get("step"), small_file=small.get("file"),
+                      small_error=small.get("error"), small_job=small.get("job"))
+        if small["status"] == "done":
+            links = published_links(publish["repo"], small["folder"], PUBLIC_APP, None)
+            answer.update(small_ref=links["ref"], small_try_link=links["try_link"])
     return answer
 
 
@@ -540,17 +552,19 @@ def _run(hf, publish, job, who, private, include_dataset, lora_copy, small_copy)
         with hf["lock"]:
             publish.update(fields)
 
-    small_job, small = None, None
+    small_job = None
     if small_copy:
         try:
             small_job = distill.start_distill(job.model_yaml_path, job.corrections_path, job.output_dir)
-            small = {"status": "running", "step": "distilling"}
+            update(small={"status": "running", "step": "distilling", "job": None})
+            _start_thread(_follow_small, hf, publish, small_job)
         except (ValueError, RuntimeError) as e:
-            small = {"status": "failed", "error": f"The smaller copy could not start: {e}"}
+            update(small={"status": "failed", "error": f"The smaller copy could not start: {e}"})
 
     try:
         served = yaml.safe_load(Path(job.model_yaml_path).read_text())
-        export = _wait(export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir), "export")
+        export = _wait(export_web.start_export(job.model_yaml_path, job.corrections_path, job.output_dir), "export",
+                       update)
         folder, manifest, no_browser = export["folder"], export["manifest"], export["no_browser"]
         export_dir = Path(export["dir"])
         # The export always writes model.pt2 where torch.export can; it is
@@ -576,7 +590,7 @@ def _run(hf, publish, job, who, private, include_dataset, lora_copy, small_copy)
         update(folder=folder)
         created, is_private = _commit(who["token"], publish["repo"], private, files,
                                       f"Publish {folder} from cellmap-flow", update)
-        update(status="done", created=created, private=is_private, at=published_at, no_browser=no_browser, small=small)
+        update(status="done", created=created, private=is_private, at=published_at, no_browser=no_browser)
         opens = (f"with no browser form ({no_browser})" if no_browser
                  else f"and in the browser as {ref_of(publish['repo'], folder)}")
         logger.info(f"Published {folder} to {HUB}/{publish['repo']}{' (a new repository)' if created else ''}: "
@@ -584,12 +598,30 @@ def _run(hf, publish, job, who, private, include_dataset, lora_copy, small_copy)
     except Exception as e:
         error = _publish_error(e, publish["repo"], who["via"], publish["file"])
         update(status="failed", error=error)
+        if small_job:
+            with hf["lock"]:
+                publish["small"] = {**publish["small"], "status": "failed", "error": "the model's own publish failed"}
         # The traceback for what is not Hugging Face's answer: an export or a
         # file that is not what it should be.
         logger.error(error, exc_info=_hub_status(e) is None and not _unreachable(e))
         return
     if small_job:
         _publish_small(hf, publish, who, pub, small_job)
+
+
+def _follow_small(hf, publish, small_job):
+    """How the smaller copy's training job is going, while the model itself
+    is published (``small_job``, export_status's); _publish_small follows it
+    from then on."""
+    from cellmap_flow.finetune import export_web
+
+    while publish["status"] == "running":
+        state = export_web.export_status(small_job)
+        if state["status"] != "running":
+            return
+        with hf["lock"]:
+            publish["small"] = {**publish["small"], "job": state["job"]}
+        time.sleep(EXPORT_POLL_SECONDS)
 
 
 def _publish_small(hf, publish, who, pub, small_job):
@@ -601,7 +633,7 @@ def _publish_small(hf, publish, who, pub, small_job):
             publish["small"] = {**publish["small"], **fields}
 
     try:
-        state = _wait(small_job, "smaller copy")
+        state = _wait(small_job, "smaller copy", update)
         small = {"folder": state["folder"], "manifest": state["manifest"], "published_at": _iso(_now())}
         pub = {**pub, "small": small}
         files = [(f["path"], f["text"].encode()) for f in publication_files(pub)]
@@ -619,16 +651,25 @@ def _publish_small(hf, publish, who, pub, small_job):
                      exc_info=_hub_status(e) is None and not _unreachable(e))
 
 
-def _wait(export, what):
+def _wait(export, what, update):
     """``export`` (an export_web.WebExport: the export's job, or distill's)
-    followed until it is done: its export_status answer. Raises
-    RuntimeError with its error."""
+    followed until it is done, telling ``update`` how its job is going
+    (``job``, export_status's, until it is done): its export_status answer.
+    Raises RuntimeError with its error."""
     from cellmap_flow.finetune import export_web
 
+    epoch = {}
     while (state := export_web.export_status(export))["status"] == "running":
+        # The epoch is read near the end of the log, which a training's
+        # export fills after its last epoch: the last one read stays.
+        if state["job"]["epoch"] is not None:
+            epoch = {"epoch": state["job"]["epoch"], "epochs": state["job"]["epochs"]}
+        update(job={**state["job"], **epoch})
         time.sleep(EXPORT_POLL_SECONDS)
     if state["status"] != "done":
+        update(job=state["job"])
         raise RuntimeError(f"its {what} failed: {state['error']}")
+    update(job=None)
     return state
 
 

@@ -140,6 +140,7 @@ class FakeJob:
 
     def __init__(self):
         self.status = JobStatus.RUNNING
+        self.job_id = "123"
 
     def get_status(self):
         return self.status
@@ -284,6 +285,21 @@ def test_a_2d_model_exports_for_the_browser_on_slices(finetuned, launched):
     exported = session.run([manifest["io"]["output"]], {manifest["io"]["input"]: x})[0]
     served = _served(finetuned.yaml, x)
     assert np.abs(exported - served).max() <= 1e-5 * np.abs(served).max()
+
+
+@pytest.mark.parametrize("finetuned", ["script"], indirect=True)
+def test_a_running_export_says_its_job_and_a_trainings_epoch(finetuned, launched):
+    export = export_web.start_export(finetuned.yaml, finetuned.corrections, finetuned.run)
+    launched[-1].status = JobStatus.PENDING
+    assert export_web.export_status(export)["job"]["queued"] is True
+
+    # A training (distill's) prints the trainer's epoch lines.
+    launched[-1].status = JobStatus.RUNNING
+    (export.output_dir / export_web.LOG_NAME).write_text(
+        "Starting epoch 1 of 100...\nEpoch 1/100 - Loss: 0.5\nStarting epoch 2 of 100...\n")
+    job = export_web.export_status(export)["job"]
+    assert (job["id"], job["queued"], job["epoch"], job["epochs"]) == ("123", False, 2, 100)
+    assert job["log"] == str(export.log_file)
 
 
 @pytest.mark.parametrize("finetuned", ["script"], indirect=True)

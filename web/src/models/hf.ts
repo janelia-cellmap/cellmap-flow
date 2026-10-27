@@ -44,6 +44,17 @@ export class HubStatusError extends Error {
   }
 }
 
+/** A repo, or a folder of one, that holds no copy of its model for the
+ * browser, with a message that says why and what to open instead: a model
+ * a cellmap-flow server published for servers, or a smaller copy its
+ * publish has not added yet (models/index.ts resolve). */
+export class NoBrowserCopyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoBrowserCopyError";
+  }
+}
+
 /** Whether `error` is the Hub saying there is nothing there to read anonymously (HTTP 401 or 404). */
 export function isMissing(error: unknown): error is HubStatusError {
   return error instanceof HubStatusError && (error.status === 401 || error.status === 404);
