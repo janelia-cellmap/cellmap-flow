@@ -587,7 +587,7 @@
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, and the channel named in the row as the one the model trains (Channel, in the training form, for a model of several channels), as Fit to Paint does for the model seeding the paint.</small>
+        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, and the channel named in the row as the Channel the model trains (in the training form, for a model of several channels); Fit to Paint sets both for the model seeding the paint, and its Channel only when none is picked.</small>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
         <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
       </div>
@@ -628,11 +628,12 @@
        Channel). models.js shows it for such a model, its options the
        channels by name and its pick the one kept for that model
        (training-form.js setChannelChoice); training sends it as
-       select_channel, Seed from Prediction reads the same channel, and Use
-       this model sets it to the channel that matched the paint best. Left
-       unpicked, the submit route refuses, saying so. #}
+       select_channel, Seed from Prediction reads the same channel, Use this
+       model sets it to the channel that matched the paint best, and Fit to
+       Paint fills that in only when nothing is picked. Left unpicked, the
+       submit route refuses, saying so. #}
     <div class="mb-3" id="trainChannelGroup" hidden>
-      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: pick the one your paint is for. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too, and Use this model (Which model to start from) picks the one that matched your paint best.">Channel</label>
+      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: pick the one your paint is for. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too, and Use this model (Which model to start from) picks the one that matched your paint best, as Fit to Paint does when none is picked.">Channel</label>
       <select id="trainChannel" class="form-select">
         <option value="" selected>Pick the channel your paint is for</option>
       </select>

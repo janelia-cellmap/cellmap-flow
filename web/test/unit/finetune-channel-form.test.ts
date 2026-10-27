@@ -6,7 +6,8 @@
 // own model, also through the model picker's change, which saves the form
 // while the Channel still holds the old model's channels; and Use this
 // model's pick for a model not picked yet (pickChannel) is its Channel once
-// it is. A wrong channel here trains the wrong one without a word.
+// it is, where Fit to Paint's (fillChannel) only fills a Channel nothing is
+// picked in. A wrong channel here trains the wrong one without a word.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -16,6 +17,7 @@ interface TrainingForm {
   initTrainingForm: () => { save: () => void; trainingParams: () => Record<string, unknown> };
   setChannelChoice: (model: Record<string, unknown> | null) => void;
   pickChannel: (name: string, index: number) => void;
+  fillChannel: (name: string, index: number) => boolean;
 }
 
 class FakeOption {
@@ -108,6 +110,11 @@ it("sends the Channel picked for the model picked, kept per model", async () => 
   expect(form.trainingParams().select_channel).toBe(1);
   pick(run07);
   expect(form.trainingParams().select_channel).toBe(0);
+  expect([module.fillChannel("run07", 1), module.fillChannel("run08", 2)]).toEqual([false, false]);
+  expect(form.trainingParams().select_channel).toBe(0);
+  channel.value = "";
+  expect(module.fillChannel("run07", 1)).toBe(true);
+  expect(form.trainingParams().select_channel).toBe(1);
 
   pick({ name: "affinities", channel_choice: false, output_channels: 3 });
   expect(element("trainChannelGroup").hidden).toBe(true);

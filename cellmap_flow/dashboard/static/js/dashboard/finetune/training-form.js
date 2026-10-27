@@ -226,14 +226,25 @@ export function setChannelChoice(model) {
 }
 
 // Makes channel `index` model `name`'s Channel: kept for it, and shown at
-// once when the select is filled for it, else when it is picked. For rank.js:
-// Use this model and Fit to Paint set the channel that matched the paint
-// best for the model they scored, Use this model before the model picker
-// has it.
+// once when the select is filled for it, else when it is picked. For rank.js's
+// Use this model, the explicit "use what the ranking found": the channel that
+// matched the paint best, for the model it makes the one to finetune, before
+// the model picker has it.
 export function pickChannel(name, index) {
   writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) });
   const select = document.getElementById("trainChannel");
   if (select.dataset.model === name) select.value = String(index);
+}
+
+// pickChannel, only when the Channel is shown for model `name` with nothing
+// picked and has channel `index`: Fit to Paint's, which never overrides a
+// channel the user picked. Returns whether it set it.
+export function fillChannel(name, index) {
+  const select = document.getElementById("trainChannel");
+  const fills = select.dataset.model === name && select.value === ""
+    && Array.from(select.options).some((option) => option.value === String(index));
+  if (fills) pickChannel(name, index);
+  return fills;
 }
 
 // Whether augmentation is worth enabling depends on how many times the run

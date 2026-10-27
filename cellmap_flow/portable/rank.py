@@ -19,9 +19,9 @@ portable/calls.py; numpy and the standard library only. In short:
   beside it.
 - A binary model answers with its best channel, by name and index
   (``channel``, ``channel_index``): the one the Finetune tab's Use this
-  model and Fit to Paint make the training form's Channel (select_channel)
-  for a model of several. An affinity model is scored on its channels
-  together, and answers neither.
+  model makes the training form's Channel (select_channel) for a model of
+  several, and Fit to Paint when none is picked. An affinity model is
+  scored on its channels together, and answers neither.
 - Where the raw under the paint is narrower than NARROW_WINDOW of the
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
