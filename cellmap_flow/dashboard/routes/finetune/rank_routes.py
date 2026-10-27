@@ -305,15 +305,14 @@ def rank_score():
         ]
         # What its layer needs to show a good prediction, as the session's
         # chain stands (portable/rank.py needed_postprocess): the sigmoid its
-        # output needs, and a binary model's threshold fitted to the paint,
-        # which Use this model, Fit to Paint and Use these settings set
-        # beside the input normalization. Not an affinity model's threshold:
-        # its cut-off is on pairs of voxels, and a layer of 0s and 1s for
-        # each pair would leave the watershed it may be given (the model
-        # advice's optional offer) no affinities to work on.
+        # output needs and the threshold fitted to the paint, which Use this
+        # model, Fit to Paint and Use these settings set beside the input
+        # normalization. An affinity model's too: its cut-off is fitted on
+        # its channels' own values, the painted pairs, so a threshold at it
+        # on each channel is the decision the score read (David set Sigmoid
+        # → Threshold 0.076 on mito_aff_resunet_setup_54_2d by hand).
         postprocess = rank.needed_postprocess(
-            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess],
-            None if offsets else score["threshold"])
+            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess], score["threshold"])
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "
