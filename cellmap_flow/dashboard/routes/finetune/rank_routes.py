@@ -52,7 +52,9 @@ retire_annotation_volume): out of the session, kept on disk in its
 corrections dir's ``superseded/``, so the session has the one volume, the
 new one, which its manifest trains on. The carry is
 annotation_core.carry_onto_model, which training's submit carries through
-too, for a model whose grid is not the volume's. POST /api/finetune/rank/input-norm
+too, for a model whose grid is not the volume's; the model's sizes come from
+its server once its start is over (``_served_geometry``, which waits for a
+start still falling back through the GPU queues). POST /api/finetune/rank/input-norm
 {input_norm, postprocess?} makes the row's steps the dashboard's chain
 alone, with no model started and no volume made: Fit to paint's, for the
 model already seeding the paint.
@@ -74,6 +76,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.portable import rank
 from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
 
@@ -495,34 +498,58 @@ def _serving(name, config):
     return job.host, job
 
 
-# The longest Use this model waits for the model it started to answer with
-# its sizes. A server is usually up 10 to 60 s after its job is submitted; a
-# job still queued for a GPU after this keeps starting, and Use this model
-# can be pressed again once it runs.
+# How long Use this model waits for a model's server to answer with its
+# sizes once its start is over (its job has a host). A server is usually up
+# 10 to 60 s after its job is submitted.
 SERVER_WAIT_SECONDS = 180
 
+# The longest Use this model waits in all: while the model's start is still
+# going (its job pending, which jobs/launch.py start_hosts gives each GPU
+# queue PENDING_FALLBACK_SECONDS before it falls back to the next) as long
+# as every queue's fallback takes, then SERVER_WAIT_SECONDS. It waited 180 s
+# whatever the start was doing, the same 180 s gpu_h100 got before its
+# fallback to gpu_h200, and gave up at the second the job moved on.
+START_WAIT_SECONDS = current_site().pending_fallback_seconds * len(current_site().gpu_queues) + SERVER_WAIT_SECONDS
 
-def _served_geometry(name, config, timeout=SERVER_WAIT_SECONDS):
-    """``name``'s geometry, from its server or the geometry cache, waiting up
-    to ``timeout`` seconds for the server Use this model just started; never
-    from the model built in the dashboard.
+
+def _served_geometry(name, config, timeout=START_WAIT_SECONDS):
+    """``name``'s geometry, from its server or the geometry cache
+    (geometry_cache.known_geometry), waiting for the server Use this model
+    just started; never from the model built in the dashboard.
+
+    It waits while the model's start is going (services/launch.py
+    ``launching``: its launch thread waits for the job's host, through every
+    queue's fallback), then SERVER_WAIT_SECONDS more for its server to
+    answer, ``timeout`` seconds at most in all. A start that ended without a
+    server (no job of the model's running) ends the wait at once, with why
+    it failed (``start_error``).
 
     resolve_model_geometry builds the model here when neither knows it, and
     for a model whose metadata names two blocks (jrc_mus-livers' 216 and 288,
     which only running it tells apart) that loaded its TorchScript on the
     dashboard's CPU and ran it at 288^3: the dashboard died there
     ("Segmentation fault"), and the page had "Failed to fetch". Raises
-    RuntimeError when the server has not answered in time."""
+    RuntimeError when the server has not answered in time, or will not."""
+    from cellmap_flow.dashboard.services import launch
     from cellmap_flow.models import geometry_cache
 
-    deadline = time.time() + timeout
+    started = time.time()
+    ceiling = started + timeout
+    deadline = min(started + SERVER_WAIT_SECONDS, ceiling)
     while True:
-        # resolve_model_geometry's first two sources, as it asks them.
-        geometry = geometry_cache.model_geometry_config(name) or geometry_cache.load_cached_geometry(config)
+        geometry = geometry_cache.known_geometry(name, config)
         if geometry is not None:
             return geometry
-        if time.time() >= deadline:
-            raise RuntimeError(f"{name}'s server did not answer with its sizes within {timeout // 60} minutes "
+        now = time.time()
+        if launch.launching(name):
+            # Still starting: queued, falling back, or loading its model.
+            deadline = min(now + SERVER_WAIT_SECONDS, ceiling)
+        elif name not in launch.running_names():
+            why = launch.start_error(name)
+            raise RuntimeError(f"{name}'s server did not start" + (f": {why}" if why else "")
+                               + "; start it again on the Models tab, then press Use this model again")
+        if now >= deadline:
+            raise RuntimeError(f"{name}'s server did not answer with its sizes within {round((now - started) / 60)} minutes "
                                "(its job may be waiting for a GPU); it keeps starting: press Use this model "
                                "again once it is running")
         time.sleep(3)

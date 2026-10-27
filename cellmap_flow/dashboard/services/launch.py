@@ -17,6 +17,9 @@
   models* list, every model running or starting with where it came from,
   and its ✕: stop that one model and take its layer away, whatever else is
   ticked on the tab and not submitted.
+- ``launching()`` / ``start_error()``: whether a model's start is still
+  going, and why its last one failed, which the Finetune tab's Use this
+  model waits on (routes/finetune/rank_routes.py _served_geometry).
 """
 
 from cellmap_flow.config.yaml import ConfigError
@@ -73,6 +76,8 @@ def _start(config):
             logger.info(f"Stopped '{name}' while it was starting: it was removed from the loaded models")
             return None
         logger.error(f"Could not start model '{name}': {e}")
+        with _launching_lock:
+            _start_errors[name] = str(e)
         return None
     if _withdrawn():
         logger.info(f"Stopping '{name}', which was removed from the loaded models while it was starting")
@@ -295,6 +300,12 @@ class _Launch:
 # The launch the current thread runs, for _start to ask whether it was withdrawn.
 _this_launch = threading.local()
 
+# Why each model's last start failed (its JobStartError's message: no queue
+# took the job, it died loading), by name, until it is started again: the
+# Finetune tab's Use this model, which waits for the start, says why it
+# gave up (start_error).
+_start_errors: dict = {}
+
 
 def _withdrawn() -> bool:
     """Whether the launch this thread runs has been withdrawn (``remove_model``)."""
@@ -309,6 +320,7 @@ def _launch(name, target, *args, daemon=False):
     launch = _Launch(name)
     with _launching_lock:
         _launching[name] = launch
+        _start_errors.pop(name, None)
 
     def run():
         _this_launch.current = launch
@@ -331,6 +343,21 @@ def running_names() -> set:
     with _launching_lock:
         launching = set(_launching)
     return {job.model_name for job in get_session().jobs} | launching
+
+
+def launching(name) -> bool:
+    """Whether ``name``'s start is still going: its launch thread waits for
+    its job's host (jobs/launch.py start_hosts: the job pending on a GPU
+    queue, falling back to the next, or its server loading the model)."""
+    with _launching_lock:
+        return name in _launching
+
+
+def start_error(name):
+    """Why ``name``'s last start failed, or None: it has not failed, or was
+    started again since."""
+    with _launching_lock:
+        return _start_errors.get(name)
 
 
 def _owned_by_finetune(job) -> bool:

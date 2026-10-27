@@ -485,9 +485,11 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(geometry_cache, "load_cached_geometry", lambda config: None)
     monkeypatch.setattr(geometry_cache, "build_here", lambda config: pytest.fail("built in the dashboard"))
     monkeypatch.setattr(rank_routes.time, "sleep", lambda seconds: None)
-    # The chain set and the channel shown when the model is started, without a raw to redraw the viewer from.
+    # The chain set and the channel shown when the model is started, without a raw to redraw the viewer from;
+    # its start goes on until its server answers.
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
         (name, session.pipeline_spec.to_json_data(), session.shown_channel(name))))
+    monkeypatch.setattr(launch, "launching", lambda name: name == "mito_16nm")
     monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
@@ -506,6 +508,33 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]}, 2)]
     assert [c.name for c in session.models_config][-1] == "mito_16nm"
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
+
+
+@pytest.mark.parametrize("start", [pytest.param("falls back", id="waits-while-its-job-falls-back-through-the-queues"),
+                                   pytest.param("fails", id="gives-up-when-its-start-fails")])
+def test_use_this_model_waits_for_the_models_start_not_three_minutes(monkeypatch, start):
+    """setup_54_2d's job sat 180 s on gpu_h100 and fell back to gpu_h200 at
+    the second Use this model gave up waiting for its sizes. Here its start
+    falls back for 400 s and then answers, or fails at 100 s."""
+    from cellmap_flow.dashboard.services import launch
+    from cellmap_flow.models import geometry_cache
+
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(rank_routes, "time", SimpleNamespace(time=lambda: clock.now,
+                                                             sleep=lambda s: setattr(clock, "now", clock.now + s)))
+    sizes = SimpleNamespace(read_shape=[16, 8896, 8896])
+    monkeypatch.setattr(geometry_cache, "known_geometry",
+                        lambda name, config: sizes if start == "falls back" and clock.now >= 400 else None)
+    monkeypatch.setattr(launch, "launching", lambda name: clock.now < (400 if start == "falls back" else 100))
+    monkeypatch.setattr(launch, "running_names", lambda: {"setup_54_2d"} if launch.launching("setup_54_2d") else set())
+    monkeypatch.setattr(launch, "start_error", lambda name: "No GPU queue accepted setup_54_2d")
+
+    if start == "falls back":
+        assert rank_routes._served_geometry("setup_54_2d", None) is sizes
+    else:
+        with pytest.raises(RuntimeError, match="No GPU queue accepted"):
+            rank_routes._served_geometry("setup_54_2d", None)
+        assert clock.now < rank_routes.SERVER_WAIT_SECONDS, "not after waiting out the 3 minutes"
 
 
 def test_the_sigmoid_a_ranked_models_layer_needs_and_nothing_else():
