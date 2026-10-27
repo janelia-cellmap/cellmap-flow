@@ -94,7 +94,7 @@ def _show(job, st_data):
     layer = prediction_layer(
         job.model_name, job.host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
         shader=session.shaders.get(job.model_name), shader_controls=session.shader_controls.get(job.model_name),
-        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
+        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], channel=session.shown_channel(job.model_name),
     )
     with session.viewer.txn() as s:
         # A model started again keeps what the user set on its layer.

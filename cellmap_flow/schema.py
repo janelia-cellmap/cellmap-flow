@@ -180,6 +180,7 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/rank/score": "both",
     "POST /api/finetune/rank/use": "both",
     "POST /api/finetune/rank/input-norm": "both",
+    "POST /api/finetune/channel": "both",
     # Label it
     "GET /api/finetune/view-labels/sources": "both",
     "POST /api/finetune/view-labels/seed": "both",

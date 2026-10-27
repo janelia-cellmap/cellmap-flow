@@ -26,8 +26,9 @@ rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
   ``raw``, ``neuroglancer_url``, ``dashboard_url``, ``shaders``,
-  ``shader_controls``, ``extra_layers``; and ``layer_blob()``, the chain as
-  every prediction layer's URL carries it.
+  ``shader_controls``, ``extra_layers``, ``shown_channels``; and
+  ``layer_blob()``, the chain as every prediction layer's URL carries it,
+  and ``shown_channel()``, the channel a model's layer opens on.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -70,7 +71,7 @@ class Session:
     # and finetune_job_manager properties serve: a slot and a property of one
     # name cannot coexist.
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
-                 "shader_controls", "extra_layers",
+                 "shader_controls", "extra_layers", "shown_channels",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
                  "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_ids",
@@ -106,6 +107,11 @@ class Session:
         # data: a YAML's extra_layers, built by `cellmap_flow yaml`. The
         # viewer-layer routes drop or rename their entries.
         self.extra_layers = {}
+        # {model name: channel index}: the channel the Finetune tab picked to
+        # show of a model of several (POST /api/finetune/channel: Use this
+        # model's, the training form's Channel), which its layer, and its
+        # finetunes', open on (shown_channel).
+        self.shown_channels = {}
 
         # The models
         # The configured models (ModelConfig).
@@ -223,6 +229,19 @@ class Session:
         url = self.dashboard_url or dashboard_url
         extras = {"dashboard_url": url} if url else {}
         return spec.to_url_blob(**extras, digest=spec.digest())
+
+    def shown_channel(self, model_name):
+        """The channel ``model_name``'s layer opens on (viewer.layers
+        prediction_layer's ``channel``): the one picked for it
+        (``shown_channels``), else the one picked for the model it is a
+        finetune of, as finetune_layers names each iteration
+        (``<base>_finetuned...``), so a finetune of mito's channel shows mito
+        too; None when none was picked (the layer opens where its server
+        says)."""
+        if model_name in self.shown_channels:
+            return self.shown_channels[model_name]
+        bases = [base for base in self.shown_channels if (model_name or "").startswith(f"{base}_finetuned")]
+        return self.shown_channels[max(bases, key=len)] if bases else None
 
     # The models
     @property

@@ -805,6 +805,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/rank/score", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/rank/use", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/rank/input-norm", availability: "both", request: null },
+  { method: "POST", path: "/api/finetune/channel", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/view-labels/sources", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/view-labels/seed", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/view-labels/background", availability: "both", request: null },
