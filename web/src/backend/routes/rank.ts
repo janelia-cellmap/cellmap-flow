@@ -31,9 +31,9 @@
 // input_norm, with where they came from; and why those: what each channel
 // of a binary model matched, channel_matches, and what the other
 // normalizations tried matched, input_norm_others), with the
-// postprocessing its layer needs to show its output as a probability
-// (rank.display_postprocess: a sigmoid added for logits when the session
-// has none, one taken away from an output that has its own), or null.
+// postprocessing its layer needs to show a good prediction
+// (rank.needed_postprocess: the sigmoid its output needs, a second one
+// taken away, and a threshold at the row's), or null.
 // POST /api/finetune/rank/use {name, select_channel?, input_norm?,
 // postprocess?} makes the one picked the model to finetune, the row's
 // channel first made the one its layer shows (select_channel, the row's
@@ -81,7 +81,7 @@ import { dtypeRange } from "../../viewer/display";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
-import { blobFor, declaredInputNorm, pageBase, serveModels, setChain } from "../serving";
+import { blobFor, declaredInputNorm, pageBase, PORTABLE, serveModels, setChain } from "../serving";
 import { notAChannel, pickShownChannel, readSelectChannel } from "./finetune";
 import { resolveRef } from "./models";
 import { readChain } from "./pipeline";
@@ -122,7 +122,7 @@ export function rankRoutes(router: Router): void {
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
   // (score_row's, portable/rank.py), the postprocessing its layer needs
-  // (postprocess: display_postprocess's steps, or null), how long it took,
+  // (postprocess: needed_postprocess's steps, or null), how long it took,
   // and a note when some painted chunks lie where the model's level does
   // not reach. Refused without a dataset, a volume or paint (400), and for
   // a model the catalog does not have (404).
@@ -194,8 +194,20 @@ export function rankRoutes(router: Router): void {
       // What the other tries matched (those that scored), beside it in the row.
       const others = reads.flatMap((r, i) => (i === best || !r.score ? [] : [{ from: tries[i].from, matches: r.score.matches }]));
       const score = (await rankRow(ctx, kept.score, alt, norm, range, tries[best].from, others))!;
-      const postprocess = await ctx.infer.python<Step[] | null>(`${PORTABLE}:display_postprocess`,
-        { output_class: kept.served.info.output_class ?? null, postprocess: ctx.session.state.chain.postprocess, affinity: hasAffinityChannels(entry) });
+      // What its layer needs to show a good prediction as the session's chain
+      // stands (rank.needed_postprocess): the sigmoid its output needs and a
+      // threshold at the row's, fitted to the paint, which Use this model,
+      // Fit to Paint and Use these settings set beside the input
+      // normalization. An affinity model's too: its cut-off is fitted on the
+      // affinities themselves, and the chain into a segmentation stays the
+      // Processing tab's to add.
+      const postprocess = await ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`,
+        { output_class: kept.served.info.output_class ?? null, postprocess: ctx.session.state.chain.postprocess, threshold: score.threshold });
+      // Remembered as what the paint fitted this model to (the session's
+      // rankFits), so the model advice keeps to these steps once they are
+      // the chain's, and the Processing tab says where the postprocessing
+      // came from.
+      await ctx.session.update({ rankFits: { ...ctx.session.state.rankFits, [entry.name]: { input_norm: score.input_norm, postprocess } } });
       const notes = [
         ...(kept.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${kept.blocks} blocks of its output the paint reaches, spread over it`] : []),
         ...(kept.outside ? [`${kept.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
@@ -485,9 +497,6 @@ function forEachPainted(chunk: PaintedChunk, origin: number[], at: Placement, vi
 function compareIndex(p: number[], q: number[]): number {
   return p[0] - q[0] || p[1] - q[1] || p[2] - q[2];
 }
-
-/** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
-const PORTABLE = "cellmap_flow.portable.calls";
 
 /** A model's tallies of the paint so far, as the Python answers them and takes them back; nothing here reads them. */
 type Tallies = Record<string, unknown>[];

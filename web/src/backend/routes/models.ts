@@ -9,12 +9,12 @@
 // Python route starts and kills inference servers. The BioImage Model Zoo
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
-import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
+import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, ModelEntry, RankFit, ServedModel, SessionState, Step } from "../../contracts";
 import { compileExpression } from "../../infer/expression";
 import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, stepNames, unserveModel } from "../serving";
+import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
@@ -151,8 +151,12 @@ export function modelRoutes(router: Router): void {
     if ("error" in resolved) return badRequest(resolved.error);
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
     // A chain with no input normalizers takes the ones the first model
-    // started declares, before it is served (serving.ts setDeclaredInputNorm).
-    await setDeclaredInputNorm(ctx, resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id)));
+    // started declares, and one with no postprocessing what the first
+    // model's output needs, before it is served (serving.ts
+    // setDeclaredInputNorm, setNeededPostprocess).
+    const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
+    await setDeclaredInputNorm(ctx, starting);
+    await setNeededPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
     return json(200, {
@@ -167,13 +171,21 @@ export function modelRoutes(router: Router): void {
 
   // The Loaded models list (routes/models.py's /api/models/loaded), and its
   // ✕: stop serving that one model, whatever else is ticked on the tab.
-  // Beside it, the chain the models run through and the model whose
-  // declared input normalization its input part is: the page reads them
-  // after every model change, since a model's start can set that
-  // normalization (serving.ts setDeclaredInputNorm).
+  // Beside it, the chain the models run through, the model whose declared
+  // input normalization its input part is, and the model whose settings its
+  // postprocessing is (postprocess_from) with whether the ranking fitted
+  // them to the paint (postprocess_fitted; false: the model's start set
+  // what its output needs, a sigmoid for logits; both null when no loaded
+  // model's: postprocessSetBy). The page reads them after every model
+  // change, since a model's start can set either part (serving.ts
+  // setDeclaredInputNorm, setNeededPostprocess).
   router.get("/api/models/loaded", async (_req, _params, ctx) => {
     const { chain, models } = ctx.session.state;
-    return json(200, { success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models) });
+    const post = postprocessSetBy(ctx.session.state);
+    return json(200, {
+      success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models),
+      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null,
+    });
   });
 
   router.post("/api/models/remove", async (req, _params, ctx) => {
@@ -227,15 +239,23 @@ export function modelRoutes(router: Router): void {
     if (!model) return badRequest(`${ref} is not a model the browser can run`);
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
-    // As Submit: a chain with no input normalizers takes the ones it declares.
-    if (!ctx.session.state.models.some((m) => m.id === model.id)) await setDeclaredInputNorm(ctx, [model]);
+    // As Submit: a chain with no input normalizers takes the ones it
+    // declares, one with no postprocessing what its output needs.
+    if (!ctx.session.state.models.some((m) => m.id === model.id)) {
+      await setDeclaredInputNorm(ctx, [model]);
+      await setNeededPostprocess(ctx, [model], entries);
+    }
     await serveModels(ctx, entries, ctx.session.state.chain);
     await ctx.session.update({ models: entries });
     return json(200, { success: true, name: model.name });
   });
 
+  // Without model_advice.py's `starting` and `digest`: a model's start here
+  // sets the chain before its Submit answers, and the page reads the chain
+  // again after every model change, so it has no later change to look for.
   router.get("/api/model_advice", (_req, _params, ctx) => {
-    return json(200, { success: true, models: ctx.infer.served().map((s) => advice(s, ctx.session.state.chain)) });
+    const { chain, rankFits } = ctx.session.state;
+    return json(200, { success: true, models: ctx.infer.served().map((s) => advice(s, chain, rankFits[s.entry.name])) });
   });
 }
 
@@ -312,8 +332,15 @@ export function inputNormDifferences(configured: Step[], declared: Record<string
  * manifest declares, which suggest_input_norm treats as declared metadata:
  * high confidence, and a match when the configured steps are those in
  * that order with the declared values (inputNormDifferences says where
- * a value is not). */
-export function advice(served: ServedModel, chain: Chain) {
+ * a value is not).
+ *
+ * The input normalization the ranking fitted this model to (`fit`, the
+ * session's rankFits for it: the steps its last score was read through,
+ * which Use this model, Fit to Paint and Use these settings set, stretched
+ * to the raw under the paint, say) matches as it is, while it is the
+ * chain's (input_norm_fitted): suggested the declared ones back, a second
+ * Apply undid the ranking. */
+export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const manifest = served.entry.manifest;
   const declared: Record<string, Record<string, unknown>> = {};
   for (const step of manifest.input_norm ?? []) {
@@ -322,7 +349,8 @@ export function advice(served: ServedModel, chain: Chain) {
   }
   const order = Object.keys(declared);
   const configuredNorm = stepNames(chain.input_norm);
-  const differences = inputNormDifferences(chain.input_norm, declared);
+  const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
+  const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
   const output = manifest.output ?? "";
   return {
     model: served.entry.name,
@@ -344,7 +372,41 @@ export function advice(served: ServedModel, chain: Chain) {
     input_norm_suggestion: order.length
       ? { input_norm: declared, order, reason: "Declared in the model's manifest (cellmap/onnx-web-models)", confidence: "high" }
       : { input_norm: null, order: [], reason: "The model's manifest does not say", confidence: "low" },
+    input_norm_fitted: fitted,
     input_norm_differences: differences,
-    input_norm_matches: order.length > 0 && JSON.stringify(configuredNorm) === JSON.stringify(order) && differences.length === 0,
+    input_norm_matches: fitted || (order.length > 0 && JSON.stringify(configuredNorm) === JSON.stringify(order) && differences.length === 0),
   };
+}
+
+/** Whether two chains are the same steps with the same parameters, each
+ * value compared as sameValue compares it ("0" is 0): portable/rank.py's
+ * same_steps, which the server's advice and postprocess_set_by compare
+ * with. */
+function sameSteps(a: readonly Step[], b: readonly Step[]): boolean {
+  return a.length === b.length && a.every((x, i) => {
+    const y = b[i], keys = Object.keys(x);
+    return keys.length === Object.keys(y).length && keys.every((k) => k in y && sameValue(x[k], y[k]));
+  });
+}
+
+/** The loaded model whose settings the session chain's postprocessing is,
+ * step for step (sameSteps), with whether the ranking fitted them to the
+ * paint (routes/pipeline.py's postprocess_set_by): the ranking's first (a
+ * model's rankFits, what Use this model, Fit to Paint and Use these
+ * settings set, the sigmoid and the threshold the paint is fitted best
+ * at), else a model's start's (startPostprocess, serving.ts
+ * setNeededPostprocess: the sigmoid its logits need); null when it is no
+ * loaded model's, or the chain has none. An Apply of other steps since is
+ * the user's, and nothing has to forget it. */
+function postprocessSetBy(state: SessionState): { model: string; fitted: boolean } | null {
+  const live = state.chain.postprocess;
+  if (!live.length) return null;
+  const names = state.models.map((m) => m.name);
+  const ranked = names.find((name) => {
+    const fitted = state.rankFits[name]?.postprocess;
+    return fitted && sameSteps(fitted, live);
+  });
+  if (ranked) return { model: ranked, fitted: true };
+  const started = state.startPostprocess;
+  return started && names.includes(started.model) && sameSteps(started.postprocess, live) ? { model: started.model, fitted: false } : null;
 }

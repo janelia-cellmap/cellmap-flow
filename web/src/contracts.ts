@@ -123,6 +123,26 @@ export interface SessionState {
    * every listing after lists them under Added. The server's `rank_added`
    * on its dashboard session. */
   rankAdded: string[];
+  /** What the ranking's last score of each model fitted to the paint, by
+   * the model's name: its row's input normalization and the postprocessing
+   * its layer needs (null when the chain needed none), which Use this
+   * model, Fit to Paint and Use these settings set from (rank.ts's score).
+   * The model advice does not suggest another input normalization over
+   * them, and GET /api/models/loaded says the chain's postprocessing was
+   * fitted to the paint while it is theirs. The server's `rank_fits` on its
+   * dashboard session. */
+  rankFits: Record<string, RankFit>;
+  /** The postprocessing a model's start set on a chain with none, and the
+   * model (serving.ts setNeededPostprocess), which GET /api/models/loaded
+   * says the chain's came from while it is still that; null until a start
+   * sets any. The server's `start_postprocess`. */
+  startPostprocess: { model: string; postprocess: Step[] } | null;
+}
+
+/** What a model's score fitted to the paint (SessionState.rankFits). */
+export interface RankFit {
+  input_norm: Step[];
+  postprocess: Step[] | null;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that

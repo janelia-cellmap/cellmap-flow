@@ -15,7 +15,7 @@
 // merges a change in, persists it and tells the listeners. Without
 // sessionStorage (a test, or a browser that blocks storage) the session
 // lives in memory for the page's life and says so in the console.
-import type { Chain, SessionState, SessionStore } from "../contracts";
+import type { Chain, RankFit, SessionState, SessionStore, Step } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 
 /** The session's key in the tab's sessionStorage. */
@@ -32,7 +32,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [] };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -53,7 +53,25 @@ export function completeState(stored: unknown): SessionState {
     paintVolume: typeof s.paintVolume === "string" ? s.paintVolume : null,
     shownChannels: shownChannelsOf(s.shownChannels),
     rankAdded: Array.isArray(s.rankAdded) ? s.rankAdded.filter((id): id is string => typeof id === "string") : [],
+    rankFits: rankFitsOf(s.rankFits),
+    startPostprocess: startPostprocessOf(s.startPostprocess),
   };
+}
+
+/** A stored `rankFits` made whole: the entries that are a fit (steps a
+ * list, the postprocessing a list or null); {} for anything else, which
+ * only forgets what the ranking fitted until the next score. */
+function rankFitsOf(stored: unknown): Record<string, RankFit> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored as Record<string, Partial<RankFit> | null>).filter(
+    ([, f]) => f && Array.isArray(f.input_norm) && (f.postprocess === null || Array.isArray(f.postprocess)))) as Record<string, RankFit>;
+}
+
+/** A stored `startPostprocess` made whole, or null when it is not one. */
+function startPostprocessOf(stored: unknown): SessionState["startPostprocess"] {
+  const s = stored as { model?: unknown; postprocess?: unknown } | null;
+  return s && typeof s === "object" && typeof s.model === "string" && Array.isArray(s.postprocess)
+    ? { model: s.model, postprocess: s.postprocess as Step[] } : null;
 }
 
 /** A stored `shownChannels` made whole: the entries that are a channel's
