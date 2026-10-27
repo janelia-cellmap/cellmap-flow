@@ -433,7 +433,7 @@ export function initRank() {
           training && training.name === row.name && h("span", { class: "badge bg-info ms-1" }, "training this")),
         // The buttons go under the name when the column is too narrow for both.
         h("div", { class: "d-flex gap-1 flex-shrink-0 ms-auto" },
-          candidate && scored && !candidate.volume_model && useButton(candidate, row),
+          candidate && scored && (candidate.volume_model ? settingsButton(candidate, row) : useButton(candidate, row)),
           candidate && showButton(candidate))),
       scored
         ? h("div", {}, h("strong", {}, `${percent(row.matches)} match`),
@@ -479,6 +479,59 @@ export function initRank() {
     if (switching === candidate.name) setBusy(button, true, "Copying paint...");
     button.addEventListener("click", () => useModel(candidate, row));
     return button;
+  }
+
+  // The row of the model the volume is painted for has no Use this model
+  // (there is no other volume to make): this sets what its score was read
+  // at instead, as Use this model would (applyRow).
+  function settingsButton(candidate, row) {
+    const button = h("button", {
+      type: "button", class: `btn btn-sm ${row.best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null || fitting,
+      title: "Set what this model was scored at: its input normalization, the sigmoid its output needs, Seed from Prediction's threshold and its Channel. Your volume is painted for it already",
+    }, "Use these settings");
+    button.addEventListener("click", async () => {
+      if (running || switching !== null || fitting) return;
+      fitting = true;
+      showResults();
+      try {
+        await applyRow(candidate.name, row, true);
+      } catch (e) {
+        sayFit(`Could not set ${candidate.name}'s settings: ${e.message || e}`, "danger");
+      } finally {
+        fitting = false;
+        showResults();
+      }
+    });
+    return button;
+  }
+
+  // Sets what `row` (model `name`'s score) was read at, with no new volume:
+  // the input normalization and the sigmoid first (POST
+  // /api/finetune/rank/input-norm, when they are not the session's as they
+  // stand), then the threshold, which was fitted under them, and the
+  // Channel: made the row's channel when `explicit` (Use these settings, a
+  // click on that row), else filled only when none is picked (Fit to
+  // Paint's). Says what it set on the line under Label it's buttons;
+  // whether it could.
+  async function applyRow(name, row, explicit) {
+    if (changesInput(row) || changesOutput(row)) {
+      const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: row.input_norm, ...chainParts(row) });
+      if (!set.success) {
+        sayFit(`Could not set the input normalization that fits ${name} to your paint: ${set.error}`, "danger");
+        return false;
+      }
+      // The Processing tab's input normalization shows it as it now runs
+      // (main.js reads the chain again), so a later Apply keeps it.
+      announce(CHAIN_CHANGED_EVENT);
+    }
+    installThreshold(name, row.threshold);
+    let channel = null;
+    if (Number.isInteger(row.channel_index)) {
+      if (explicit) pickChannel(name, row.channel_index);
+      if (explicit || fillChannel(name, row.channel_index)) channel = channelLabel(row.channel, row.channel_index);
+    }
+    sayFit(fittedText(name, row, channel), "success");
+    return true;
   }
 
   // Makes `candidate` the model to finetune, as its score (`row`) found it
@@ -644,19 +697,7 @@ export function initRank() {
         if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
         return;
       }
-      if (changesInput(d) || changesOutput(d)) {
-        const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: d.input_norm, ...chainParts(d) });
-        if (!set.success) {
-          sayFit(`Could not set the input normalization that fits ${name} to your paint: ${set.error}`, "danger");
-          return;
-        }
-        // The Processing tab's input normalization shows it as it now runs
-        // (main.js reads the chain again), so a later Apply keeps it.
-        announce(CHAIN_CHANGED_EVENT);
-      }
-      installThreshold(name, d.threshold);
-      const channel = Number.isInteger(d.channel_index) && fillChannel(name, d.channel_index) ? channelLabel(d.channel, d.channel_index) : null;
-      sayFit(fittedText(name, d, channel), "success");
+      await applyRow(name, d, false);
     } catch (e) {
       sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");
     } finally {
