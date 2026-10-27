@@ -113,6 +113,18 @@ def test_a_finetuned_file_says_its_geometry_itself(finetuned, ort):
     assert model.declared_input_norm() == FINETUNED_MANIFEST["input_norm"]
 
 
+def test_what_its_output_is_is_read_off_the_files_graph_without_onnx(finetuned, ort, monkeypatch):
+    """head.onnx ends in a Conv, then an Unsqueeze: logits, as the exports
+    are, read off the file's graph without the onnx package. The stand-in
+    session answers zeros, which the output probe read as probabilities."""
+    from cellmap_flow.inference.runner import ModelRunner
+    from cellmap_flow.portable.label_it import UNBOUNDED
+
+    monkeypatch.setitem(sys.modules, "onnx", None)  # importing it fails
+    runner = ModelRunner(OnnxModelConfig(path=str(finetuned)))
+    assert (runner.output_class, runner.output_class_from, runner.output_op) == (UNBOUNDED, "graph", "Conv")
+
+
 # --- a Hugging Face folder ---------------------------------------------------------------------
 
 SETUP_54 = {
