@@ -487,13 +487,17 @@ Apply, or ``PUT /api/pipeline``, and the layers
 
 The one other change of the chain a model makes: a model started from the
 Models tab when the chain has no input normalizers sets the ones it declares
-(``ModelConfig.declared_input_norm``, an onnx model's manifest), before its
-layer is drawn (``routes/pipeline.set_declared_input_norm``, through
+(``ModelConfig.declared_input_norm``: an onnx model's manifest, or a
+cellmap-models export's metadata.json ``input_normalization``, read by
+``serving/probe.metadata_input_norm``), or, for a CellMap or DaCapo model
+that declares none, their convention ([-1, 1]), before its layer is drawn
+(``routes/pipeline.set_declared_input_norm``, through
 ``_set_chain_and_redraw``; the browser's ``serving.ts``
-``setDeclaredInputNorm``, through ``setChain``). After every model change
-the page reads the chain back from ``GET /api/models/loaded``'s
-``pipeline``, and a list whose chain the backend changed shows it, saying
-so under its heading.
+``setDeclaredInputNorm``, through ``setChain``, whose models all declare
+theirs). After every model change the page reads the chain back from
+``GET /api/models/loaded``'s ``pipeline``, and a list whose chain the
+backend changed shows it, saying so above it, and whether the model
+declared it (``input_norm_declared``).
 
 Launching a model server
 ~~~~~~~~~~~~~~~~~~~~~~~~

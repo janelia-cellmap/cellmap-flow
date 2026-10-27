@@ -20,7 +20,7 @@ def verdict(dashboard, monkeypatch):
     from cellmap_flow.dashboard.routes import model_advice
 
     monkeypatch.setattr(model_advice, "_fetch_probe", lambda host: {"available": False})
-    monkeypatch.setattr(model_advice, "_raw_dtype_and_range", lambda path: ("uint8", (0, 255)))
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0, 255)))
 
     def verdict(model_config, input_norm=()):
         session = get_session()

@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 model_advice_bp = Blueprint("model_advice", __name__)
 
-def _model_metadata(model_config) -> dict:
+def model_metadata(model_config) -> dict:
     """Best-effort metadata for a model config, from whatever source has it."""
     meta = {}
     try:
@@ -52,19 +52,20 @@ def _model_metadata(model_config) -> dict:
     return meta
 
 
-def _declared_input_norm(model_config):
+def _declared_input_norm(model_config, data_range):
     """The input normalization a model declares itself
-    (``ModelConfig.declared_input_norm``), in suggest_input_norm's
-    ``declared`` form (``{name: params}``, in order), or None; None too for
-    a job whose model is not among the session's.
+    (``ModelConfig.declared_input_norm``, for raw data spanning
+    ``data_range``), in suggest_input_norm's ``declared`` form (``{name:
+    params}``, in order), or None; None too for a job whose model is not
+    among the session's.
 
-    An onnx model's manifest declares the steps the browser feeds it through;
-    no other type declares any.
+    An onnx model's manifest declares the steps the browser feeds it through,
+    and a cellmap-models export's metadata.json the range the model reads.
     """
     if model_config is None:
         return None
     norm = {}
-    for step in model_config.declared_input_norm() or []:
+    for step in model_config.declared_input_norm(data_range=data_range) or []:
         if isinstance(step, dict) and step.get("name"):
             norm[step["name"]] = {k: v for k, v in step.items() if k != "name"}
     return norm or None
@@ -75,7 +76,7 @@ def _declared_input_norm(model_config):
 _raw_range_cache = {}
 
 
-def _raw_dtype_and_range(dataset_path):
+def raw_dtype_and_range(dataset_path):
     """The dtype and value range of the raw data, for scaling it to the model.
 
     Integer data has an exact range from its dtype. Float data does not -- the
@@ -109,6 +110,33 @@ def _raw_dtype_and_range(dataset_path):
     return dtype_name, value_range
 
 
+def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
+    """What ``model_config``'s input normalization should be on raw data of
+    ``raw_dtype`` spanning ``raw_range``: suggest_input_norm's suggestion,
+    and the declaration it holds the chain to (_declared_input_norm), or
+    None when the model declares none. ``meta`` is model_metadata's for it
+    ({} for a job whose model is not among the session's).
+
+    The page shows the suggestion, and a model's start sets it on a chain
+    with no input normalization when it is the model's declaration or the
+    convention for its kind of model (routes.pipeline.set_declared_input_norm).
+    """
+    if getattr(model_config, "normalizes_input", False):
+        # No suggestion, so the page shows none: [-1, 1] was suggested
+        # for a Cellpose model, which normalizes each slice itself.
+        return {"input_norm": None, "order": [], "reason": "The model normalizes its input itself",
+                "confidence": "high"}, None
+    declared = _declared_input_norm(model_config, raw_range)
+    suggestion = suggest_input_norm(
+        framework=meta.get("framework"),
+        raw_dtype=raw_dtype,
+        declared=declared,
+        source=meta.get("repo") or meta.get("folder_path"),
+        data_range=raw_range,
+    )
+    return suggestion, declared
+
+
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
     return fetch_model_info(host)
@@ -126,7 +154,7 @@ def model_advice():
     ]
     configured_norm = [step.get("name") for step in configured_steps]
 
-    raw_dtype, raw_range = _raw_dtype_and_range(session.dataset_path)
+    raw_dtype, raw_range = raw_dtype_and_range(session.dataset_path)
 
     by_name = {}
     for cfg in session.models_config or []:
@@ -138,7 +166,7 @@ def model_advice():
     results = []
     for job in session.jobs or []:
         name = getattr(job, "model_name", None)
-        meta = _model_metadata(by_name[name]) if name in by_name else {}
+        meta = model_metadata(by_name[name]) if name in by_name else {}
         probe = _fetch_probe(getattr(job, "host", None))
 
         # Only folder-backed models carry metadata.json; a script model
@@ -181,30 +209,12 @@ def model_advice():
             )
 
         # Input side is a declared convention, not something we can observe.
-        declared = _declared_input_norm(by_name.get(name))
-        if getattr(by_name.get(name), "normalizes_input", False):
-            # No suggestion, so the page shows none: [-1, 1] was suggested
-            # for a Cellpose model, which normalizes each slice itself.
-            declared = None
-            entry["input_norm_suggestion"] = {
-                "input_norm": None,
-                "order": [],
-                "reason": "The model normalizes its input itself",
-                "confidence": "high",
-            }
-        else:
-            entry["input_norm_suggestion"] = suggest_input_norm(
-                framework=meta.get("framework"),
-                raw_dtype=raw_dtype,
-                declared=declared,
-                source=meta.get("repo") or meta.get("folder_path"),
-                data_range=raw_range,
-            )
+        suggestion, declared = input_norm_suggestion(by_name.get(name), meta, raw_dtype, raw_range)
+        entry["input_norm_suggestion"] = suggestion
         # A "low" confidence suggestion is just the dtype default, made without
         # knowing the training framework -- reporting a mismatch against it
         # would flag a correct hand-tuned config as wrong. Say "unknown"
         # instead, so callers can stay quiet rather than mislead.
-        suggestion = entry["input_norm_suggestion"]
         # Order-sensitive on purpose: LambdaNormalizer("x*2-1") before the
         # rescale computes something quite different from after it, so the
         # same two normalizers in the wrong sequence is not a match. A

@@ -69,13 +69,13 @@ function say(notice, text) {
 // fills a list in and calls this Apply.
 //
 // The backend can change its chain itself: a model's start sets the input
-// normalization the model declares when the chain had none
-// (routes/pipeline.py set_declared_input_norm, web/src/backend/serving.ts
-// setDeclaredInputNorm), and Use this model stretches the raw. So after
-// every model change (MODELS_CHANGED_EVENT) the chain is read again, from
-// GET /api/models/loaded's `pipeline`, and a list whose chain the backend
-// changed shows the new one, as applied, with a notice under its heading
-// saying so.
+// normalization the model declares, or its kind of model's convention, when
+// the chain had none (routes/pipeline.py set_declared_input_norm,
+// web/src/backend/serving.ts setDeclaredInputNorm), and Use this model
+// stretches the raw. So after every model change (MODELS_CHANGED_EVENT) the
+// chain is read again, from GET /api/models/loaded's `pipeline`, and a list
+// whose chain the backend changed shows the new one, as applied, with a
+// notice above it saying so.
 function initApply(inputChain, postChain) {
   const button = document.getElementById("applyButton");
   const pending = document.getElementById("applyPending");
@@ -149,12 +149,14 @@ function initApply(inputChain, postChain) {
       });
   }
 
-  // `pipeline` is the backend's chain as an answer gives it, and
-  // `declaredBy` the model whose declared input normalization it is (or
-  // null). A list whose chain changed shows the new one, as applied, and its
+  // `pipeline` is the backend's chain as an answer gives it, `setBy` the
+  // model whose start set its input normalization (or null), and `declared`
+  // whether that model declares it (false: the convention for its kind of
+  // model, which the Flask dashboard sets for a CellMap model that declares
+  // none). A list whose chain changed shows the new one, as applied, and its
   // notice says why; an edit in it not applied yet is replaced, while the
   // other list keeps its edits.
-  function showLive(pipeline, declaredBy) {
+  function showLive(pipeline, setBy, declared) {
     if (!pipeline) return;
     const before = live;
     live = pipeline;
@@ -165,15 +167,20 @@ function initApply(inputChain, postChain) {
       if (!Array.isArray(steps) || chainChanges(before[part.key], steps) === 0) return;
       part.chain.show(steps);
       part.chain.markApplied();
-      say(part.notice, part.key === "input_norm" && declaredBy
-        ? `Input normalization set from ${declaredBy}'s declaration when it started.`
-        : `The ${part.name} was changed outside this tab (a model's start, Use this model or Fit to Paint); the list shows it as it runs now.`);
+      let why = `The ${part.name} was changed outside this tab (a model's start, Use this model or Fit to Paint); the list shows it as it runs now.`;
+      if (part.key === "input_norm" && setBy) {
+        why = declared
+          ? `Input normalization set from ${setBy}'s declaration when it started.`
+          : `Input normalization set to the CellMap convention, [-1, 1], when ${setBy} started: the model does not declare one. Change it here if the model was trained on another range.`;
+      }
+      say(part.notice, why);
     });
   }
 
   function readLive() {
     return inOrder(() => getJSON("/api/models/loaded"))
-      .then((data) => showLive(data.pipeline, data.input_norm_from))
+      // The browser's backend answers no input_norm_declared: its models all declare theirs.
+      .then((data) => showLive(data.pipeline, data.input_norm_from, data.input_norm_declared !== false))
       .catch((err) => console.warn("Could not read the chain the models run through:", err));
   }
 

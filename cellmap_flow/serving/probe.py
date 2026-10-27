@@ -331,6 +331,50 @@ def _to_unit_range(lo, hi) -> dict:
 
 SHIFT_TO_SIGNED = {"name": "LambdaNormalizer", "expression": "x*2-1"}
 
+# The input_normalization values metadata_input_norm has logged as not read,
+# so the dashboard's polls do not log them again.
+_unread_logged = set()
+
+
+def metadata_input_norm(input_normalization, data_range):
+    """The input normalization a cellmap-models export's metadata.json
+    declares (its ``input_normalization``), as chain steps
+    (``[{"name", **params}]``), for raw data spanning ``data_range`` (lo,
+    hi); None when it declares none.
+
+    ``{"method": "min_max", "min": a, "max": b}`` says the model reads its
+    input scaled onto [a, b]: a MinMaxNormalizer from the raw data's range
+    onto [0, 1], as the convention's (_to_unit_range), then a
+    LambdaNormalizer onto [a, b], none for [0, 1]. [-1, 1] gives
+    SHIFT_TO_SIGNED's ``x*2-1``, so the declaration is the convention's
+    chain step for step, and a chain set from either matches the other.
+    Another method, or a min or max that is not a number, is not guessed at:
+    it is logged once and declares nothing, as a declaration does without
+    the data's range (no dataset open).
+    """
+    if not input_normalization:
+        return None
+    a = b = None
+    if isinstance(input_normalization, dict) and input_normalization.get("method") == "min_max":
+        try:
+            a, b = float(input_normalization["min"]), float(input_normalization["max"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    if a is None:
+        said = repr(input_normalization)
+        if said not in _unread_logged:
+            _unread_logged.add(said)
+            logger.warning(f"A model's metadata.json input_normalization {said} is not used: "
+                           "only the min_max method, with a number for min and max, is read")
+        return None
+    if data_range is None:
+        return None
+    lo, hi = (float(v) for v in data_range)
+    steps = [_to_unit_range(lo, hi)["MinMaxNormalizer"]]
+    if (a, b) != (0.0, 1.0):
+        steps.append({"name": "LambdaNormalizer", "expression": f"x*{b - a:g}" + (f"{a:+g}" if a else "")})
+    return steps
+
 
 def same_value(configured, declared) -> bool:
     """Whether a configured parameter value is the declared one: numbers by
