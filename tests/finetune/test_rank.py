@@ -22,7 +22,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune import rank
 from cellmap_flow.finetune.session.volume import carry_paint
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.portable.rank import best_try, norm_tries, score_row
+from cellmap_flow.portable.rank import best_try, display_postprocess, norm_tries, score_row
 from cellmap_flow.serving.probe import UNBOUNDED
 
 
@@ -61,6 +61,9 @@ def test_a_binary_model_answers_its_best_channel_by_index_and_an_affinity_model_
     rank.tally(tallies, np.repeat((labels > 1)[None], 3, axis=0), np.repeat((labels > 0)[None], 3, axis=0), logits)
     binary = rank.rank_score(tallies, ["all_mem", "mito", "er"], False)
     assert (binary["channel"], binary["channel_index"], binary["matches"]) == ("mito", 1, 1)
+    # Every channel's match, the best first, to say why that one.
+    assert [(c["channel"], c["channel_index"]) for c in binary["channel_matches"]][0] == ("mito", 1)
+    assert len(binary["channel_matches"]) == 3
     affinity = rank.rank_score(tallies, ["z", "y", "x"], True)
     assert (affinity["channel"], affinity["channel_index"]) == (None, None)
 
@@ -94,6 +97,9 @@ def test_a_model_is_tried_through_its_own_normalization_and_the_sessions():
     same = [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
     assert [t["from"] for t in norm_tries(own, "convention", same)] == ["convention"]
     assert [t["from"] for t in norm_tries(own, "declared", own[:1])] == ["declared", "session"]
+    # What the others matched goes into the row, to say why this one.
+    row = score_row({"matches": 0.9, "cutoff": 0.0}, None, own, None, "assumed", [{"from": "none", "matches": 0.51}])
+    assert row["input_norm_others"] == [{"from": "none", "matches": 0.51}]
     # An assumption comes after the session's, so it loses a tie to it.
     assert [t["from"] for t in norm_tries(own, "assumed", own[:1])] == ["session", "assumed"]
     assert norm_tries([], "convention", []) == [{"input_norm": [], "from": "none"}]
@@ -350,3 +356,17 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     assert launched == ["mito_16nm"] and [c.name for c in session.models_config][-1] == "mito_16nm"
     assert session.pipeline_spec.input_norm[0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
+
+
+def test_the_sigmoid_a_ranked_models_layer_needs_and_nothing_else():
+    """Use this model sets the sigmoid a model's output needs to show right:
+    one for logits when nothing is set, none on top of an output in [0, 1]
+    or [-1, 1]. Anything else, an affinity model's watershed among it, stays
+    the Processing tab's suggestion."""
+    sigmoid, threshold = {"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": 0.5}
+    assert display_postprocess("unbounded", [], False) == [sigmoid]
+    assert display_postprocess("unbounded", [threshold], False) is None
+    assert display_postprocess("unit", [sigmoid, threshold], False) == [threshold]
+    assert display_postprocess("signed_unit", [sigmoid], False) == []
+    assert display_postprocess("unit", [], False) is None
+    assert display_postprocess("unbounded", [], True) is None

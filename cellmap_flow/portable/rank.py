@@ -36,8 +36,11 @@ portable/calls.py; numpy and the standard library only. In short:
   Prediction's threshold (a probability) and the raw's range read as 0 to
   1 (the stretched window, or the normalizer's own range), and the
   normalizer steps it was read through (``input_norm``), which Use this
-  model and Fit to Paint make the session's. Both modes answer it as it
-  is, so their tables agree.
+  model and Fit to Paint make the session's, with what the other channels
+  and normalizations matched (``channel_matches``, ``input_norm_others``):
+  why this one. Both modes answer it as it is, so their tables agree.
+- Beside it, the sigmoid the model's layer needs to show right
+  (``display_postprocess``), which they set too.
 
 The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
 default loss, is given beside the score: about 0.69 is guessing, about 0.20
@@ -48,6 +51,8 @@ import math
 from typing import List, Optional, Sequence
 
 import numpy as np
+
+from cellmap_flow.portable.label_it import SIGNED_UNIT, UNBOUNDED, UNIT
 
 # The most painted blocks one score reads, spread over the paint.
 RANK_BLOCKS = 32
@@ -122,16 +127,25 @@ def rank_score(tallies: List[dict], channels: Sequence[str], affinity: bool) -> 
     together (``channel`` and ``channel_index`` None), a binary model's best
     channel's (by the score, then the lower loss), ``channel`` its name in
     ``channels`` ("channel <i>" past them) and ``channel_index`` its index,
-    as select_channel takes it. None when nothing was counted."""
+    as select_channel takes it; with ``channel_matches``, every channel's
+    ``{channel, channel_index, matches}``, the best first, which says why
+    that one (organelle close behind mito, say). None when nothing was
+    counted."""
     if affinity:
         all_ = {k: sum(t[k] for t in tallies) for k in tallies[0]}
         return _score_of(all_, None, None)
-    best = None
+    best, each = None, []
     for c, t in enumerate(tallies):
         s = _score_of(t, channels[c] if c < len(channels) else f"channel {c}", c)
-        if s and (best is None or s["matches"] > best["matches"] or (s["matches"] == best["matches"] and s["loss"] < best["loss"])):
+        if s is None:
+            continue
+        each.append(s)
+        if best is None or s["matches"] > best["matches"] or (s["matches"] == best["matches"] and s["loss"] < best["loss"]):
             best = s
-    return best
+    if best is None:
+        return None
+    others = sorted((s for s in each if s is not best), key=lambda s: -s["matches"])
+    return {**best, "channel_matches": [{k: s[k] for k in ("channel", "channel_index", "matches")} for s in [best, *others]]}
 
 
 def _score_of(t: dict, channel: Optional[str], channel_index: Optional[int]) -> Optional[dict]:
@@ -248,8 +262,34 @@ def best_try(scores: Sequence[Optional[dict]]) -> Optional[int]:
     return best
 
 
+def display_postprocess(output_class: Optional[str], postprocess: Sequence[dict], affinity: bool) -> Optional[List[dict]]:
+    """The postprocessing a ranked model's layer needs instead of
+    ``postprocess`` (the session's steps) to show its output as values in [0,
+    1] or [-1, 1], or None when it shows as it is: what Use this model and
+    Fit to Paint set beside the input normalization.
+
+    Only the sigmoid, the one step whose absence or excess shows a model
+    wrong: one added for an output with no activation (``output_class``
+    UNBOUNDED, logits) when nothing is configured, as the model advice
+    suggests (serving/probe.py review_postprocess); one taken away from an
+    output that has one already (UNIT, SIGNED_UNIT), which a second flattens.
+    An affinity model's postprocessing (a watershed into a segmentation) is
+    left as the Processing tab's suggestion, as is everything else.
+    """
+    if affinity:
+        return None
+    steps = [dict(s) for s in postprocess or []]
+    sigmoid = [s for s in steps if s.get("name") == "SigmoidPostprocessor"]
+    if output_class == UNBOUNDED and not steps:
+        return [{"name": "SigmoidPostprocessor"}]
+    if output_class in (UNIT, SIGNED_UNIT) and sigmoid:
+        return [s for s in steps if s.get("name") != "SigmoidPostprocessor"]
+    return None
+
+
 def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict],
-              raw: Optional[Sequence[float]], norm_from: str = "session") -> Optional[dict]:
+              raw: Optional[Sequence[float]], norm_from: str = "session",
+              others: Sequence[dict] = ()) -> Optional[dict]:
     """A model's row of the ranking, as both modes answer it beside the
     model's name, the time taken and the notes; None when ``base`` is None
     (the paint gave the model nothing to score).
@@ -274,7 +314,9 @@ def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[di
     - ``input_norm``: the normalizer steps the score kept was read through
       (``norm``, stretched when the stretch was kept), which Use this model
       and Fit to Paint make the session's; and ``input_norm_from``, where
-      they come from (``norm_from``).
+      they come from (``norm_from``);
+    - ``input_norm_others``: what the other normalizations tried matched,
+      ``others`` (``{from, matches}`` each), which says why this one.
     """
     if base is None:
         return None
@@ -296,5 +338,6 @@ def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[di
         "input_window": input_window,
         "input_norm": windowed(norm, *window) if keep else [dict(s) for s in norm],
         "input_norm_from": norm_from,
+        "input_norm_others": [{"from": o["from"], "matches": o["matches"]} for o in others],
     }
 

@@ -60,13 +60,21 @@ def best_try(args, arrays):
     return rank.best_try(args["scores"])
 
 
+def display_postprocess(args, arrays):
+    """``rank.display_postprocess``: the postprocessing a model of
+    ``output_class`` needs instead of ``postprocess``, an ``affinity`` model's
+    or not, or null."""
+    return rank.display_postprocess(args.get("output_class"), args["postprocess"], bool(args["affinity"]))
+
+
 def rank_row(args, arrays):
     """``rank.score_row``: the ranking's row from ``base`` (the score read
     through ``norm``, which came from ``norm_from``), ``stretched`` (the
-    score read through ``norm`` stretched to ``raw``, or null) and ``raw``
-    (the raw's window, or null); null when ``base`` is null."""
+    score read through ``norm`` stretched to ``raw``, or null), ``raw`` (the
+    raw's window, or null) and ``others`` (what the other normalizations
+    tried matched); null when ``base`` is null."""
     return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"),
-                          args.get("norm_from", "session"))
+                          args.get("norm_from", "session"), args.get("others") or ())
 
 
 def carry_paint(args, arrays):
