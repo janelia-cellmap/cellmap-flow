@@ -61,7 +61,10 @@ const prod = (shape: readonly number[]) => shape.reduce((a, b) => a * b, 1);
 
 /** The voxel count of a chunk and the spatial size of its feature map's
  * batch slices, once `features` and `targets` are checked to describe the
- * chunk's voxels by the layout rule (see gatherPixels). */
+ * chunk's voxels by the layout rule (see gatherPixels). `head` is the head
+ * trained, which for a run of one channel is its row alone (run.ts), so the
+ * targets have its channels; the logits, the model's every channel, are
+ * checked against the features by the feature runner (features.ts). */
 export function chunkLayout(features: ModelFeatures, targets: Targets, head: Head, chunkShape: number[]): { n: number; spatial: number } {
   const n = prod(chunkShape);
   const { inChannels, outChannels } = head;
@@ -74,8 +77,6 @@ export function chunkLayout(features: ModelFeatures, targets: Targets, head: Hea
   if (features.features.length !== prod(fd) || prod(fd) !== inChannels * n) {
     throw new Error(`the feature map ${fd.join("×")} holds ${prod(fd) / inChannels} voxels, the chunk ${chunkShape.join("×")} has ${n}`);
   }
-  const ld = features.logitsDims;
-  if (prod(ld) !== outChannels * n) throw new Error(`the logits ${ld.join("×")} hold ${prod(ld) / outChannels} voxels, the chunk ${chunkShape.join("×")} has ${n}`);
   return { n, spatial: prod(fd.slice(2)) };
 }
 
@@ -95,8 +96,8 @@ export function copyFeatures(features: ModelFeatures, inChannels: number, spatia
  * voxels in C order. That covers the 2D exports' `[1, C, y, x]` and the 3D
  * exports' `[z, C, y, x]` (their final Conv runs with z as the batch axis)
  * alike: voxel v = n × spatial + s has channel c at (n × C + c) × spatial +
- * s. The logits are checked to the same rule, so the features gathered
- * belong to the voxels the targets describe. */
+ * s. The feature map is checked to hold the chunk's voxels, so the features
+ * gathered belong to the voxels the targets describe. */
 export function gatherPixels(features: ModelFeatures, targets: Targets, head: Head, chunkShape: number[]): PixelSet {
   const { inChannels, outChannels } = head;
   const { n, spatial } = chunkLayout(features, targets, head, chunkShape);
