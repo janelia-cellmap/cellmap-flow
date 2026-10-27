@@ -197,8 +197,10 @@ def rank_candidates():
         entry, _, refusal = bioimage_model_entry(model, online=False)
         add(entry["name"], ZOO, task="bioimage", source=model["key"], em=bool(model.get("em")),
             dims={"2d": 2, "3d": 3}.get(model.get("dims")),
-            # What the Models tab's zoo row shows and its search reads.
-            title=model.get("name"), description=model.get("description"), tags=list(model.get("tags") or []),
+            # The model as the Models tab's zoo list has it, which the
+            # ranking's zoo row is made from (static/js/shared/model-list.js
+            # zooRow), shown and searched as that list's.
+            zoo=model,
             **({"error": f"{refusal}: to rank it, add it with one (bioimageio:{model['key']} and its voxel size)",
                 "needs": ["voxel_size"]} if refusal else {"entry": entry}))
     order = [RUNNING, *(session.model_catalog or {}), HUGGING_FACE, ZOO, ADDED]

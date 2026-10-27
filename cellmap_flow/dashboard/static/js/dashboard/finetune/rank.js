@@ -8,8 +8,14 @@
 // (a download, then a run over the painted chunks) and longer on a server for
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
-// each request, and one not running (cluster) starts unticked. A filter narrows the models listed, a ticked one staying in view, and Rank scores every ticked
-// one. Each row gives what its score was read at, as the controls it sets
+// each request, and one not running (cluster) starts unticked. They are
+// listed as the Models tab lists them, made of the same pieces
+// (shared/model-list.js): a section for each of the tab's sections a model
+// is under (its group), with the tab's rows, the Hugging Face and zoo
+// sections' search bar, Refresh and filters, and its Add a model. The ticks
+// are the ranking's own, not the Models tab's: a ticked model stays in view
+// whatever its section's search, and Rank scores every ticked one. Each
+// row of the ranking gives what its score was read at, as the controls it sets
 // take it (portable/rank.py score_row): the threshold, a probability, and
 // the input normalization it was read through (input_norm: the model's own,
 // or the session's when that matched better, maybe stretched to the raw
@@ -37,8 +43,10 @@
 // the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
 import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
-import { matchesWords, searchText } from "../../lib/search.js";
+import { isBrowserMode } from "../../lib/page-data.js";
+import { searchText } from "../../lib/search.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
+import { addModelField, listControls, modelRow, modelSection, neededField, notice, zooRow } from "../../shared/model-list.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
@@ -68,17 +76,17 @@ export function rankResults(answers) {
   return { rows, littlePaint: Boolean(best) && best.scored_voxels < LITTLE_PAINT };
 }
 
-// Whether `candidate` shows under the filter typed (lib/search.js, the
-// rule every model list's search follows): every word of it is in the
-// model's name, task, channels or a voxel size ("16 nm" or "16nm"), or is
-// its "2d" or "3d", or "finetuned". Blank shows all.
-export function matchesFilter(candidate, query) {
-  const text = searchText(
+// The text a section's search reads in `candidate`'s row (lib/search.js,
+// the rule every model list's search follows): the model's name, task,
+// channels and voxel size ("16nm", which "16 nm" finds too), its "2d" or
+// "3d", and "finetuned" for a finetune. A zoo model's row is searched as
+// the Models tab's zoo list searches it (shared/model-list.js zooRow).
+export function candidateText(candidate) {
+  return searchText(
     candidate.name, candidate.task, ...(candidate.channels || []),
     ...(candidate.voxel_size_nm || []).map((size) => `${size}nm`),
     candidate.dims && `${candidate.dims}d`, candidate.finetuned && "finetuned",
   );
-  return matchesWords(text, query);
 }
 
 function isScored(answer) {
@@ -184,6 +192,28 @@ function describe(candidate) {
     .filter(Boolean).join(", ");
 }
 
+// The ranking's sections, one for each group the candidates are under (the
+// routes' RUNNING, HUGGING_FACE, ZOO and ADDED, a server's Local Catalog
+// groups, and the browser's GROUPS), in the Models tab's order, which the
+// routes list the candidates in; null is where the groups named nowhere
+// else go, in the order listed: a server's Local Catalog's. `hf` is the
+// group of the Models tab's Hugging Face list, whose section has its search
+// bar and Refresh: the browser's is cellmap's own repo, where a server's
+// "cellmap" is a Local Catalog group. That section and the zoo's show even
+// while they list nothing, for their Refresh.
+const ZOO_GROUP = "BioImage Zoo";
+const SERVER_GROUPS = { order: ["Running", null, "Hugging Face", ZOO_GROUP, "Added"], hf: "Hugging Face" };
+const BROWSER_GROUPS = { order: ["Running", "cellmap", "Added", "Finetuned", null], hf: "cellmap" };
+// The Models tab's Hugging Face and zoo lists (GET, and POST .../refresh to
+// fetch them again), which a listing of the candidates reads only as those
+// cached them: a server's ranking never waits on the Hub or bioimage.io.
+const LISTS = { hf: "/api/huggingface-models", zoo: "/api/bioimage-models" };
+// What their sections say until then, as the Models tab's do.
+const NOT_LOADED = { hf: "Click to load Hugging Face models...", zoo: "Click to load BioImage Model Zoo models..." };
+// What rank/add takes as voxel_size of what a model needs (the route's
+// VOXEL_NEEDS); anything else only the Models tab's Add a model asks for.
+const VOXEL_NEEDS = ["voxel_size", "input_voxel_size"];
+
 // Whether the card is open, kept in this browser as the patch tools'
 // sections are (index.js rememberOpenSections); closed until opened.
 const OPEN_KEY = "finetuneRankOpen";
@@ -193,21 +223,13 @@ const MARK_KEY = "cellmap_flow.seed_threshold_by_ranking";
 
 export function initRank() {
   const section = document.getElementById("rankSection");
-  const filter = document.getElementById("rankFilter");
   const tickAll = document.getElementById("rankTickAll");
   const tickNone = document.getElementById("rankTickNone");
-  const candidateList = document.getElementById("rankCandidates");
-  // The Models tab's ways to find a model (the template's): the zoo's EM
-  // only (server mode alone, as the zoo is) and 2D / 3D, its Hugging Face
-  // Refresh and its Add a model.
-  const emOnly = document.getElementById("rankEmOnly");
-  const only2d = document.getElementById("rank2d");
-  const only3d = document.getElementById("rank3d");
-  const refreshBtn = document.getElementById("rankRefresh");
-  const addRef = document.getElementById("rankAddRef");
-  const addBtn = document.getElementById("rankAddBtn");
+  // The sections, and Add a model under them.
+  const sectionList = document.getElementById("rankSections");
+  const groups = isBrowserMode() ? BROWSER_GROUPS : SERVER_GROUPS;
   // Ticked only shows the models Rank scores, and the count beside it says
-  // how many. Tick none unticks every one: a ticked one is always shown.
+  // how many. Tick none unticks every one, in every section.
   const tickedOnly = document.getElementById("rankTickedOnly");
   const tickedCount = document.getElementById("rankTickedCount");
   const rankBtn = document.getElementById("rankBtn");
@@ -231,6 +253,17 @@ export function initRank() {
   // later starts as its listing says.
   const unticked = new Set();
   const seen = new Set();
+  // A section for each group, made once and kept, so it stays open or closed
+  // as it was left and its search keeps what was typed while the list is
+  // shown again: {section, controls, list, kind}, kind "hf" or "zoo" for the
+  // Models tab's lists of those, with their controls. Each model's row as
+  // shown last, by name. Whether the listing had the Models tab's Hugging
+  // Face and zoo lists cached (a browser's always has its catalog), and why
+  // one could not be fetched.
+  const sections = new Map();
+  let rowsByName = new Map();
+  let cached = { hf: true, zoo: true };
+  const listErrors = {};
   // The ranking shown: its score answers in the order they came, the models
   // it scores by name (for Show), the volume it was painted on, and its
   // status line ({ text, tone }), which stays while its table does.
@@ -356,6 +389,7 @@ export function initRank() {
     if (!d.success) return { ready: false, message: `Could not list the models: ${d.error}`, tone: "danger" };
     listed = true;
     candidates = d.candidates || [];
+    cached = { hf: d.hf_cached !== false, zoo: d.zoo_cached !== false };
     for (const candidate of candidates) {
       if (!seen.has(candidate.name) && candidate.ticked === false) unticked.add(candidate.name);
       seen.add(candidate.name);
@@ -399,96 +433,204 @@ export function initRank() {
     return refreshing;
   }
 
-  // Whether `candidate` shows: it is ticked (a ticked one stays in view, as
-  // the Models tab's zoo list keeps it, so nothing is ranked unseen), or it
-  // matches the filter typed and the 2D / 3D and EM only boxes, as the zoo
-  // list filters (neither of 2D and 3D ticked: either; EM only leaves out
-  // the zoo models not tagged EM, every other model being EM).
-  function visible(candidate) {
-    if (!unticked.has(candidate.name)) return true;
+  // A listing begun after what was just changed (a model added, a list
+  // fetched): one under way may have begun before it.
+  async function relist() {
+    if (refreshing) await refreshing;
+    return refresh();
+  }
+
+  function isTicked(candidate) {
+    return !unticked.has(candidate.name);
+  }
+
+  // Whether `candidate`'s row (`row`, its data the section's controls
+  // match) shows: it is ticked (a ticked one stays in view, as the Models
+  // tab's zoo list keeps it, so nothing is ranked unseen), or, but under
+  // Ticked only, it passes its section's search and filters when the
+  // section has them (the Hugging Face and zoo sections).
+  function visible(candidate, row) {
+    if (isTicked(candidate)) return true;
     if (tickedOnly.checked) return false;
-    const dims = [[only2d, 2], [only3d, 3]].filter(([box]) => box.checked).map(([, d]) => d);
-    return matchesFilter(candidate, filter.value)
-      && (!dims.length || dims.includes(candidate.dims))
-      && !(emOnly && emOnly.checked && candidate.em === false);
+    const { controls } = sections.get(candidate.group) || {};
+    return !controls || controls.matches(row.dataset);
   }
 
-  // The models the filter shows.
+  // The models shown: their rows in view, in a section open.
   function shown() {
-    return candidates.filter(visible);
+    return candidates.filter((candidate) => {
+      const row = rowsByName.get(candidate.name);
+      const { section: shownIn } = sections.get(candidate.group) || {};
+      return row && !row.hidden && shownIn && !shownIn.item.hidden && shownIn.isOpen();
+    });
   }
 
-  // The list, under a heading for each Models tab section its models are
-  // under (the candidates' group, in the order the route gives them).
+  // The groups to show a section for, in the Models tab's order: each one a
+  // candidate is under, and the Hugging Face and zoo lists' even when they
+  // list nothing yet.
+  function groupsShown() {
+    const listed = [...new Set(candidates.map((candidate) => candidate.group))];
+    const others = listed.filter((group) => !groups.order.includes(group));
+    return groups.order.flatMap((group) => (group === null ? others : [group]))
+      .filter((group) => listed.includes(group) || group === groups.hf || group === ZOO_GROUP);
+  }
+
+  // `group`'s section, made the first time: open when a model in it is
+  // ticked, so the ones Rank scores are in view; for the Models tab's
+  // Hugging Face and zoo lists, with their search bar and Refresh, and the
+  // zoo's filters, and opening it fetches the list when the listing had it
+  // not cached, as opening it on the Models tab does.
+  function sectionFor(group) {
+    if (sections.has(group)) return sections.get(group);
+    const kind = group === groups.hf ? "hf" : group === ZOO_GROUP ? "zoo" : null;
+    const made = modelSection({
+      id: `rank_${sections.size}`, title: group,
+      open: candidates.some((candidate) => candidate.group === group && isTicked(candidate)),
+      onOpen: kind && (() => {
+        if (!cached[kind]) fetchList(kind, false);
+      }),
+    });
+    const controls = kind === "hf"
+      ? listControls({
+        id: "rankHf", placeholder: "Search: mito aff, 16 nm, 2d", title: "Every word typed, in the model's name, task, channels, voxel size or its 2D/3D",
+        refreshTitle: "Refresh from Hugging Face", onRefresh: () => fetchList("hf", true), onChange: showCandidates,
+      })
+      : kind === "zoo"
+        ? listControls({
+          id: "rankZoo", zoo: true, placeholder: "Search models...", title: "Every word typed, in the name, description, tags or 2D/3D",
+          refreshTitle: "Refresh from bioimage.io", onRefresh: () => fetchList("zoo", true), onChange: showCandidates,
+        })
+        : null;
+    const list = h("div", { class: kind === "zoo" ? "zoo-model-list" : null });
+    made.body.append(...(controls ? [controls.element] : []), list);
+    sections.set(group, { section: made, controls, list, kind });
+    return sections.get(group);
+  }
+
+  // A model's row, as the Models tab's: a zoo model's as its zoo list has it,
+  // with why it cannot be ranked under it when nothing says its voxel size;
+  // any other's its name, with what it predicts at what voxel size beside.
+  // The volume's model says it is the one painted for.
+  function candidateRow(candidate, id) {
+    const paintedFor = candidate.volume_model ? " (painted for)" : "";
+    const options = {
+      id, checked: isTicked(candidate), disabled: running,
+      onTick: (on) => {
+        if (on) unticked.delete(candidate.name);
+        else unticked.add(candidate.name);
+        showCandidates();
+      },
+    };
+    if (candidate.zoo) {
+      return zooRow(candidate.zoo, {
+        ...options, name: candidate.zoo.name + paintedFor,
+        below: candidate.error ? h("div", { class: "zoo-trained" }, candidate.error) : null,
+      });
+    }
+    return modelRow({
+      ...options, value: candidate.name, name: candidate.name + paintedFor, note: describe(candidate),
+      title: candidate.source || `${candidate.repo}/${candidate.folder}`, search: candidateText(candidate),
+    });
+  }
+
+  // The sections, each with its models' rows: the rows not shown hidden, the
+  // count of those ticked in its header, the zoo's count of those shown in
+  // its controls, and under Ticked only the sections with none ticked
+  // hidden. A section is put back in its place only when the order changed:
+  // moved, its search bar would lose what is being typed.
   function showCandidates() {
     tickAll.disabled = tickNone.disabled = running;
-    const ticked = candidates.filter((candidate) => !unticked.has(candidate.name)).length;
-    tickedCount.textContent = `${ticked} ticked`;
-    const none = candidates.length && !shown().length
-      && h("small", { class: "text-muted" }, "No model matches the filter.");
-    let group = null;
-    candidateList.replaceChildren(none || "", ...candidates.flatMap((candidate, i) => {
-      const id = `rankCandidate${i}`;
-      const show = visible(candidate);
-      const heading = show && candidate.group && candidate.group !== group
-        ? h("div", { class: "small fw-semibold text-muted mt-1" }, (group = candidate.group))
-        : null;
-      const item = h("div", { class: "form-check", hidden: !show },
-        h("input", {
-          type: "checkbox", class: "form-check-input", id, value: candidate.name,
-          checked: !unticked.has(candidate.name), disabled: running,
-          onChange: (e) => {
-            if (e.target.checked) unticked.delete(candidate.name);
-            else unticked.add(candidate.name);
-            showCandidates();
-          },
-        }),
-        h("label", { class: "form-check-label", for: id, title: candidate.source || `${candidate.repo}/${candidate.folder}` },
-          candidate.name, candidate.volume_model ? " (painted for)" : "", " ",
-          h("small", { class: "text-muted" }, describe(candidate))));
-      return heading ? [heading, item] : [item];
-    }));
+    tickedCount.textContent = `${candidates.filter(isTicked).length} ticked`;
+    const shownGroups = groupsShown().map(sectionFor);
+    const items = shownGroups.map(({ section: made }) => made.item);
+    if (items.length !== sectionList.children.length || items.some((item, i) => sectionList.children[i] !== item)) {
+      sectionList.replaceChildren(...items);
+    }
+    rowsByName = new Map();
+    candidates.forEach((candidate, i) => rowsByName.set(candidate.name, candidateRow(candidate, `rankCandidate${i}`)));
+    for (const [group, { section: made, controls, list, kind }] of sections) {
+      const members = candidates.filter((candidate) => candidate.group === group);
+      const rows = members.map((candidate) => {
+        const row = rowsByName.get(candidate.name);
+        row.hidden = !visible(candidate, row);
+        return row;
+      });
+      const ticked = members.filter(isTicked).length;
+      const inView = rows.filter((row) => !row.hidden).length;
+      made.count(ticked ? `${ticked} ticked` : "");
+      if (controls) controls.count(inView, rows.length);
+      made.item.hidden = tickedOnly.checked && !ticked;
+      const empty = !rows.length && (listErrors[kind] ? notice(listErrors[kind], true)
+        : notice(kind && !cached[kind] ? NOT_LOADED[kind] : "No models found."));
+      const none = rows.length && !inView && notice("No model matches the search.");
+      list.replaceChildren(...rows, ...[empty, none].filter(Boolean));
+    }
   }
 
   // Add a model, as the Models tab's does, to this list (POST
   // /api/finetune/rank/add resolves the reference and keeps the model in the
-  // session's list), ticked, without starting it.
-  async function addModel() {
-    const ref = addRef.value.trim();
-    if (!ref || running) return;
-    setBusy(addBtn, true, "Adding...");
+  // session's list), ticked, without starting it. One whose voxel size
+  // nothing says is asked for it, as the Models tab's asks, and added with
+  // it (`voxelSize`); one that needs more is the Models tab's to add.
+  const addField = addModelField({
+    id: "rankAddRef", button: "Add",
+    placeholder: isBrowserMode() ? "Hugging Face repo: owner/repo, owner/repo/folder" : "Hugging Face repo, zoo model, path...",
+    title: "Any model the Models tab's Add a model takes but a Cellpose model; it joins the list, ticked, without starting",
+    onSubmit: (ref) => addModel(ref),
+  });
+  document.getElementById("rankAdd").append(addField.element);
+
+  async function addModel(ref, voxelSize) {
+    if (running) return;
+    setBusy(addField.button, true, "Adding...");
     try {
-      const d = await postAnswer("/api/finetune/rank/add", { ref });
+      const d = await postAnswer("/api/finetune/rank/add", { ref, ...(voxelSize ? { voxel_size: voxelSize } : {}) });
       if (!d.success) {
-        const needs = (d.needs || []).length ? ` It needs ${d.needs.join(", ")}: add it on the Models tab, where you can give them.` : "";
-        say(`Could not add ${ref}: ${d.error || "not a model reference"}.${needs}`, "danger");
+        const needs = d.needs || [];
+        if (needs.length && needs.every((key) => VOXEL_NEEDS.includes(key))) {
+          addField.show({
+            summary: d.error, fields: [neededField(needs[0])], action: "Add",
+            actionTitle: "Add it with this voxel size, ticked, without starting it",
+            onAction: (values) => addModel(ref, values[needs[0]].trim()),
+          });
+          return;
+        }
+        addField.hide();
+        say(`Could not add ${ref}: ${d.error || "not a model reference"}`, "danger");
         return;
       }
       const name = (d.candidate || d).name;
       unticked.delete(name);
-      addRef.value = "";
-      await refresh();
+      addField.hide();
+      addField.input.value = "";
+      await relist();
       say(`Added ${name}, ticked: Rank scores it with the others.`, "success");
     } catch (e) {
       say(`Could not add ${ref}: ${e.message || e}`, "danger");
     } finally {
-      setBusy(addBtn, false);
+      setBusy(addField.button, false);
     }
   }
 
-  // The Hugging Face models listed again, as the Models tab's Refresh lists
-  // them (the same route in both modes), then this list.
-  async function refreshModels() {
+  // The Models tab's Hugging Face or zoo list (`kind`) fetched as that tab's
+  // section fetches it, from its cache or, `fresh` (its Refresh), from the
+  // Hub or bioimage.io again (the same routes in both modes), then this
+  // list, which lists what it fetched.
+  async function fetchList(kind, fresh) {
     if (running) return;
-    setBusy(refreshBtn, true, "Refreshing...");
+    const { section: made } = [...sections.values()].find((s) => s.kind === kind);
+    made.loading(true);
     try {
-      await postAnswer("/api/huggingface-models/refresh");
+      const d = await (fresh ? postAnswer(`${LISTS[kind]}/refresh`) : getAnswer(LISTS[kind]));
+      listErrors[kind] = d && d.error ? `Could not list them: ${d.error}` : null;
     } catch (e) {
-      say(`Could not list the Hugging Face models again: ${e.message || e}`, "danger");
-    } finally {
-      setBusy(refreshBtn, false);
+      listErrors[kind] = `Could not list them: ${e.message || e}`;
     }
-    await refresh();
+    try {
+      await relist();
+    } finally {
+      made.loading(false);
+    }
   }
 
   function showResults() {
@@ -718,7 +860,7 @@ export function initRank() {
     const state = await listCandidates();
     // Every ticked model, which visible() keeps in view: one the filter hid
     // used to be left out of the ranking though it was ticked.
-    const chosen = candidates.filter((candidate) => !unticked.has(candidate.name));
+    const chosen = candidates.filter(isTicked);
     if (!state.ready || !chosen.length) {
       running = false;
       setBusy(rankBtn, false);
@@ -813,18 +955,15 @@ export function initRank() {
   seedThreshold.addEventListener("input", showMark);
   seedThreshold.addEventListener("change", showMark);
   showMark();
-  filter.addEventListener("input", showCandidates);
-  for (const box of [emOnly, only2d, only3d, tickedOnly]) if (box) box.addEventListener("change", showCandidates);
-  addBtn.addEventListener("click", addModel);
-  addRef.addEventListener("keydown", (e) => { if (e.key === "Enter") addModel(); });
-  refreshBtn.addEventListener("click", refreshModels);
-  // Tick or untick the models shown; the hidden ones keep their ticks.
+  tickedOnly.addEventListener("change", showCandidates);
+  // Tick the models shown, the hidden ones keeping their ticks; or untick
+  // every one.
   tickAll.addEventListener("click", () => {
     for (const candidate of shown()) unticked.delete(candidate.name);
     showCandidates();
   });
   tickNone.addEventListener("click", () => {
-    for (const candidate of shown()) unticked.add(candidate.name);
+    for (const candidate of candidates) unticked.add(candidate.name);
     showCandidates();
   });
   stopBtn.addEventListener("click", () => {
