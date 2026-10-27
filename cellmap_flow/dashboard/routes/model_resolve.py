@@ -13,6 +13,8 @@ answer is ``models.resolve``'s ``Resolved``::
 submits once the user has given what ``needs`` lists. Nothing is built or
 launched here. A reference that resolves to nothing, or to a model
 cellmap-flow cannot serve, is a 400 with ``{"success": false, "error": ...}``.
+``resolve_request`` is that resolve, which the Finetune tab's ranking adds a
+model with too (``POST /api/finetune/rank/add``, routes/finetune/rank_routes.py).
 """
 
 import logging
@@ -36,18 +38,28 @@ class ResolveModel(BaseModel):
     voxel_size: Any = None
 
 
-@model_resolve_bp.route("/api/models/resolve", methods=["POST"])
-def resolve_model():
+def resolve_request(data):
+    """``(resolved, error)``: what the reference of ``data``, a ResolveModel's
+    body, resolves to (``models.resolve``'s Resolved) and None; or None and
+    the 400 answer saying why it resolves to nothing, or why the body is
+    not one. Add a model's resolve, here and in the Finetune tab's ranking."""
     from cellmap_flow.models.resolve import resolve
 
-    body, error = parse(ResolveModel, request.get_json(silent=True))
+    body, error = parse(ResolveModel, data)
     if error:
-        return error
+        return None, error
     try:
-        resolved = resolve(body.ref, name=(body.name or "").strip() or None, voxel_size=body.voxel_size)
+        return resolve(body.ref, name=(body.name or "").strip() or None, voxel_size=body.voxel_size), None
     except ValueError as e:
         logger.info(f"Could not resolve model {body.ref!r}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 400
+        return None, (jsonify({"success": False, "error": str(e)}), 400)
+
+
+@model_resolve_bp.route("/api/models/resolve", methods=["POST"])
+def resolve_model():
+    resolved, error = resolve_request(request.get_json(silent=True))
+    if error:
+        return error
     return jsonify({"success": True, **resolved.to_json()})
 
 
