@@ -1,7 +1,9 @@
 // The Local Catalog: a section for each of its groups (models.yaml's, and
 // "User" for the session's running models), from the page's
 // #model-catalog-data (routes/index_page.py), with the rows every model list
-// has (shared/model-list.js); and the boxes of the models added by reference
+// has (shared/model-list.js), tagged with what each export's folder holds
+// (its group's facts, by name: formats, finetune modes and size); and the
+// boxes of the models added by reference
 // (add-model.js). Each box is an `input.model-checkbox` in
 // #modelSelectionForm whose value is the model's name, ticked to start when
 // that model is running. Submit sends the ticked names as selected_models.
@@ -11,11 +13,11 @@ import { modelRow, modelSection, untickBox } from "../../shared/model-list.js";
 export function init() {
   const { groups, ticked } = pageData("model-catalog-data");
   const accordion = document.getElementById("modelAccordion");
-  groups.forEach(([group, names], i) => {
+  groups.forEach(([group, names, facts = {}], i) => {
     const section = modelSection({ id: String(i + 1), title: group });
     section.body.append(...names.map((name) => modelRow({
       id: `chk_${group}_${name}`, value: name, name, checked: ticked.includes(name),
-      boxClass: "model-checkbox", boxName: "selected_models",
+      boxClass: "model-checkbox", boxName: "selected_models", facts: facts[name],
     })));
     accordion.append(section.item);
   });

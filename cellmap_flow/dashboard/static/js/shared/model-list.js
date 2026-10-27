@@ -5,8 +5,9 @@
 // start from (dashboard/finetune/rank.js), which lists the same models to
 // score rather than to run. So the two look alike and find a model alike: a
 // collapsible section per source (modelSection), a row per model (modelRow,
-// and zooRow for a zoo model's), the Hugging Face and zoo sections' search
-// bar, Refresh and filters (listControls), and the Add a model field
+// and zooRow for a zoo model's) with the tags of what the model is
+// (factTags), the Hugging Face and zoo sections' search bar, Refresh,
+// filters and order (listControls), and the Add a model field
 // (addModelField).
 //
 // Each piece is made from what it is given and handed back, for its place
@@ -22,6 +23,41 @@ import { matchesWords, searchText } from "../lib/search.js";
 // A small tag: a model's dims, weight format, Cellpose name or source.
 export function tag(text, title) {
   return h("span", { class: "zoo-tag", title: title || null }, text);
+}
+
+// What the training form calls each way to finetune (finetune_modes).
+const MODE_WORDS = { lora: "LoRA", full: "full", head: "head" };
+
+// A size in MB (1e6 bytes) as a tag says it: "3.2 GB", "56 MB", "7.6 MB".
+function mbText(mb) {
+  if (mb >= 1000) return `${(mb / 1000).toFixed(1)} GB`;
+  return mb >= 10 ? `${Math.round(mb)} MB` : `${mb.toFixed(1)} MB`;
+}
+
+// What a model is, as its row's tags, from the fields every listing gives a
+// model (a server's models/hf_catalog.py FACTS, the browser's
+// web/src/models/metadata.ts, under the same names), so it is known without
+// downloading it: its weight formats ("TorchScript", "torch.export",
+// "ONNX"), the ways it can be finetuned ("LoRA + full", "head + full"), its
+// size (its largest weights file, or its parameters when that is not known)
+// and its copy that runs in the browser, by the precisions that copy comes in
+// ("browser: fp32/fp16/int8w"). Nothing for a field not given.
+export function factTags(facts) {
+  const modes = facts.finetune_modes || [];
+  const variants = facts.variants || [];
+  const params = facts.params > 0 ? `${(facts.params / 1e6).toFixed(1)}M parameters` : null;
+  const size = Number.isFinite(facts.size_mb)
+    ? tag(mbText(facts.size_mb), `Its largest weights file${params ? `; ${params}` : ""}`)
+    : params && tag(params, "Its parameters");
+  return [
+    (facts.formats || []).map((format) => tag(format, "Weight format")),
+    modes.length ? tag(modes.map((mode) => MODE_WORDS[mode] || mode).join(" + "), "How it can be finetuned (the training form's Finetune mode)") : null,
+    size,
+    facts.browser_copy
+      ? tag(variants.length ? `browser: ${variants.map((v) => v.variant).join("/")}` : "browser",
+        `Runs in the browser, as ${facts.browser_copy}${variants.length ? `: ${variants.map((v) => `${v.variant} ${mbText(v.file_mb)}`).join(", ")}` : ""}`)
+      : null,
+  ];
 }
 
 // Untick ``box`` as a click would: the row is told of the change, so a zoo or
@@ -76,13 +112,20 @@ export function modelSection({ id, title, bodyId, open = false, onOpen }) {
 // under that (`below`: a zoo row's voxel size, say). `value` is the box's
 // value, and `boxClass` and `boxName` what a place's Submit finds the ticked
 // boxes by; `rowClass` is the row's, for a list's own spacing; `title` the
-// name's tooltip. `search`, `em` and `dims` are the row's data (data-search,
-// data-em, data-dims), which a section's controls match (listControls).
+// name's tooltip. `facts` are what the model's listing says it is
+// (factTags), tagged after the place's own tags. `search`, `em` and `dims`
+// are the row's data (data-search, data-em, data-dims), which a section's
+// controls match (listControls), with its name, size and whether it has a
+// browser copy ("yes", "no", or none when that is not known), from `facts`,
+// which they order and filter by.
 export function modelRow({
-  id, value, name, note, tags, link, description, below, title, checked = false, disabled = false, onTick,
+  id, value, name, note, tags, facts, link, description, below, title, checked = false, disabled = false, onTick,
   rowClass = "form-check mb-2", boxClass, boxName, search, em, dims,
 }) {
-  const data = Object.fromEntries(Object.entries({ search, em, dims }).filter(([, v]) => v !== undefined));
+  const browser = facts && "browser_copy" in facts ? (facts.browser_copy ? "yes" : "no") : undefined;
+  const size = facts && Number.isFinite(facts.size_mb) ? String(facts.size_mb) : undefined;
+  const data = Object.fromEntries(Object.entries({ search, em, dims, browser, size, name: typeof name === "string" ? name : undefined })
+    .filter(([, v]) => v !== undefined));
   return h("div", { class: rowClass, dataset: data },
     h("input", {
       class: boxClass ? `form-check-input ${boxClass}` : "form-check-input", type: "checkbox", name: boxName, id, value,
@@ -90,7 +133,7 @@ export function modelRow({
     }),
     h("label", { class: "form-check-label", for: id, title },
       name, note ? [" ", h("small", { style: { color: "#aaa" } }, "- " + note)] : null),
-    tags, link, description ? h("div", { class: "zoo-desc", title: description }, description) : null, below);
+    tags, facts && factTags(facts), link, description ? h("div", { class: "zoo-desc", title: description }, description) : null, below);
 }
 
 // The voxel size a zoo model was trained at, from cellmap-flow's own table
@@ -131,16 +174,24 @@ export function zooRow(model, options) {
 
 // A section's ways to find a model, as the Models tab's Hugging Face and zoo
 // sections have them: a search bar (every word typed, lib/search.js) with a
-// Refresh beside it, and for the zoo (`zoo`) EM only, ticked to start, 2D
-// and 3D, and the count of the rows shown (count). `id` prefixes their ids
-// (<id>SearchBar, <id>RefreshBtn, <id>EmOnly, <id>2d, <id>3d, <id>Count).
-// onChange runs on every change to them, onRefresh on Refresh.
-// matches(data) is whether a row's data (modelRow's search, em and dims)
-// passes them: every word typed is in its search text, it is tagged EM when
-// EM only is ticked, and its dims are one of those ticked (2D and 3D
-// neither: any). What a row that does not match does, and whether a ticked
-// one stays shown regardless, is the place's.
-export function listControls({ id, placeholder, title, refreshTitle, onRefresh, onChange, zoo = false }) {
+// Refresh beside it; for the zoo (`zoo`) EM only, ticked to start, 2D and
+// 3D; for a list of Hugging Face models, Runs in the browser (`browser`, a
+// server's: in the browser every model does), ticked to start, and the
+// order of its rows (`sort`: by name, or by size, smallest first); and with
+// any of those the count of the rows shown (count). `id` prefixes their ids
+// (<id>SearchBar, <id>RefreshBtn, <id>EmOnly, <id>2d, <id>3d, <id>Browser,
+// <id>Sort, <id>Count). onChange runs on every change to them, onRefresh on
+// Refresh.
+// matches(data) is whether a row's data (modelRow's search, em, dims and
+// browser) passes them: every word typed is in its search text, it is tagged
+// EM when EM only is ticked, its dims are one of those ticked (2D and 3D
+// neither: any), and it has a browser copy when Runs in the browser is
+// ticked (one not known to have none passes: its listing did not say).
+// noCopy(data) is whether that box alone hides it, for the count. sorted(rows)
+// gives the rows in the order chosen, by their data's name and size (one of
+// no size last); as they came without `sort`. What a row that does not match
+// does, and whether a ticked one stays shown regardless, is the place's.
+export function listControls({ id, placeholder, title, refreshTitle, onRefresh, onChange, zoo = false, browser = false, sort = false }) {
   const search = h("input", { type: "text", class: "form-control", id: `${id}SearchBar`, placeholder, title, onInput: onChange });
   const refresh = h("button", {
     type: "button", class: "btn btn-sm btn-outline-secondary", id: `${id}RefreshBtn`, style: { whiteSpace: "nowrap" },
@@ -150,24 +201,41 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
     const input = h("input", { class: "form-check-input", type: "checkbox", id: `${id}${suffix}`, checked, onChange });
     return [input, h("div", { class: "form-check mb-0", title: boxTitle }, input, h("label", { class: "form-check-label", for: input.id }, label))];
   };
-  const [emOnly, emBox] = box("EmOnly", "EM only", "Only models whose tags, name or description say electron microscopy", true);
-  const [only2d, box2d] = box("2d", "2D", "Models tagged 2D", false);
-  const [only3d, box3d] = box("3d", "3D", "Models tagged 3D", false);
+  const [emOnly, emBox] = zoo ? box("EmOnly", "EM only", "Only models whose tags, name or description say electron microscopy", true) : [];
+  const [only2d, box2d] = zoo ? box("2d", "2D", "Models tagged 2D", false) : [];
+  const [only3d, box3d] = zoo ? box("3d", "3D", "Models tagged 3D", false) : [];
+  const [browserOnly, browserBox] = browser
+    ? box("Browser", "Runs in the browser", "Only models with a copy that runs in the browser (an ONNX export, cellmap/onnx-web-models' or a folder of the repo's own). Ticked models are always shown.", true)
+    : [];
+  const order = sort && h("select", {
+    class: "form-select form-select-sm w-auto", id: `${id}Sort`, title: "The order of the models: by name, or by size (the largest weights file), smallest first", onChange,
+  }, h("option", { value: "name" }, "Sort by name"), h("option", { value: "size" }, "Sort by size"));
   const shown = h("span", { class: "zoo-count ms-auto", id: `${id}Count`, title: "Shown / listed. Ticked models are always shown." });
   const element = h("div", {},
     h("div", { class: "d-flex gap-2 mb-2" }, search, refresh),
-    zoo && h("div", { class: "d-flex align-items-center gap-3 mb-2 flex-wrap" }, emBox, box2d, box3d, shown));
+    (zoo || browser || sort) && h("div", { class: "d-flex align-items-center gap-3 mb-2 flex-wrap" }, emBox, box2d, box3d, browserBox, order, shown));
+  const noCopy = (data) => Boolean(browserOnly && browserOnly.checked && data.browser === "no");
+  const byName = (a, b) => (a.dataset.name || "").localeCompare(b.dataset.name || "");
+  const size = (row) => (row.dataset.size ? Number(row.dataset.size) : Infinity);
   return {
     element,
     search,
     refresh,
     matches(data) {
       if (!matchesWords(data.search || "", search.value)) return false;
+      if (noCopy(data)) return false;
       if (!zoo) return true;
       const dims = [[only2d, "2d"], [only3d, "3d"]].filter(([input]) => input.checked).map(([, d]) => d);
       return (!emOnly.checked || Boolean(data.em)) && (!dims.length || dims.includes(data.dims));
     },
-    count: (n, listed) => { shown.textContent = listed ? n + " / " + listed : ""; },
+    noCopy,
+    sorted(rows) {
+      if (!order) return [...rows];
+      return [...rows].sort(order.value === "size" ? (a, b) => size(a) - size(b) || byName(a, b) : byName);
+    },
+    count: (n, listed, hiddenNoCopy = 0) => {
+      shown.textContent = listed ? `${n} / ${listed}${hiddenNoCopy ? `, ${hiddenNoCopy} hidden: no browser copy` : ""}` : "";
+    },
   };
 }
 
