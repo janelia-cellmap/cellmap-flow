@@ -15,9 +15,10 @@ import { ARGS_KEY } from "../contracts";
 import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
 import { SUPPORTED_NORMALIZERS } from "../infer/norms";
 import { entryFor } from "../models";
+import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs } from "../shared/args";
 import { shaderColor } from "../viewer/display";
-import { PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
+import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
 
 /** The dashboard's address as the Python routes put it in the blob
  * (request.host_url: the scheme, host and the page's base, with the
@@ -210,7 +211,8 @@ export async function stopServing(ctx: AppContext, name: string, views: readonly
  * set unless the postprocessing changed. Then the shader is dropped (its
  * contrast range belongs to the old chain) but its colour is kept, so the
  * layer the user knows by its colour stays that colour (pipeline.py's
- * previous_shader). */
+ * previous_shader). Each opens on the channel the session shows for it
+ * (shownChannel), which a new chain's source would otherwise lose. */
 export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain, postprocessChanged: boolean, replacing: Record<string, string> = {}): void {
   if (!served.length) return;
   const layers: Record<string, ReturnType<typeof predictionLayer>> = {};
@@ -218,9 +220,50 @@ export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain,
     const name = s.entry.name;
     const current = ctx.viewer.layerShader(name);
     const color = (postprocessChanged ? shaderColor(current?.shader) : null) ?? PREDICTION_COLORS[i % PREDICTION_COLORS.length];
-    layers[name] = predictionLayer(s, chain, color, postprocessChanged ? undefined : (current ?? undefined));
+    const shown = shownChannel(ctx.session.state.shownChannels, name)?.channel ?? null;
+    layers[name] = predictionLayer(s, chain, color, postprocessChanged ? undefined : (current ?? undefined), shown);
   });
   ctx.viewer.setLayers(layers, replacing);
+}
+
+/** The channel the session shows model `name`'s layer on (`shown`, the
+ * session's shownChannels, as POST /api/finetune/channel sets them), and
+ * the model it was picked for: `name`'s own pick, else the pick for the
+ * model it was finetuned from, whose channels are its own (models/
+ * finetuned.ts finetuneNumber; the server's view_labels._model_read_as),
+ * the latest of its series picked: `x-ft2` opens on what `x-ft1` shows,
+ * else on what `x` shows. Null when none is picked. */
+export function shownChannel(shown: Readonly<Record<string, number>>, name: string): { model: string; channel: number } | null {
+  if (Object.hasOwn(shown, name)) return { model: name, channel: shown[name] };
+  let found: { model: string; channel: number; number: number } | null = null;
+  for (const [model, channel] of Object.entries(shown)) {
+    if (finetuneNumber(name, model) === null) continue;
+    const number = Number(/-ft(\d+)$/.exec(model)?.[1] ?? 0);
+    if (!found || number > found.number) found = { model, channel, number };
+  }
+  return found && { model: found.model, channel: found.channel };
+}
+
+/** The channel picked for `model` (the session's shownChannels) shown now
+ * on the layers that open on it (shownChannel: the model's own, and those
+ * of its finetunes that follow its pick), each layer otherwise as it is:
+ * its position on its channel axis is all that changes. A segmentation
+ * layer, an output with no channel axis and a chain that changes the
+ * channel count show none (displayChannel). Answers whether a layer was
+ * changed. */
+export function showChannel(ctx: AppContext, model: string): boolean {
+  const { shownChannels, chain } = ctx.session.state;
+  let changed = false;
+  for (const s of ctx.infer.served()) {
+    const shown = shownChannel(shownChannels, s.entry.name);
+    const layer = shown?.model === model ? ctx.viewer.layer(s.entry.name) : null;
+    if (!shown || layer?.type !== "image") continue;
+    const channel = displayChannel(s.info, chain.postprocess, shown.channel);
+    if (channel === null) continue;
+    ctx.viewer.setLayers({ [s.entry.name]: { ...layer, localPosition: channelPosition(channel) } });
+    changed = true;
+  }
+  return changed;
 }
 
 /** "148" for a cubic block, "148x148x64" otherwise. */

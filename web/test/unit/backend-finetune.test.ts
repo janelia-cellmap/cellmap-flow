@@ -11,11 +11,13 @@ import { createBackend } from "../../src/backend";
 import { type FinetuneDeps, finetuneRoutes, RESTART_EVENT } from "../../src/backend/routes/finetune";
 import { rankRoutes } from "../../src/backend/routes/rank";
 import { Router } from "../../src/backend/router";
+import { serveModels, setChain, shownChannel } from "../../src/backend/serving";
 import type { ApiRequest, ApiResponse, ModelEntry } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
 import { parseTrainGraph } from "../../src/finetune/full/graph";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey, planVolume, readVolume } from "../../src/finetune/volume";
+import { finetunedEntry } from "../../src/models/finetuned";
 import { entryFor, parseManifest } from "../../src/models/manifest";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
@@ -258,6 +260,50 @@ describe("GET /api/finetune/models' channels", () => {
     expect(byName[NAME_54]).toMatchObject({ channels: ["mito_aff_z", "mito_aff_y", "mito_aff_x"], channel_choice: false });
     expect(byName[many.name]).toMatchObject({ channels: ORGANELLES, channel_choice: true });
     expect(byName[NAME_56]).toMatchObject({ channels: ["nuc"], channel_choice: false });
+  });
+});
+
+describe("POST /api/finetune/channel", () => {
+  it("shows the channel picked on the model's layer now, and on each layer built later for it or a finetune of it", async () => {
+    const ctx = fakeContext();
+    const many = organelles();
+    await ctx.session.update({ models: [many] });
+    await serveModels(ctx, [many], ctx.session.state.chain);
+    const h = harness(ctx);
+    const pick = (model_name: string, select_channel: unknown) => h.handle(request("POST", "/api/finetune/channel", { model_name, select_channel }));
+    expect(ctx.viewer.layers[many.name].localPosition).toBeUndefined();
+
+    expect(body(await pick(many.name, 2))).toEqual({ success: true, shown: true });
+    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2.5]);
+    // Another chain is another source, whose layer opened on the first channel.
+    await setChain(ctx, { ...ctx.session.state.chain, postprocess: [] });
+    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2.5]);
+    // A finetune of it has its channels, and opens on its pick.
+    const tuned = finetunedEntry(many, `${many.name}-ft1`);
+    await ctx.session.update({ models: [many, tuned] });
+    await serveModels(ctx, [many, tuned], ctx.session.state.chain);
+    expect(ctx.viewer.layers[tuned.name].localPosition).toEqual([2.5]);
+    // A chain that keeps two channels numbers them anew: none is shown.
+    await setChain(ctx, { ...ctx.session.state.chain, postprocess: [{ name: "ChannelSelection", channels: "2,3" }] });
+    expect(ctx.viewer.layers[many.name].localPosition).toBeUndefined();
+    expect(body(await pick(many.name, 3))).toEqual({ success: true, shown: false });
+
+    // Past its channels, not an index, a model the browser does not have: refused, the pick kept.
+    expect(await pick(many.name, 8)).toMatchObject({ status: 400 });
+    expect(await pick(many.name, "mito")).toMatchObject({ status: 400 });
+    expect(await pick("nope", 1)).toMatchObject({ status: 404 });
+    expect(ctx.session.state.shownChannels).toEqual({ [many.name]: 3 });
+    // Cleared: no pick kept, the layers left as they are.
+    expect(body(await pick(many.name, null))).toEqual({ success: true, shown: false });
+    expect(ctx.session.state.shownChannels).toEqual({});
+  });
+
+  it("opens a finetune on its own pick, else on the latest of its series picked", () => {
+    const shown = { x: 1, "x-ft1": 4 };
+    expect(shownChannel(shown, "x-ft2")).toEqual({ model: "x-ft1", channel: 4 });
+    expect(shownChannel(shown, "x-ft1")).toEqual({ model: "x-ft1", channel: 4 });
+    expect(shownChannel({ x: 1 }, "x-ft3")).toEqual({ model: "x", channel: 1 });
+    expect(shownChannel(shown, "y-ft1")).toBeNull();
   });
 });
 

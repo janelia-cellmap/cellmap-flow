@@ -164,13 +164,17 @@ export function predictionSource(url: string, overrideScales: readonly number[] 
   return { url, transform: { outputDimensions: dimensions, inputDimensions: { ...dimensions } } };
 }
 
-/** The channel a model's layer opens on (layers.py's display_channel): the
- * one the engine names (`display_channel`, a Cellpose model's cell
- * probability rather than its first flow), while the chain keeps the model's
- * channels; null otherwise (the first). */
-export function displayChannel(info: ModelInfo, postprocess: Step[]): number | null {
-  const channel = info.display_channel;
+/** The channel a model's layer opens on (layers.py's display_channel):
+ * `shown`, the one the session shows for the model (POST
+ * /api/finetune/channel; serving.ts shownChannel), when it is one of the
+ * model's channels; else the one the engine names (`display_channel`, a
+ * Cellpose model's cell probability rather than its first flow); either
+ * only while the chain keeps the model's channels, since a chain that
+ * changes their count (a ChannelSelection, a merge) numbers them anew, and
+ * only for an output with a channel axis. Null otherwise (the first). */
+export function displayChannel(info: ModelInfo, postprocess: Step[], shown: number | null = null): number | null {
   const channels = info.output_channels;
+  const channel = shown !== null && shown < channels ? shown : info.display_channel;
   if (channel === null || channel === undefined || !channels || info.has_channel === false) return null;
   if (outputChannels(postprocess, channels) !== channels) return null;
   return Math.trunc(channel);
@@ -182,10 +186,12 @@ export function displayChannel(info: ModelInfo, postprocess: Step[]): number | n
  * order) over the range the chain produces, with the user's `keep` shader
  * and controls instead when they left some. The source URL is the engine's
  * (`served.url`, zarr3://...), transformed when the output must be drawn at
- * another voxel size than declared. With a display channel, the layer opens
- * on it: Neuroglancer's channel axis is a local dimension whose position is
- * the channel shown, at the channel's centre as Neuroglancer places them. */
-export function predictionLayer(served: ServedModel, chain: Chain, color: string, keep?: KeptShader): LayerSpec {
+ * another voxel size than declared. With a display channel (displayChannel:
+ * `shown`, the channel the session shows for the model, or the engine's),
+ * the layer opens on it: Neuroglancer's channel axis is a local dimension
+ * whose position is the channel shown, at the channel's centre as
+ * Neuroglancer places them (channelPosition). */
+export function predictionLayer(served: ServedModel, chain: Chain, color: string, keep?: KeptShader, shown: number | null = null): LayerSpec {
   const { info } = served;
   const source = predictionSource(served.url, predictionVoxelOverride(info), info.has_channel ?? true);
   if (isSegmentation(chain.postprocess) === true) {
@@ -201,9 +207,15 @@ export function predictionLayer(served: ServedModel, chain: Chain, color: string
   const layer: LayerSpec = { type: "image", name: served.entry.name, source, shader };
   const controls = keptControls(keep);
   if (controls) layer.shaderControls = controls;
-  const channel = displayChannel(info, chain.postprocess);
-  if (channel !== null) layer.localPosition = [channel + 0.5];
+  const channel = displayChannel(info, chain.postprocess, shown);
+  if (channel !== null) layer.localPosition = channelPosition(channel);
   return layer;
+}
+
+/** A layer's `localPosition` showing `channel` of its channel axis: the
+ * channel's centre, as Neuroglancer places them. */
+export function channelPosition(channel: number): number[] {
+  return [channel + 0.5];
 }
 
 // ---------------------------------------------------------------------------

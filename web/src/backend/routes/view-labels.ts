@@ -72,6 +72,7 @@ import { PYTHON } from "../../generated/python-data";
 import { asConnectivity, asBoolLike } from "../../infer/label";
 import { type Placement, placementArgs, readRegion, servedLevel } from "../../label-it/prediction";
 import { type Block, bufferOf, LABEL_IT, mutexObjects } from "../../label-it/segment";
+import { finetuneNumber } from "../../models/finetuned";
 import { paintLayerName } from "../../viewer/layers";
 import type { Router } from "../router";
 import { json, message, objectBody } from "../router";
@@ -535,20 +536,6 @@ function confirmationNeeded(body: Record<string, unknown>, lo: number[], hi: num
   const voxels = hi.reduce((n, h, a) => n * (h - lo[a]), 1);
   if (voxels <= LARGE_BOX_VOXELS || body.confirm) return null;
   return json(409, { success: false, error: `The box is ${voxels.toLocaleString("en-US")} voxels. Label it all?`, needs_confirmation: true, voxels });
-}
-
-/** Whether `name` is a model finetuned in this browser from `base`, or a
- * later one of its series (models/finetuned.ts nextFinetunedName: `x-ft1`,
- * then `x-ft2` from either), and how late: its number, or null. */
-function finetuneNumber(name: string, base: string): number | null {
-  const series = base.replace(/-ft\d+$/, "");
-  const after = /-ft(\d+)$/.exec(base);
-  const baseNumber = after ? Number(after[1]) : 0;
-  if (!name.startsWith(`${series}-ft`)) return null;
-  const rest = name.slice(series.length + 3);
-  if (!/^\d+$/.test(rest)) return null;
-  const n = Number(rest);
-  return n > baseNumber ? n : null;
 }
 
 /** Whether model `name` is read as `base`, the volume's model

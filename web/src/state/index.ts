@@ -32,7 +32,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {} };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -51,7 +51,16 @@ export function completeState(stored: unknown): SessionState {
     resample: typeof s.resample === "boolean" ? s.resample : false,
     prefs: s.prefs && typeof s.prefs === "object" && !Array.isArray(s.prefs) ? (s.prefs as SessionState["prefs"]) : {},
     paintVolume: typeof s.paintVolume === "string" ? s.paintVolume : null,
+    shownChannels: shownChannelsOf(s.shownChannels),
   };
+}
+
+/** A stored `shownChannels` made whole: the entries that are a channel's
+ * index (a whole number, 0 and up), since each becomes a layer's position
+ * on its channel axis; {} for anything that is not an object of them. */
+function shownChannelsOf(stored: unknown): Record<string, number> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored).filter(([, c]) => Number.isInteger(c) && (c as number) >= 0)) as Record<string, number>;
 }
 
 /** A SessionStore over `initial`, persisted through `save` after each update. */
