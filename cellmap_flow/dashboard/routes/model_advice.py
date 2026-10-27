@@ -7,8 +7,10 @@ degrades the result silently rather than erroring, which is a bad failure mode.
 
 This endpoint combines two sources into a verdict the UI can show:
 
-* the running server's output probe (``/__control__/output_probe``), which
-  observes what activation the model's output already has, and
+* the running server's model info (``/__control__/model_info``), which says
+  what activation the model's output already has: read off its network's
+  graph (the op that ends it), or else observed by its output probe on
+  noise, a guess, and
 * the model's declared metadata (channel count, name, training framework).
 
 It never changes anything -- callers decide whether to apply the suggestion.
@@ -28,7 +30,7 @@ from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.portable.rank import same_steps
-from cellmap_flow.serving.probe import input_norm_differences, review_postprocess, suggest_input_norm
+from cellmap_flow.serving.probe import activation_evidence, input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,9 @@ def model_advice():
             "probe_available": bool(probe.get("available")),
             "out_channels": out_channels,
             "output_class": probe.get("output_class"),
+            # What says it: "graph" (output_op, the op that ends it) or "probe".
+            "output_class_from": probe.get("output_class_from"),
+            "output_op": probe.get("output_op"),
             "output_min": probe.get("output_min"),
             "output_max": probe.get("output_max"),
             "configured_postprocess": configured_post,
@@ -224,11 +229,13 @@ def model_advice():
             }
         else:
             entry["postprocess_review"] = review_postprocess(
-                probe["output_class"],
+                probe.get("output_class"),
                 configured_post,
                 out_channels=out_channels,
                 model_name=meta.get("model_name") or name or "",
                 channels_names=meta.get("channels_names"),
+                evidence=activation_evidence(probe.get("output_class_from"), probe.get("output_op"),
+                                             (probe.get("output_min"), probe.get("output_max"))),
             )
 
         # Input side is a declared convention, not something we can observe.

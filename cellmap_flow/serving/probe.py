@@ -1,10 +1,13 @@
-"""Infer what postprocessing a model's raw output needs, from the output itself.
+"""Infer what postprocessing a model's raw output needs, from what its output is.
 
-A model's output activation is observable: feed it extreme inputs and see
-whether the result stays bounded. That tells us what activation is *already*
-baked into the weights, which is enough to catch the common misconfigurations
-(a SigmoidPostprocessor stacked on a model that already ends in a sigmoid, or a
-tanh-range model served without the rescale it needs).
+A model's output activation is read off its network's graph where that
+says it (portable/activation.py: the op that ends it), and is otherwise
+observed: feed it extreme inputs and see whether the result stays bounded,
+a guess, as a network can answer noise with one value everywhere. Either
+tells us what activation is *already* baked into the model, which is enough
+to catch the common misconfigurations (a SigmoidPostprocessor stacked on a
+model that already ends in a sigmoid, or a tanh-range model served without
+the rescale it needs).
 
 Deliberately does NOT try to decide what unbounded output *means*. Raw logits
 and signed-distance predictions are both unbounded and want opposite treatment,
@@ -12,6 +15,7 @@ and nothing in the tensor distinguishes them -- see ``UNBOUNDED`` below.
 """
 
 import logging
+from typing import Optional
 
 # The activation classes and their reading of a range are written once in
 # cellmap_flow.portable, where the browser's Python (a seed's probability)
@@ -182,17 +186,34 @@ def output_display_range(postprocess_steps, output_class):
     return rng
 
 
+def activation_evidence(output_class_from=None, output_op=None, output_range=None) -> str:
+    """What says a model's output is what it is, in words for the advice
+    (the server's model_info: ``output_class_from``, ``output_op`` and the
+    probe's ``output_range``): its network's last op, which says it for
+    certain, or its output on noise, a guess; "" when nothing is known of
+    either."""
+    if output_class_from == "graph" and output_op:
+        return f"its network ends in {'an' if output_op[0] in 'AEIOU' else 'a'} {output_op}"
+    if output_range is None or None in tuple(output_range):
+        return ""
+    lo, hi = (float(v) for v in output_range)
+    seen = f"its output on noise was {lo:.4g} everywhere" if hi - lo <= 1e-4 else \
+        f"its output on noise ranged from {lo:.4g} to {hi:.4g}"
+    return seen + (": a guess, as its network does not say" if output_class_from == "probe" else "")
+
+
 def review_postprocess(
-    output_class: str,
+    output_class: Optional[str],
     postprocess_names,
     out_channels=None,
     model_name="",
     channels_names=None,
+    evidence="",
 ) -> dict:
-    """Compare an observed output class against the configured postprocessors.
+    """Compare a model's output class against the configured postprocessors.
 
     Returns ``{"level", "message", "suggest"}`` where ``level`` is one of
-    "ok" / "optional" / "suggest" / "warn", and ``suggest`` is a list of
+    "ok" / "optional" / "suggest" / "warn" / "unknown", and ``suggest`` is a list of
     postprocessor names to apply (empty when the current configuration is
     already sensible).
 
@@ -205,8 +226,14 @@ def review_postprocess(
     affinity model's logits' too), it read as though that were wrong. A
     threshold is no fault either: the ranking sets one at the probability
     the paint is fitted best at.
+
+    ``evidence`` (``activation_evidence``'s) is what says the class, which
+    each message gives. ``output_class`` None, when neither the network nor
+    its output on noise says what the output is, is "unknown", with what
+    the probe saw.
     """
     names = list(postprocess_names or [])
+    said = f" ({evidence})" if evidence else ""
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
     has_threshold = "ThresholdPostprocessor" in names
@@ -220,6 +247,16 @@ def review_postprocess(
             "params": suggest_postprocess_params(suggest, output_class, out_channels),
         }
 
+    if output_class is None:
+        return verdict(
+            "unknown",
+            (
+                f"Neither this model's network nor its output on noise says what its output is{said}. "
+                "Set its postprocessing yourself: SigmoidPostprocessor if it gives logits, none if probabilities."
+            ),
+            [],
+        )
+
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
             if not (has_default or has_sigmoid or output_class == UNIT):
@@ -228,7 +265,7 @@ def review_postprocess(
                     (
                         "AffinityPostprocessor needs affinities in [0, 1] (or "
                         "the 0-255 that DefaultPostprocessor produces), but "
-                        "this model's output is not bounded to [0, 1] and "
+                        f"this model's output is not bounded to [0, 1]{said} and "
                         "nothing ahead of it rescales it, so the watershed "
                         "works on the wrong values."
                     ),
@@ -253,15 +290,15 @@ def review_postprocess(
             return verdict(
                 "warn",
                 (
-                    "This model's output is already bounded to [0, 1], so it "
-                    "ends in a sigmoid. SigmoidPostprocessor would apply a "
-                    "second one, flattening the contrast."
+                    f"This model's output is already in [0, 1], a sigmoid's{said}. "
+                    "SigmoidPostprocessor would apply a second one, flattening "
+                    "the contrast."
                 ),
                 [n for n in names if n != "SigmoidPostprocessor"],
             )
         return verdict(
             "ok",
-            "Model output is already in [0, 1]; no activation needed.",
+            f"Model output is already in [0, 1]{said}; no activation needed.",
             [],
         )
 
@@ -270,7 +307,7 @@ def review_postprocess(
             return verdict(
                 "warn",
                 (
-                    "This model's output is bounded to [-1, 1] (a tanh head). "
+                    f"This model's output is bounded to [-1, 1], a tanh's{said}. "
                     "A sigmoid on top compresses it to roughly [0.27, 0.73], "
                     "which looks washed out. DefaultPostprocessor is the usual "
                     "choice for this range."
@@ -281,7 +318,7 @@ def review_postprocess(
             return verdict(
                 "suggest",
                 (
-                    "Model output is in [-1, 1] (a tanh head). "
+                    f"Model output is in [-1, 1], a tanh's{said}. "
                     "DefaultPostprocessor rescales that to 0-255 for display."
                 ),
                 ["DefaultPostprocessor"],
@@ -295,14 +332,15 @@ def review_postprocess(
         return verdict(
             "suggest",
             (
-                "Model output is unbounded, so it has no activation. If these "
-                "are logits (an affinity model's are), SigmoidPostprocessor "
-                "converts them to probabilities. If they are distances, leave "
-                "this alone -- the output range cannot tell the two apart."
+                f"Model output has no activation{said}. If these are logits "
+                "(an affinity model's are), SigmoidPostprocessor converts them "
+                "to probabilities. If they are distances, leave this alone -- "
+                "neither the network's last op nor the output's range can tell "
+                "the two apart."
             ),
             ["SigmoidPostprocessor"],
         )
-    return verdict("ok", "Model output is unbounded; current postprocessing left as set.", [])
+    return verdict("ok", f"Model output has no activation{said}; current postprocessing left as set.", [])
 
 
 # --- input normalization -----------------------------------------------------

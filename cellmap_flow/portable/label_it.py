@@ -24,6 +24,8 @@ package the first time a call fails to import it, then calls again, so the
 first seed pays for scipy and opening a dataset does not.
 """
 
+from typing import Optional
+
 import numpy as np
 
 # How a seed makes objects of the prediction (``post.segment``), each fitting
@@ -41,8 +43,9 @@ SEED_METHODS = (
     "instances",
 )
 
-# A model's output activation, as serving/probe.py observes it (and
-# re-exports these from here, so the browser's Python has them too).
+# A model's output activation, as activation.py reads it off the network's
+# graph, or serving/probe.py observes it (and re-exports these from here, so
+# the browser's Python has them too).
 UNIT = "unit"  # [0, 1] -- sigmoid/softmax already applied
 SIGNED_UNIT = "signed_unit"  # [-1, 1] -- tanh already applied
 UNBOUNDED = "unbounded"  # no output activation: logits, distances, affinities...
@@ -51,11 +54,21 @@ UNBOUNDED = "unbounded"  # no output activation: logits, distances, affinities..
 CONNECTIVITIES = {1: "faces", 2: "faces and edges", 3: "all neighbours"}
 
 
-def classify_output_range(lo: float, hi: float) -> str:
-    """Bucket an observed (min, max) output range into an activation class."""
+def classify_output_range(lo: float, hi: float) -> Optional[str]:
+    """Bucket an observed (min, max) output range into an activation class;
+    None for a flat one, max - min within the tolerance.
+
+    A flat output is no evidence: jrc_mus-livers_16nm_to_8nm_peroxisome gave
+    -0.9595 everywhere on the server's noise, read as a tanh's [-1, 1], when
+    its network ends in a Conv (logits); a sigmoid saturated everywhere
+    would be as flat at 1. Whatever the values, a range they do not span
+    says nothing of what the output can be.
+    """
     # Small tolerance: a saturating activation can land a hair outside its
     # asymptote in float32.
     eps = 1e-4
+    if hi - lo <= eps:
+        return None
     if lo >= -eps and hi <= 1.0 + eps:
         return UNIT
     if lo >= -1.0 - eps and hi <= 1.0 + eps:
@@ -236,8 +249,14 @@ def probability(prediction, output_class=None, channels=None):
     probability, so ``channels`` (a slice: the affinity channels, say) can
     be averaged and one threshold means the same for every model. A slice
     running past the model's channels reads those there are; one starting
-    past them is refused. ``output_class`` is the server's
-    (serving.probe), or read off the values when it has none.
+    past them is refused. ``output_class`` is the server's (its network's
+    last op, or its probe's: inference/runner.py), or read off the values
+    when it has none, and taken as logits when they are flat
+    (``classify_output_range``). Read off the values is a guess: logits
+    that lie within [0, 1] read as probabilities. It is kept because the
+    values are real predictions (the ranking's under the paint, a seed's in
+    its box), nearer the truth than the probe's noise, and a model whose
+    graph says its activation never comes to it.
     """
     if channels is not None:
         prediction = prediction[channels]

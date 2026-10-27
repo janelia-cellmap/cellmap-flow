@@ -215,10 +215,30 @@ function renderOptionalPostprocess(m, rev, box, wanted) {
   }, JSON.stringify(rev.params || {}));
 }
 
+// A served model whose output neither its network's graph nor its probe on
+// noise says (a flat probe: model_info's output_class null), so nothing
+// sets its postprocessing: one quiet line saying so, and what the probe saw.
+function renderUnknownOutput(m, rev, box, wanted) {
+  const key = adviceKey("post-unknown", m, [rev.message]);
+  showAdvice(box, wanted, key, function () {
+    const div = document.createElement("div");
+    div.className = "small text-muted mb-2";
+    div.innerHTML = "<code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
+      function () { hideAdvice(key); }));
+    return div;
+  });
+}
+
 function renderPostprocessAdvice(m, box, wanted) {
   const rev = m.postprocess_review || {};
   if (rev.level === "optional") {
     renderOptionalPostprocess(m, rev, box, wanted);
+    return;
+  }
+  // "unknown" with no answer from the server is a server not up yet.
+  if (rev.level === "unknown" && m.probe_available) {
+    renderUnknownOutput(m, rev, box, wanted);
     return;
   }
   if (rev.level !== "suggest" && rev.level !== "warn") return;
@@ -231,13 +251,10 @@ function renderPostprocessAdvice(m, box, wanted) {
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (warn ? "alert-warning" : "alert-info");
+    // The message says what the output is and what says so: the network's
+    // last op, or the range its output on noise had (a guess).
     let html = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
              + "</strong> for <code>" + esc(m.model || "model") + "</code><br>";
-    if (m.output_min !== null && m.output_min !== undefined) {
-      html += "<small>Observed output range ["
-           + Number(m.output_min).toPrecision(4) + ", "
-           + Number(m.output_max).toPrecision(4) + "]</small><br>";
-    }
     html += esc(rev.message);
     const tuned = Object.keys(rev.params || {});
     if (tuned.length) {

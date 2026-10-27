@@ -1,7 +1,10 @@
 """Running a model on a region: the device, the warmup and the forward.
 
-``ModelRunner`` puts a ModelConfig's model on the device, warms it up (the
-same forward checks the declared shapes and probes the output's range), and
+``ModelRunner`` puts a ModelConfig's model on the device, reads its output
+activation off its network's graph (``ModelConfig.output_graph``,
+``portable.activation``), warms it up (the same forward checks the declared
+shapes and probes the output's range, which says the activation when the
+graph does not), and
 predicts an output region from a ``RawInput`` (``cellmap_flow.io.raw``; in
 the server, its ``BlockInput``): the model's raw output, ``(C, *spatial)``,
 with no postprocessing and no process-wide state.
@@ -208,9 +211,14 @@ class ModelRunner:
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
-        # Populated by the warmup probe; None when it could not run.
+        # What the model's output is (portable/label_it.py's classes): read
+        # off its network's graph (output_class_from "graph", output_op the
+        # op that ends it), else measured by the warmup probe ("probe");
+        # None when neither says. output_range is the probe's, whenever it ran.
         self.output_range = None
         self.output_class = None
+        self.output_class_from = None
+        self.output_op = None
         # The warmup forward below checks the declared shapes, on the device
         # that serves; building the config then needs no forward of its own.
         model_config.check_shapes_on_warmup = True
@@ -238,6 +246,7 @@ class ModelRunner:
             return
         if not isinstance(self.model_config.config.model, torch.nn.Module):
             logger.warning("Model is not a nn.Module, we only optimize torch models")
+            self._read_output_activation()  # a bioimage.io model's description may say it
             return
         self.model_config.config.model.to(self.device)
         if self.use_half_prediction:
@@ -248,7 +257,32 @@ class ModelRunner:
         #     self.model_config.config.model = torch.compile(self.model_config.config.model)
         # print("Model compiled")
         self.model_config.config.model.eval()
+        # In eval mode: a DaCapo model's forward adds its eval activation then.
+        self._read_output_activation()
         self._warmup()
+
+    def _read_output_activation(self):
+        """Read the output activation off the network's graph (``ModelConfig.output_graph``,
+        ``portable.activation.output_activation``): the op that ends it says it
+        for certain, where the warmup's probe guesses from the output's range
+        on noise (jrc_mus-livers_16nm_to_8nm_peroxisome's was -0.9595
+        everywhere, read as a tanh's, when its network ends in a Conv). The
+        probe decides only when the graph does not say, or cannot be read.
+        """
+        from cellmap_flow.portable.activation import output_activation
+
+        try:
+            graph = self.model_config.output_graph()
+            found = output_activation(*graph) if graph is not None else None
+        except Exception as e:
+            logger.info(f"Could not read the model's graph ({e}); its output probe decides what its output is")
+            return
+        if found is None:
+            logger.info("The model's graph does not say what its output is; its output probe decides")
+            return
+        self.output_class, self.output_op = found["output_class"], found["op"]
+        self.output_class_from = "graph"
+        logger.info(f"The model's network ends in {self.output_op}: its output is {self.output_class}")
 
     def _warmup(self):
         """Run one throwaway forward pass so the first real chunk doesn't pay for it.
@@ -361,7 +395,9 @@ class ModelRunner:
         )
 
     def _record_output_class(self, out):
-        """Classify the model's output activation from the warmup pass.
+        """Classify the model's output activation from the warmup pass, unless
+        its graph said it (``_read_output_activation``); a flat output (the
+        same value everywhere) says nothing (``classify_output_range``).
 
         Stored on the instance so the server can report it to the dashboard,
         which uses it to suggest (or sanity-check) the postprocessing chain.
@@ -380,9 +416,13 @@ class ModelRunner:
                 logger.info("Output probe saw non-finite values; skipping")
                 return
             self.output_range = (lo, hi)
+            if self.output_class_from == "graph":
+                logger.info(f"Model output range [{lo:.4g}, {hi:.4g}]; its graph says {self.output_class}")
+                return
             self.output_class = classify_output_range(lo, hi)
+            self.output_class_from = "probe" if self.output_class else None
             logger.info(
-                f"Model output range [{lo:.4g}, {hi:.4g}] -> {self.output_class}"
+                f"Model output range [{lo:.4g}, {hi:.4g}] -> {self.output_class or 'flat: not known'}"
             )
         except Exception as e:
             logger.info(f"Could not classify model output: {e}")

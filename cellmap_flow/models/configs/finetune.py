@@ -191,6 +191,13 @@ class FinetuneModelConfig(ModelConfig):
         voxel_size, shape = _at_voxel_size(base["write_shape"], base["output_voxel_size"], self.output_voxel_size)
         return {**base, "write_shape": list(shape), "output_voxel_size": list(voxel_size)}
 
+    def output_graph(self):
+        """Its base's: a finetune's weights (an adapter beside each layer, or
+        the whole network's) change what its layers compute, not the op that
+        ends it, and the module it serves (PEFT's, around the base's
+        trainable module) is not one a torch.fx trace reads."""
+        return self.base_model_config.output_graph()
+
     def trainable_model(self):
         """The module it serves (its base's trainable module with the adapter
         or weights on), to train on from where the finetune left off; not
