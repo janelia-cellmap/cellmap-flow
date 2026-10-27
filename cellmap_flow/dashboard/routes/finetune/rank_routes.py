@@ -17,16 +17,21 @@ the better kept: a server runs the chain each request names. Where the raw
 under the paint is narrow, the same server is asked again through that
 normalization stretched to the raw's window. The answer is the ranking's
 row (portable/rank.py score_row: the score kept, its threshold, the raw's
-range it read and the steps it was read through, ``input_norm``).
-POST /api/finetune/rank/use {name, entry?, input_norm?} makes the one
-picked the model to finetune: ``input_norm`` (the row's) made the
-dashboard's normalization first, then the model running (as the Models
-tab's Add runs it), a volume made for it with the session volume's paint
-carried onto its grid (session/volume.py carry_paint) and its paint layer
-in the old one's place; the old volume stays. POST
-/api/finetune/rank/input-norm {input_norm} makes the row's steps the
-dashboard's normalization alone, with no model started and no volume
-made: Fit to paint's, for the model already seeding the paint.
+range it read and the steps it was read through, ``input_norm``, with what
+every channel matched, ``channel_matches``, and what the other
+normalizations tried did, ``input_norm_others``: why this one), and the
+postprocessing its layer needs to show right instead of the session's,
+``postprocess`` (portable/rank.py display_postprocess: the sigmoid added or
+taken away), or null when the session's shows it right.
+POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?}
+makes the one picked the model to finetune: ``input_norm`` and
+``postprocess`` (the row's) made the dashboard's chain first, then the
+model running (as the Models tab's Add runs it), a volume made for it with
+the session volume's paint carried onto its grid (session/volume.py
+carry_paint) and its paint layer in the old one's place; the old volume
+stays. POST /api/finetune/rank/input-norm {input_norm, postprocess?} makes
+the row's steps the dashboard's chain alone, with no model started and no
+volume made: Fit to paint's, for the model already seeding the paint.
 """
 
 import logging
@@ -51,7 +56,7 @@ logger = logging.getLogger(__name__)
 RAW_SAMPLE = 1_000_000
 
 # Where a score's input normalization came from (portable/rank.py
-# norm_tries's ``from``), as the score's notes and the log name it.
+# norm_tries's ``from``), as the log names it.
 NORM_FROM = {
     "declared": "its declared input normalization",
     "convention": "the CellMap convention's input normalization",
@@ -147,12 +152,16 @@ def rank_score():
         scored = [_score(host, name, volume, boxes, info, offsets, t["input_norm"]) for t in tries]
         k = rank.best_try([s for s, _ in scored]) or 0
         (base, outside), norm, norm_from = scored[k], tries[k]["input_norm"], tries[k]["from"]
+        # What the tries not kept matched, which the row carries to say why
+        # this one.
+        others = [{"from": t["from"], "matches": s["matches"]}
+                  for j, (t, (s, _)) in enumerate(zip(tries, scored)) if j != k and s]
         # The raw stretched to its own range, when it is narrow, and the
         # row from the two scores (portable/rank.py).
         raw = base and _raw_window(volume, boxes)
         stretched = raw and rank.windowed(norm, *raw)
         alt = _score(host, name, volume, boxes, info, offsets, stretched)[0] if base and stretched else None
-        score = rank.score_row(base, alt, norm, raw, norm_from)
+        score = rank.score_row(base, alt, norm, raw, norm_from, others)
         if not score:
             return _refused(f"The paint gives {name} nothing to score: "
                             + ("an affinity is between two painted neighbours, so paint strokes, not single voxels." if offsets
@@ -161,9 +170,12 @@ def rank_score():
             *([f"scored under {rank.RANK_BLOCKS} of the {len(chunks)} painted chunks, spread over them"] if len(chunks) > rank.RANK_BLOCKS else []),
             *([f"{outside} of the painted chunks scored lie past its output, and were not scored"] if outside else []),
             *(["started for its score and stopped after"] if job is not None else []),
-            *(f"through {NORM_FROM[t['from']]} it matched {s['matches']:.0%}"
-              for j, (t, (s, _)) in enumerate(zip(tries, scored)) if j != k and s),
         ]
+        # The sigmoid its layer needs to show right, as the session's chain
+        # stands (portable/rank.py display_postprocess), which Use this model
+        # and Fit to paint set beside the input normalization.
+        postprocess = rank.display_postprocess(
+            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess], bool(offsets))
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "
@@ -171,7 +183,7 @@ def rank_score():
                     + (f", the raw stretched from {window[0]:.1f}-{window[1]:.1f} ({base['matches']:.0%} unstretched)" if window else "")
                     + f", {seconds:.1f} s")
         return jsonify({
-            "success": True, "name": name, **score, "seconds": seconds,
+            "success": True, "name": name, **score, "postprocess": postprocess, "seconds": seconds,
             **({"note": "; ".join(notes)} if notes else {}),
         })
     except Exception as e:
@@ -204,8 +216,8 @@ def rank_use():
     if from_volume.get("model_name") == name:
         return _refused(f"{from_id} is {name}'s volume already: finetune it as it is.")
     try:
-        # Before the model starts, so it is served through it.
-        input_norm = _install_input_norm(data.get("input_norm"))
+        # Before the model starts, so it is served through them.
+        input_norm, postprocess = _install_chain(data.get("input_norm"), data.get("postprocess"))
         config = _model_config(name, data.get("entry"))
         if name not in running_names():
             _start_for_good(name, config)
@@ -225,7 +237,7 @@ def rank_use():
         return jsonify({
             "success": True, "name": name, "volume_id": to_id, "from_volume": from_id, "layer_name": layer,
             "painted_voxels": carried["painted"], "source_voxels": carried["source"], "conflicts": carried["conflicts"],
-            "chunks": carried["chunks"], "input_norm": input_norm,
+            "chunks": carried["chunks"], "input_norm": input_norm, "postprocess": postprocess,
         })
     except Exception as e:
         logger.error(f"Could not make {name} the model to finetune: {e}", exc_info=True)
@@ -234,51 +246,70 @@ def rank_use():
 
 @finetune_bp.route("/api/finetune/rank/input-norm", methods=["POST"])
 def rank_input_norm():
-    """Fit to paint's: the input normalization a score was read through
-    ({input_norm: steps}, the score answer's) made the dashboard's, as Use
-    this model makes it, without starting a model or making a volume.
-    Answers the session's input normalization as it now is; refused (400)
-    for steps that are not a list of normalizers the dashboard has, which
-    leaves it as it was."""
+    """Fit to paint's: the input normalization a score was read through and
+    the postprocessing its layer needs ({input_norm, postprocess?}, the
+    score answer's) made the dashboard's chain, as Use this model makes it,
+    without starting a model or making a volume. Answers the session's
+    chain as it now is, ``input_norm`` and ``postprocess``; refused (400)
+    for steps that are not a list of ops of their kind the dashboard has,
+    which leaves the chain as it was."""
     data = request.get_json(silent=True) or {}
     try:
-        steps = _install_input_norm(data.get("input_norm"), required=True)
+        steps, post = _install_chain(data.get("input_norm"), data.get("postprocess"), input_norm_required=True)
     except ValueError as e:
-        return _refused(f"The input normalization was left as it is: {e}")
+        return _refused(f"The input normalization and postprocessing were left as they are: {e}")
     except Exception as e:
-        logger.error(f"Could not set the input normalization: {e}", exc_info=True)
-        return _refused(f"Could not set the input normalization: {e}")
+        logger.error(f"Could not set the input normalization and postprocessing: {e}", exc_info=True)
+        return _refused(f"Could not set the input normalization and postprocessing: {e}")
     if steps is not None:
         logger.info(f"Input normalization set to fit the paint: {' → '.join(s['name'] for s in steps)}")
-    return jsonify({"success": True, "input_norm": [dict(s) for s in get_session().pipeline_spec.input_norm]})
+    if post is not None:
+        logger.info(f"Postprocessing set to show the model right: {' → '.join(s['name'] for s in post) or 'none'}")
+    spec = get_session().pipeline_spec
+    return jsonify({"success": True, "input_norm": [dict(s) for s in spec.input_norm],
+                    "postprocess": [dict(s) for s in spec.postprocess]})
 
 
-def _install_input_norm(steps, required=False):
-    """``steps`` (normalizer step dicts, a score's ``input_norm``) made the
-    session's input normalization, its postprocessing kept, and the viewer
+def _install_chain(input_norm, postprocess, input_norm_required=False):
+    """``input_norm`` (normalizer step dicts, a score's ``input_norm``) and
+    ``postprocess`` (postprocessor step dicts, a score's ``postprocess``)
+    made the session's chain, each part where it is given and is not the
+    session's already (rank.same_steps), in one chain set, and the viewer
     redrawn through it (routes/pipeline.py's setter, as PUT /api/pipeline
-    sets it): the raw is the dataset's, so every model reads it so. Returns
-    the steps set, or None when ``steps`` is None (and not ``required``) or
-    the session's already (rank.same_steps), which changes nothing. Raises
-    ValueError for steps that are not a list of normalizers the dashboard
-    has, or that one's class refuses, with nothing changed."""
+    sets it): the raw is the dataset's, so every model reads it through the
+    one input normalization, and every prediction layer shows through the
+    one postprocessing. Returns ``(input_norm, postprocess)``, each the
+    steps set, or None for a part left as it was: not given (None, and for
+    ``input_norm`` not ``input_norm_required``) or the session's already.
+    Raises ValueError for a part that is not a list of steps of ops of its
+    kind the dashboard has, or that one's class refuses, with nothing
+    changed."""
     from cellmap_flow.dashboard.routes.pipeline import _set_chain_and_redraw, _unknown_op
 
-    if steps is None and not required:
-        return None
-    if not isinstance(steps, list) or not all(isinstance(s, dict) for s in steps):
-        raise ValueError("input_norm is a list of normalizer steps")
-    unknown = _unknown_op("normalizer", [s.get("name") for s in steps])
-    if unknown:
-        raise ValueError(unknown)
-    session = get_session()
-    if rank.same_steps(steps, [dict(s) for s in session.pipeline_spec.input_norm]):
-        return None
+    live = get_session().pipeline_spec
+    parts = []
+    for steps, field, kind, current, required in (
+            (input_norm, "input_norm", "normalizer", live.input_norm, input_norm_required),
+            (postprocess, "postprocess", "postprocessor", live.postprocess, False)):
+        if steps is None and not required:
+            parts.append(None)
+            continue
+        if not isinstance(steps, list) or not all(isinstance(s, dict) for s in steps):
+            raise ValueError(f"{field} is a list of {kind} steps")
+        unknown = _unknown_op(kind, [s.get("name") for s in steps])
+        if unknown:
+            raise ValueError(unknown)
+        parts.append(None if rank.same_steps(steps, [dict(s) for s in current]) else [dict(s) for s in steps])
+    input_norm, postprocess = parts
+    if input_norm is None and postprocess is None:
+        return None, None
+    spec = PipelineSpec(live.input_norm if input_norm is None else input_norm,
+                        live.postprocess if postprocess is None else postprocess)
     try:
-        _set_chain_and_redraw(PipelineSpec([dict(s) for s in steps], session.pipeline_spec.postprocess), request.host_url)
+        _set_chain_and_redraw(spec, request.host_url)
     except TypeError as e:
         raise ValueError(str(e)) from e
-    return steps
+    return input_norm, postprocess
 
 
 def _norm_tries(config, session):

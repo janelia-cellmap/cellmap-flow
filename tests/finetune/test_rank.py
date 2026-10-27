@@ -6,7 +6,9 @@ forgiving a binary model the strokes' edges; a binary model answers its
 best channel by name and index, an affinity model neither; a model running is read
 through its server and any other started for its score alone; the raw is
 stretched when that scores clearly better; each row gives its threshold
-and input window; Fit to Paint sets them for the model seeding the paint
+and input window, what the other normalizations matched and the sigmoid
+its layer needs; Use this model and Fit to Paint set the normalization and
+the sigmoid in one chain set, Fit to Paint for the model seeding the paint
 without a new volume; the paint is carried onto another model's grid.
 """
 
@@ -202,6 +204,8 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert body["success"], body
     assert (body["matches"], body["cutoff"], body["channel"], body["window"]) == (1, 0, "nuc", None)
     assert (body["object_voxels"], body["background_voxels"]) == (64, 64)
+    # Its logits show right through a sigmoid, which the session's empty chain lacks.
+    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}]
     assert {host for host, _ in painted.reads} == {"http://gpu:8000" if running else "http://gpu:9000"}
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
@@ -232,11 +236,11 @@ def test_a_model_is_read_through_its_own_input_normalization_when_the_session_ha
     assert all(steps == own for _, steps in painted.reads)
 
     # With the session's chain as something else that sees nothing, its own
-    # is still kept, and the note says what the other matched.
+    # is still kept, and the row says what the other matched.
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
     assert (body["matches"], body["input_norm_from"]) == (1, "convention")
-    assert "through the session's input normalization it matched 50%" in body["note"]
+    assert body["input_norm_others"] == [{"from": "session", "matches": 0.5}]
 
 
 def test_a_model_nothing_declares_is_read_through_the_assumed_normalization(dashboard, painted, monkeypatch):
@@ -273,14 +277,16 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
     assert painted.reads[-1][1][0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
 
 
-def test_fit_to_paint_sets_the_threshold_and_input_normalization_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
+def test_fit_to_paint_sets_the_input_normalization_and_sigmoid_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
     session = get_session()
     session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
     # The chain set, without a raw to redraw the viewer from.
-    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
+    chains = []
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw",
+                        lambda spec, url: (chains.append(spec), session.set_pipeline(spec)))
     # As normalized it sees nothing; with the raw stretched, the objects at -1
     # over the rest at -4, so a cut-off under the model's own fits them.
     painted.stretched = np.where(painted.logits > 0, -1.0, -4.0).astype("f4")
@@ -288,18 +294,24 @@ def test_fit_to_paint_sets_the_threshold_and_input_normalization_of_the_model_se
     volumes = dict(session.annotation_volumes)
 
     scored = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
-    fitted = dashboard.post("/api/finetune/rank/input-norm", json={"input_norm": scored["input_norm"]}).get_json()
+    fitted = dashboard.post("/api/finetune/rank/input-norm", json={
+        "input_norm": scored["input_norm"], "postprocess": scored["postprocess"]}).get_json()
 
     assert scored["success"] and fitted["success"], (scored, fitted)
     assert scored["cutoff"] < 0 and scored["threshold"] == round(1 / (1 + math.exp(-scored["cutoff"])), 3)
     assert scored["window"] == scored["input_window"] == [100.0, 120.0]
     stretched = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
     assert fitted["input_norm"] == scored["input_norm"] == [stretched]
-    assert session.pipeline_spec.input_norm[0] == stretched
+    # The sigmoid its logits need, set with the normalization in one chain set.
+    sigmoid = {"name": "SigmoidPostprocessor"}
+    assert fitted["postprocess"] == scored["postprocess"] == [sigmoid] and len(chains) == 1
+    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": [sigmoid]}
     assert session.annotation_volumes == volumes and rank_routes.session_store().session_volume()[0] == "vol-1"
-    # Steps the dashboard has no normalizer for change nothing.
-    assert not dashboard.post("/api/finetune/rank/input-norm", json={"input_norm": [{"name": "NoSuchNormalizer"}]}).get_json()["success"]
-    assert session.pipeline_spec.input_norm[0] == stretched
+    # Steps the dashboard has no op for change nothing.
+    for body in ({"input_norm": [{"name": "NoSuchNormalizer"}]},
+                 {"input_norm": [], "postprocess": [{"name": "NoSuchPostprocessor"}]}):
+        assert not dashboard.post("/api/finetune/rank/input-norm", json=body).get_json()["success"]
+    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": [sigmoid]}
 
 
 def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(dashboard, painted, monkeypatch):
@@ -339,22 +351,25 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(annotation_core, "make_volume", make_volume)
     monkeypatch.setattr(finetune_utils, "ensure_minio_serving", lambda *a, **k: None)
     monkeypatch.setattr(geometry_cache, "resolve_model_geometry", lambda name, config: {})
-    monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(name))
-    # The chain set, without a raw to redraw the viewer from.
+    # The chain set when the model is started, without a raw to redraw the viewer from.
+    monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
+        (name, session.pipeline_spec.to_json_data())))
     monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
+    stretched, sigmoid = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}, {"name": "SigmoidPostprocessor"}
     body = dashboard.post("/api/finetune/rank/use", json={
-        "name": "mito_16nm", "input_norm": [{"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}],
+        "name": "mito_16nm", "input_norm": [stretched], "postprocess": [sigmoid],
         "entry": {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}}).get_json()
 
     assert body["success"], body
     assert (body["volume_id"], body["from_volume"]) == ("vol-2", "vol-1")
-    assert body["input_norm"] == [{"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}]
+    assert (body["input_norm"], body["postprocess"]) == ([stretched], [sigmoid])
     # 4^3 object and 4^3 background voxels of 16 nm, 2^3 each at 32 nm.
     assert (body["painted_voxels"], body["source_voxels"], body["conflicts"]) == (16, 128, 0)
-    assert launched == ["mito_16nm"] and [c.name for c in session.models_config][-1] == "mito_16nm"
-    assert session.pipeline_spec.input_norm[0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
+    # Served through both.
+    assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]})]
+    assert [c.name for c in session.models_config][-1] == "mito_16nm"
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
 
 
@@ -370,3 +385,4 @@ def test_the_sigmoid_a_ranked_models_layer_needs_and_nothing_else():
     assert display_postprocess("signed_unit", [sigmoid], False) == []
     assert display_postprocess("unit", [], False) is None
     assert display_postprocess("unbounded", [], True) is None
+
