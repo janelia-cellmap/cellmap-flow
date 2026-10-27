@@ -6,6 +6,7 @@
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
+import { matchesWords, searchText } from "../../lib/search.js";
 import { notice, tag, untickBox } from "./row.js";
 
 // The zoo models already running, ticked on load, with the voxel size each
@@ -57,7 +58,7 @@ function row(model, voxelSize) {
   return h("div", {
     class: "form-check zoo-model-item",
     dataset: {
-      search: [model.name, model.key, model.id, model.description, ...model.tags].join(" ").toLowerCase(),
+      search: searchText(model.name, model.key, model.id, model.description, ...model.tags, model.dims),
       em: model.em ? "1" : "",
       dims: model.dims || "",
     },
@@ -79,7 +80,7 @@ function row(model, voxelSize) {
 // Search words (all must match), EM only, and 2D/3D (neither ticked: any).
 // A ticked row stays in view, so nothing is submitted unseen.
 function filter() {
-  const words = document.getElementById("zooSearchBar").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const query = document.getElementById("zooSearchBar").value;
   const emOnly = document.getElementById("zooEmOnly").checked;
   const dims = [["zoo2d", "2d"], ["zoo3d", "3d"]]
     .filter(([id]) => document.getElementById(id).checked)
@@ -87,7 +88,7 @@ function filter() {
   const rows = document.querySelectorAll("#zooModelList .zoo-model-item");
   let shown = 0;
   rows.forEach((item) => {
-    const matches = words.every((w) => item.dataset.search.includes(w))
+    const matches = matchesWords(item.dataset.search, query)
       && (!emOnly || item.dataset.em)
       && (!dims.length || dims.includes(item.dataset.dims));
     const show = matches || item.querySelector(".zoo-model-checkbox").checked;

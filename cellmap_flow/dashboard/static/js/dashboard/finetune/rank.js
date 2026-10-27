@@ -37,6 +37,7 @@
 // the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
 import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { matchesWords, searchText } from "../../lib/search.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
@@ -67,20 +68,17 @@ export function rankResults(answers) {
   return { rows, littlePaint: Boolean(best) && best.scored_voxels < LITTLE_PAINT };
 }
 
-// Whether `candidate` shows under the filter typed: every word of it is in
-// the model's name, task, channels or a voxel size ("16 nm" or "16nm"), or
-// is its "2d" or "3d", or "finetuned", whatever the case. Spaces, commas,
-// hyphens and underscores all separate words, in the filter and the names
-// alike, so "mito aff", "mito-aff" and "mito_aff" all find
-// mito-aff-unet-setup-16, listed as mito_aff_unet_setup_16. Blank shows all.
+// Whether `candidate` shows under the filter typed (lib/search.js, the
+// rule every model list's search follows): every word of it is in the
+// model's name, task, channels or a voxel size ("16 nm" or "16nm"), or is
+// its "2d" or "3d", or "finetuned". Blank shows all.
 export function matchesFilter(candidate, query) {
-  const words = query.toLowerCase().replace(/(\d)\s+nm\b/g, "$1nm").split(/[\s,_-]+/).filter(Boolean);
-  const text = [
+  const text = searchText(
     candidate.name, candidate.task, ...(candidate.channels || []),
     ...(candidate.voxel_size_nm || []).map((size) => `${size}nm`),
     candidate.dims && `${candidate.dims}d`, candidate.finetuned && "finetuned",
-  ].filter(Boolean).join(" ").toLowerCase().replace(/[_-]+/g, " ");
-  return words.every((word) => text.includes(word));
+  );
+  return matchesWords(text, query);
 }
 
 function isScored(answer) {

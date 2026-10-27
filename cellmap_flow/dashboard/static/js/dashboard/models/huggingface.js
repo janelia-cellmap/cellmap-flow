@@ -4,6 +4,7 @@
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
+import { dimsWord, matchesWords, searchText } from "../../lib/search.js";
 import { notice, untickBox } from "./row.js";
 
 // The repos of the Hugging Face models already running, ticked on load; one
@@ -18,7 +19,10 @@ function row(modelId, metadata) {
   const id = "chk_hf_" + displayName;
   return h("div", {
     class: "form-check mb-2 hf-model-item",
-    "data-search": (modelId + " " + JSON.stringify(metadata)).toLowerCase(),
+    // What lib/search.js matches: the repo, its metadata, and the words the
+    // ranking's filter takes too, its voxel size ("16nm") and "2d" or "3d".
+    "data-search": searchText(modelId, JSON.stringify(metadata), ...(metadata.output_voxel_size || []).map((size) => `${size}nm`),
+      dimsWord(metadata.input_shape)),
   },
   h("input", {
     class: "form-check-input hf-model-checkbox", type: "checkbox", name: "selected_hf_models", id, value: modelId,
@@ -81,9 +85,9 @@ export function init() {
   });
   document.getElementById("hfRefreshBtn").addEventListener("click", () => load("/api/huggingface-models/refresh"));
   document.getElementById("hfSearchBar").addEventListener("input", function () {
-    const query = this.value.toLowerCase();
+    const query = this.value;
     document.querySelectorAll(".hf-model-item").forEach((item) => {
-      item.style.display = item.getAttribute("data-search").includes(query) ? "" : "none";
+      item.style.display = matchesWords(item.getAttribute("data-search"), query) ? "" : "none";
     });
   });
 }
