@@ -9,26 +9,34 @@
 // GET /api/finetune/rank/candidates lists them: the catalog's models,
 // finetuned ones among them, with the session's volume and the model it is
 // for. POST /api/finetune/rank/score {name} scores one, as the tab asks for
-// them one at a time and shows each as it comes. A model already served is
+// them one at a time and shows each as it comes. A model is scored through
+// each input normalization portable/rank.py's norm_tries gives it, its own
+// (its manifest's declaration) and the session's when that is another, and
+// the better score is kept (best_try): read through none, or another
+// model's, a model's score is noise (fly_organelles fed raw 0 to 255 matched
+// 51% in the server's ranking, which read every model through the session's
+// input normalization). Through the session's, a model already served is
 // read as it is served, its chunks from the engine's caches where the viewer
-// has had them computed; any other is served for the score alone, with its
-// manifest's normalizers and no layer, and released after, so a ranking
-// leaves the Models tab and the GPU as they were (its download stays in the
+// has had them computed; any other read is served for the score alone, with
+// those normalizers and no layer, and released after, so a ranking leaves
+// the Models tab and the GPU as they were (its download stays in the
 // catalog's byte cache, and Show serves it at once). Where the raw under the
-// paint is narrow, a model is scored a second time through its normalizer
-// stretched to the raw's window, served for that alone (portable/rank.py
-// says when that is kept). The answer is the ranking's row, as the Python
-// builds it (score_row: the score kept, its threshold and the raw's range
-// it read). POST /api/finetune/rank/use {name, window?}
-// makes the one picked the model to finetune, the window its score chose
-// (if any) first made the session's input normalization:
-// served with its layer (as the Models tab's Add serves it), a volume made
-// for it with the session volume's paint carried onto its grid
+// paint is narrow, a model is scored a second time through the kept
+// normalization stretched to the raw's window, served for that alone
+// (portable/rank.py says when that is kept). The answer is the ranking's
+// row, as the Python builds it (score_row: the score kept, its threshold,
+// the raw's range it read and the normalizer steps it was read through,
+// input_norm, with where they came from). POST /api/finetune/rank/use
+// {name, input_norm?} makes the one picked the model to finetune, the row's
+// steps first made the session's input normalization (when they are not
+// already), so it is served through what it was ranked through: served with
+// its layer (as the Models tab's Add serves it), a volume made for it with
+// the session volume's paint carried onto its grid
 // (cellmap_flow/portable/carry.py, the same way) and its good regions, and that volume the session's,
 // its paint layer in the old one's place; the old volume stays in the paint
-// store. POST /api/finetune/rank/window {window} makes the window the
-// session's input normalization alone, with no model served and no volume
-// made: Fit to paint's, for the model already seeding the paint.
+// store. POST /api/finetune/rank/input-norm {input_norm} makes the steps
+// the session's input normalization alone, with no model served and no
+// volume made: Fit to paint's, for the model already seeding the paint.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { volumeCornerNm } from "../../ai-annotate/fill";
@@ -48,7 +56,8 @@ import { entryFor } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
-import { blobFor, pageBase, serveModels, setChain } from "../serving";
+import { blobFor, declaredInputNorm, pageBase, serveModels, setChain } from "../serving";
+import { readChain } from "./pipeline";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
 
@@ -72,10 +81,11 @@ export function rankRoutes(router: Router): void {
   });
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
-  // (score_row's, portable/rank.py), how long it took, and a
-  // note when some painted chunks lie where the model's level does not
-  // reach. Refused without a dataset, a volume or paint (400), and for a
-  // model the catalog does not have (404).
+  // (score_row's, portable/rank.py), how long it took, and a note when some
+  // painted chunks lie where the model's level does not reach, and what the
+  // other input normalization matched when it was read through two.
+  // Refused without a dataset, a volume or paint (400), and for a model the
+  // catalog does not have (404).
   router.post("/api/finetune/rank/score", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -91,56 +101,79 @@ export function rankRoutes(router: Router): void {
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
 
     const started = performance.now();
-    let held: Held;
+    const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
     try {
-      held = await servedForRanking(ctx, entry);
-    } catch (e) {
-      return json(400, { success: false, error: `${name} could not be served: ${message(e)}` });
-    }
-    try {
-      const base = await scorePaint(ctx, dataset, volume, indices, held.served);
-      // The raw stretched to its own range, when it is narrow, and the row
-      // from the two scores (portable/rank.py).
-      const range = base.score && (await rawWindow(ctx, dataset, held.served.entry, base.read));
-      const stretched = range && (await windowed(ctx, held.chain.input_norm, range));
+      // The paint scored through each input normalization the model is
+      // tried with (rank.norm_tries: its own first, the session's when that
+      // is another), the model served for each score alone and released
+      // after, but read as it is served through the session's steps when it
+      // is served already (sessionsTry says which try those are); and the
+      // best of the scores kept (rank.best_try, its own among equals).
+      const session = ctx.session.state.chain.input_norm;
+      const tries = await ctx.infer.python<NormTry[]>(`${PORTABLE}:norm_tries`, { own: declaredInputNorm(entry), own_from: "declared", session });
+      const asServed = sessionsTry(tries, session);
+      const stepsOf = (i: number) => (i === asServed ? session : tries[i].input_norm);
+      const reads: (PaintScore & { entry: ModelEntry })[] = [];
+      for (let i = 0; i < tries.length; i++) {
+        let held: Held;
+        try {
+          held = await servedForRanking(ctx, entry, stepsOf(i), i === asServed);
+        } catch (e) {
+          return json(400, { success: false, error: `${name} could not be served: ${message(e)}` });
+        }
+        try {
+          reads.push({ ...(await scorePaint(ctx, dataset, volume, indices, held.served)), entry: held.served.entry });
+        } finally {
+          await held.release();
+        }
+      }
+      const best = await ctx.infer.python<number | null>(`${PORTABLE}:best_try`, { scores: reads.map((r) => r.score) });
+      const kept = best === null ? null : reads[best];
+      if (best === null || !kept?.score) {
+        return badRequest(hasAffinityChannels(entry)
+          ? `The paint gives ${name} nothing to score: an affinity is between two painted neighbours, so paint strokes, not single voxels.`
+          : `The paint gives ${name} nothing to score: only the edges between object and background strokes are painted, and those are not counted.`);
+      }
+      // The raw stretched to its own range, when it is narrow, through the
+      // steps kept, and the row from the two scores (portable/rank.py).
+      const norm = stepsOf(best);
+      const range = await rawWindow(ctx, dataset, kept.entry, kept.read);
+      const stretched = range && (await windowed(ctx, norm, range));
       let alt: RankScore | null = null;
-      if (base.score && range && stretched) {
-        const again = await servedForRanking(ctx, entry, stretched);
+      if (range && stretched) {
+        const again = await servedForRanking(ctx, entry, stretched, false);
         try {
           alt = (await scorePaint(ctx, dataset, volume, indices, again.served)).score;
         } finally {
           await again.release();
         }
       }
-      const score = base.score && (await rankRow(ctx, base.score, alt, held.chain.input_norm, range || null));
-      if (!score) {
-        return badRequest(hasAffinityChannels(entry)
-          ? `The paint gives ${name} nothing to score: an affinity is between two painted neighbours, so paint strokes, not single voxels.`
-          : `The paint gives ${name} nothing to score: only the edges between object and background strokes are painted, and those are not counted.`);
-      }
+      const score = (await rankRow(ctx, kept.score, alt, norm, range, tries[best].from))!;
       const notes = [
-        ...(base.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${base.blocks} blocks of its output the paint reaches, spread over it`] : []),
-        ...(base.outside ? [`${base.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
+        ...(kept.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${kept.blocks} blocks of its output the paint reaches, spread over it`] : []),
+        ...(kept.outside ? [`${kept.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
+        ...reads.flatMap((r, i) => (i === best ? [] : [`through ${through(tries[i].from)} it ${r.score ? `matched ${pct(r.score.matches)}` : "scored nothing"}`])),
       ];
       const seconds = (performance.now() - started) / 1000;
-      const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
-      const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(base.score!.matches)} as normalized)` : "";
-      ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0)${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
+      const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(kept.score.matches)} as normalized)` : "";
+      ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0) through ${through(score.input_norm_from)}, ${stepsText(score.input_norm)}${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
       return json(200, {
         success: true, name, ...score, seconds,
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
       return json(400, { success: false, error: `${name} could not be scored: ${message(e)}` });
-    } finally {
-      await held.release();
     }
   });
 
-  // POST /api/finetune/rank/use {name}: see the top of the file. Answers the
-  // new volume, how much paint it took and how much was dropped where the
-  // old voxels disagreed on the new grid. Refused as score is, and when the
-  // session's volume is the model's already.
+  // POST /api/finetune/rank/use {name, input_norm?}: see the top of the
+  // file; `input_norm` is the row's steps. Answers the new volume, how much
+  // paint it took and how much was dropped where the old voxels disagreed on
+  // the new grid, and the input normalization it set (null when the
+  // session's was those steps already). Refused as score is, when the
+  // session's volume is the model's already, and for steps that are not a
+  // list of steps the browser runs (checked as PUT /api/pipeline checks
+  // them), which changes nothing.
   router.post("/api/finetune/rank/use", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -153,8 +186,13 @@ export function rankRoutes(router: Router): void {
     const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
+    const read = body.input_norm == null ? null : readInputNorm(body.input_norm);
+    if (read && "error" in read) return badRequest(read.error);
     try {
-      const { window } = await installWindow(ctx, body.window);
+      // The steps it was ranked through made the session's first, so the
+      // model is served through them (and the models served already redrawn).
+      const inputNorm = read && (await setInputNorm(ctx, read.steps)) ? read.steps : null;
+      if (inputNorm) ctx.log(`Input normalization set to the one ${name} was ranked through: ${stepsText(inputNorm)}`);
       if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
         const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
         await serveModels(ctx, entries, ctx.session.state.chain);
@@ -175,7 +213,7 @@ export function rankRoutes(router: Router): void {
       ctx.viewer.selectLayer(layer, PAINT_TAB);
       ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
       return json(200, {
-        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, window,
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, input_norm: inputNorm,
         painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
       });
     } catch (e) {
@@ -183,49 +221,77 @@ export function rankRoutes(router: Router): void {
     }
   });
 
-  // POST /api/finetune/rank/window {window}: Fit to paint's, the raw's
-  // window a score chose (the score answer's window: [lo, hi]) made the
-  // session's input normalization, as Use this model makes it, without
-  // serving a model or making a volume. Answers the window and the
-  // normalizer steps now set; refused (400) when the normalization has no
-  // MinMaxNormalizer to stretch or the window is not narrower than its
-  // range (portable/rank.py windowed), which leaves it as it was.
-  router.post("/api/finetune/rank/window", async (req, _params, ctx) => {
+  // POST /api/finetune/rank/input-norm {input_norm}: Fit to paint's, the
+  // steps a score was read through (the score answer's input_norm) made the
+  // session's input normalization, as Use this model makes them, without
+  // serving a model or making a volume. Answers the steps now set; refused
+  // (400) for a body whose input_norm is not a list of steps the browser
+  // runs (checked as PUT /api/pipeline checks them), which changes nothing.
+  router.post("/api/finetune/rank/input-norm", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
+    const read = readInputNorm(body.input_norm);
+    if ("error" in read) return badRequest(read.error);
     try {
-      const { window, steps } = await installWindow(ctx, body.window);
-      if (!window || !steps) return badRequest("The input normalization was left as it is: it has no MinMaxNormalizer, or the window is not narrower than its range. Score the model again.");
-      ctx.log(`Stretched the input normalization to the raw's window ${window.map((v) => v.toFixed(1)).join("–")}, to fit the paint`);
-      return json(200, { success: true, window, input_norm: steps });
+      if (await setInputNorm(ctx, read.steps)) ctx.log(`Input normalization set to fit the paint: ${stepsText(read.steps)}`);
+      return json(200, { success: true, input_norm: ctx.session.state.chain.input_norm });
     } catch (e) {
-      return json(400, { success: false, error: `Could not stretch the input normalization: ${message(e)}` });
+      return json(400, { success: false, error: `Could not set the input normalization: ${message(e)}` });
     }
   });
 }
 
-/** The session's input normalization with its MinMaxNormalizer stretched to
- * the raw's window `w` ([lo, hi], a score's) made the session's chain, its
- * layers redrawn through it (serving.ts setChain, as PUT /api/pipeline sets
- * it): the raw is the dataset's, so every model reads it so. Answers `w` as
- * numbers and the normalizer steps set, or nulls when `w` is not a pair of
- * numbers or the normalization has nothing to stretch to it (rank.windowed),
- * which changes nothing. */
-async function installWindow(ctx: AppContext, w: unknown): Promise<{ window: [number, number] | null; steps: Step[] | null }> {
-  const pair = Array.isArray(w) && w.length === 2 ? w.map(Number) : null;
-  if (!pair || !pair.every(Number.isFinite)) return { window: null, steps: null };
-  const window: [number, number] = [pair[0], pair[1]];
-  const steps = await windowed(ctx, ctx.session.state.chain.input_norm, window);
-  if (!steps) return { window: null, steps: null };
-  await setChain(ctx, { ...ctx.session.state.chain, input_norm: steps });
-  return { window, steps };
+/** A request's `input_norm` as steps, checked as PUT /api/pipeline checks a
+ * chain's (pipeline.ts readChain: a list, each step one the browser runs),
+ * or the reason it is not. */
+function readInputNorm(value: unknown): { steps: Step[] } | { error: string } {
+  const read = readChain({ input_norm: value, postprocess: [] });
+  return "error" in read ? read : { steps: read.chain.input_norm };
 }
 
-/** `served`'s score on the paint of `volume`'s chunks `indices`, with how
+/** `steps` made the session chain's input normalization, its postprocessing
+ * as it is, and its layers redrawn through it (serving.ts setChain, as PUT
+ * /api/pipeline sets it): the raw is the dataset's, so every model reads it
+ * so. Answers whether anything changed: the session's steps already, as a
+ * row read through them gives them back, change nothing. */
+async function setInputNorm(ctx: AppContext, steps: Step[]): Promise<boolean> {
+  const { chain } = ctx.session.state;
+  if (JSON.stringify(steps) === JSON.stringify(chain.input_norm)) return false;
+  await setChain(ctx, { ...chain, input_norm: steps });
+  return true;
+}
+
+/** Normalizer steps as the log shows them: each by name with its parameters; "none" for none. */
+function stepsText(steps: readonly Step[]): string {
+  return steps.map(({ name, ...p }) => `${name}(${Object.entries(p).map(([k, v]) => `${k}=${v}`).join(", ")})`).join(" → ") || "none";
+}
+
+/** Which of `tries` (rank.norm_tries's, the session's input normalization
+ * being `session`) reads through the session's steps, so a model served
+ * already (through the session's chain) is read as it is: the try from the
+ * session; or, when there is none, the first when the session has steps
+ * (norm_tries lists them once, as the model's own, when they are its own
+ * by value) or when neither has any (both read the raw as it is). -1 when
+ * the session has none and the model its own. */
+function sessionsTry(tries: readonly NormTry[], session: readonly Step[]): number {
+  const i = tries.findIndex((t) => t.from === "session");
+  if (i >= 0) return i;
+  return session.length || tries[0].from === "none" ? 0 : -1;
+}
+
+/** Where a try's input normalization came from (norm_tries's `from`), as the notes and the log say it. */
+function through(from: string): string {
+  return from === "declared" ? "its declared input normalization" : from === "session" ? "the session's input normalization" : "no input normalization";
+}
+
+/** A model's score on the paint (null when it counted nothing), with how
  * many of its output blocks the paint reaches, which of them were read (at
  * most RANK_BLOCKS, spread over the paint: [lo, hi) on its level), and how
  * many painted chunks lie past its output. */
-async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVolume, indices: number[][], served: ServedModel): Promise<{ score: RankScore | null; blocks: number; read: { lo: number[]; hi: number[] }[]; outside: number }> {
+interface PaintScore { score: RankScore | null; blocks: number; read: { lo: number[]; hi: number[] }[]; outside: number }
+
+/** `served`'s score on the paint of `volume`'s chunks `indices` (PaintScore). */
+async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVolume, indices: number[][], served: ServedModel): Promise<PaintScore> {
   const entry = served.entry;
   const level = servedLevel(dataset, entry), block = outputShape(geometryOf(entry));
   const transform = targetTransformFor(entry, ctx.infer), affinity = hasAffinityChannels(entry);
@@ -363,19 +429,29 @@ interface RankScore {
 /** A model's row of the ranking, as score_row answers it (portable/rank.py): the
  * score kept (the stretched one when it matched WINDOW_MARGIN better), the raw's
  * window when that was kept and the match without it, the cut-off as Seed from
- * Prediction's threshold (a probability), and the raw's range the model read as 0
- * to 1 (null without a MinMaxNormalizer). */
+ * Prediction's threshold (a probability), the raw's range the model read as 0
+ * to 1 (null without a MinMaxNormalizer), and the normalizer steps the score kept
+ * was read through, which Use this model and Fit to Paint make the session's, with
+ * where they came from (norm_tries's `from`). */
 interface RankRow extends RankScore {
   window: [number, number] | null;
   matches_without_window?: number;
   threshold: number;
   input_window: [number, number] | null;
+  input_norm: Step[];
+  input_norm_from: string;
 }
 
-/** The ranking's row from `base`, the score read through `norm`, and `stretched`,
- * the score read through `norm` stretched to `raw` (or null): rank.score_row. */
-function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, norm: readonly Step[], raw: readonly [number, number] | null): Promise<RankRow | null> {
-  return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw });
+/** One input normalization a model is scored through, as rank.norm_tries answers
+ * it: the steps, and where they came from ("declared", the model's manifest;
+ * "session"; or "none", the raw as it is, when neither has any). */
+interface NormTry { input_norm: Step[]; from: string }
+
+/** The ranking's row from `base`, the score read through `norm` (which came from
+ * `normFrom`), and `stretched`, the score read through `norm` stretched to `raw`
+ * (or null): rank.score_row. */
+function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, norm: readonly Step[], raw: readonly [number, number] | null, normFrom: string): Promise<RankRow | null> {
+  return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw, norm_from: normFrom });
 }
 
 /** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
@@ -437,23 +513,24 @@ async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {
   return id ? readVolume(ctx.paint, id) : null;
 }
 
-/** A model served for a score, the chain it is read through, and its release. */
-interface Held { served: ServedModel; chain: Chain; release: () => Promise<void> }
+/** A model served for a score, and its release. */
+interface Held { served: ServedModel; release: () => Promise<void> }
 
-/** `entry` served for a score: as it is served already (through the
- * session's chain), or served now with `inputNorm` or else its manifest's
- * normalizers and no postprocessing (the model stage's own output is what
- * is read), and released when the score is done. Served
- * now, it is its smallest block at the precision this GPU takes
- * (Catalog.chooseVariant without a buffer limit): a 3D model's largest
- * block can hold most of a GPU's memory, beside the models already served,
- * and a GPU run out of memory loses its device and every model with it. */
-async function servedForRanking(ctx: AppContext, entry: ModelEntry, inputNorm?: Step[]): Promise<Held> {
-  const current = !inputNorm && ctx.infer.served().find((s) => s.entry.id === entry.id);
-  if (current) return { served: current, chain: ctx.session.state.chain, release: async () => {} };
+/** `entry` served for a score read through the normalizer steps
+ * `inputNorm`: as it is served already when `sessions` says they are the
+ * session chain's (it is served through that chain), or else served now
+ * with them and no postprocessing (the model stage's own output is what is
+ * read), and released when the score is done. Served now, it is its
+ * smallest block at the precision this GPU takes (Catalog.chooseVariant
+ * without a buffer limit): a 3D model's largest block can hold most of a
+ * GPU's memory, beside the models already served, and a GPU run out of
+ * memory loses its device and every model with it. */
+async function servedForRanking(ctx: AppContext, entry: ModelEntry, inputNorm: readonly Step[], sessions: boolean): Promise<Held> {
+  const current = sessions && ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (current) return { served: current, release: async () => {} };
   const limits = { ...(await ctx.infer.gpuLimits()), maxBufferSize: null };
   const tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
-  const chain: Chain = { input_norm: inputNorm ?? entry.manifest.input_norm, postprocess: [] };
+  const chain: Chain = { input_norm: [...inputNorm], postprocess: [] };
   const served = await ctx.infer.serve(tuned, chain, (await blobFor(chain)).blob, () => ctx.catalog.modelBytes(tuned));
-  return { served, chain, release: () => served.dispose() };
+  return { served, release: () => served.dispose() };
 }
