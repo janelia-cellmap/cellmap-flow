@@ -11,15 +11,18 @@
 // selections ignored (the template hides their panels in browser mode).
 import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, ModelEntry, RankFit, ServedModel, SessionState, Step } from "../../contracts";
 import { compileExpression } from "../../infer/expression";
-import { isFinetuned } from "../../models";
+import { isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
 import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
- * the id "cellmap/onnx-web-models/setup_54" (models-tab.js shows its last
- * segment and the metadata's description). A model the session is serving
+ * the id "cellmap/onnx-web-models/setup_54" (huggingface.js shows its last
+ * segment and the metadata's description), with what its row tags it with
+ * and sorts it by (models/metadata.ts listFacts: its format, its ways to
+ * finetune, its size and precisions), as the ranking's candidates have
+ * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing
  * has no such field, so its rows start unticked as before. `refresh` reads
@@ -30,7 +33,7 @@ async function listModels(ctx: AppContext, refresh: boolean) {
   try {
     const entries = refresh ? await ctx.catalog.refresh() : await ctx.catalog.list();
     const serving = new Set(ctx.session.state.models.map((m) => m.id));
-    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
+    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
   } catch (e) {
     return json(500, { error: message(e) });
   }

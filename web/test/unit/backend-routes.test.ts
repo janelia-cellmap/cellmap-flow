@@ -245,6 +245,21 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
   });
 });
 
+describe("the model lists: GET /api/huggingface-models and /api/finetune/rank/candidates", () => {
+  it("tag each model alike, with its format, its ways to finetune, its size and each precision's", async () => {
+    const backend = createBackend(fakeContext());
+    const listing = body(await backend.handle(request("GET", "/api/huggingface-models")));
+    const { candidates } = body(await backend.handle(request("GET", "/api/finetune/rank/candidates")));
+    const e = entry("setup_54");
+    const facts = {
+      formats: ["ONNX"], finetune_modes: ["head"], size_mb: 42.9, browser_copy: e.id,
+      variants: [{ variant: "fp32", file_mb: 42.9 }, { variant: "int8w", file_mb: 10.9 }],
+    };
+    expect(listing[e.id]).toMatchObject(facts);
+    expect(candidates.find((c: { name: string }) => c.name === NAME_54)).toMatchObject(facts);
+  });
+});
+
 describe("PUT /api/pipeline", () => {
   const CHAIN = {
     input_norm: [

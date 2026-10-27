@@ -75,7 +75,7 @@ import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
-import { HF_REPO } from "../../models";
+import { HF_REPO, type ListFacts, listFacts } from "../../models";
 import { entryFor } from "../../models/manifest";
 import { dtypeRange } from "../../viewer/display";
 import type { Router } from "../router";
@@ -584,10 +584,11 @@ type Group = (typeof GROUPS)[number];
 /** A model of the ranking's list, as rank.js shows and filters it: what it
  * predicts, at what voxel size, in 2D or 3D (dims, by the slices it reads),
  * the group it is listed under, whether it is served and whether the
- * session's volume is painted for it. Each starts ticked: the browser runs
+ * session's volume is painted for it, and what the Models tab's listing
+ * tags and sorts it by (ListFacts). Each starts ticked: the browser runs
  * every one itself, where the server starts one not running on the cluster
  * for its score and leaves it unticked. */
-interface Candidate {
+interface Candidate extends ListFacts {
   name: string;
   repo: string;
   folder: string;
@@ -617,6 +618,7 @@ function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEn
     name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,
     voxel_size_nm: e.manifest.output_voxel_size_nm, dims: readsOneSlice(e) ? 2 : 3, group: group(e),
     finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), ticked: true, volume_model: volume?.model_id === e.id,
+    ...listFacts(e),
   });
 }
 

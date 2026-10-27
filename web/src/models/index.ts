@@ -33,7 +33,7 @@ import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, modelFolders, parseManif
 
 export { chooseVariant, estimatePeakBytes, isOneSlice, PREFER_SMALL_DOWNLOAD, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "./variant";
 export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, ManifestError, parseManifest } from "./manifest";
-export { FINETUNED_AUTHOR, metadataFor, MODELS_AUTHOR } from "./metadata";
+export { FINETUNED_AUTHOR, listFacts, type ListFacts, metadataFor, MODELS_AUTHOR } from "./metadata";
 export { fetchEtag, HF_REPO, HF_REVISION, RateLimitError, resolveUrl } from "./hf";
 export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, modelBytesKey, type ByteCache } from "./byte-cache";
 export { type KeyValueStore, LISTING_TTL_MS, MemoryKeyValueStore } from "./listing-cache";
