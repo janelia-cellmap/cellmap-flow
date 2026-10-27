@@ -2,8 +2,8 @@
 mitigation, and the check that no non-finite gradient reaches the weights.
 
 ``Precision`` is the run's autocast dtype and GradScaler. The functions take
-the trainer (``loop.Finetuner``), whose batch, accumulation and distillation
-term they change.
+the trainer (``loop.Finetuner``), whose batch, accumulation, distillation
+term and hold on the other channels they change.
 """
 
 import logging
@@ -137,7 +137,9 @@ def halve_batch(trainer) -> bool:
 
 def survive_oom(trainer, epoch) -> bool:
     """Make room after an out-of-memory epoch: halve the batch, else drop
-    distillation; False when nothing is left to try.
+    distillation and the hold on the other channels, which free the teacher
+    (its forward pass, and a full finetune's copy of the weights); False when
+    nothing is left to try.
 
     Applied again and again until the epoch succeeds or there is nothing
     left: users can restart with a much larger rank and batch and the second
@@ -150,14 +152,19 @@ def survive_oom(trainer, epoch) -> bool:
             f"OOM at epoch {epoch + 1} — retrying with smaller batch size "
             f"(now {trainer.dataloader.batch_size})."
         )
-    elif trainer.distillation.on:
-        trainer.log(
-            f"OOM at epoch {epoch + 1} and batch already at 1 — "
-            f"disabling distillation (was lambda={trainer.distillation.weight}) and retrying."
-        )
+    elif trainer.distillation.teacher_needed:
+        dropped = []
+        if trainer.distillation.on:
+            dropped.append(f"disabling distillation (was lambda={trainer.distillation.weight})")
+        if trainer.distillation.holds_others:
+            dropped.append(
+                f"no longer holding the channels other than {trainer.select_channel} to the starting "
+                "model: they may drift from here on"
+            )
+        trainer.log(f"OOM at epoch {epoch + 1} and batch already at 1 — {'; '.join(dropped)}. Retrying.")
         trainer.distillation.drop()
     else:
-        trainer.log("ERROR: OOM at batch=1 with no distillation. Cannot continue.")
+        trainer.log("ERROR: OOM at batch=1 with no distillation or hold left to drop. Cannot continue.")
         return False
     trainer.optimizer.zero_grad(set_to_none=True)
     torch.cuda.empty_cache()

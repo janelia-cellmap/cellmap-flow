@@ -124,6 +124,25 @@ def test_a_full_finetune_distils_toward_a_frozen_copy_of_its_starting_weights(ma
     assert any(not torch.equal(v, start[k]) for k, v in model.state_dict().items()), "the student moved"
 
 
+def test_training_one_channel_holds_the_others_where_they_were(make_trainer):
+    """With select_channel the prediction was sliced to that channel, so the
+    others were in no loss at all and drifted with the network they share
+    (here by 0.36 and 0.07, the trained one by 0.54). They are held to the
+    starting model on every voxel now, with no distillation asked for too."""
+    torch.manual_seed(0)
+    model = nn.Sequential(nn.Conv3d(1, 4, 3, padding=1), nn.ReLU(), nn.Conv3d(4, 3, 1))
+    raw = torch.rand(4, 1, 6, 6, 6)
+    with torch.no_grad():
+        start = model(raw)
+    ann = _annotation(1, n=4, size=6, fg=(2, np.s_[:, :, :3]))
+    trainer = make_trainer(model, (raw, ann), batch_size=2, num_epochs=20, learning_rate=1e-2, select_channel=1,
+                           distillation_lambda=0.0, target_transform=BinaryTargetTransform())
+    assert not trainer.train().get("diverged")
+    with torch.no_grad():
+        moved = (model(raw) - start).abs().mean(dim=(0, 2, 3, 4))
+    assert moved[1] > 5 * max(moved[0], moved[2])
+
+
 class _OutOfMemory(nn.Module):
     """Runs out of memory on a batch larger than ``fits``."""
 

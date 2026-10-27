@@ -78,8 +78,10 @@ class TensorBoard:
         except Exception as e:
             logger.debug(f"TensorBoard image logging skipped: {e}")
 
-    def log_step(self, *, loss, supervised, distillation, bce_metrics, interval_terms, lr, step_s, data_wait_s):
-        """One optimizer step's scalars, at the next step."""
+    def log_step(self, *, loss, supervised, distillation, other_channels, bce_metrics, interval_terms, lr,
+                 step_s, data_wait_s):
+        """One optimizer step's scalars, at the next step; ``distillation`` and
+        ``other_channels`` (the hold on the channels not trained) None when off."""
         self.step += 1
         add = self.writer.add_scalar
         add("train/loss", loss, self.step)
@@ -94,12 +96,17 @@ class TensorBoard:
             add("train/interval_slope", interval_terms[1], self.step)
         if distillation is not None:
             add("train/distillation", distillation, self.step)
+        if other_channels is not None:
+            add("train/other_channels", other_channels, self.step)
         add("train/lr", lr, self.step)
         add("time/step_s", step_s, self.step)
         add("time/data_wait_s", data_wait_s, self.step)
 
-    def log_epoch(self, *, loss, supervised, best_supervised, bce_metrics, data_wait_s, compute_s, peak_memory_gb):
-        """One epoch's scalars, at the next epoch; ``supervised`` None when nothing was supervised."""
+    def log_epoch(self, *, loss, supervised, best_supervised, bce_metrics, other_channels, data_wait_s, compute_s,
+                  peak_memory_gb):
+        """One epoch's scalars, at the next epoch; ``supervised`` None when nothing was
+        supervised, ``other_channels`` (how far the channels not trained moved) None
+        without the hold."""
         self.epoch += 1
         add = self.writer.add_scalar
         add("epoch/loss", loss, self.epoch)
@@ -111,6 +118,8 @@ class TensorBoard:
             add("epoch/bce_floor", floor, self.epoch)
             add("epoch/supervised_above_floor", supervised - floor, self.epoch)
             add("epoch/mean_abs_error", mae, self.epoch)
+        if other_channels is not None:
+            add("epoch/other_channels", other_channels, self.epoch)
         add("time/epoch_data_wait_s", data_wait_s, self.epoch)
         add("time/epoch_compute_s", compute_s, self.epoch)
         if peak_memory_gb is not None:

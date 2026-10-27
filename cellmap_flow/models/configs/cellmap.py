@@ -11,6 +11,7 @@ import os
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
+from cellmap_flow.models.geometry import channel_names_of
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,12 @@ def metadata_geometry(metadata):
         if _other_shapes(metadata) is not None:
             return None
         voxel_size = Coordinate(metadata.output_voxel_size)
+        names = channel_names_of(metadata)
         return {
             "write_shape": list(Coordinate(metadata.output_shape) * voxel_size),
             "output_voxel_size": list(voxel_size),
             "output_channels": int(metadata.out_channels),
+            "channels": list(names) if names else None,
         }
     except (AttributeError, TypeError, ValueError):
         return None

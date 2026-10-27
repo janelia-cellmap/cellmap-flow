@@ -212,71 +212,129 @@ def annotation_dtype_for(model_config):
     return annotation_dtype(output_type)
 
 
+# The targets with a channel for each of the model's: a model trained on one
+# trains every channel at once, never one at a time. binary_broadcast is the
+# one binary target given to every channel, which is asking for all of them.
+EVERY_CHANNEL_TARGETS = ("affinities", "flows", "binary_broadcast")
+
+
+def model_target(model_config, channel_names):
+    """The training target a model says it has without being built:
+    ``(output_type, offsets)``, the offsets a list or None; ``(None, None)``
+    when nothing says.
+
+    In turn: the target its type declares (``declared_output_type``:
+    Cellpose's flows); the offsets its script assigns, read by parsing it
+    (an affinity model's); the affinity offsets its output channel names
+    give (portable/label_it.affinity_offsets: the browser's Python applies
+    the same rule to its manifest's names, for training and seeding, so
+    both modes treat such a model the same way). ``channel_names`` is a
+    function of no arguments giving those names (None when they are not
+    known), called only when the type and the script say nothing: finding
+    them can cost a download, or the model's geometry.
+
+    The one rule for what a model trains on, which ``autodetect_output_type``
+    (at submit) and ``channel_choice`` (the models list, every two seconds)
+    both apply.
+    """
+    from cellmap_flow.finetune.target_transforms import read_offsets_from_script
+
+    declared = declared_output_type(model_config)
+    if declared is not None:
+        return declared, None
+    if hasattr(model_config, "script_path"):
+        script_offsets = read_offsets_from_script(model_config.script_path)
+        if script_offsets is not None:
+            return "affinities", script_offsets
+    names = channel_names()
+    offsets = affinity_offsets(names) if names else None
+    if offsets is not None:
+        return "affinities", offsets
+    return None, None
+
+
+def trains_one_channel(output_type, output_channels) -> bool:
+    """Whether a model with ``output_channels`` output channels, trained on
+    ``output_type``, trains one channel at a time (``select_channel``): more
+    than one channel, on a target that is not one of EVERY_CHANNEL_TARGETS.
+    The paint is then about one channel: the binary target on every channel
+    taught the paint's class to each (er and nucleus learned "mito")."""
+    return int(output_channels or 1) > 1 and output_type not in EVERY_CHANNEL_TARGETS
+
+
+def channel_choice(model_config, output_channels, channel_names) -> bool:
+    """The models list's ``channel_choice``: whether ``model_config``, with
+    ``output_channels`` output channels named ``channel_names`` (None when
+    unknown), trains one channel at a time (``trains_one_channel``) on the
+    target ``model_target`` says. ``model_config`` may be None (a job served
+    without a config), and then only the names say. Never builds the model:
+    the list is asked every two seconds."""
+    output_type, _ = model_target(model_config, lambda: channel_names)
+    return trains_one_channel(output_type, output_channels)
+
+
+def _channel_names_for_autodetect(model_config):
+    """The output channel names of ``model_config`` for autodetect_output_type,
+    or None: from a Hugging Face model's metadata.json, a built config, else
+    the model's geometry (resolve_model_geometry: its server's, the cache's,
+    or the model built here).
+
+    Read as channel_names_of reads them: a string is one name. They were
+    iterated as they came, so a single "x_aff" channel was the letters "x",
+    "_", "a"... and never an affinity model.
+    """
+    channels = None
+    try:
+        if hasattr(model_config, "_load_metadata"):
+            meta = model_config._load_metadata()
+            channels = channel_names_of(SimpleNamespace(channels_names=meta.get("channels_names")))
+        elif getattr(model_config, "_config", None) is not None:
+            channels = channel_names_of(model_config._config)
+    except Exception:
+        pass
+    if channels:
+        return channels
+    # _config is only populated once something has built the model in this
+    # process. The dashboard deliberately no longer does that -- it asks the
+    # running server, or the geometry cache -- so _config is normally None
+    # here and this check silently fell through to "binary" for an affinity
+    # model. Ask the same sources, which now carry the channel names.
+    from cellmap_flow.models.geometry_cache import resolve_model_geometry
+
+    try:
+        return channel_names_of(resolve_model_geometry(getattr(model_config, "name", None), model_config))
+    except Exception as e:
+        logger.debug(f"Could not resolve channels for autodetect: {e}")
+        return None
+
+
 def autodetect_output_type(model_config, output_type, offsets):
+    """The training target of ``model_config``: ``(output_type, offsets)``,
+    the offsets as JSON or None.
+
+    ``output_type`` and ``offsets`` when given. Else what the model says
+    (``model_target``, with its channel names read as
+    ``_channel_names_for_autodetect`` reads them); else a distance model's,
+    by its name; else binary. An affinity target without offsets takes its
+    script's, or raises ValueError.
+    """
     from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 
     resolved_output_type = output_type
     resolved_offsets = offsets
 
     if resolved_output_type is None:
-        resolved_output_type = declared_output_type(model_config)
+        resolved_output_type, found_offsets = model_target(
+            model_config, lambda: _channel_names_for_autodetect(model_config)
+        )
+        if found_offsets is not None:
+            resolved_offsets = json.dumps(found_offsets)
         if resolved_output_type is not None:
-            logger.info(f"Output type {resolved_output_type!r}, as the model type declares")
-
-    if resolved_output_type is None:
-        if hasattr(model_config, "script_path"):
-            script_offsets = read_offsets_from_script(model_config.script_path)
-            if script_offsets is not None:
-                resolved_output_type = "affinities"
-                resolved_offsets = json.dumps(script_offsets)
-                logger.info(
-                    f"Auto-detected output_type='affinities' with "
-                    f"{len(script_offsets)} offsets from model script"
-                )
-
-        if resolved_output_type is None:
-            # Read as channel_names_of reads them: a string is one name. They
-            # were iterated as they came, so a single "x_aff" channel was the
-            # letters "x", "_", "a"... and never an affinity model.
-            channels = None
-            try:
-                if hasattr(model_config, "_load_metadata"):
-                    meta = model_config._load_metadata()
-                    channels = channel_names_of(SimpleNamespace(channels_names=meta.get("channels_names")))
-                elif getattr(model_config, "_config", None) is not None:
-                    channels = channel_names_of(model_config._config)
-            except Exception:
-                pass
-
-            if not channels:
-                # _config is only populated once something has built the model
-                # in this process. The dashboard deliberately no longer does
-                # that -- it asks the running server, or the geometry cache --
-                # so _config is normally None here and this check silently
-                # fell through to "binary" for an affinity model. Ask the same
-                # sources, which now carry the channel names.
-                from cellmap_flow.models.geometry_cache import resolve_model_geometry
-
-                try:
-                    geometry = resolve_model_geometry(
-                        getattr(model_config, "name", None), model_config
-                    )
-                    channels = channel_names_of(geometry)
-                except Exception as e:
-                    logger.debug(f"Could not resolve channels for autodetect: {e}")
-
-            # The one rule for a model known by its channel names alone
-            # (portable/label_it.affinity_offsets): the browser's Python
-            # applies it to its manifest's names, for training and seeding,
-            # so both modes treat such a model the same way.
-            default_offsets = affinity_offsets(channels) if channels else None
-            if default_offsets is not None:
-                resolved_output_type = "affinities"
-                resolved_offsets = json.dumps(default_offsets)
-                logger.info(
-                    f"Auto-detected output_type='affinities' from "
-                    f"channel names: {channels}, offsets: {default_offsets}"
-                )
+            logger.info(
+                f"Auto-detected output_type={resolved_output_type!r}"
+                + (f" with offsets {found_offsets}" if found_offsets is not None else "")
+                + " from the model (its type, its script or its channel names)"
+            )
 
         if resolved_output_type is None:
             # The cellmap distance models announce themselves only by name

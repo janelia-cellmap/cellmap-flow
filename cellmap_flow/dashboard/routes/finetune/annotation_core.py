@@ -3,6 +3,10 @@
 Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
 and GET and POST ``/api/finetune/user-prefs``.
 
+A model's entry says, with its geometry, whether it trains one channel at a
+time (``channel_choice``, common.channel_choice): training's submit refuses
+such a model without the channel the paint is for (``channel_pick_refusal``).
+
 A volume is made for a model, on the grid its prediction is served on, or
 before any model (a "paint-first" volume, ``make_paint_volume``) on the
 raw's grid at a voxel size of the user's, the raw level the viewer shows by
@@ -23,6 +27,7 @@ from cellmap_flow.dashboard.requests import CreateVolume, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     annotation_dtype_for,
+    channel_choice,
     current_chain,
     ensure_corrections_storage,
     find_model_config,
@@ -30,6 +35,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     rewrite_minio_url_for_proxy,
     save_user_prefs,
     session_store,
+    trains_one_channel,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
@@ -46,6 +52,7 @@ from cellmap_flow.portable import volume as portable_volume
 from cellmap_flow.serving.client import (
     fetch_model_info,
     model_geometry,
+    output_channel_names,
     running_job_host,
 )
 
@@ -195,13 +202,17 @@ def _geometry_from_server(name):
 
 
 def _geometry_from_saved_pipeline(name):
+    """The geometry the pipeline builder saved with ``name``'s entry, and the
+    channel names the entry gives (a fly model's ``channels``); None without one."""
     cfg = get_session().builder_model_configs.get(name)
     if not cfg:
         return None
+    output_channels = cfg.get("output_channels", 1)
     return {
         "write_shape": cfg.get("write_shape", []),
         "output_voxel_size": cfg.get("output_voxel_size", []),
-        "output_channels": cfg.get("output_channels", 1),
+        "output_channels": output_channels,
+        "channels": output_channel_names(cfg, output_channels),
     }
 
 
@@ -210,6 +221,44 @@ def _declared_geometry(model_config):
     (``ModelConfig.declared_geometry``), or None."""
     declared = getattr(model_config, "declared_geometry", None)
     return model_geometry(declared()) if callable(declared) else None
+
+
+def listed_geometry(name, model_config):
+    """``name``'s geometry as the models list has it: its server's, as it
+    serves the model; else what the pipeline builder saved; else what the
+    model declares (``model_config`` its config, None for a model a job
+    serves without one). None when none of them knows it. Never the model
+    built here (see get_finetune_models)."""
+    return (
+        _geometry_from_server(name)
+        or _geometry_from_saved_pipeline(name)
+        or _declared_geometry(model_config)
+    )
+
+
+def channel_pick_refusal(model_name, model_config, output_type, select_channel):
+    """Training's submit refused for a model that trains one channel at a time
+    when no channel is picked: ``(response, 400)``, with the sentence the
+    browser's submit says too.
+
+    Such a model is one with more than one output channel, trained on a
+    target that is not one per channel (common.trains_one_channel, of the
+    ``output_type`` submit resolved): the models list says
+    ``channel_choice`` for it, and the training form then asks for the
+    channel. Without one the job trained every channel on the paint. None
+    when a channel is picked, or the model trains every channel at once, or
+    the list has no geometry for it (the form shows no pick then, and the
+    job trains as the command line does).
+    """
+    if select_channel is not None:
+        return None
+    geometry = listed_geometry(model_name, model_config)
+    if not geometry or not trains_one_channel(output_type, geometry["output_channels"]):
+        return None
+    return jsonify({"success": False, "error": (
+        f"{model_name} has {geometry['output_channels']} output channels and trains one at a time: "
+        "pick the channel your paint is for (Channel, in the training form)."
+    )}), 400
 
 
 def _waiting(name):
@@ -239,8 +288,11 @@ def get_finetune_models():
     "selected_model", "raw_voxel_sizes"}``.
 
     Each model is ``{"name", "write_shape" (nm), "output_voxel_size",
-    "output_channels", "finetune_modes"}``; one whose geometry nothing knows
-    yet is ``{"name", "status", "finetune_modes"}`` instead, its ``status``
+    "output_channels", "channels", "channel_choice", "finetune_modes"}``:
+    ``channels`` the output channels' names (None when nothing names them),
+    ``channel_choice`` whether training takes one of them at a time
+    (common.channel_choice). One whose geometry nothing knows yet is
+    ``{"name", "status", "finetune_modes"}`` instead, its ``status``
     "waiting for its server" or, stopped on the Models tab, "not running".
     """
     try:
@@ -271,15 +323,15 @@ def get_finetune_models():
             # forward on the dashboard's CPU (25 s for a 3 GB TorchScript). A
             # model none of them knows is listed with why it has no geometry
             # yet, its ``status``, until its server answers.
-            geometry = (
-                _geometry_from_server(name)
-                or _geometry_from_saved_pipeline(name)
-                or _declared_geometry(configs_by_name.get(name))
-                or {"status": _waiting(name)}
-            )
+            config = configs_by_name.get(name)
+            geometry = listed_geometry(name, config)
+            if geometry is None:
+                geometry = {"status": _waiting(name)}
+            else:
+                # By the same rule, so without building it either.
+                geometry["channel_choice"] = channel_choice(config, geometry["output_channels"], geometry["channels"])
             seen.add(name)
-            models.append({"name": name, **geometry,
-                           "finetune_modes": _finetune_modes(configs_by_name.get(name))})
+            models.append({"name": name, **geometry, "finetune_modes": _finetune_modes(config)})
 
         selected = models[0]["name"] if len(models) == 1 else None
         # The raw's levels, which New Volume offers as the voxel size of a

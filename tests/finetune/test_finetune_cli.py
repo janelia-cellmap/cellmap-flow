@@ -72,6 +72,23 @@ def test_a_target_a_three_channel_model_cannot_train_on_is_refused_before_traini
     assert ("Starting epoch" in cli.out) == trains and len(cli.loaded) == 1
 
 
+def test_a_restart_trains_the_same_channel_and_holds_the_others_again(run_cli, tmp_path, monkeypatch):
+    """A restart that does not name the channel keeps the one the job trains."""
+    from cellmap_flow.finetune import session_loop
+
+    trainers = []
+
+    class Recorded(session_loop.Finetuner):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            trainers.append(self)
+
+    monkeypatch.setattr(session_loop, "Finetuner", Recorded)
+    run_cli("--select-channel", "1", "--auto-serve", "--serve-data-path", str(tmp_path), channels=3,
+            restarts=[{"params": {"learning_rate": 1e-3}}])
+    assert [(t.select_channel, t.distillation.holds_others) for t in trainers] == [(1, True)] * 2
+
+
 def _metadata(run, **params):
     """A metadata.json with ``params``, as the job manager writes one."""
     run.mkdir(parents=True)
