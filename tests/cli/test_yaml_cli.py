@@ -114,7 +114,8 @@ def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tm
 
     session, chain = get_session(), process_chain()
     assert [(type(m).__name__, m.name) for m in session.models_config] == [("ScriptModelConfig", "m")]
-    assert ran == [(session.models_config, yaml.safe_load(open(config))["data_path"], "grp", "gpu_h200")]
+    # The YAML's one queue is a list of one.
+    assert ran == [(session.models_config, yaml.safe_load(open(config))["data_path"], "grp", ["gpu_h200"])]
     assert list(session.extra_layers) == ["pred"]
     # For the models the dashboard launches later, not only the YAML's.
     assert session.resample is True
@@ -129,7 +130,7 @@ def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tm
     )
     assert yaml.safe_load((tmp_path / "server_config.yaml").read_text()) == {
         **settings.SERVER_CONFIG_DEFAULTS,
-        "queue": "gpu_h200", "charge_group": "grp", "walltime": "36:00", "cycle_gpu_queues": False,
+        "queue": ["gpu_h200"], "charge_group": "grp", "walltime": "36:00", "cycle_gpu_queues": False,
     }
 
 

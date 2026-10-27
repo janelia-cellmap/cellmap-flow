@@ -4,7 +4,7 @@
 // the GPU queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
-import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
+import { createQueuePicker, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
 const FINETUNE_STATE_KEY = "finetuneFormState";
@@ -15,8 +15,10 @@ const FINETUNE_STATE_KEY = "finetuneFormState";
 // - "blank": also when it is "", which is a choice of its own (keep the
 //   manifest's value), not a missing one;
 // - "checkbox": whenever it was saved.
-// The model picker's choice is saved with them, as selectedModelName, and
-// the Channel picked for each model, as channelByModel (see setChannelChoice).
+// The model picker's choice is saved with them, as selectedModelName, the
+// Channel picked for each model, as channelByModel (see setChannelChoice),
+// and the GPU queues ticked, as gpuQueues (none before a choice is made:
+// every queue).
 const SAVED_FIELDS = [
   ["outputPath", "outputPath", "value"],
   ["checkpointPath", "checkpointPath", "value"],
@@ -34,7 +36,6 @@ const SAVED_FIELDS = [
   ["balanceClasses", "balanceClasses", "checkbox"],
   ["augment", "augment", "checkbox"],
   ["autoServe", "autoServeCheck", "checkbox"],
-  ["gpuQueue", "gpuQueue", "value"],
 ];
 
 // The fields saved in this mode. The browser mode keeps the Loss Function
@@ -71,6 +72,7 @@ function saveFinetuneState() {
   state.selectedModelName = document.getElementById("modelSelect").value;
   const channel = document.getElementById("trainChannel");
   state.channelByModel = keptChannels(channel.dataset.model, channel.value);
+  state.gpuQueues = queuePicker.value();
   writeJSON(FINETUNE_STATE_KEY, state);
 }
 
@@ -88,6 +90,7 @@ function applySavedState(saved) {
       el.value = value;
     }
   }
+  queuePicker.setValue(saved.gpuQueues);
 }
 
 function readPatchesPerEpochOverride() {
@@ -342,18 +345,18 @@ function updateAugmentAdvice() {
   }
 }
 
-// The GPU queue picker shows what the queues look like right now. A training
-// job is not cycled onto another queue if the one picked is busy -- it just
-// waits -- so the only thing that helps is seeing the wait before submitting
-// rather than after. The answers come from the poller the Models tab's
-// pickers share.
+// The GPU queue picker shows what the queues look like right now; the job
+// goes to the freest of those ticked, and moves on to the next while it has
+// not started (submit.QueueFallback). The answers come from the poller the
+// Models tab's pickers share. Its own choice, not the Models tab's: a
+// training job may want other GPUs than a model's server.
+let queuePicker;
+
 function showGpuQueues(data) {
-  // An answer with no queues leaves the options (at first the template's)
-  // and the note as they are, rather than emptying the picker.
+  // An answer with no queues leaves the picker and the note as they are,
+  // rather than emptying them.
   if (!((data && data.queues) || []).length) return;
-  const select = document.getElementById("gpuQueue");
-  // The queue picked stays, even if LSF no longer lists it.
-  fillQueueSelect(select, data, { preferred: select.value, missingSuffix: " (selected)" });
+  queuePicker.render(data);
   document.getElementById("finetuneGpuQueueHint").textContent = queueHint(data);
 }
 
@@ -506,10 +509,16 @@ export function setBrowserTraining(model) {
   }
 }
 
-// Returns { saved, save(), trainingParams() }: saved is the state restored
-// at load (null if none); save() stores the form's state now.
+// Returns { saved, save(), trainingParams(), gpuQueues() }: saved is the
+// state restored at load (null if none); save() stores the form's state
+// now; gpuQueues() is the queues ticked ([] until the queues are listed,
+// while none has been chosen).
 export function initTrainingForm() {
   const outputPathInput = document.getElementById("outputPath");
+  queuePicker = createQueuePicker(document.getElementById("gpuQueue"), {
+    missingSuffix: " (selected)",
+    onChange: () => saveFinetuneState(),
+  });
 
   // Show the margin field only for the margin loss.
   const lossSel = document.getElementById("lossType");
@@ -587,5 +596,6 @@ export function initTrainingForm() {
     saved,
     save: saveFinetuneState,
     trainingParams,
+    gpuQueues: () => queuePicker.value(),
   };
 }

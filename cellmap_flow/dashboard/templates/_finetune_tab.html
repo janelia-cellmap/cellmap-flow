@@ -984,13 +984,9 @@
     <div class="row server-only">
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="gpuQueue" class="form-label">GPU Queue</label>
-          <select id="gpuQueue" class="form-select">
-            <option value="gpu_h100" selected>H100</option>
-            <option value="gpu_a100">A100</option>
-            <option value="gpu_h200">H200</option>
-            <option value="gpu_rtx6000">RTX 6000</option>
-          </select>
+          {# The GPU queues the job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
+          <span class="form-label d-block">GPU Queues</span>
+          <div id="gpuQueue"></div>
           <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
         </div>
       </div>

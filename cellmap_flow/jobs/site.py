@@ -11,7 +11,7 @@ between profiles once there is more than one.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,6 @@ class SiteProfile:
     # easier to choose from than a complete one. The RTX 6000s (Blackwell,
     # sm_120, which the pixi torch builds for) often have the shortest wait.
     gpu_queues: Tuple[Tuple[str, str, str], ...]
-    default_queue: str = "gpu_h100"
     # Who a job is billed to when neither the request nor the dashboard's
     # settings say.
     default_charge_group: str = "cellmap"
@@ -52,6 +51,14 @@ class SiteProfile:
     # while an esub delays an over-ratio request, and still create the job
     # after the client has given up; see lsf.BsubTimeoutError.
     bsub_timeout_seconds: int = 30
+
+    @property
+    def default_queues(self) -> List[str]:
+        """The queues a job may run on when nothing says which: every GPU
+        queue offered. The dashboard's GPU pickers start with all of them
+        ticked, and a job goes to whichever has the most free GPUs
+        (queues.candidates); a job pinned to one GPU model says so."""
+        return [queue for queue, _, _ in self.gpu_queues]
 
 
 JANELIA = SiteProfile(

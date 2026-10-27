@@ -50,9 +50,9 @@ def test_every_test_starts_from_the_state_a_new_process_has(step):
     session = get_session()
     if step == "change":
         session.viewer = object()
-        session.queue = "gpu_elsewhere"
+        session.queue = ["gpu_elsewhere"]
         session.jobs.append(SimpleNamespace(model_name="leaked", host="http://leaked:8000"))
         session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer"}], [{"name": "SigmoidPostprocessor"}]))
         return
-    assert (session.viewer, session.queue, session.jobs) == (None, current_site().default_queue, [])
+    assert (session.viewer, session.queue, session.jobs) == (None, current_site().default_queues, [])
     assert (session.input_norms, session.postprocess, session.pipeline_spec) == ([], [], PipelineSpec())

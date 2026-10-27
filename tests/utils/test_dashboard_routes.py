@@ -119,12 +119,15 @@ def test_the_model_form_parses_and_rejects_the_same_way(dashboard, type_name, pa
 
 
 def test_the_blockwise_settings_are_kept_and_read_back(dashboard, tmp_path):
-    sent = {"queue": "gpu_l4", "charge_group": "grp", "nb_cores_master": 2, "nb_cores_worker": 8, "nb_workers": 5,
-            "tmp_dir": str(tmp_path / "progress"), "blockwise_tasks_dir": str(tmp_path / "tasks")}
-    assert dashboard.post("/api/blockwise-config", json=sent).get_json() == {"success": True, "config": sent}
-    assert dashboard.get("/api/blockwise-config").get_json() == sent
+    """The builder's Queue is a text field: two queues in it are a list of two."""
+    sent = {"queue": "gpu_l4, gpu_h100", "charge_group": "grp", "nb_cores_master": 2, "nb_cores_worker": 8,
+            "nb_workers": 5, "tmp_dir": str(tmp_path / "progress"), "blockwise_tasks_dir": str(tmp_path / "tasks")}
+    kept = {**sent, "queue": ["gpu_l4", "gpu_h100"]}
+    assert dashboard.post("/api/blockwise-config", json=sent).get_json() == {"success": True, "config": kept}
+    assert dashboard.get("/api/blockwise-config").get_json() == kept
     session = get_session()
-    assert (session.queue, session.tmp_dir, session.tasks_dir()) == ("gpu_l4", sent["tmp_dir"], sent["blockwise_tasks_dir"])
+    assert (session.queue, session.tmp_dir, session.tasks_dir()) == (
+        ["gpu_l4", "gpu_h100"], sent["tmp_dir"], sent["blockwise_tasks_dir"])
 
 
 def test_a_package_log_record_reaches_the_log_panel(dashboard):

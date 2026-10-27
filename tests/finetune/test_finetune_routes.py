@@ -171,6 +171,15 @@ def test_submit_after_a_dashboard_restart_finds_the_session_on_disk(submit):
     assert job.sent["corrections_path"] == job.corrections
 
 
+@pytest.mark.parametrize("request_data, queues", [
+    pytest.param({"queue": ["gpu_h200", "gpu_a100"]}, ["gpu_h200", "gpu_a100"], id="the queues ticked"),
+    pytest.param({}, ["gpu_h100", "gpu_h200", "gpu_a100", "gpu_rtx6000"], id="none sent: every GPU queue"),
+])
+def test_submit_hands_the_job_manager_the_queues_ticked(submit, request_data, queues):
+    """The form's GPU Queue was one queue, which the job waited on however busy it was."""
+    assert submit(**request_data).sent["queue"] == queues
+
+
 @pytest.fixture
 def restart(client, local_jobs, session, monkeypatch):
     """``restart(pulled=0, **request)``: POST /api/finetune/job/<id>/restart for

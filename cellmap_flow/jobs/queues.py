@@ -1,7 +1,10 @@
 """Which GPU queues are actually usable, and the order to try them in.
 
-gpu_queue_availability() feeds the dashboard's queue picker; candidates()
-is the order start_hosts submits in when queue cycling is on.
+gpu_queue_availability() feeds the dashboard's queue pickers; candidates()
+is the order a job is tried on the queues it may run on, which start_hosts
+and the finetune job manager submit in; queue_list() reads those queues
+wherever they are given (a YAML, a command line, the saved settings, a
+request).
 
 Picking a queue blind is how a job ends up behind nine thousand pending ones:
 at the time this was written ``gpu_h200`` had 9224 jobs pending while
@@ -23,6 +26,7 @@ queue picker that still works, just without the annotations.
 """
 
 import logging
+import re
 import subprocess
 import threading
 import time
@@ -264,35 +268,65 @@ def gpu_queue_availability(force=False):
     return payload
 
 
-def candidates(preferred, cycle=True):
-    """The queue to try first, then the others worth falling back to.
+def queue_list(value):
+    """The queues ``value`` names, as a list, each once, in its order.
 
-    With ``cycle=False`` the requested queue is the only candidate: the job
-    waits for it however long that takes, rather than being moved to whatever
-    is free. Some work is pinned to a queue on purpose -- a benchmark that
-    must run on one GPU model, or a charge group only valid on one queue --
-    and silently landing somewhere else is worse than waiting.
+    A job may run on several GPU queues (the dashboard's pickers tick them),
+    so wherever a queue is read it is a list; one name is a list of one, so
+    a YAML's ``queue: gpu_h200`` and a command line's ``--queue gpu_h200``
+    read as they always did. A string may name several, separated by commas
+    or spaces, as a text field holds them (the pipeline builder's Queue).
+    None and "" name none: [].
 
-    Ordered by what LSF says is actually free rather than by a fixed list, so
-    the first fallback is the one most likely to start now. Fallback queues
-    that are not accepting work are dropped: they take submissions and never
-    run them, which is indistinguishable from a very slow job.
-
-    The requested queue is kept whatever LSF says about it, but demoted to
-    last if LSF says it is not accepting work, so a closed request does not
-    cost a full pending timeout before anything else is tried.
-
-    When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
+    Raises:
+        ValueError: ``value`` is neither a name nor a list of names.
     """
-    first = [preferred] if preferred else []
+    if value is None:
+        return []
+    if isinstance(value, str):
+        names = re.split(r"[\s,]+", value)
+    elif isinstance(value, (list, tuple)) and all(isinstance(name, str) for name in value):
+        names = [name.strip() for name in value]
+    else:
+        raise ValueError(f"A queue is a name or a list of names, not {value!r}")
+    return list(dict.fromkeys(name for name in names if name))
+
+
+def candidates(queues, cycle=True):
+    """The order to try ``queues``, the queues a job may run on, in.
+
+    ``queues`` is read by queue_list; none named is every GPU queue
+    offered (the site's default_queues).
+
+    With ``cycle=False`` the first of them is the only candidate: the job
+    waits for it however long that takes, rather than being moved to
+    whatever is free. Some work is pinned to a queue on purpose -- a
+    benchmark that must run on one GPU model, or a charge group only valid
+    on one queue -- and silently landing somewhere else is worse than
+    waiting.
+
+    Otherwise every one of them and no other, ordered by what LSF says is
+    free right now: the most free GPUs first, ties broken on the shorter
+    pending queue. So the job goes first to the queue likeliest to start it,
+    and each fallback after a pending timeout is the next likeliest of the
+    ones asked for; a queue that was not asked for is never tried, however
+    free it is.
+
+    A queue LSF says is not accepting work goes last: it takes submissions
+    and never runs them, which is indistinguishable from a very slow job, so
+    trying it before the others would cost a pending timeout of dead wait.
+    It stays on the list -- a queue can reopen, and it was asked for -- just
+    not ahead of queues that can run the job now. A queue LSF says nothing
+    about (a YAML naming gpu_l4) is unknown, not closed: it comes after the
+    ones known to accept work and before the closed ones.
+
+    When LSF cannot be queried at all, ``queues`` are tried in their order.
+    """
+    queues = queue_list(queues) or current_site().default_queues
 
     if not cycle:
-        logger.info(
-            f"Queue cycling disabled; using {preferred or 'the default queue'} "
-            f"only, and waiting for it."
-        )
-        return first
-    all_gpu = [q for q, _, _ in GPU_QUEUES]
+        logger.info(f"Queue cycling disabled; using {queues[0]} only, and waiting for it.")
+        return queues[:1]
 
     try:
         info = gpu_queue_availability()
@@ -301,40 +335,21 @@ def candidates(preferred, cycle=True):
         info = {}
 
     if not info.get("available"):
-        return first + [q for q in all_gpu if q != preferred]
+        return queues
 
-    others = [
-        q for q in info["queues"]
-        if q["queue"] != preferred and q.get("accepting")
-    ]
-    # Most free GPUs first; break ties on the shorter pending queue.
-    others.sort(key=lambda q: (-(q.get("gpus_free") or 0), q.get("pending") or 0))
+    known = {q["queue"]: q for q in info["queues"]}
+    accepting = [known[q] for q in queues if q in known and known[q].get("accepting")]
+    accepting.sort(key=lambda q: (-(q.get("gpus_free") or 0), q.get("pending") or 0))
+    unknown = [q for q in queues if q not in known]
+    closed = [q for q in queues if q in known and not known[q].get("accepting")]
 
     # The order is not arbitrary and the reason is worth seeing -- especially
     # now that these records reach the dashboard's log panel. A queue that was
     # skipped is more interesting than one that was kept.
     for q in info["queues"]:
-        state = "skipped, not accepting work" if not q.get("accepting") else (
-            "requested" if q["queue"] == preferred else "fallback"
+        state = "not asked for" if q["queue"] not in queues else (
+            "not accepting work, tried last" if not q.get("accepting") else "asked for"
         )
         logger.info(f"  {q['queue']}: {q.get('description') or 'no detail'} [{state}]")
 
-    # If LSF says the requested queue is not accepting work, try it last
-    # rather than first. Trying it first costs pending_fallback_seconds of
-    # dead wait on a queue that LSF has already said will not start the job.
-    # It stays on the list -- a queue can reopen, and the request should still
-    # be honoured if nothing else works -- just not ahead of queues that can
-    # run it now. A queue LSF says nothing about (a yaml naming gpu_l4) is
-    # unknown, not closed, and keeps its place at the front.
-    requested = next(
-        (q for q in info["queues"] if q["queue"] == preferred), None
-    )
-    if requested is not None and not requested.get("accepting") and others:
-        logger.warning(
-            f"{preferred} is not accepting work ({requested.get('description')}); "
-            f"trying it last and starting with {others[0]['queue']}"
-        )
-        return [q["queue"] for q in others] + [preferred]
-
-    return first + [q["queue"] for q in others]
-
+    return [q["queue"] for q in accepting] + unknown + closed

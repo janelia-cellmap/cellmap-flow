@@ -1,47 +1,47 @@
 // The GPU queue picker next to Submit and the Server Config accordion: both
-// show the configured queue (GET/POST /api/server-config), the accordion
-// the LSF settings beside it.
+// show the configured queues (GET/POST /api/server-config), the accordion
+// the LSF settings beside them.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
-import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
+import { createQueuePicker, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { readCount, saveServerConfig, WALLTIME_RE } from "../../shared/server-config.js";
 
 export function init() {
-  let current = "";
   let loaded = false;
 
-  function selects() {
-    return ["gpuQueueSelect", "cfg_queue"].map((id) => document.getElementById(id)).filter(Boolean);
+  // The two pickers are one setting: a box clicked in either is saved at
+  // once, and shown in the other.
+  function saveQueues(queues) {
+    showQueues(queues);
+    postJSON("/api/server-config", { queue: queues }).catch(() => {});
+  }
+  const pickers = ["gpuQueuePicker", "cfg_queue"]
+    .map((id) => document.getElementById(id))
+    .filter(Boolean)
+    .map((root) => createQueuePicker(root, { small: true, onChange: saveQueues }));
+
+  function showQueues(queues) {
+    pickers.forEach((picker) => picker.setValue(queues));
   }
 
   function renderQueues(data) {
-    selects().forEach((sel) => fillQueueSelect(sel, data, { preferred: current }));
+    pickers.forEach((picker) => picker.render(data));
     const hint = document.getElementById("gpuQueueHint");
     if (hint) hint.textContent = queueHint(data);
   }
 
-  function setQueue(value) {
-    if (!value) return;
-    current = value;
-    selects().forEach((sel) => { if (sel.value !== value) sel.value = value; });
-    postJSON("/api/server-config", { queue: value }).catch(() => {});
-  }
-
-  selects().forEach((sel) => sel.addEventListener("change", () => setQueue(sel.value)));
-
-  // Seed from the configured queue before drawing options, so an out-of-list
-  // queue survives the first render.
+  // The configured queues before the first answer is drawn, so a queue LSF
+  // does not list survives the first render.
   getJSON("/api/server-config")
-    .then((data) => { current = (data && data.queue) || ""; })
+    .then((data) => showQueues(data && data.queue))
     .catch(() => {})
     .then(() => subscribeGpuQueues(renderQueues));
 
   function load() {
     getJSON("/api/server-config")
       .then((data) => {
-        // Go through the shared value so the accordion and the picker next
-        // to Submit cannot drift apart.
-        current = data.queue || current;
-        selects().forEach((sel) => { if (current) sel.value = current; });
+        // Both pickers, so the accordion and the picker next to Submit
+        // cannot drift apart.
+        if (data.queue) showQueues(data.queue);
         document.getElementById("cfg_charge_group").value = data.charge_group || "";
         document.getElementById("cfg_walltime").value = data.walltime || "";
         // Default to on when the server has not stored a preference.
@@ -87,9 +87,9 @@ export function init() {
       // string "false" would read as true.
       cycle_gpu_queues: document.getElementById("cfg_cycle_gpu_queues").checked,
     };
-    // Empty until LSF has listed the queues; don't send that as a queue.
-    const queue = document.getElementById("cfg_queue").value;
-    if (queue) payload.queue = queue;
+    // Empty until LSF has listed the queues; don't send that as the queues.
+    const queues = pickers.length ? pickers[0].value() : [];
+    if (queues.length) payload.queue = queues;
     try {
       const cores = readCount(document.getElementById("cfg_nb_cores_worker").value, "Cores per Worker");
       const workers = readCount(document.getElementById("cfg_nb_workers").value, "Number of Workers");

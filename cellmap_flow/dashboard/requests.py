@@ -44,6 +44,7 @@ from pydantic import (
 
 from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.finetune.options import MANIFEST_FIELDS, MODES, OutputType, TrainingOptions
+from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.models import entry as model_entry
@@ -67,6 +68,19 @@ def _whole_number(value, info: ValidationInfo):
 
 
 WholeNumber = Annotated[int, BeforeValidator(_whole_number)]
+
+
+def _queues(value):
+    """The GPU queues ``value`` names (queues.queue_list: a list, or one
+    name), refused when it names none: a job needs somewhere to run."""
+    queues = queue_list(value)
+    if not queues:
+        raise ValueError("queue must name at least one GPU queue")
+    return queues
+
+
+# The GPU queues a job may run on, as the pickers send them: a list of names.
+Queues = Annotated[list[str], BeforeValidator(_queues)]
 
 
 def _required(name, strip=False, message=None):
@@ -104,11 +118,13 @@ def parse(model, body):
 
 class ServerConfigUpdate(BaseModel):
     """Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
-    sent change. The counts must be whole numbers; the rest are kept as sent,
-    and keys that are not settings are ignored."""
+    sent change. The counts must be whole numbers and the queue a list of at
+    least one queue; the rest are kept as sent, and keys that are not
+    settings are ignored."""
 
     model_config = ConfigDict(extra="allow")
 
+    queue: Queues = None
     nb_cores_master: WholeNumber = None
     nb_cores_worker: WholeNumber = None
     nb_workers: WholeNumber = None
@@ -123,7 +139,8 @@ class BlockwiseSettings(BaseModel):
     """The pipeline builder's blockwise settings. All three counts are
     required, as whole numbers; a missing one is reported as None."""
 
-    queue: Any = None
+    # The node's Queue field is text: "gpu_h100, gpu_h200" is two.
+    queue: Queues = None
     charge_group: Any = None
     nb_cores_master: WholeNumber = Field(None, validate_default=True)
     nb_cores_worker: WholeNumber = Field(None, validate_default=True)
@@ -300,7 +317,9 @@ class FinetuneSubmit(_FinetuneBody):
     )] = Field(None, validate_default=True)
     checkpoint_path: Optional[str] = None
     auto_serve: bool = True
-    queue: Optional[str] = Field(default_factory=lambda: current_site().default_queue)
+    # The GPU queues ticked; the job goes to the freest of them
+    # (FinetuneJobManager.submit_finetuning_job).
+    queue: Queues = Field(default_factory=lambda: current_site().default_queues)
     charge_group: Optional[str] = None
 
     def options(self, **resolved) -> TrainingOptions:

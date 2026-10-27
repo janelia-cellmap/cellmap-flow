@@ -21,6 +21,7 @@ from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 from cellmap_flow.models.registry import build_models
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.jobs.launch import submit_bsub_job
+from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.spec import shell_quote
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
@@ -777,13 +778,18 @@ def spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None,
 
     Logs go to ``log_dir``, by default ./daisy_logs as before, resolved now so
     that every worker writes to the same place.
+
+    ``queue`` is the task's GPU queues (a list, as load_config reads it).
+    Each worker goes to the one with the most free GPUs when it is submitted
+    (queues.candidates; the first of them when queue cycling is off), and
+    stays there: a worker is not moved once submitted.
     """
     log_dir = Path(log_dir or "daisy_logs").resolve()
 
     def run_worker():
         submit_bsub_job(
             f"cellmap_flow blockwise {shell_quote(yaml_config)} --client",
-            queue=queue,
+            queue=gpu_queue_candidates(queue, cycle=launcher_settings().cycle_gpu_queues)[0],
             charge_group=charge_group,
             job_name=str(name),
             num_gpus=1,

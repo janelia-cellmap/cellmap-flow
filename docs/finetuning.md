@@ -185,7 +185,7 @@ On the server it lists the session's models, the catalog's and Hugging Face's. O
 | **Distillation Scope** | (Advanced) Where to apply distillation loss — **Unlabeled** (only on unannotated voxels) or **All** (everywhere). |
 | **Label Smoothing** | Softens hard `0/1` targets. Useful when annotations are noisy; set to `0` if you want sharp targets. |
 | **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
-| **GPU Queue** | Which GPU queue to submit the training job to (e.g. H100, H200). |
+| **GPU Queues** | The GPU queues the training job may run on, all ticked at first. It goes to the one with the most free GPUs, and moves to the next one ticked if it has not started in 3 minutes (unless *Move a job that has not started* is off in the Models tab's Server Configuration). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
 
 ### Which models can be finetuned

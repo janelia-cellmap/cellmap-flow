@@ -2,7 +2,8 @@
 
 ``load_config`` reads and checks the file's top level, filling
 ``charge_group`` and ``queue`` from the dashboard's saved settings (then the
-site's default queue) when the file leaves them out; the model entries under
+site's default queues) when the file leaves them out, and reading ``queue``
+as a list (one queue, ``queue: gpu_h200``, is a list of one); the model entries under
 ``models`` are built by ``models.registry.build_models``. Every problem is a ``ConfigError``.
 ``resolve_data_path`` is the one rule for a model's ``data_path`` and
 ``scale``, used by every launcher. Every model's input is resampled to its
@@ -19,6 +20,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.site import current_site
 
 logger = logging.getLogger(__name__)
@@ -130,7 +132,6 @@ def load_config(path: str) -> Dict[str, Any]:
         # (jobs.launch) and nothing reads LSF's charge group or queue, so a
         # YAML without them, as one exported on a Mac is, loads there.
         config["charge_group"] = config.get("charge_group") or SERVER_CONFIG_DEFAULTS["charge_group"]
-        config["queue"] = config.get("queue") or cached.get("queue", current_site().default_queue)
     elif "charge_group" not in config or not config["charge_group"]:
         fallback = cached.get("charge_group", SERVER_CONFIG_DEFAULTS.get("charge_group"))
         if fallback:
@@ -141,10 +142,18 @@ def load_config(path: str) -> Dict[str, Any]:
                 "Missing required field in YAML: charge_group (no cache available)"
             )
 
-    if "queue" not in config or not config["queue"]:
-        fallback = cached.get("queue", current_site().default_queue)
-        logger.warning(f"Missing 'queue' in YAML, using: {fallback}")
-        config["queue"] = fallback
+    # The GPU queues the models may run on, a list: a YAML names one queue or
+    # several (queues.queue_list), and start_hosts sends each job to the one
+    # with the most free GPUs.
+    try:
+        queue = queue_list(config.get("queue"))
+    except ValueError as e:
+        raise ConfigError(f"YAML 'queue': {e}")
+    if not queue:
+        queue = queue_list(cached.get("queue")) or current_site().default_queues
+        if lsf.available():
+            logger.warning(f"Missing 'queue' in YAML, using: {', '.join(queue)}")
+    config["queue"] = queue
 
     # Models field: must be a dict, list, or empty/missing (for dashboard-only mode)
     if "models" not in config or config["models"] is None:

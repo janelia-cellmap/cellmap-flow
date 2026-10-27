@@ -359,8 +359,9 @@
         <div class="modal-body">
           <p style="color: #aaa;">No server configuration found. Please set your server parameters to continue.</p>
           <div class="mb-2">
-            <label class="form-label" for="modal_queue">Queue</label>
-            <input type="text" class="form-control form-control-sm" id="modal_queue" value="gpu_h100" />
+            {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js), all ticked. #}
+            <span class="form-label d-block">GPU Queues</span>
+            <div id="modal_queue"></div>
           </div>
           <div class="mb-2">
             <label class="form-label" for="modal_charge_group">Charge Group</label>

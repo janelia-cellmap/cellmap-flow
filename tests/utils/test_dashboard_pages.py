@@ -203,5 +203,5 @@ def test_the_lsf_settings_are_asked_for_only_where_jobs_go_to_lsf(dashboard, mon
     monkeypatch.setattr(index_page, "bsub_available", lambda: bsub)
     html = dashboard.get("/").get_data(as_text=True)
     assert ('id="serverConfigModal"' in html) is bsub
-    assert ('id="gpuQueueSelect"' in html) is bsub
+    assert ('id="gpuQueuePicker"' in html) is bsub
     assert ("No cluster here" in html) is not bsub

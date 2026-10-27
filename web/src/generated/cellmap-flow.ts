@@ -162,10 +162,12 @@ export interface Equivalences {
 }
 /**
  * Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
- * sent change. The counts must be whole numbers; the rest are kept as sent,
- * and keys that are not settings are ignored.
+ * sent change. The counts must be whole numbers and the queue a list of at
+ * least one queue; the rest are kept as sent, and keys that are not
+ * settings are ignored.
  */
 export interface ServerConfigUpdate {
+  queue?: string[];
   nb_cores_master?: number;
   nb_cores_worker?: number;
   nb_workers?: number;
@@ -176,7 +178,7 @@ export interface ServerConfigUpdate {
  * required, as whole numbers; a missing one is reported as None.
  */
 export interface BlockwiseSettings {
-  queue?: unknown;
+  queue?: string[];
   charge_group?: unknown;
   nb_cores_master?: number;
   nb_cores_worker?: number;
@@ -507,7 +509,7 @@ export interface FinetuneSubmit {
   corrections_path?: string;
   checkpoint_path?: string | null;
   auto_serve?: boolean;
-  queue?: string | null;
+  queue?: string[];
   charge_group?: string | null;
   [k: string]: unknown;
 }

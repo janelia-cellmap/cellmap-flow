@@ -1,10 +1,10 @@
 """Starting the inference servers the CLIs and the dashboard ask for.
 
 The policy over ``jobs.lsf`` and ``jobs.local``: ``start_hosts`` runs a
-server on LSF or on this machine, tries the other GPU queues when one does
-not start it, waits for its address and records the job in
-``started_jobs()``; ``install_cleanup_handlers`` kills the recorded jobs,
-and any still starting, on Ctrl+C, SIGTERM or SIGHUP.
+server on LSF or on this machine, tries the next of the GPU queues it may
+run on when one does not start it, waits for its address and records the
+job in ``started_jobs()``; ``install_cleanup_handlers`` kills the recorded
+jobs, and any still starting, on Ctrl+C, SIGTERM or SIGHUP.
 
 Two deployment settings are read here, once, at import:
 
@@ -28,7 +28,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from cellmap_flow.jobs import lsf
 # Module globals, looked up when a job is started, so tests can replace them
@@ -242,7 +242,7 @@ def install_cleanup_handlers() -> bool:
 
 def submit_bsub_job(
     command: str,
-    queue: str = _SITE.default_queue,
+    queue: str,
     charge_group: Optional[str] = None,
     job_name: str = "my_job",
     num_gpus: int = 1,
@@ -298,7 +298,7 @@ def submit_bsub_job(
 
 def start_hosts(
     command: str,
-    queue: str = _SITE.default_queue,
+    queue: Optional[List[str]] = None,
     charge_group: Optional[str] = None,
     job_name: str = "example_job",
     use_https: bool = False,
@@ -317,16 +317,17 @@ def start_hosts(
 
     Args:
         command: Command to execute
-        queue: LSF queue name (for bsub)
+        queue: The LSF queues it may run on (for bsub), tried in the order
+            queues.candidates gives them; None is every GPU queue offered
         charge_group: Project for billing (for bsub)
         job_name: Name for the job
         use_https: Whether to use HTTPS (adds cert/key flags)
         wait_for_host: Whether to wait for host information before returning
         walltime: LSF run limit ("HH:MM" or minutes); defaults to the
             launcher settings' walltime, then the site's
-        cycle_queues: Try other GPU queues when the requested one is busy or
-            closed. Defaults to the launcher settings' cycle_gpu_queues,
-            which defaults to True.
+        cycle_queues: Move the job to the next of ``queue`` when it has not
+            started on one; off, it waits on the first. Defaults to the
+            launcher settings' cycle_gpu_queues, which defaults to True.
         local: Run on this machine even if bsub is available.
 
     Returns:
@@ -394,7 +395,7 @@ def start_hosts(
                 return job
 
             with _while_starting(job):
-                started = _wait_on_queue(job, job_name, queue, candidate, index, candidates)
+                started = _wait_on_queue(job, job_name, candidate, index, candidates)
             if started is not None:
                 return started
 
@@ -418,7 +419,7 @@ def start_hosts(
     return job
 
 
-def _wait_on_queue(job, job_name, queue, candidate, index, candidates):
+def _wait_on_queue(job, job_name, candidate, index, candidates):
     """Wait for ``job``, submitted to ``candidate``, the ``index``-th of
     ``candidates``, to report its address.
 
@@ -447,10 +448,10 @@ def _wait_on_queue(job, job_name, queue, candidate, index, candidates):
         observed = None if host else job.observed_status()
 
     if host:
-        if candidate != queue:
+        if index:
             logger.warning(
-                f"Running on {candidate}, not the requested {queue}: "
-                f"{index} earlier queue(s) did not start the job"
+                f"Running on {candidate}: {index} earlier queue(s) "
+                f"({', '.join(candidates[:index])}) did not start the job"
             )
         else:
             logger.info(f"Running on {candidate}")

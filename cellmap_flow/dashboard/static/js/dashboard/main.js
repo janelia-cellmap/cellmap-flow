@@ -5,6 +5,7 @@
 // page's elements are all there.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
 import { CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
+import { createQueuePicker, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { chainChanges, mountOpChain } from "../shared/op-chain.js";
 import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
@@ -216,6 +217,8 @@ function initServerConfigModal() {
   if (!modalEl) return;
   const modal = new bootstrap.Modal(modalEl);
   modal.show();
+  const queuePicker = createQueuePicker(document.getElementById("modal_queue"), { small: true });
+  const stopQueues = subscribeGpuQueues(queuePicker.render);
 
   document.getElementById("modalSaveConfigBtn").addEventListener("click", function () {
     const statusEl = document.getElementById("modalConfigStatus");
@@ -223,12 +226,13 @@ function initServerConfigModal() {
       statusEl.style.color = "#f87171";
       statusEl.textContent = message;
     }
-    // A blank count or queue is left out so the server keeps its default.
+    // A blank count, or no queues (LSF has not listed them yet), is left out
+    // so the server keeps its default.
     const payload = {
       charge_group: document.getElementById("modal_charge_group").value.trim(),
     };
-    const queue = document.getElementById("modal_queue").value.trim();
-    if (queue) payload.queue = queue;
+    const queues = queuePicker.value();
+    if (queues.length) payload.queue = queues;
     const counts = [
       ["modal_nb_cores_worker", "nb_cores_worker", "Cores per Worker"],
       ["modal_nb_workers", "nb_workers", "Number of Workers"],
@@ -246,6 +250,7 @@ function initServerConfigModal() {
       .then(function () {
         statusEl.style.color = "#4ade80";
         statusEl.textContent = "Saved!";
+        stopQueues();
         setTimeout(function () { modal.hide(); }, 500);
       })
       .catch(function (err) {

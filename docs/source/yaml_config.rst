@@ -38,7 +38,11 @@ A configuration file has the following top-level fields:
      - Project billing group.
    * - ``queue``
      - No
-     - Job queue (default: ``gpu_h100``).
+     - The GPU queue the jobs run on, or a list of them
+       (``[gpu_h100, gpu_h200]``): each job goes to the one with the most
+       free GPUs, and moves to the next if it has not started in 3 minutes
+       (``cycle_gpu_queues: false`` keeps it on the first). Default: the
+       dashboard's saved queues, else every GPU queue.
    * - ``models``
      - Yes
      - Dict or list of model entries (see below).
