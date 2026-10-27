@@ -2,14 +2,31 @@
 (web/src/backend/routes/rank.ts), answered by the dashboard, so the Finetune
 tab's ranking (static/js/dashboard/finetune/rank.js) works the same in both.
 
-GET /api/finetune/rank/candidates lists the models to rank: the session's
-(running or not), the catalog's and Hugging Face's, with the session's
-volume and the model it is for; only the running ones start ticked, as a
-model not running is started on the cluster for its score. POST
+GET /api/finetune/rank/candidates lists the models to rank as the Models tab
+offers them, each with the ``group`` of the tab's it is listed under, in the
+tab's order: the session's ("Running", running or not; not a Cellpose
+model, whose flows the ranking does not score), each catalog group's
+(models.yaml's "cellmap", "saalfeldlab"), cellmap's on Hugging Face
+("Hugging Face") and the BioImage Model Zoo's ("BioImage Zoo", with its
+``em`` tag, which the others are), from the lists the tab last cached
+(``hf_cached`` and ``zoo_cached`` say whether there were any: none is
+fetched here, so a listing never waits on the Hub or bioimage.io; the tab's
+Refresh fetches them), then the ones given here by reference ("Added"),
+with the session's volume and the model it is for. Each not running says
+how to build it (``entry``, the one the Models tab starts it from); only the
+running ones and the added start ticked, as a model not running is started
+on the cluster for its score. A zoo model whose voxel size nothing says
+(its server would refuse it) has no entry, and ``error`` and ``needs`` say
+so. POST /api/finetune/rank/add {ref, name?, voxel_size?} adds a model by
+reference, resolved as the Models tab's Add a model resolves it
+(routes/model_resolve.py resolve_request), and answers its candidate,
+starting nothing (a Cellpose model is refused); the session keeps it among
+the candidates (Session.rank_added). POST
 /api/finetune/rank/score {name, entry?} scores one on the session volume's
 paint (portable/rank.py says how; the browser runs the same Python): a running model
 through its server, any other started for the score alone (``entry``, the
-candidate's, says how to build it) and stopped after, so a ranking leaves
+candidate's, says how to build it; a zoo model is served from its own
+environment, as the Models tab serves it) and stopped after, so a ranking leaves
 the Models tab and the cluster as they were. The model is read through
 its own input normalization (what its start sets: its declaration, or the
 CellMap convention) and through the session's when that is another, and
@@ -49,7 +66,9 @@ from scipy.special import logit
 from cellmap_flow.dashboard.finetune_utils import retire_annotation_volume, sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.channel import channel_refusal
-from cellmap_flow.dashboard.routes.finetune.common import autodetect_output_type, find_model_config, session_store
+from cellmap_flow.dashboard.routes.finetune.common import (
+    autodetect_output_type, declared_output_type, find_model_config, session_store,
+)
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.portable import rank
 from cellmap_flow.finetune.session.volume import volume_corner_nm
@@ -70,6 +89,19 @@ NORM_FROM = {
     "session": "the session's input normalization",
     "none": "no input normalization",
 }
+
+# The Models tab's sections a candidate is listed under (its ``group``), in
+# the tab's order, with the catalog's groups (models.yaml) after RUNNING.
+RUNNING, HUGGING_FACE, ZOO, ADDED = "Running", "Hugging Face", "BioImage Zoo", "Added"
+
+# The target of a Cellpose model (declared_output_type), which is not ranked:
+# the ranking scores object and background, or affinities, and Cellpose
+# predicts flows.
+FLOWS = "flows"
+
+# What resolve asks for that rank/add's ``voxel_size`` gives (models.resolve:
+# a zoo or Cellpose model's voxel_size, a fly or onnx model's input one).
+VOXEL_NEEDS = {"voxel_size", "input_voxel_size"}
 
 
 def _dims(input_shape):
@@ -97,62 +129,126 @@ def _folder_input_shape(folder):
         return None
 
 
+def _candidate(name, group, served, volume, **fields):
+    """A model to rank as the listing gives it, listed under ``group``:
+    ``fields`` over the defaults for what nothing has said of it (no
+    channels, voxel size or dims; EM; not finetuned). A model not running
+    is started on the cluster for its score (``cluster``), so by default
+    only a running one (``served``) starts ticked. ``volume`` is the
+    session's, which ``volume_model`` says whether it is this model's."""
+    return {
+        "name": name, "group": group, "task": None, "channels": [], "voxel_size_nm": [], "dims": None, "em": True,
+        "finetuned": False, "served": served, "ticked": served, "cluster": True, "source": name,
+        "volume_model": bool(volume) and volume.get("model_name") == name, **fields,
+    }
+
+
 def _refused(message, status=400, **extra):
     return jsonify({"success": False, "error": message, **extra}), status
 
 
 @finetune_bp.route("/api/finetune/rank/candidates", methods=["GET"])
 def rank_candidates():
+    from cellmap_flow.dashboard.services.launch import _sanitize_job_name, bioimage_model_entry
+    from cellmap_flow.models.bioimage_catalog import cached_bioimage_models
+    from cellmap_flow.models.configs.finetune import FinetuneModelConfig
+    from cellmap_flow.models.hf_catalog import cached_huggingface_models
+
     session = get_session()
     volume_id, volume = session_store().session_volume()
     hosts = {job.model_name: job.host for job in session.jobs if getattr(job, "host", None)}
-    candidates, seen = [], set()
+    candidates = {}
 
-    def add(name, **fields):
-        if not name or name in seen:
-            return
-        seen.add(name)
-        served = name in hosts
-        # A model not running is started on the cluster for its score
-        # (``cluster``), so only the running ones start ticked.
-        candidates.append({
-            "name": name, "task": None, "channels": [], "voxel_size_nm": [], "dims": None, "finetuned": False,
-            "served": served, "ticked": served, "cluster": True, "source": name,
-            "volume_model": bool(volume) and volume.get("model_name") == name, **fields,
-        })
-
-    from cellmap_flow.dashboard.services.launch import _sanitize_job_name
-    from cellmap_flow.models.configs.finetune import FinetuneModelConfig
+    def add(name, group, **fields):
+        # A model listed twice is kept where it was first listed.
+        if name and name not in candidates:
+            candidates[name] = _candidate(name, group, name in hosts, volume, **fields)
 
     for config in session.models_config:
+        if declared_output_type(config) == FLOWS:
+            continue
         name = getattr(config, "name", None)
         info = fetch_model_info(hosts[name]) if name in hosts else {}
         # The server's read shape (nm) over its input voxel size: its input in voxels.
         read, voxel = info.get("read_shape"), info.get("input_voxel_size")
         shape = [r / v for r, v in zip(read, voxel)] if read and voxel else None
-        add(name, task=getattr(type(config), "cli_name", None), finetuned=isinstance(config, FinetuneModelConfig),
-            channels=list(info.get("channels") or []), voxel_size_nm=list(info.get("output_voxel_size") or []),
-            dims=_dims(shape))
+        add(name, RUNNING, task=getattr(type(config), "cli_name", None),
+            finetuned=isinstance(config, FinetuneModelConfig), channels=list(info.get("channels") or []),
+            voxel_size_nm=list(info.get("output_voxel_size") or []), dims=_dims(shape))
+    # Before the lists, so one added by hand keeps its group and its tick
+    # when a list has it too.
+    for name, fields in session.rank_added.items():
+        add(name, ADDED, ticked=True, **fields)
     for group, models in (session.model_catalog or {}).items():
         for name, folder in models.items():
-            add(name, task=group, source=folder, dims=_dims(_folder_input_shape(folder)),
+            add(name, group, task=group, source=folder, dims=_dims(_folder_input_shape(folder)),
                 entry={"type": "cellmap", "folder_path": folder, "name": name})
-    try:
-        from cellmap_flow.models.hf_catalog import list_huggingface_models
-
-        for repo, meta in list_huggingface_models().items():
-            # Named as the Models tab's Submit names it (run_hf_model).
-            name = _sanitize_job_name(repo.split("/")[-1])
-            add(name, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
-                voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
-                entry={"type": "huggingface", "repo": repo, "name": name})
-    except Exception as e:
-        logger.warning(f"Which model to start from lists no Hugging Face models: {e}")
+    hf = cached_huggingface_models()
+    for repo, meta in (hf or {}).items():
+        # Named as the Models tab's Submit names it (run_hf_model).
+        name = _sanitize_job_name(repo.split("/")[-1])
+        add(name, HUGGING_FACE, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
+            voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
+            entry={"type": "huggingface", "repo": repo, "name": name})
+    zoo = cached_bioimage_models()
+    for model in (zoo or {}).get("models", []):
+        # Built as the Models tab's Submit builds it with its voxel size
+        # blank, from the cached list alone.
+        entry, _, refusal = bioimage_model_entry(model, online=False)
+        add(entry["name"], ZOO, task="bioimage", source=model["key"], em=bool(model.get("em")),
+            dims={"2d": 2, "3d": 3}.get(model.get("dims")),
+            # What the Models tab's zoo row shows and its search reads.
+            title=model.get("name"), description=model.get("description"), tags=list(model.get("tags") or []),
+            **({"error": f"{refusal}: to rank it, add it with one (bioimageio:{model['key']} and its voxel size)",
+                "needs": ["voxel_size"]} if refusal else {"entry": entry}))
+    order = [RUNNING, *(session.model_catalog or {}), HUGGING_FACE, ZOO, ADDED]
     return jsonify({
         "success": True,
         "volume": {"id": volume_id, "model_name": volume.get("model_name"), "painted_chunks": len(_painted_chunks(volume))} if volume else None,
-        "candidates": candidates,
+        "candidates": sorted(candidates.values(), key=lambda c: order.index(c["group"])),
+        "hf_cached": hf is not None, "zoo_cached": zoo is not None,
     })
+
+
+@finetune_bp.route("/api/finetune/rank/add", methods=["POST"])
+def rank_add():
+    """A model for the ranking by reference, ``{ref, name?, voxel_size?}``
+    (a ResolveModel), resolved as the Models tab's Add a model resolves it
+    (routes/model_resolve.py resolve_request), starting nothing.
+
+    Answers ``{"success": true, "candidate": ...}``, the candidate as the
+    listing gives it (``group`` "Added", ticked, its ``entry`` the resolved
+    one) with the resolve's ``how``, ``env`` and ``notes``, and keeps it in
+    the session (Session.rank_added), so every listing after includes it.
+    A reference that resolves to nothing is the resolve's 400. One whose
+    model needs more than the reference says is a 400 whose ``needs`` lists
+    what (the resolve's): a voxel size, which the same request with
+    ``voxel_size`` gives; anything else only the Models tab's Add a model
+    asks for, and the model it starts there is listed here as running. A
+    Cellpose model is a 400 too: it predicts flows, which are not ranked."""
+    from cellmap_flow.dashboard.routes.model_resolve import resolve_request
+    from cellmap_flow.models.registry import model_type
+
+    data = request.get_json(silent=True)
+    resolved, error = resolve_request(data)
+    if error:
+        return error
+    if getattr(model_type(resolved.type), "finetune_output_type", None) == FLOWS:
+        return _refused(f"{resolved.name}, {resolved.how}, predicts flows, which the ranking does not score: "
+                        "it scores a model's object and background, or its affinities, on the paint.")
+    if resolved.needs:
+        needs = ", ".join(resolved.needs)
+        remedy = ("give its voxel size (nm, as 8 or 40,4,4) and add it again" if set(resolved.needs) <= VOXEL_NEEDS
+                  else "add it on the Models tab (Add a model), which asks for them; started there, it is listed here")
+        return _refused(f"{resolved.name}, {resolved.how}, needs {needs}: {remedy}.", needs=resolved.needs)
+    fields = {"task": resolved.type, "source": data["ref"].strip(),
+              "finetuned": resolved.type == "finetune", "entry": resolved.entry()}
+    get_session().rank_added[resolved.name] = fields
+    _, volume = session_store().session_volume()
+    candidate = _candidate(resolved.name, ADDED, bool(running_job_host(resolved.name)), volume, ticked=True, **fields)
+    logger.info(f"Added {resolved.name} to the models to rank: {resolved.how}")
+    return jsonify({"success": True, "candidate": candidate, "how": resolved.how, "env": resolved.env,
+                    "notes": resolved.notes})
 
 
 @finetune_bp.route("/api/finetune/rank/score", methods=["POST"])

@@ -48,6 +48,7 @@ URLS = {
     "/api/finetune/load-existing-volume-progress": "GET",
     "/api/finetune/models": "GET",
     "/api/finetune/rank/candidates": "GET",
+    "/api/finetune/rank/add": "POST",
     "/api/finetune/rank/score": "POST",
     "/api/finetune/rank/use": "POST",
     "/api/finetune/rank/input-norm": "POST",

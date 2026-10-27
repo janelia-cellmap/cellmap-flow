@@ -34,7 +34,8 @@ rather than being stored beside the real one:
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
-  ``annotation_volumes``, ``output_sessions``; its AI annotation's
+  ``annotation_volumes``, ``output_sessions``; the models its ranking was
+  given by reference, ``rank_added``; its AI annotation's
   ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
   ``restart_key`` that restarts one from the viewer; the Review tab's
   ``review``.
@@ -73,7 +74,7 @@ class Session:
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
                  "shader_controls", "extra_layers", "shown_channels",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
-                 "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
+                 "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added", "review",
                  "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_ids",
                  "log_clients", "bbx_generator_state")
 
@@ -146,6 +147,11 @@ class Session:
         self.annotation_volumes = {}
         # {output base directory: its session directory}.
         self.output_sessions = {}
+        # {model name: its candidate's fields}: the models the Finetune tab's
+        # ranking was given by reference (POST /api/finetune/rank/add, Add a
+        # model's resolve), which every listing of its candidates includes
+        # after, until the dashboard stops; nothing is started for them.
+        self.rank_added = {}
         # The Review tab's open index (review_routes.ReviewSession), or None
         # until /api/review/open.
         self.review = None

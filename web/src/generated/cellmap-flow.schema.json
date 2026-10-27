@@ -512,6 +512,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/finetune/rank/add",
+      "availability": "both",
+      "request": "ResolveModel"
+    },
+    {
+      "method": "POST",
       "path": "/api/finetune/rank/score",
       "availability": "both",
       "request": null
@@ -2164,6 +2170,9 @@
         },
         "POST /api/finetune/job/<job_id>/restart": {
           "$ref": "#/$defs/FinetuneRestart"
+        },
+        "POST /api/finetune/rank/add": {
+          "$ref": "#/$defs/ResolveModel"
         },
         "POST /api/finetune/ai-annotate/settings": {
           "$ref": "#/$defs/AIAnnotateSettings"

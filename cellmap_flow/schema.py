@@ -177,6 +177,7 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/good-regions/delete": "both",
     # Which model to start from
     "GET /api/finetune/rank/candidates": "both",
+    "POST /api/finetune/rank/add": "both",
     "POST /api/finetune/rank/score": "both",
     "POST /api/finetune/rank/use": "both",
     "POST /api/finetune/rank/input-norm": "both",
@@ -206,6 +207,7 @@ REQUEST_MODELS: dict[str, str] = {
     "POST /api/models/remove": "RemoveModel",
     "POST /api/models/resolve": "ResolveModel",
     "POST /api/models/add": "AddModel",
+    "POST /api/finetune/rank/add": "ResolveModel",
     "PUT /api/pipeline": "PipelineUpdate",
     "POST /update/equivalences": "Equivalences",
     "POST /api/server-config": "ServerConfigUpdate",
