@@ -49,12 +49,24 @@ def windowed(args, arrays):
     return rank.windowed(args["norm"], float(args["lo"]), float(args["hi"]))
 
 
+def norm_tries(args, arrays):
+    """``rank.norm_tries``: the input normalizations a model is scored
+    through, from ``own`` (its declaration, ``own_from``) and ``session``."""
+    return rank.norm_tries(args["own"], args["own_from"], args["session"])
+
+
+def best_try(args, arrays):
+    """``rank.best_try``: the index of the best of ``scores``, or null."""
+    return rank.best_try(args["scores"])
+
+
 def rank_row(args, arrays):
     """``rank.score_row``: the ranking's row from ``base`` (the score read
-    through ``norm``), ``stretched`` (the score read through ``norm``
-    stretched to ``raw``, or null) and ``raw`` (the raw's window, or null);
-    null when ``base`` is null."""
-    return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"))
+    through ``norm``, which came from ``norm_from``), ``stretched`` (the
+    score read through ``norm`` stretched to ``raw``, or null) and ``raw``
+    (the raw's window, or null); null when ``base`` is null."""
+    return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"),
+                          args.get("norm_from", "session"))
 
 
 def carry_paint(args, arrays):

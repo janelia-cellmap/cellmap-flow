@@ -22,7 +22,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune import rank
 from cellmap_flow.finetune.session.volume import carry_paint
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.portable.rank import score_row
+from cellmap_flow.portable.rank import best_try, norm_tries, score_row
 from cellmap_flow.serving.probe import UNBOUNDED
 
 
@@ -84,6 +84,21 @@ def test_the_row_keeps_a_clearly_better_stretch_and_gives_the_threshold_and_inpu
     assert (clear["threshold"], clear["input_window"]) == (round(1 / (1 + math.exp(-1)), 3), [100.0, 120.0])
     assert score_row(base, None, [], None)["input_window"] is None
     assert score_row(None, None, norm, None) is None
+    # The steps it was read through, stretched when the stretch is kept.
+    assert (close["input_norm"], clear["input_norm"]) == (norm, [dict(norm[0], min_value=100.0, max_value=120.0)])
+
+
+def test_a_model_is_tried_through_its_own_normalization_and_the_sessions():
+    own = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+    # The session's chain as the page keeps it, in strings: the same steps, tried once.
+    same = [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+    assert [t["from"] for t in norm_tries(own, "convention", same)] == ["convention"]
+    assert [t["from"] for t in norm_tries(own, "declared", own[:1])] == ["declared", "session"]
+    assert norm_tries([], "convention", []) == [{"input_norm": [], "from": "none"}]
+    # The better is kept, the model's own among equals.
+    assert best_try([{"matches": 0.5}, {"matches": 0.9}]) == 1
+    assert best_try([{"matches": 0.7}, {"matches": 0.7}]) == 0
+    assert best_try([None, None]) is None
 
 
 def _volume(path, voxel, shape, chunks):

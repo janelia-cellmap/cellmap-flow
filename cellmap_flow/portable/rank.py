@@ -22,6 +22,11 @@ portable/calls.py; numpy and the standard library only. In short:
   model makes the training form's Channel (select_channel) for a model of
   several, and Fit to Paint when none is picked. An affinity model is
   scored on its channels together, and answers neither.
+- A model is read through its own input normalization (what its start
+  sets: its declaration, or its kind's convention) and through the
+  session's when that is another (``norm_tries``), and the better score is
+  kept (``best_try``, its own among equals). Read through none, or another
+  model's, a model's score is noise.
 - Where the raw under the paint is narrower than NARROW_WINDOW of the
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
@@ -29,8 +34,10 @@ portable/calls.py; numpy and the standard library only. In short:
 - The row of the ranking (``score_row``) is the score kept, with what it
   was read at in the units its controls take: the cut-off as Seed from
   Prediction's threshold (a probability) and the raw's range read as 0 to
-  1 (the stretched window, or the normalizer's own range). Both modes
-  answer it as it is, so their tables agree.
+  1 (the stretched window, or the normalizer's own range), and the
+  normalizer steps it was read through (``input_norm``), which Use this
+  model and Fit to Paint make the session's. Both modes answer it as it
+  is, so their tables agree.
 
 The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
 default loss, is given beside the score: about 0.69 is guessing, about 0.20
@@ -183,19 +190,72 @@ def windowed(norm: Sequence[dict], lo: float, hi: float) -> Optional[List[dict]]
     return [dict(s, min_value=float(lo), max_value=float(hi)) if i == k else dict(s) for i, s in enumerate(norm)]
 
 
+def _value(v):
+    """A normalizer parameter as a number or a bool where it reads as one: the
+    session's chain keeps what the page sent ("0", "false"), a model's
+    declaration numbers."""
+    if isinstance(v, str):
+        if v.lower() in ("true", "false"):
+            return v.lower() == "true"
+        try:
+            return float(v)
+        except ValueError:
+            return v
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+
+
+def same_steps(a: Sequence[dict], b: Sequence[dict]) -> bool:
+    """Whether two normalizer chains are the same steps with the same
+    parameters, read as values (``_value``: "0" is 0)."""
+    return len(a) == len(b) and all(
+        x.keys() == y.keys() and all(_value(x[k]) == _value(y[k]) for k in x) for x, y in zip(a, b))
+
+
+def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> List[dict]:
+    """The input normalizations a model is scored through, each once, its own
+    first: ``{"input_norm": steps, "from": where}``.
+
+    ``own`` is what the model's start sets (its declaration, ``own_from``
+    "declared"; or its kind's convention, "convention"; [] when nothing is
+    known of it), ``session`` the session's input normalization ("session").
+    The model's own is always tried: read through another's, or none, a model
+    scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
+    channel nucleus for paint of mitochondria). The session's is tried too,
+    as one the user set may fit this raw better. With neither, the raw as it
+    is ("none").
+    """
+    tries = []
+    for steps, where in ((own, own_from), (session, "session")):
+        steps = [dict(s) for s in steps or []]
+        if steps and not any(same_steps(steps, t["input_norm"]) for t in tries):
+            tries.append({"input_norm": steps, "from": where})
+    return tries or [{"input_norm": [], "from": "none"}]
+
+
+def best_try(scores: Sequence[Optional[dict]]) -> Optional[int]:
+    """The index of the score (``rank_score``'s, one per ``norm_tries``
+    entry, None where it counted nothing) that matches best, the first among
+    equals (the model's own); None when none counted."""
+    best = None
+    for i, s in enumerate(scores):
+        if s is not None and (best is None or s["matches"] > scores[best]["matches"]):
+            best = i
+    return best
+
+
 def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict],
-              raw: Optional[Sequence[float]]) -> Optional[dict]:
+              raw: Optional[Sequence[float]], norm_from: str = "session") -> Optional[dict]:
     """A model's row of the ranking, as both modes answer it beside the
     model's name, the time taken and the notes; None when ``base`` is None
     (the paint gave the model nothing to score).
 
     ``base`` is the model's score (``rank_score``) read through ``norm``,
-    the normalizer specs it was served with; ``stretched`` its score read
-    through ``windowed(norm, *raw)``, ``raw`` the raw's 1st and 99th
-    percentiles under the paint, or None when that was not tried (the raw
-    is not narrow) or counted nothing. The stretched score is kept when it
-    matches WINDOW_MARGIN better than ``base``. The row is the score kept,
-    with:
+    the normalizer specs it was served with (the best of ``norm_tries``,
+    ``norm_from`` its ``from``); ``stretched`` its score read through
+    ``windowed(norm, *raw)``, ``raw`` the raw's 1st and 99th percentiles
+    under the paint, or None when that was not tried (the raw is not narrow)
+    or counted nothing. The stretched score is kept when it matches
+    WINDOW_MARGIN better than ``base``. The row is the score kept, with:
 
     - ``window``: ``raw`` when the stretched score was kept, else None; and
       then ``matches_without_window``, ``base``'s match;
@@ -205,7 +265,11 @@ def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[di
       fitted best above;
     - ``input_window``: the raw's range the model read as 0 to 1, as the
       Processing tab's MinMaxNormalizer takes it: ``window`` when kept, else
-      ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer.
+      ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer;
+    - ``input_norm``: the normalizer steps the score kept was read through
+      (``norm``, stretched when the stretch was kept), which Use this model
+      and Fit to Paint make the session's; and ``input_norm_from``, where
+      they come from (``norm_from``).
     """
     if base is None:
         return None
@@ -225,5 +289,7 @@ def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[di
         **({"matches_without_window": base["matches"]} if keep else {}),
         "threshold": round(1 / (1 + math.exp(-score["cutoff"])), 3),
         "input_window": input_window,
+        "input_norm": windowed(norm, *window) if keep else [dict(s) for s in norm],
+        "input_norm_from": norm_from,
     }
 
