@@ -21,7 +21,7 @@ from cellmap_flow.serving.protocol import split_dataset_url
 
 # The chain configured and drawn before each request.
 SHOWN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], "postprocess": []}
-# Submit's body: the Input and Postprocess tabs' steps, every value a string.
+# Apply's body: the Processing tab's steps, every value a string.
 SUBMITTED = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"},
                             {"name": "LambdaNormalizer", "expression": "x*2-1"}],
              "postprocess": [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]}

@@ -163,7 +163,7 @@ def get_loaded_models():
     its input part is, else None (routes.pipeline.input_norm_declared_by).
     The page reads them after every model change: a model's start can set
     the input normalization (routes.pipeline.set_declared_input_norm), and
-    the Input list then shows it, saying from which model.
+    the Processing tab's input list then shows it, saying from which model.
     """
     from cellmap_flow.dashboard.routes.pipeline import input_norm_declared_by
 

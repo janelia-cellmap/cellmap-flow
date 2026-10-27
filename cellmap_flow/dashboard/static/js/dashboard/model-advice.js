@@ -160,7 +160,7 @@ function renderInputNormAdvice(m, box, wanted) {
                     + "</small>";
     }
     div.appendChild(document.createElement("br"));
-    // Fills the Input list in; the Apply bar then counts the change, and
+    // Fills the input list in; the Apply bar then counts the change, and
     // the user's Apply sends it.
     div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
       differences.length ? "Apply the declared values" : "Apply: " + names.join(" → "),

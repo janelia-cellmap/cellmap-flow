@@ -326,7 +326,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
     PUT /api/pipeline sets it, so the layers of the models already running
     are redrawn through it too. A chain that has input normalizers already
     (a YAML's, the user's Apply) is left alone, and after this only Apply
-    changes it: the page's Input list shows the chain as set
+    changes it: the Processing tab's input list shows the chain as set
     (GET /api/models/loaded's ``pipeline``, which the page reads after every
     model change) and the notice that says where it came from. A model that
     declares nothing changes nothing. A declaration that names an op the
