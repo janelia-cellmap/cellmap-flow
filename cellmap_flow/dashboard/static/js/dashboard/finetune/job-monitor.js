@@ -17,6 +17,7 @@ import { setBusy } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT, RESTART_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
+import { sessionVolumeChanged } from "./crops.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
@@ -249,6 +250,13 @@ export function initJobMonitor({ picker, form, log }) {
         if (result.tensorboard_command) appendLog(`TensorBoard: ${result.tensorboard_command}`);
         if (result.note) {
           appendLog(`Note: ${result.note}`);
+        }
+        // The paint was on another model's grid and is carried onto this
+        // one's, into a new volume (the note says so): the volume buttons
+        // act on it, and the model lists' "(painted for)" follows it.
+        if (result.carried) {
+          sessionVolumeChanged(result.carried.volume_id);
+          announce(MODELS_CHANGED_EVENT);
         }
         appendLog(`\nWaiting for training to start...\n`);
 

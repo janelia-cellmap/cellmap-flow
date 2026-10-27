@@ -19,6 +19,7 @@ import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/typ
 import { CHUNK_DIR, chunkKey, planVolume, readVolume } from "../../src/finetune/volume";
 import { finetunedEntry } from "../../src/models/finetuned";
 import { entryFor, parseManifest } from "../../src/models/manifest";
+import { paintLayerName } from "../../src/viewer/layers";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
 import { readMetadata } from "./onnx-metadata";
@@ -378,6 +379,42 @@ describe.skipIf(!python)("POST /api/finetune/submit of one channel", () => {
     expect(body(await h.handle(request("POST", `/api/finetune/job/${picked.job_id}/restart`, { ...FORM, num_epochs: 1 }))).success).toBe(true);
     await job.settled();
     expect(calls[1].options.selectChannel).toBe(2);
+  });
+});
+
+describe.skipIf(!python)("POST /api/finetune/submit with a model on another grid", () => {
+  it("carries the paint onto the model's grid first, as Use this model does, leaves the chain as it was and trains on the new volume", async () => {
+    // A volume made for setup_54 on the raw's 16 nm level, and an 8 nm
+    // model, which reads the 8 nm level: setup_54_2d was trained on a 3D
+    // model's volume, and its job read patches it does not take.
+    const levels = [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [4, 4, 4] }, { shape: [500, 500, 500], voxel: [16, 16, 16], origin: [8, 8, 8] }];
+    const ctx = fakeContext({ dataset: { ...DATASET, levels } });
+    const nuc = entry("setup_60", "nuc", ["nuc"], 8);
+    await serve(ctx, entry("setup_54"), nuc);
+    const { run, calls } = fakeRun();
+    const h = harness(ctx, { run });
+    const from = body(await h.handle(request("POST", "/api/finetune/create-volume", { model_name: NAME_54 }))).volume_id as string;
+    await writeBox(ctx.paint, (await readVolume(ctx.paint, from))!, [0, 0, 0], [10, 10, 10], new Uint16Array(1000).map((_, i) => (i < 500 ? 2 : 1)));
+    await h.handle(request("POST", "/api/finetune/add-to-viewer", { crop_id: from }));
+    const chain = structuredClone(ctx.session.state.chain);
+
+    const submitted = body(await h.handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name }))));
+    expect(submitted).toMatchObject({ success: true, carried: { from_model: NAME_54, from_volume: from, chunks: 1 } });
+    expect(submitted.note).toEqual(expect.any(String));
+    const to = submitted.carried.volume_id as string;
+    // The new volume, on the model's grid, is the session's and the job's; the old one is kept, superseded.
+    expect(await readVolume(ctx.paint, to)).toMatchObject({ model_name: nuc.name, output_voxel_size: [8, 8, 8] });
+    expect((await readVolume(ctx.paint, from))!.superseded_by).toBe(to);
+    expect(ctx.session.state.paintVolume).toBe(to);
+    expect(ctx.viewer.layers[paintLayerName(to)]).toBeDefined();
+    expect(ctx.viewer.layers[paintLayerName(from)]).toBeUndefined();
+    await h.jobs.get(submitted.job_id)!.settled();
+    expect(calls[0].volume.id).toBe(to);
+    expect(ctx.session.state.chain).toEqual(chain);
+
+    // On its own grid now: trained as it is.
+    const again = body(await h.handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name }))));
+    expect(again.carried).toBeUndefined();
   });
 });
 

@@ -329,6 +329,73 @@ def test_submit_asks_which_channel_a_model_of_classes_trains(submit, monkeypatch
         assert job.sent["options"].select_channel == 2
 
 
+@pytest.mark.parametrize("answered", [pytest.param(True, id="carried onto its grid"),
+                                      pytest.param(False, id="its grid not known: refused")])
+def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp_path, ome_zarr, monkeypatch, answered):
+    """mito_aff_resunet_setup_54_2d (1 x 556 x 556 at 16 nm) was trained on a
+    volume made for a 3D model (178^3 at 8 nm): the job read 178^3 patches
+    and torch.export refused them. Here a volume made for "a" (8^3 in, 4^3
+    out) and "m", whose server answers with a 2D model's blocks, or has not
+    answered yet."""
+    from cellmap_flow.dashboard.routes.finetune import annotation_core, common, training
+    from cellmap_flow.finetune.session.manifest import read_manifest
+    from cellmap_flow.finetune.session.volume import create_volume_zarr, open_labels, plan_volume
+    from cellmap_flow.models import geometry_cache
+    from cellmap_flow.pipeline_spec import PipelineSpec
+    from cellmap_flow.serving.client import geometry_stand_in
+
+    session = get_session()
+    session.dataset_path = ome_zarr(tmp_path / "raw.zarr", ("s0", np.zeros((32,) * 3, np.uint8), 16.0, 8.0))
+    corrections = tmp_path / "base" / "20260101_120000" / "corrections"
+    corrections.mkdir(parents=True)
+    planned = plan_volume(session.dataset_path, SimpleNamespace(
+        input_voxel_size=[16] * 3, output_voxel_size=[16] * 3, input_shape=[8] * 3, output_shape=[4] * 3))
+    zarr_path = create_volume_zarr(str(corrections / "vol-a.zarr"), planned, dataset_path=session.dataset_path, model_name="a")
+    session.annotation_volumes["vol-a"] = planned.record(zarr_path, dataset_path=session.dataset_path, model_name="a",
+                                                         corrections_dir=str(corrections))
+    labels = open_labels(zarr_path, mode="r+")
+    labels.write_index([4, 4, 4], [8, 8, 8], np.full((4, 4, 4), 2, np.uint8))
+    labels.write_index([8, 8, 8], [12, 12, 12], np.ones((4, 4, 4), np.uint8))
+    chain = PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], [{"name": "SigmoidPostprocessor"}])
+    session.set_pipeline(chain)
+    common.write_volume_manifest(session.annotation_volumes["vol-a"])
+
+    two_d = {"read_shape": [16, 192, 192], "write_shape": [16, 128, 128], "input_voxel_size": [16] * 3,
+             "output_voxel_size": [16] * 3, "output_channels": 3}
+    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: geometry_stand_in(two_d) if answered else None)
+    monkeypatch.setattr(geometry_cache, "load_cached_geometry", lambda config: None)
+    monkeypatch.setattr(annotation_core, "ensure_minio_serving", lambda *args, **kwargs: "http://minio/volume.zarr")
+    monkeypatch.setattr(training, "sync_all_annotations_from_minio", lambda force=True: 0)
+    asked = []
+    session.finetune_job_manager = SimpleNamespace(
+        jobs={}, add_listener=lambda listener: None,
+        submit_finetuning_job=lambda **kw: asked.append(kw) or SimpleNamespace(job_id="j", output_dir=corrections, lsf_job=None))
+
+    response = client.post("/api/finetune/submit", json={"model_name": "m", "corrections_path": str(corrections)})
+    manifest = read_manifest(str(corrections))
+
+    if not answered:
+        # Nothing changed: the volume, the manifest and the job are as they were.
+        assert response.status_code == 400 and not asked
+        assert list(session.annotation_volumes) == ["vol-a"] and not (corrections / "superseded").exists()
+        assert manifest["volume_zarr_path"] == zarr_path
+        return
+    body = response.get_json()
+    assert response.status_code == 200, body
+    new_id = body["carried"]["volume_id"]
+    assert body["carried"]["from_volume"] == "vol-a" and body["note"]
+    # The paint on the 2D model's grid, the volume it trains on; the old one kept, out of the session.
+    assert list(session.annotation_volumes) == [new_id] and session.annotation_volumes[new_id]["model_name"] == "m"
+    assert (corrections / "superseded" / "vol-a.zarr").is_dir()
+    assert manifest["volume_zarr_path"].endswith(f"{new_id}.zarr")
+    assert (manifest["input_size_voxels"], manifest["output_size_voxels"]) == ([1, 12, 12], [1, 8, 8])
+    carried = np.asarray(open_labels(manifest["volume_zarr_path"]).read_index([0, 0, 0], [32, 32, 32]))
+    assert (carried == 2).sum() == (carried == 1).sum() == 64
+    # The chain stays as the user set it; the job trains the session's corrections, now on the new volume.
+    assert session.pipeline_spec.to_json_data() == chain.to_json_data()
+    assert asked[0]["corrections_path"] == corrections
+
+
 MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
 PROXY ="https://gateway.example.org/minio/annotations/vol-1.zarr"
 
