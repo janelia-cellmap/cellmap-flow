@@ -2,7 +2,9 @@
 // paint and the model's output and hand them to cellmap_flow.portable, the
 // Python both modes run (here in node's Pyodide, test/unit/pyodide.ts; the
 // score and the carry themselves are tested in tests/finetune/test_rank.py).
-// The score route reads a served model as it is and serves any other for its
+// The list puts each model under the Models tab's section it would be in, and
+// a model added by hand (rank/add) under Added from then on, scored by its
+// name. The score route reads a served model as it is and serves any other for its
 // score alone; a model is read through its own input normalization and the
 // session's, the better kept; a known paint and output rank as they always
 // did; each row gives its threshold, input window and the steps it was read
@@ -19,7 +21,7 @@ import { finetuneRoutes } from "../../src/backend/routes/finetune";
 import { rankRoutes } from "../../src/backend/routes/rank";
 import type { ApiRequest, ApiResponse, Chain, PaintVolume } from "../../src/contracts";
 import { readVolume } from "../../src/finetune/volume";
-import { entryFor } from "../../src/models";
+import { entryFor, finetunedEntry } from "../../src/models";
 import { paintLayerName } from "../../src/viewer/layers";
 import { entry, type FakeContext, fakeContext, manifest, NAME_54, NAME_56, request } from "./backend-fakes";
 import { portablePython } from "./pyodide";
@@ -82,6 +84,12 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const servedForScore = ctx.infer.serves.at(-1)!;
     expect(servedForScore).toMatchObject({ name: NAME_54, chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } });
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+  });
+
+  it("score a model added by hand by the name its candidate answers", async () => {
+    const { handle } = await painted();
+    const { candidate } = body(await handle(request("POST", "/api/finetune/rank/add", { ref: entry("setup_54").id })));
+    expect(body(await handle(request("POST", "/api/finetune/rank/score", { name: candidate.name })))).toMatchObject({ success: true, name: NAME_54 });
   });
 
   it("score a model again with narrow raw stretched, keep that only when it scores clearly better, and Use this model sets it", async () => {
@@ -287,6 +295,29 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
 });
 
 describe("the rank routes, without Python", () => {
+  it("list each model under its Models tab section, in the sections' order, and one added by hand under Added from then on, unserved", async () => {
+    const ctx = fakeContext();
+    const [e54, e56] = ctx.catalog.entries;
+    const tuned = finetunedEntry(e56, `${NAME_56}-ft1`);
+    const er = entry("setup_60", "er", ["er"], 32);
+    ctx.catalog.entries = [tuned, e54, e56, er];
+    await ctx.infer.serve(e56, ctx.session.state.chain, "blob", async () => new ArrayBuffer(8));
+    const handle = harness(ctx);
+    const groups = async () => body(await handle(request("GET", "/api/finetune/rank/candidates"))).candidates.map((c: any) => [c.name, c.group]);
+    expect(await groups()).toEqual([[NAME_56, "Running"], [NAME_54, "cellmap"], [er.name, "cellmap"], [tuned.name, "Finetuned"]]);
+
+    // Added by its id, a ref the Models tab's Add takes, and answered as the list will list it.
+    const added = await handle(request("POST", "/api/finetune/rank/add", { ref: e54.id }));
+    expect(body(added)).toMatchObject({ success: true, candidate: { name: NAME_54, group: "Added", ticked: true, served: false } });
+    expect(await groups()).toEqual([[NAME_56, "Running"], [er.name, "cellmap"], [NAME_54, "Added"], [tuned.name, "Finetuned"]]);
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+
+    // A ref the browser cannot run is refused as the Models tab's resolve refuses it.
+    const refused = await handle(request("POST", "/api/finetune/rank/add", { ref: "/groups/models/mito.pt" }));
+    expect(refused).toMatchObject({ status: 503, json: { success: false } });
+    expect(ctx.session.state.rankAdded).toEqual([e54.id]);
+  });
+
   it("refuse without paint, and for a model the catalog does not have", async () => {
     const bare = harness(fakeContext());
     expect(body(await bare(request("POST", "/api/finetune/rank/score", { name: NAME_56 })))).toMatchObject({ success: false, needs_volume: true });

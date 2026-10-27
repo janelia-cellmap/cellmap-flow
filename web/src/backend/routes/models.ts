@@ -9,7 +9,7 @@
 // Python route starts and kills inference servers. The BioImage Model Zoo
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
-import type { AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
+import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
 import { compileExpression } from "../../infer/expression";
 import { isFinetuned } from "../../models";
 import type { Router } from "../router";
@@ -105,6 +105,25 @@ export async function loadedModels(ctx: AppContext): Promise<LoadedModel[]> {
   });
 }
 
+/** The catalog's entry for the model a `{ref}` body names, as Add a model
+ * resolves it: the Models tab's (POST /api/models/resolve) and Which model
+ * to start from's (POST /api/finetune/rank/add, rank.ts), so the two take
+ * the same refs and refuse the same ones. Or the answer that refuses it:
+ * a 400 for a body with no ref, and for a ref that is not a model the
+ * browser can run (anything but the catalog's ONNX models: a path, a
+ * checkpoint, a zoo id) the 503 that says it needs a server. */
+export async function resolveRef(req: ApiRequest, ctx: AppContext): Promise<{ entry: ModelEntry } | { refused: ApiResponse }> {
+  const body = objectBody(req);
+  if (!body) return { refused: badRequest("expected a JSON object") };
+  const ref = typeof body.ref === "string" ? body.ref.trim() : "";
+  if (!ref) return { refused: badRequest("ref is required") };
+  const entry = await ctx.catalog.resolve(ref);
+  if (!entry) {
+    return { refused: unavailable(`Only the ONNX models of Hugging Face repositories such as cellmap/onnx-web-models can be added in the browser; ${ref} is not one of them.`) };
+  }
+  return { entry };
+}
+
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the models are then run on it.";
 
 export function modelRoutes(router: Router): void {
@@ -168,20 +187,14 @@ export function modelRoutes(router: Router): void {
     return json(200, { success: true, removed: name, models: await loadedModels(ctx) });
   });
 
-  // Add a model by reference: what a Hugging Face ONNX model resolves to, in
-  // the shape models/resolve.py's Resolved gives, as the server's onnx type's
-  // entry (routes/config.ts serverParams, without the file: the one run is
-  // chosen for this GPU); anything else (a path, a checkpoint, a zoo id)
-  // needs a server.
+  // Add a model by reference: what a Hugging Face ONNX model resolves to
+  // (resolveRef), in the shape models/resolve.py's Resolved gives, as the
+  // server's onnx type's entry (routes/config.ts serverParams, without the
+  // file: the one run is chosen for this GPU).
   router.post("/api/models/resolve", async (req, _params, ctx) => {
-    const body = objectBody(req);
-    if (!body) return badRequest("expected a JSON object");
-    const ref = typeof body.ref === "string" ? body.ref.trim() : "";
-    if (!ref) return badRequest("ref is required");
-    const entry = await ctx.catalog.resolve(ref);
-    if (!entry) {
-      return unavailable(`Only the ONNX models of Hugging Face repositories such as cellmap/onnx-web-models can be added in the browser; ${ref} is not one of them.`);
-    }
+    const resolved = await resolveRef(req, ctx);
+    if ("refused" in resolved) return resolved.refused;
+    const { entry } = resolved;
     // The catalog's default variant; the one served is chosen for the GPU when it is.
     const v = entry.variant;
     return json(200, {
