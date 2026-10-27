@@ -18,18 +18,31 @@
 //   has_channel, output_axes    channels first, as chunkmirage serves them;
 //   output_class                the output activation's class in the Python
 //                               vocabulary (serving/probe.py: "unit",
-//                               "signed_unit", "unbounded"), which the
-//                               server observes by probing and the browser
-//                               reads off the manifest's `output` text;
+//                               "signed_unit", "unbounded"), read off the
+//                               network the engine runs (networkActivation:
+//                               its ONNX graph's last op that computes
+//                               values), else off the manifest's `output`
+//                               text, the way the server reads its model's
+//                               graph, else probes it;
+//   output_class_from, output_op
+//                               which of the two it was ("graph", with the
+//                               op, or "manifest"; the server's other is
+//                               "probe"), null when neither says;
 //   output_min / output_max     the probed range: null, nothing was probed;
 //   display_channel             the channel to show for a flow model
 //                               (Cellpose): none of these models has one;
 //   available                   true: the geometry is known without a probe.
-import type { ModelEntry, ModelInfo } from "../contracts";
+import type { Inference, ModelEntry, ModelInfo, ModelManifest, OutputActivation } from "../contracts";
+import { readGraph, readModel } from "../finetune/onnx-proto";
+
+/** The portable rule a graph's nodes go to (cellmap_flow/portable/calls.py, over portable/activation.py). */
+const OUTPUT_ACTIVATION = "cellmap_flow.portable.calls:output_activation";
 
 const SPATIAL_AXES = ["z", "y", "x"];
 
-export function modelInfo(entry: ModelEntry): ModelInfo {
+/** The served model's info; `activation` is what its network ends in
+ * (networkActivation), or null when that was not read or does not say. */
+export function modelInfo(entry: ModelEntry, activation: OutputActivation | null = null): ModelInfo {
   const m = entry.manifest;
   const v = entry.variant;
   const spatial = SPATIAL_AXES.slice(SPATIAL_AXES.length - m.input_voxel_size_nm.length);
@@ -44,12 +57,42 @@ export function modelInfo(entry: ModelEntry): ModelInfo {
     has_channel: true,
     output_axes: ["c", ...spatial],
     available: true,
-    output_class: outputClassOf(m.output),
+    ...outputClass(m, activation),
     output_min: null,
     output_max: null,
     display_channel: null,
     engine: "browser",
   };
+}
+
+/** What the network of the ONNX model in `bytes` ends in, by the rule both
+ * modes run (portable/activation.py output_activation, through the engine's
+ * Python): its graph's nodes as they are, each op_type with the names of the
+ * values it reads and writes (an initializer is a name no node writes), and
+ * `output`, the graph output the engine reads (the manifest's io.output),
+ * else the graph's first. Null when the graph does not say: a Relu last,
+ * arithmetic after a sigmoid, a custom op. A Clip's bounds are not read
+ * (from opset 11 they are inputs, a Constant's or an initializer's), so a
+ * Clip last says nothing either: none of the exports measured on
+ * 2026-10-27 ends in one (they end in a Conv or a Sigmoid). Throws when
+ * `bytes` are not an ONNX model. The weights are stepped over, not decoded
+ * (onnx-proto.ts readGraph), so a big model costs no more than a small one. */
+export async function networkActivation(bytes: ArrayBuffer, output: string | undefined, infer: Pick<Inference, "python">): Promise<OutputActivation | null> {
+  const graph = readGraph(readModel(new Uint8Array(bytes)).graph);
+  const nodes = graph.nodes.map((n) => ({ op: n.opType, inputs: n.inputs, outputs: n.outputs }));
+  return infer.python<OutputActivation | null>(OUTPUT_ACTIVATION, { nodes, output: output || graph.outputs[0] || "" });
+}
+
+/** A served model's output class and where it came from: its network's
+ * (`activation`) when that says, else the manifest's `output` text
+ * (outputClassOf), else null from nowhere. What the Python server's
+ * model_info answers, with "manifest" where it says "probe": the advice,
+ * the start's postprocessing and the ranking read the class alike, and the
+ * advice says which it was. */
+export function outputClass(manifest: ModelManifest, activation: OutputActivation | null): Pick<ModelInfo, "output_class" | "output_class_from" | "output_op"> {
+  if (activation) return { output_class: activation.output_class, output_class_from: "graph", output_op: activation.op };
+  const declared = outputClassOf(manifest.output);
+  return { output_class: declared, output_class_from: declared ? "manifest" : null, output_op: null };
 }
 
 /** The activation class a manifest's `output` text describes, in

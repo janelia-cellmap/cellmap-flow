@@ -1,6 +1,9 @@
 // The /api/* routes against fake context members: the JSON each answers,
 // checked against what the dashboard's JavaScript reads (models-tab.js,
 // main.js, connect.js, model-advice.js).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { createBackend, restoreSession } from "../../src/backend";
@@ -157,6 +160,22 @@ describe("POST /api/models", () => {
     expect(ctx.session.state.chain.postprocess).toEqual(theirs);
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: null, postprocess_fitted: null });
   }, 120_000);  // Pyodide and numpy load the first time, a few seconds
+
+  it("reads what a model starting needs off its network, over a manifest that says otherwise", async (t) => {
+    if (!(await portablePython())) t.skip();
+    const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
+    // setup_54's manifest says it has its sigmoid, but the bytes it runs end in a Conv: logits.
+    const model = ctx.catalog.entries[0];
+    model.manifest.output = "probabilities (sigmoid applied)";
+    const head = readFileSync(resolve(import.meta.dirname, "../fixtures/head.onnx"));
+    ctx.catalog.finetunedBytes.set(model.onnxUrl, head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength));
+    const backend = createBackend(ctx);
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    expect(ctx.session.state.chain.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    // and the advice says where the class came from
+    const m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
+    expect(m).toMatchObject({ output_class: "unbounded", output_class_from: "graph", output_op: "Conv" });
+  }, 120_000);
 
   it("refuses a reference that is not a model the browser runs, changing nothing", async () => {
     const ctx = fakeContext();

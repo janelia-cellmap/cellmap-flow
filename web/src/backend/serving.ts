@@ -19,7 +19,7 @@ import { SUPPORTED_NORMALIZERS } from "../infer/norms";
 import { entryFor } from "../models";
 import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs } from "../shared/args";
-import { outputClassOf } from "../shared/model-info";
+import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
 import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
 
@@ -121,8 +121,9 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
  * models they are about to serve that are not served yet (`starting`) and
  * every model they serve (`serving`, those among them), after
  * setDeclaredInputNorm and before serving them. A model's output class is
- * its manifest's (shared/model-info.ts outputClassOf, what its served
- * ModelInfo says), and what it needs is cellmap_flow/portable/rank.py's
+ * what its served ModelInfo will say (servedOutputClass: its network's, read
+ * from the bytes of the variant it is served in, else its manifest's), and
+ * what it needs is cellmap_flow/portable/rank.py's
  * needed_postprocess on an empty chain with no threshold, the rule the
  * ranking's rows follow too: a sigmoid for logits, affinities' included,
  * nothing for an output that has its activation. The first of `starting`
@@ -136,8 +137,8 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
  * Python cannot be called, the chain is left as it is, saying why. */
 export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
   if (ctx.session.state.chain.postprocess.length) return null;
-  const needed = (entry: ModelEntry, postprocess: Step[]) =>
-    ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: outputClassOf(entry.manifest.output), postprocess, threshold: null });
+  const needed = async (entry: ModelEntry, postprocess: Step[]) =>
+    ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: await servedOutputClass(ctx, entry), postprocess, threshold: null });
   for (const entry of starting) {
     let steps: Step[] | null;
     const wrong: string[] = [];
@@ -159,6 +160,30 @@ export async function setNeededPostprocess(ctx: AppContext, starting: readonly M
     return entry.name;
   }
   return null;
+}
+
+/** The output class `entry`'s served ModelInfo says, or will say once it
+ * is served (shared/model-info.ts outputClass): its network's, read from the
+ * bytes of the variant it is served in (servedVariant; Inference.
+ * outputActivation keeps it, so the serve that follows reads nothing again),
+ * else its manifest's text. */
+async function servedOutputClass(ctx: AppContext, entry: ModelEntry): Promise<string | null> {
+  const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (served) return served.info.output_class ?? null;
+  const tuned = await servedVariant(ctx, entry);
+  return outputClass(tuned.manifest, await ctx.infer.outputActivation(tuned, () => ctx.catalog.modelBytes(tuned))).output_class ?? null;
+}
+
+/** `entry` in the variant it is served in: the one it is served in already
+ * (through another chain: the same variant again, so the onnxruntime
+ * session is shared), else the one for this machine's GPU (the catalog's
+ * entries carry a default variant, fp32 and the smallest block, and
+ * Catalog.chooseVariant picks the precision and block size the GPU's
+ * limits allow). */
+async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelEntry> {
+  const previous = ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (previous) return previous.entry;
+  return entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()), entry.repo);
 }
 
 /** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
@@ -200,17 +225,14 @@ export interface ServeOptions {
  * removed. Then the viewer shows one layer per entry, coloured by position.
  * Returns the served models in `entries` order.
  *
- * A model is served in the variant for this machine's GPU: the catalog's
- * entries carry a default variant (fp32, the smallest block), and
- * Catalog.chooseVariant picks the precision and block size the GPU's limits
- * allow, so the entry is tuned here, just before it is served. The session
- * keeps the entries as the catalog gave them, and tunes again on each load. */
+ * A model is served in the variant for this machine's GPU (servedVariant),
+ * so the entry is tuned here, just before it is served. The session keeps
+ * the entries as the catalog gave them, and tunes again on each load. */
 export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain: Chain, options: ServeOptions = {}): Promise<ServedModel[]> {
   const blob = options.blob ?? (await blobFor(chain)).blob;
   const before = ctx.infer.served();
   const kept = new Set<ServedModel>();
   const result: ServedModel[] = [];
-  let limits: Awaited<ReturnType<AppContext["infer"]["gpuLimits"]>> | null = null;
   for (const entry of entries) {
     const current = before.find((s) => s.entry.id === entry.id && blobOf(s) === blob);
     if (current) {
@@ -218,15 +240,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
       result.push(current);
       continue;
     }
-    // Served already through another chain: the same variant again, so the
-    // onnxruntime session is shared; else the variant for this GPU.
-    const previous = before.find((s) => s.entry.id === entry.id);
-    let tuned: ModelEntry;
-    if (previous) tuned = previous.entry;
-    else {
-      limits ??= await ctx.infer.gpuLimits();
-      tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
-    }
+    const tuned = await servedVariant(ctx, entry);
     ctx.log(`Serving ${tuned.name} (${tuned.variant.variant}, ${sizeLabel(tuned.variant.input_size)} voxels, ${tuned.variant.file_mb} MB)`);
     result.push(await ctx.infer.serve(tuned, chain, blob, () => ctx.catalog.modelBytes(tuned)));
   }

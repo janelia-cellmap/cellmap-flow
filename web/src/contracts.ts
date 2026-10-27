@@ -269,6 +269,14 @@ export interface ModelEntry {
   onnxUrl: string;
 }
 
+/** What a model's network ends in: the class of its output and the op that
+ * decides it, as the page names it ("Sigmoid", "Conv"):
+ * cellmap_flow/portable/activation.py output_activation's answer. */
+export interface OutputActivation {
+  output_class: string;
+  op: string;
+}
+
 /** What /__control__/model_info says about a served model (models/geometry.py,
  * chunkmirage_server.py), as the dashboard's layer code reads it. */
 export interface ModelInfo {
@@ -284,6 +292,13 @@ export interface ModelInfo {
   output_axes: string[];
   available: boolean;
   output_class?: string | null;
+  /** Where output_class was read (shared/model-info.ts outputClass):
+   * "graph", the network's last op that computes values, which output_op
+   * names; "manifest", the manifest's `output` text, when the graph does not
+   * say (the server's model_info says "probe" there: the output on noise);
+   * null when neither says. */
+  output_class_from?: "graph" | "manifest" | null;
+  output_op?: string | null;
   output_min?: number | null;
   output_max?: number | null;
   display_channel?: number | null;
@@ -480,9 +495,16 @@ export interface Inference {
   openDataset(url: string): Promise<DatasetInfo>;
   dataset(): DatasetInfo | null;
   /** Serve `entry` through `chain`; `blob` is the chain's URL blob (shared/args.ts), which names the view.
-   * `modelBytes` gives the .onnx bytes (Catalog.modelBytes); it is called once per entry, when its
-   * session is first built. */
+   * `modelBytes` gives the .onnx bytes (Catalog.modelBytes); it is called when the entry's session is
+   * first built, and before that by outputActivation, at the file's first serve. */
   serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel>;
+  /** What the network of `entry`'s file ends in (shared/model-info.ts
+   * networkActivation), which serve puts in the served model's info: read
+   * from `modelBytes` once per file, the first time it is asked, so a model's
+   * start asks before its serve and the serve reads nothing again. Null when
+   * the graph does not say, or could not be read (said in the log): the
+   * manifest's text is read then. */
+  outputActivation(entry: ModelEntry, modelBytes: () => Promise<ArrayBuffer>): Promise<OutputActivation | null>;
   served(): ServedModel[];
   gpuLimits(): Promise<GpuLimits>;
   readonly stats: InferenceStats;
