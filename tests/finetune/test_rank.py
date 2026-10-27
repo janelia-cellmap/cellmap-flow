@@ -10,10 +10,16 @@ and input window, what the other normalizations matched and the sigmoid
 its layer needs; Use this model and Fit to Paint set the normalization and
 the sigmoid in one chain set, Fit to Paint for the model seeding the paint
 without a new volume; the paint is carried onto another model's grid; the
-channel picked is shown, on the model's layer and its finetunes'.
+channel picked is shown, on the model's layer and its finetunes'. The
+candidates are the Models tab's, in its groups, from the lists it cached
+(none fetched), a zoo model's with the entry its Submit starts it from,
+which is scored served from the zoo's environment; a model added by
+reference is resolved as Add a model resolves it, and listed after.
 """
 
+import json
 import math
+import shutil
 from types import SimpleNamespace
 
 import numpy as np
@@ -315,26 +321,143 @@ def test_fit_to_paint_sets_the_input_normalization_and_sigmoid_of_the_model_seed
     assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": [sigmoid]}
 
 
-def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(dashboard, painted, monkeypatch):
+def _no_fetch(*args):
+    raise AssertionError(f"fetched {args}: the ranking lists what the Models tab cached")
+
+
+# The zoo's models as bioimage.io's server lists them: one cellmap-flow knows
+# the training voxel size of, one whose description declares it, one with
+# neither, which its server would refuse with its voxel size blank.
+SHRIMP, SHARK, CHIPMUNK = ({"alias": alias, "manifest": {
+    "id": alias, "name": name, "type": "model", "description": description, "tags": tags,
+    "inputs": [{"axes": axes}]}} for alias, name, description, tags, axes in (
+        ("impartial-shrimp", "Neuron Segmentation in EM", "Membranes in electron microscopy",
+         ["electron-microscopy", "3d"], "bczyx"),
+        ("affable-shark", "Nuclei", "Fluorescence nuclei", ["fluorescence"], [
+            {"type": "batch"}, {"type": "space", "id": "y", "scale": 0.25, "unit": "micrometer"},
+            {"type": "space", "id": "x", "scale": 0.25, "unit": "micrometer"}]),
+        ("determined-chipmunk", "EM3DBoundaryEnhancer", "Boundaries in EM", ["electron-microscopy", "3d"], "bczyx")))
+
+
+@pytest.fixture
+def cached(tmp_path, monkeypatch):
+    """``cached.hf(models)`` and ``cached.zoo(listing)`` cache those lists as
+    the Models tab's Refresh does; until then nothing is cached, and nothing
+    may be fetched. The zoo's impartial-shrimp was trained at 40x4x4 nm."""
+    from cellmap_flow.models import bioimage_catalog, hf_catalog
+
+    hf_file = tmp_path / "hugging_face" / "models_cache.json"
+    monkeypatch.setattr(hf_catalog, "HF_CACHE_FILE", str(hf_file))
+    monkeypatch.setattr(hf_catalog, "_fetch_huggingface_models", _no_fetch)
+    monkeypatch.setattr(bioimage_catalog, "BIOIMAGE_CACHE_FILE", str(tmp_path / "bioimage" / "models_cache.json"))
+    monkeypatch.setattr(bioimage_catalog, "_fetch_index", _no_fetch)
+    trained = {"impartial-shrimp": {"voxel_size": [40, 4, 4], "trained_on": "CREMI", "confidence": "high", "source": "paper"}}
+    monkeypatch.setattr(bioimage_catalog, "trained_at",
+                        lambda model: trained.get(model if isinstance(model, str) else model.get("key")))
+
+    def hf(models):
+        hf_file.parent.mkdir()
+        hf_file.write_text(json.dumps(models))
+
+    def zoo(listing):
+        with monkeypatch.context() as fetching:
+            fetching.setattr(bioimage_catalog, "_fetch_index", lambda url: listing)
+            bioimage_catalog.refresh_bioimage_models()
+
+    return SimpleNamespace(hf=hf, zoo=zoo)
+
+
+def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cached(dashboard, painted, cached):
+    from cellmap_flow.models.configs.cellpose import CellposeModelConfig
+
     session = get_session()
-    session.models_config = [_model("model")]
+    # Cellpose predicts flows, which the ranking does not score.
+    session.models_config = [_model("model"), CellposeModelConfig(voxel_size=8, name="cells")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.model_catalog = {"mito": {"mito_16nm": "/models/mito"}}
-    monkeypatch.setattr("cellmap_flow.models.hf_catalog.list_huggingface_models",
-                        lambda: {"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8]},
-                                 # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
-                                 "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
 
+    # Nothing cached: nothing is fetched, and the answer says so.
+    body = dashboard.get("/api/finetune/rank/candidates").get_json()
+    assert [c["name"] for c in body["candidates"]] == ["model", "mito_16nm"]
+    assert (body["hf_cached"], body["zoo_cached"]) == (False, False)
+
+    cached.hf({"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8]},
+               # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
+               "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
+    cached.zoo([SHRIMP, SHARK, CHIPMUNK])
     body = dashboard.get("/api/finetune/rank/candidates").get_json()
 
     assert body["volume"] == {"id": "vol-1", "model_name": "model", "painted_chunks": 2}
+    assert (body["hf_cached"], body["zoo_cached"]) == (True, True)
     rows = {c["name"]: c for c in body["candidates"]}
-    assert [(n, c["ticked"], c["volume_model"]) for n, c in rows.items()] == [
-        ("model", True, True), ("mito_16nm", False, False), ("nuc_model", False, False), ("mito_2d", False, False)]
-    # Its dims are what the filter's "2d" finds.
-    assert (rows["mito_2d"]["dims"], rows["nuc_model"]["dims"]) == (2, None)
+    assert [(n, c["group"], c["ticked"], c["volume_model"]) for n, c in rows.items()] == [
+        ("model", "Running", True, True), ("mito_16nm", "mito", False, False),
+        ("nuc_model", "Hugging Face", False, False), ("mito_2d", "Hugging Face", False, False),
+        ("impartial_shrimp", "BioImage Zoo", False, False), ("affable_shark", "BioImage Zoo", False, False),
+        ("determined_chipmunk", "BioImage Zoo", False, False)]
+    # Its dims are what the filter's "2d" finds; the zoo's EM tag what its "EM only" does.
+    assert [(rows[n]["dims"], rows[n]["em"]) for n in ("mito_2d", "nuc_model", "impartial_shrimp", "affable_shark")] == [
+        (2, True), (None, True), (3, True), (2, False)]
     assert rows["mito_16nm"]["entry"] == {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}
     assert rows["nuc_model"]["entry"] == {"type": "huggingface", "repo": "org/nuc-model", "name": "nuc_model"}
+    # Each zoo model with the entry the Models tab's Submit starts it from,
+    # its voxel size blank: the one it was trained at, or its description's
+    # left to its server; with neither, none, and why.
+    assert rows["impartial_shrimp"]["entry"] == {
+        "type": "bioimage", "model": "impartial-shrimp", "voxel_size": [40, 4, 4], "name": "impartial_shrimp"}
+    assert rows["affable_shark"]["entry"] == {"type": "bioimage", "model": "affable-shark", "name": "affable_shark"}
+    assert "entry" not in rows["determined_chipmunk"] and rows["determined_chipmunk"]["needs"] == ["voxel_size"]
+
+
+def test_a_zoo_model_listed_is_scored_served_from_its_own_environment(dashboard, painted, cached, monkeypatch, tmp_path):
+    from tests.utils.test_bioimage_zoo import MANIFEST
+    from tests.utils.test_cellpose_list import pixi_manifest, served_entry
+
+    manifest = pixi_manifest(tmp_path, monkeypatch, MANIFEST)
+    monkeypatch.setenv("CELLMAP_FLOW_ENVS_FILE", str(tmp_path / "no-aliases.yaml"))
+    commands, killed = [], []
+
+    def start_hosts(command, job_name, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(model_name=job_name, host="http://gpu:9000", kill=lambda: killed.append(job_name))
+
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
+    cached.zoo([SHRIMP])
+    (row,) = [c for c in dashboard.get("/api/finetune/rank/candidates").get_json()["candidates"]
+              if c["group"] == "BioImage Zoo"]
+
+    body = dashboard.post("/api/finetune/rank/score", json={"name": row["name"], "entry": row["entry"]}).get_json()
+
+    assert body["success"], body
+    (command,) = commands
+    argv, entry = served_entry(command)
+    assert argv[:7] == ["/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "bioimageio"]
+    assert entry == row["entry"] and killed == ["impartial_shrimp"]
+
+
+def test_a_model_added_by_reference_is_resolved_as_add_a_model_resolves_it_and_listed_after(dashboard, painted, tmp_path):
+    from tests.utils.onnx_helpers import HEAD
+
+    ref = str(tmp_path / "plain.onnx")
+    shutil.copy(HEAD, ref)
+
+    # An ONNX model without its manifest says no voxel size: it is asked for,
+    # and nothing is added.
+    refused = dashboard.post("/api/finetune/rank/add", json={"ref": ref})
+    assert refused.status_code == 400 and refused.get_json()["needs"] == ["input_voxel_size"]
+    listed = dashboard.get("/api/finetune/rank/candidates").get_json()["candidates"]
+    assert "plain" not in {c["name"] for c in listed}
+
+    added = dashboard.post("/api/finetune/rank/add", json={"ref": ref, "voxel_size": "8"}).get_json()
+
+    assert added["success"], added
+    candidate = added["candidate"]
+    assert (candidate["name"], candidate["group"], candidate["ticked"], candidate["served"]) == ("plain", "Added", True, False)
+    assert candidate["entry"] == {"type": "onnx", "path": ref, "input_voxel_size": [8, 8, 8], "name": "plain"}
+    listed = dashboard.get("/api/finetune/rank/candidates").get_json()["candidates"]
+    assert [c for c in listed if c["name"] == "plain"] == [candidate]
+    # A Cellpose model predicts flows, which the ranking does not score.
+    assert dashboard.post("/api/finetune/rank/add", json={"ref": "cpsam", "voxel_size": "8"}).status_code == 400
 
 
 def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(dashboard, painted, monkeypatch, viewer, tmp_path):

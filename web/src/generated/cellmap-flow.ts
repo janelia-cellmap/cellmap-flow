@@ -34,6 +34,7 @@ export interface RequestBodies {
   "POST /api/finetune/load-crops"?: LoadCrops;
   "POST /api/finetune/submit"?: FinetuneSubmit;
   "POST /api/finetune/job/<job_id>/restart"?: FinetuneRestart;
+  "POST /api/finetune/rank/add"?: ResolveModel;
   "POST /api/finetune/ai-annotate/settings"?: AIAnnotateSettings;
   "POST /api/finetune/ai-annotate/run"?: AIAnnotateRun;
   "POST /api/finetune/ai-annotate/resend"?: AIAnnotateResend;
@@ -802,6 +803,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/good-regions/mark-view", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/delete", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/rank/candidates", availability: "both", request: null },
+  { method: "POST", path: "/api/finetune/rank/add", availability: "both", request: "ResolveModel" },
   { method: "POST", path: "/api/finetune/rank/score", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/rank/use", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/rank/input-norm", availability: "both", request: null },

@@ -138,32 +138,52 @@ def bioimage_job_name(key: str) -> str:
     return re.sub(r"\W+", "_", key).strip("_")
 
 
+def bioimage_model_entry(model, voxel_size=None, *, online: bool = True):
+    """``(entry, choice, refusal)``: the model entry the Models tab's Submit
+    starts for a zoo model at ``voxel_size`` (what its row says; None when
+    blank), how its voxel size was decided, and why its server would refuse
+    it, or None.
+
+    ``model`` is its row of the cached list, or the id a row was ticked by,
+    which is looked up in it: the listed id may be a DOI, and the model is
+    loaded by its nickname when the list has one, and named
+    ``bioimage_job_name`` of that. Its voxel size is decided as its server
+    decides it (``bioimage_catalog.entry_voxel_size``, ``choice``); a model
+    that declares none, and that cellmap-flow does not know the training
+    voxel size of, would be refused by its server after its job started,
+    where nothing on the page shows it, so ``refusal`` says so in a sentence
+    (unless it is running already), and the caller refuses it. ``online``
+    False decides from the cached list alone, as the Finetune tab's ranking
+    lists every zoo model (routes/finetune/rank_routes.py) without a fetch
+    for each.
+    """
+    found = model if isinstance(model, dict) else bioimage_catalog.find_bioimage_model(model)
+    key = found["key"] if found else model
+    name = bioimage_job_name(key)
+    choice = bioimage_catalog.entry_voxel_size(key, voxel_size, listed=found, online=online)
+    refusal = None
+    if choice.source in ("none", "unread") and name not in running_names():
+        how = "does not say" if choice.source == "none" else "could not be read, so it is not known whether it says"
+        refusal = f"{found['name']} ({key}) {how} what voxel size it was trained at"
+    return bioimage_catalog.bioimage_entry(key, choice.voxel_size, name), choice, refusal
+
+
 def _bioimage_configs(selections) -> list:
-    """A BioModelConfig for each ticked zoo model ({"id", "voxel_size"}).
+    """A BioModelConfig for each ticked zoo model ({"id", "voxel_size"}), of
+    the entry ``bioimage_model_entry`` gives it.
 
     Built before anything is stopped or started, so a model whose voxel size
     is missing refuses the whole Submit (ValueError) rather than half of it.
-    The listed id may be a DOI; the model is loaded by its nickname when the
-    cached list has one. Its voxel size is decided as its server decides it
-    (``bioimage_catalog.entry_voxel_size``); a model that declares none, and
-    that cellmap-flow does not know the training voxel size of, is refused
-    here: its server would refuse it after its job started, where nothing
-    on the page shows it.
     """
     configs = []
     for selection in selections:
-        found = bioimage_catalog.find_bioimage_model(selection["id"])
-        key = found["key"] if found else selection["id"]
-        name = bioimage_job_name(key)
-        choice = bioimage_catalog.entry_voxel_size(key, selection.get("voxel_size"), listed=found)
+        entry, choice, refusal = bioimage_model_entry(selection["id"], selection.get("voxel_size"))
+        if refusal:
+            raise ValueError(f"{refusal}: enter one (nm) in its row")
         if choice.source == "trained":
-            logger.info(f"{key}: at {choice.voxel_size} nm, the voxel size it was trained at "
+            logger.info(f"{entry['model']}: at {choice.voxel_size} nm, the voxel size it was trained at "
                         f"({choice.trained['trained_on']})")
-        elif choice.source in ("none", "unread") and name not in running_names():
-            how = ("does not say" if choice.source == "none"
-                   else "could not be read, so it is not known whether it says")
-            raise ValueError(f"{found['name']} ({key}) {how} what voxel size it was trained at: enter one (nm) in its row")
-        configs.append(_built(bioimage_catalog.bioimage_entry(key, choice.voxel_size, name), f"{key}"))
+        configs.append(_built(entry, entry["model"]))
     return configs
 
 

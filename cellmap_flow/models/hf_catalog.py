@@ -2,13 +2,15 @@
 
 ``list_huggingface_models`` answers from a cache file under
 ``~/.cellmap_flow`` once there is one, so opening the dashboard does not
-query the Hub each time; ``refresh_huggingface_models`` rebuilds it. Each
-model is keyed by its repo id, with the ``metadata.json`` it publishes.
+query the Hub each time; ``refresh_huggingface_models`` rebuilds it;
+``cached_huggingface_models`` reads the cache alone, for a list that must
+not wait on the Hub. Each model is keyed by its repo id, with the
+``metadata.json`` it publishes.
 """
 
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from huggingface_hub import hf_hub_download, list_models
 
@@ -52,10 +54,20 @@ def list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str,
     Returns:
         A dict mapping model IDs to their metadata
     """
-    if os.path.exists(HF_CACHE_FILE):
+    cached = cached_huggingface_models()
+    return cached if cached is not None else _fetch_huggingface_models(org_name)
+
+
+def cached_huggingface_models() -> Optional[Dict[str, Any]]:
+    """The models as the last fetch cached them, or None when nothing is
+    cached (or the cache cannot be read), without asking the Hub: the
+    Finetune tab's ranking lists them so (routes/finetune/rank_routes.py),
+    and its Refresh is the Models tab's, ``refresh_huggingface_models``."""
+    try:
         with open(HF_CACHE_FILE) as f:
             return json.load(f)
-    return _fetch_huggingface_models(org_name)
+    except (OSError, ValueError):
+        return None
 
 
 def refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]:
