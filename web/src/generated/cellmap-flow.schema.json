@@ -524,7 +524,7 @@
     },
     {
       "method": "POST",
-      "path": "/api/finetune/rank/window",
+      "path": "/api/finetune/rank/input-norm",
       "availability": "both",
       "request": null
     },

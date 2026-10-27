@@ -189,7 +189,8 @@ def test_a_volume_painted_before_any_model_is_ranked_and_carried_but_not_trained
     labels[20:28, 20:28, 20:28] = 1
 
     # A model now running: training it on this volume is refused, the error saying where to go.
-    monkeypatch.setattr(session, "models_config", [SimpleNamespace(name="m")])
+    # It declares no input normalization (ModelConfig.declared_input_norm), which ranking asks.
+    monkeypatch.setattr(session, "models_config", [SimpleNamespace(name="m", declared_input_norm=lambda data_range=None: None)])
     monkeypatch.setattr(session, "jobs", [SimpleNamespace(model_name="m", host="http://gpu:8000")])
     refused = post("/api/finetune/submit", model_name="m", corrections_path=str(zarr_path.parent))
     assert refused.status_code == 400 and refused.get_json()["paint_first"] is True
