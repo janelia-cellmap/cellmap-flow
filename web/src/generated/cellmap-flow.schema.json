@@ -1643,7 +1643,7 @@
             }
           ],
           "default": null,
-          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+          "description": "The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target."
         },
         "offsets": {
           "anyOf": [
@@ -1897,7 +1897,7 @@
             }
           ],
           "default": null,
-          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+          "description": "The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target."
         },
         "offsets": {
           "anyOf": [

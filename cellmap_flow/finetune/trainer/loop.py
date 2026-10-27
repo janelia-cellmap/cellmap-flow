@@ -4,10 +4,11 @@
 a ``TrainingOptions``: a LoRA adapter, or every weight (which of the two the
 model decides, see adaptation.strategy_for). An epoch is: fetch a batch,
 make its target, forward, the supervised term (supervised.SupervisedLoss),
-the distillation term (distillation.Distillation), step, record. Around it:
+the distillation term and, when one channel trains (select_channel), the
+hold on the others (distillation.Distillation), step, record. Around it:
 
-- recovery from an OOM (halve the batch, then drop distillation) and from a
-  NaN under mixed precision (restart in fp32): recovery.py;
+- recovery from an OOM (halve the batch, then drop distillation and the
+  hold) and from a NaN under mixed precision (restart in fp32): recovery.py;
 - a best checkpoint, chosen by the supervised loss alone, which the export
   loads first; the strategies write and read the files (adaptation.py);
 - TensorBoard, continuing across a job's iterations: tensorboard.py;
@@ -31,7 +32,7 @@ from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.adaptation import strategy_for
 from cellmap_flow.finetune.options import TrainingOptions
 from cellmap_flow.finetune.trainer.diagnostics import GradientFlow, describe_first_batch, warn_if_single_class
-from cellmap_flow.finetune.trainer.distillation import Distillation
+from cellmap_flow.finetune.trainer.distillation import OTHER_CHANNELS_WEIGHT, Distillation
 from cellmap_flow.finetune.trainer.recovery import Precision, probe_precision, survive_oom
 from cellmap_flow.finetune.trainer.supervised import SupervisedLoss
 from cellmap_flow.finetune.trainer.tensorboard import TensorBoard
@@ -53,10 +54,12 @@ class Finetuner:
     - Partial annotation support (mask unannotated regions)
     - Distillation toward the starting model, on unlabeled voxels, on all
       voxels, or on the good regions' rehearsal patches
+    - One channel of a multi-channel model trained (select_channel), every
+      other one held to the starting model's prediction
     - A best checkpoint, chosen by the supervised loss alone; the export
       loads it first
-    - Recovery from an OOM (halve the batch, then drop distillation) and
-      from a NaN under mixed precision (restart in fp32)
+    - Recovery from an OOM (halve the batch, then drop distillation and the
+      hold) and from a NaN under mixed precision (restart in fp32)
     - TensorBoard logging, continuing across a job's iterations
 
     Args:
@@ -164,6 +167,9 @@ class Finetuner:
         # selection uses this rather than the combined loss -- see the epoch
         # loop for why the combined loss cannot rank epochs.
         self.last_supervised_loss = float('nan')
+        # Average hold on the other channels in the epoch just finished: how
+        # far they moved from the starting model. NaN without the hold.
+        self.last_others_loss = float('nan')
         self.training_stats = []
         self._target_checked = False
         self._last_epoch_timing = (0.0, 0.0)
@@ -215,6 +221,8 @@ class Finetuner:
             ("balance classes", self.supervised.balance_classes),
             ("label smoothing", self.supervised.label_smoothing),
             ("distillation lambda", self.distillation.weight),
+            ("channel", "every one" if self.select_channel is None else
+             f"{self.select_channel}, the others held at weight {OTHER_CHANNELS_WEIGHT}"),
             ("mask unannotated", self.supervised.mask_unannotated),
             ("trainable params", f"{trainable:,} of {total:,} ({100 * trainable / max(total, 1):.2f}%)"),
             ("device", str(self.device)),
@@ -233,6 +241,7 @@ class Finetuner:
         self.best_loss = float('inf')
         self._has_best_checkpoint = False
         self.last_supervised_loss = float('nan')
+        self.last_others_loss = float('nan')
         self.training_stats = []
 
     def _set_train_mode(self):
@@ -282,6 +291,9 @@ class Finetuner:
         log(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
         log(f"Mixed precision: {self.precision.describe()}")
         log(f"Mask unannotated regions: {self.supervised.mask_unannotated}")
+        if self.select_channel is not None:
+            log(f"Channel: {self.select_channel}; every other channel is held to the starting "
+                f"model's prediction (weight {OTHER_CHANNELS_WEIGHT})")
         log(f"Log file: {log_file}")
         if self.tb.on:
             log(f"TensorBoard: tensorboard --logdir {self.output_dir.parent}   (this run: {self.tb.dir})")
@@ -324,8 +336,8 @@ class Finetuner:
             self.current_epoch = epoch
             log(f"Starting epoch {epoch+1} of {self.num_epochs}...")
             # Mitigation loop: keep making room (halve the batch, then drop
-            # distillation) and retrying until the epoch succeeds or there is
-            # nothing left to try (see recovery.survive_oom).
+            # distillation and the hold) and retrying until the epoch succeeds
+            # or there is nothing left to try (see recovery.survive_oom).
             epoch_loss = None
             while True:
                 try:
@@ -382,12 +394,16 @@ class Finetuner:
             if bce_metrics is not None:
                 epoch_floor, epoch_mae = bce_metrics
                 bce_extra = f" - Above floor: {selection_loss - epoch_floor:.6f} - MAE: {epoch_mae:.6f}"
+            # How far the channels not trained moved from the starting model:
+            # the hold's mean over the epoch, a mean squared distance.
+            others_moved = self.last_others_loss
+            others_extra = f" - Other channels moved: {others_moved:.6f}" if math.isfinite(others_moved) else ""
             log(
                 f"Epoch {epoch+1}/{self.num_epochs} - "
                 f"Loss: {epoch_loss:.6f} - "
                 f"Supervised: {selection_loss:.6f} - "
                 f"Best supervised: {self.best_loss:.6f}"
-                f"{bce_extra}"
+                f"{bce_extra}{others_extra}"
                 + ("" if supervised else " (nothing supervised: not ranked)")
             )
 
@@ -413,6 +429,7 @@ class Finetuner:
                 self.tb.log_epoch(
                     loss=epoch_loss, supervised=selection_loss if supervised else None,
                     best_supervised=self.best_loss, bce_metrics=bce_metrics,
+                    other_channels=others_moved if math.isfinite(others_moved) else None,
                     data_wait_s=data_wait, compute_s=compute,
                     peak_memory_gb=torch.cuda.max_memory_allocated() / 1e9 if self.device.type == "cuda" else None,
                 )
@@ -460,6 +477,7 @@ class Finetuner:
         logger.warning(f"{why}; skipping the update and aborting the epoch.")
         self.optimizer.zero_grad(set_to_none=True)
         self.last_supervised_loss = float('nan')
+        self.last_others_loss = float('nan')
         return float('nan')
 
     def _step(self):
@@ -480,6 +498,7 @@ class Finetuner:
         # many rehearsal draws an epoch happened to get.
         supervised_batches = 0
         epoch_distill_loss = 0.0
+        epoch_others_loss = 0.0
         num_batches = len(self.dataloader)
         accumulate = self.gradient_accumulation_steps
         self.supervised.reset_epoch()
@@ -520,18 +539,15 @@ class Finetuner:
                     if class_voxels is not None:
                         warn_if_single_class(*class_voxels)
 
-            # Teacher forward pass for distillation (before student pass): the
-            # model as it was before this run.
-            teacher_pred = self.distillation.teacher_prediction(raw) if self.distillation.on else None
+            # Teacher forward pass for distillation and the hold (before the
+            # student pass): the model as it was before this run.
+            teacher_pred = self.distillation.teacher_prediction(raw) if self.distillation.teacher_needed else None
 
             # Student forward pass with mixed precision
             with self.precision.autocast():
-                pred = self.model(raw)
-                if not torch.isfinite(pred).all():
-                    logger.warning(f"NaN/Inf in student pred! range=[{pred.min():.4f}, {pred.max():.4f}]")
-                # Select specific channel if requested (e.g., mito = channel 2 from 8-channel output)
-                if self.select_channel is not None:
-                    pred = pred[:, self.select_channel:self.select_channel+1]
+                output = self.model(raw)
+                if not torch.isfinite(output).all():
+                    logger.warning(f"NaN/Inf in student pred! range=[{output.min():.4f}, {output.max():.4f}]")
 
             # Losses in fp32, outside autocast; only the forward pass runs in
             # reduced precision. Two reasons. Models with a built-in sigmoid
@@ -540,15 +556,31 @@ class Finetuner:
             # binary_cross_entropy at all. And a bf16 probability near 0 or 1
             # has too few mantissa bits for log(p) / log(1-p) to mean much.
             with autocast('cuda', enabled=False):
+                # The channel the paint is for, when one is selected (mito =
+                # channel 2 of an 8-channel model, say); the others are held
+                # below.
+                pred = output
+                if self.select_channel is not None:
+                    pred = output[:, self.select_channel:self.select_channel+1]
                 pred = pred.float()
                 supervised_loss = self.supervised(pred, target, mask, bounds, hard_target)
                 if not torch.isfinite(supervised_loss):
                     logger.warning(f"NaN/Inf supervised_loss: {supervised_loss.item()}")
                 loss = supervised_loss
                 distill_loss = torch.tensor(0.0, device=self.device)
+                others_loss = torch.tensor(0.0, device=self.device)
                 if teacher_pred is not None:
-                    distill_loss = self.distillation.term(pred, teacher_pred.float(), mask, anchor)
+                    teacher_pred = teacher_pred.float()
+                if self.distillation.on:
+                    distill_loss = self.distillation.term(pred, teacher_pred, mask, anchor)
                     loss = loss + self.distillation.weight * distill_loss
+                # Every channel but the one trained, held to the starting
+                # model's prediction on every voxel: they share the network,
+                # and without it they drifted wherever training the selected
+                # one took them.
+                if self.distillation.holds_others:
+                    others_loss = self.distillation.others_term(output.float(), teacher_pred)
+                    loss = loss + OTHER_CHANNELS_WEIGHT * others_loss
                 # Scale loss for gradient accumulation
                 loss = loss / accumulate
 
@@ -576,6 +608,7 @@ class Finetuner:
                     self.tb.log_step(
                         loss=loss.item() * accumulate, supervised=supervised_loss.item(),
                         distillation=distill_loss.item() if self.distillation.on else None,
+                        other_channels=others_loss.item() if self.distillation.holds_others else None,
                         bce_metrics=self.supervised.step_bce_metrics,
                         interval_terms=self.supervised.step_interval_terms,
                         lr=self.optimizer.param_groups[0]["lr"],
@@ -591,22 +624,26 @@ class Finetuner:
                 return self._abort_epoch(f"NaN/Inf loss at epoch {self.current_epoch+1}, batch {batch_idx+1}")
             epoch_loss += batch_loss
             epoch_distill_loss += distill_loss.item()
+            epoch_others_loss += others_loss.item()
             if mask is None or bool(mask.sum() > 0):
                 supervised_batches += 1
                 epoch_supervised_loss += supervised_loss.item()
                 self.supervised.tally()
 
-            # Log progress every batch (since we have few batches)
+            # Log progress every batch (since we have few batches), with the
+            # terms of the loss when it has more than the supervised one.
             avg_loss = epoch_loss / (batch_idx + 1)
+            terms = []
+            if self.distillation.teacher_needed:
+                terms.append(f"sup: {epoch_supervised_loss / max(supervised_batches, 1):.6f}")
             if self.distillation.on:
-                avg_sup = epoch_supervised_loss / max(supervised_batches, 1)
-                avg_distill = epoch_distill_loss / (batch_idx + 1)
-                self.log(
-                    f"  Batch {batch_idx+1}/{num_batches} - "
-                    f"Loss: {avg_loss:.6f} (sup: {avg_sup:.6f}, distill: {avg_distill:.6f})"
-                )
-            else:
-                self.log(f"  Batch {batch_idx+1}/{num_batches} - Loss: {avg_loss:.6f}")
+                terms.append(f"distill: {epoch_distill_loss / (batch_idx + 1):.6f}")
+            if self.distillation.holds_others:
+                terms.append(f"other channels: {epoch_others_loss / (batch_idx + 1):.6f}")
+            self.log(
+                f"  Batch {batch_idx+1}/{num_batches} - Loss: {avg_loss:.6f}"
+                + (f" ({', '.join(terms)})" if terms else "")
+            )
 
         # Handle leftover accumulated gradients at end of epoch
         # (in case num_batches is not divisible by gradient_accumulation_steps)
@@ -622,6 +659,7 @@ class Finetuner:
         self.last_supervised_loss = (
             epoch_supervised_loss / supervised_batches if supervised_batches else float('nan')
         )
+        self.last_others_loss = epoch_others_loss / num_batches if self.distillation.holds_others else float('nan')
         return epoch_loss / num_batches
 
     def save_checkpoint(self, is_best: bool = False):

@@ -166,7 +166,10 @@ class TrainingOptions(BaseModel):
         "trained with 6."
     ))
     select_channel: Optional[int] = Field(None, ge=0, description=(
-        "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+        "The one channel of a multi-channel model to train on the paint (not with output_type "
+        "affinities or flows, whose targets have a channel for each of the model's); every other "
+        "channel is held to the starting model's prediction on every voxel, so it stays as it was. "
+        "Blank trains every channel on the one target."
     ))
     offsets: Optional[str] = Field(None, description=(
         "JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. "

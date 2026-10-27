@@ -324,8 +324,8 @@ class FullStrategy(_Checkpoints):
         if self.teacher_model is None:
             self.teacher_model = frozen_teacher_copy(model)
         logger.info(
-            "Full finetune with distillation: the teacher is a frozen copy "
-            "of the starting weights."
+            "Full finetune with distillation, or with the channels not trained held: "
+            "the teacher is a frozen copy of the starting weights."
         )
         return nullcontext(self.teacher_model)
 

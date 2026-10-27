@@ -480,7 +480,7 @@ export interface FinetuneSubmit {
    */
   distance_sigma?: number;
   /**
-   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   * The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target.
    */
   select_channel?: number | null;
   /**
@@ -607,7 +607,7 @@ export interface FinetuneRestart {
    */
   distance_sigma?: number;
   /**
-   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   * The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target.
    */
   select_channel?: number | null;
   /**
