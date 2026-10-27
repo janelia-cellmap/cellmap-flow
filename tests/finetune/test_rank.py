@@ -31,7 +31,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune import rank
 from cellmap_flow.finetune.session.volume import carry_paint
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.portable.rank import best_try, display_postprocess, norm_tries, score_row
+from cellmap_flow.portable.rank import best_try, needed_postprocess, norm_tries, score_row
 from cellmap_flow.serving.probe import UNBOUNDED
 
 
@@ -211,8 +211,9 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert body["success"], body
     assert (body["matches"], body["cutoff"], body["channel"], body["window"]) == (1, 0, "nuc", None)
     assert (body["object_voxels"], body["background_voxels"]) == (64, 64)
-    # Its logits show right through a sigmoid, which the session's empty chain lacks.
-    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}]
+    # Its logits show right through a sigmoid, which the session's empty
+    # chain lacks, cut where the paint is fitted best: its own boundary.
+    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": 0.5}]
     assert {host for host, _ in painted.reads} == {"http://gpu:8000" if running else "http://gpu:9000"}
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
@@ -284,7 +285,7 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
     assert painted.reads[-1][1][0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
 
 
-def test_fit_to_paint_sets_the_input_normalization_and_sigmoid_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
+def test_fit_to_paint_sets_the_input_normalization_and_postprocessing_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
     session = get_session()
     session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
@@ -309,16 +310,17 @@ def test_fit_to_paint_sets_the_input_normalization_and_sigmoid_of_the_model_seed
     assert scored["window"] == scored["input_window"] == [100.0, 120.0]
     stretched = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
     assert fitted["input_norm"] == scored["input_norm"] == [stretched]
-    # The sigmoid its logits need, set with the normalization in one chain set.
-    sigmoid = {"name": "SigmoidPostprocessor"}
-    assert fitted["postprocess"] == scored["postprocess"] == [sigmoid] and len(chains) == 1
-    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": [sigmoid]}
+    # The sigmoid its logits need and the threshold fitted to the paint, set
+    # with the normalization in one chain set.
+    shown = [{"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": scored["threshold"]}]
+    assert fitted["postprocess"] == scored["postprocess"] == shown and len(chains) == 1
+    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": shown}
     assert session.annotation_volumes == volumes and rank_routes.session_store().session_volume()[0] == "vol-1"
     # Steps the dashboard has no op for change nothing.
     for body in ({"input_norm": [{"name": "NoSuchNormalizer"}]},
                  {"input_norm": [], "postprocess": [{"name": "NoSuchPostprocessor"}]}):
         assert not dashboard.post("/api/finetune/rank/input-norm", json=body).get_json()["success"]
-    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": [sigmoid]}
+    assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": shown}
 
 
 def _no_fetch(*args):
@@ -509,18 +511,27 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
 
 
-def test_the_sigmoid_a_ranked_models_layer_needs_and_nothing_else():
-    """Use this model sets the sigmoid a model's output needs to show right:
-    one for logits when nothing is set, none on top of an output in [0, 1]
-    or [-1, 1]. Anything else, an affinity model's watershed among it, stays
-    the Processing tab's suggestion."""
-    sigmoid, threshold = {"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": 0.5}
-    assert display_postprocess("unbounded", [], False) == [sigmoid]
-    assert display_postprocess("unbounded", [threshold], False) is None
-    assert display_postprocess("unit", [sigmoid, threshold], False) == [threshold]
-    assert display_postprocess("signed_unit", [sigmoid], False) == []
-    assert display_postprocess("unit", [], False) is None
-    assert display_postprocess("unbounded", [], True) is None
+def test_the_postprocessing_a_models_layer_needs_to_show_a_good_prediction():
+    """A model's layer shows a good prediction through the sigmoid its
+    output needs and, from the ranking, the threshold fitted to the paint:
+    logits get both (an affinity model's logits the sigmoid too, which
+    they were not given), an output that has a sigmoid loses a second one,
+    and a chain of the user's, a watershed, is left as it is."""
+    sigmoid = {"name": "SigmoidPostprocessor"}
+
+    def threshold(t):
+        return {"name": "ThresholdPostprocessor", "threshold": t}
+
+    assert needed_postprocess("unbounded", [], 0.731) == [sigmoid, threshold(0.731)]
+    assert needed_postprocess("unbounded", [threshold(0.0)], 0.731) == [sigmoid, threshold(0.731)]
+    assert needed_postprocess("unbounded", []) == [sigmoid]
+    assert needed_postprocess("unbounded", [threshold(0.0)]) is None
+    assert needed_postprocess("unit", [sigmoid, threshold(0.5)]) == [threshold(0.5)]
+    assert needed_postprocess("signed_unit", [sigmoid], 0.75) == [threshold(0.5)]
+    assert needed_postprocess("unit", [threshold(0.5)], 0.5) is None
+    watershed = [sigmoid, {"name": "DefaultPostprocessor"}, {"name": "AffinityPostprocessor"}]
+    assert needed_postprocess("unbounded", watershed, 0.731) is None
+    assert needed_postprocess("unit", watershed) == watershed[1:]
 
 
 def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_finetunes_built_after(

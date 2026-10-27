@@ -60,11 +60,12 @@ def best_try(args, arrays):
     return rank.best_try(args["scores"])
 
 
-def display_postprocess(args, arrays):
-    """``rank.display_postprocess``: the postprocessing a model of
-    ``output_class`` needs instead of ``postprocess``, an ``affinity`` model's
-    or not, or null."""
-    return rank.display_postprocess(args.get("output_class"), args["postprocess"], bool(args["affinity"]))
+def needed_postprocess(args, arrays):
+    """``rank.needed_postprocess``: the postprocessing a model of
+    ``output_class`` needs instead of ``postprocess`` to show a good
+    prediction, with a ThresholdPostprocessor at ``threshold`` (a
+    probability) when that is given, or null."""
+    return rank.needed_postprocess(args.get("output_class"), args["postprocess"], args.get("threshold"))
 
 
 def rank_row(args, arrays):

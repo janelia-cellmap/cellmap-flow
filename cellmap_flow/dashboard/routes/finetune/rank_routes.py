@@ -38,7 +38,7 @@ range it read and the steps it was read through, ``input_norm``, with what
 every channel matched, ``channel_matches``, and what the other
 normalizations tried did, ``input_norm_others``: why this one), and the
 postprocessing its layer needs to show right instead of the session's,
-``postprocess`` (portable/rank.py display_postprocess: the sigmoid added or
+``postprocess`` (portable/rank.py needed_postprocess: the sigmoid added or
 taken away), or null when the session's shows it right.
 POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
 select_channel?} makes the one picked the model to finetune: ``input_norm``
@@ -303,11 +303,17 @@ def rank_score():
             *([f"{outside} of the painted chunks scored lie past its output, and were not scored"] if outside else []),
             *(["started for its score and stopped after"] if job is not None else []),
         ]
-        # The sigmoid its layer needs to show right, as the session's chain
-        # stands (portable/rank.py display_postprocess), which Use this model
-        # and Fit to paint set beside the input normalization.
-        postprocess = rank.display_postprocess(
-            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess], bool(offsets))
+        # What its layer needs to show a good prediction, as the session's
+        # chain stands (portable/rank.py needed_postprocess): the sigmoid its
+        # output needs, and a binary model's threshold fitted to the paint,
+        # which Use this model, Fit to Paint and Use these settings set
+        # beside the input normalization. Not an affinity model's threshold:
+        # its cut-off is on pairs of voxels, and a layer of 0s and 1s for
+        # each pair would leave the watershed it may be given (the model
+        # advice's optional offer) no affinities to work on.
+        postprocess = rank.needed_postprocess(
+            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess],
+            None if offsets else score["threshold"])
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "
