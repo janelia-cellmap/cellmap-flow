@@ -376,16 +376,33 @@ def metadata_input_norm(input_normalization, data_range):
     return steps
 
 
+# Where two expressions are compared: a declared "x*2-1" and a typed
+# "2*x-1" are one map, which the text alone did not say.
+EXPRESSION_SAMPLES = (-2.0, -1.0, -0.5, 0.0, 0.25, 0.5, 1.0, 2.0, 255.0)
+
+
 def same_value(configured, declared) -> bool:
     """Whether a configured parameter value is the declared one: numbers by
     value (the form sends "255.0" for a manifest's 255), anything else as
     text, trimmed and without regard to case (a form's "False", Python's
-    False and JSON's false are one value; an expression is compared as
-    written)."""
+    False and JSON's false are one value), and two expressions by what they
+    give at EXPRESSION_SAMPLES, each through the whitelist LambdaNormalizer
+    runs it through (compile_expression)."""
     try:
         return float(configured) == float(declared)
     except (TypeError, ValueError):
-        return str(configured).strip().lower() == str(declared).strip().lower()
+        pass
+    if str(configured).strip().lower() == str(declared).strip().lower():
+        return True
+    import numpy as np
+
+    from cellmap_flow.norm.safe_expression import compile_expression
+
+    try:
+        x = np.asarray(EXPRESSION_SAMPLES, dtype=np.float64)
+        return bool(np.allclose(compile_expression(str(configured))(x), compile_expression(str(declared))(x)))
+    except Exception:
+        return False
 
 
 def input_norm_differences(configured_steps, declared) -> list:
