@@ -23,15 +23,20 @@ normalizations tried did, ``input_norm_others``: why this one), and the
 postprocessing its layer needs to show right instead of the session's,
 ``postprocess`` (portable/rank.py display_postprocess: the sigmoid added or
 taken away), or null when the session's shows it right.
-POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?}
-makes the one picked the model to finetune: ``input_norm`` and
-``postprocess`` (the row's) made the dashboard's chain first, then the
-model running (as the Models tab's Add runs it), a volume made for it with
-the session volume's paint carried onto its grid (session/volume.py
-carry_paint) and its paint layer in the old one's place; the old volume
-stays. POST /api/finetune/rank/input-norm {input_norm, postprocess?} makes
-the row's steps the dashboard's chain alone, with no model started and no
-volume made: Fit to paint's, for the model already seeding the paint.
+POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
+select_channel?} makes the one picked the model to finetune: ``input_norm``
+and ``postprocess`` (the row's) made the dashboard's chain first, and
+``select_channel`` (the row's channel_index) the channel its layer shows
+(Session.shown_channels), then the model running (as the Models tab's Add
+runs it), a volume made for it with the session volume's paint carried onto
+its grid (session/volume.py carry_paint) and its paint layer in the old
+one's place. The old volume is retired (finetune_utils
+retire_annotation_volume): out of the session, kept on disk in its
+corrections dir's ``superseded/``, so the session has the one volume, the
+new one, which its manifest trains on. POST /api/finetune/rank/input-norm
+{input_norm, postprocess?} makes the row's steps the dashboard's chain
+alone, with no model started and no volume made: Fit to paint's, for the
+model already seeding the paint.
 """
 
 import logging
@@ -41,8 +46,9 @@ import numpy as np
 from flask import jsonify, request
 from scipy.special import logit
 
-from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
+from cellmap_flow.dashboard.finetune_utils import retire_annotation_volume, sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.routes.finetune.channel import channel_refusal
 from cellmap_flow.dashboard.routes.finetune.common import autodetect_output_type, find_model_config, session_store
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.portable import rank
@@ -199,7 +205,7 @@ def rank_score():
 @finetune_bp.route("/api/finetune/rank/use", methods=["POST"])
 def rank_use():
     from cellmap_flow.dashboard.routes.finetune.annotation_core import make_volume
-    from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
+    from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer, refresh_annotated_regions_layer
     from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
     from cellmap_flow.dashboard.services.launch import running_names
     from cellmap_flow.finetune.session.volume import carry_paint
@@ -209,6 +215,10 @@ def rank_use():
     name = str(data.get("name") or "").strip()
     if not name:
         return _refused("name is required")
+    channel = data.get("select_channel")
+    refused = channel_refusal(channel)
+    if refused:
+        return refused
     session = get_session()
     from_id, from_volume = session_store().session_volume()
     if not from_volume:
@@ -219,6 +229,12 @@ def rank_use():
         # Before the model starts, so it is served through them.
         input_norm, postprocess = _install_chain(data.get("input_norm"), data.get("postprocess"))
         config = _model_config(name, data.get("entry"))
+        if channel is not None:
+            # Before the model starts too, so the layer its start builds
+            # (services/launch.py, on Session.shown_channel) opens on the
+            # channel the paint matched: it opened on Neuroglancer's middle
+            # channel, and only moved once the page's pick arrived.
+            session.shown_channels[name] = channel
         if name not in running_names():
             _start_for_good(name, config)
         sync_annotation_volume_from_minio(from_id)
@@ -232,8 +248,13 @@ def rank_use():
                 if old in s.layers:
                     del s.layers[old]
             add_annotation_layer(session.viewer, layer, f"{minio_url}/annotation")
+        # One volume a session: the one its manifest now trains on (make_volume
+        # wrote it). The old is kept, out of everything's way.
+        superseded = retire_annotation_volume(from_id)
+        refresh_annotated_regions_layer()
         logger.info(f"Carried {from_id}'s paint to {to_id} for {name}: {carried['painted']} voxels from {carried['source']}"
-                    + (f"; {carried['conflicts']} left unpainted where object and background met in one voxel" if carried["conflicts"] else ""))
+                    + (f"; {carried['conflicts']} left unpainted where object and background met in one voxel" if carried["conflicts"] else "")
+                    + (f"; {from_id} kept in {superseded}" if superseded else ""))
         return jsonify({
             "success": True, "name": name, "volume_id": to_id, "from_volume": from_id, "layer_name": layer,
             "painted_voxels": carried["painted"], "source_voxels": carried["source"], "conflicts": carried["conflicts"],

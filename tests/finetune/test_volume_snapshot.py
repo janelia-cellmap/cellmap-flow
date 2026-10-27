@@ -145,6 +145,26 @@ def test_a_painted_session_resumes_elsewhere_with_its_strokes(world):
         resumed["zarr_path"], str(world.tmp / "raw.zarr" / "em"))
 
 
+def test_a_resume_copies_and_registers_the_sessions_current_volume_alone(world):
+    """A session of one paint in four volumes was resumed with all of them,
+    and the oldest became the resumed session's volume: Rank scored one
+    volume, training read another."""
+    from cellmap_flow.dashboard.routes.finetune.common import session_store
+
+    post = lambda url, **body: world.client.post(url, json=body).get_json()  # noqa: E731
+    made = [post("/api/finetune/create-volume", model_name="m", output_path=str(world.tmp / "a")) for _ in range(2)]
+    for volume in made:
+        zarr.open_array(str(Path(volume["zarr_path"]) / "annotation" / "s0"), mode="r+")[0:4, 0:4, 0:4] = 2
+
+    resumed = post("/api/finetune/load-existing-volume", output_path=str(world.tmp / "b"),
+                   source_session_path=str(Path(made[0]["zarr_path"]).parents[1]))
+
+    assert resumed["success"] and resumed["volume_id"] == made[1]["volume_id"], "the manifest's, the last made"
+    copied = [p.name for p in Path(resumed["zarr_path"]).parent.glob("*.zarr")]
+    assert copied == [f"{made[1]['volume_id']}.zarr"]
+    assert session_store().session_volume()[1]["zarr_path"] == resumed["zarr_path"]
+
+
 def test_a_session_resumes_only_over_the_dataset_it_was_painted_on(world):
     """A jrc_axolotl-heart-1 session resumed in a jrc_amphiuma-means-heart-1
     dashboard drew its strokes over the wrong EM, trained on axolotl, and
@@ -222,6 +242,15 @@ def test_a_volume_painted_before_any_model_is_ranked_and_carried_but_not_trained
     carried = session.annotation_volumes[used["volume_id"]]
     assert (carried["model_name"], carried["output_voxel_size"]) == ("m", [16.0] * 3)
     assert (Path(carried["zarr_path"]).parent / "_virtual_sources.json").exists(), "the model's volume is trained on"
+    # The session's one volume is the model's: the old one is out of the
+    # session, kept with its paint in superseded/, where nothing lists it.
+    corrections = zarr_path.parent
+    assert [p.name for p in corrections.glob("*.zarr")] == [Path(carried["zarr_path"]).name]
+    kept = zarr.open_array(str(corrections / "superseded" / zarr_path.name / "annotation" / "s0"), mode="r")[:]
+    assert (kept == 2).sum() == 8 ** 3 and volume_id not in session.annotation_volumes
+    (listed,) = post("/api/finetune/list-existing-sessions", output_path=str(world.tmp / "a")).get_json()["sessions"]
+    assert ([v["volume_id"] for v in listed["volumes"]], listed["model_name"]) == ([used["volume_id"]], "m")
+    assert listed["chunk_count"] == used["chunks"]
 
 
 @pytest.mark.parametrize("zoom, voxel", [(None, 8.0), (2.5, 16.0)], ids=["no zoom: the finest", "zoomed out: s1"])

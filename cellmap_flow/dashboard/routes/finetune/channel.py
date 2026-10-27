@@ -37,8 +37,9 @@ def show_channel():
     channel = data.get("select_channel")
     if not name:
         return jsonify({"success": False, "error": "model_name is required"}), 400
-    if channel is not None and (isinstance(channel, bool) or not isinstance(channel, int) or channel < 0):
-        return jsonify({"success": False, "error": "select_channel is a channel's index (0 and up), or null"}), 400
+    refused = channel_refusal(channel)
+    if refused:
+        return refused
     session = get_session()
     if channel is None:
         session.shown_channels.pop(name, None)
@@ -48,6 +49,15 @@ def show_channel():
     logger.info(f"{name}'s layer shows channel {channel}" if shown
                 else f"{name}'s layers will open on channel {channel}")
     return jsonify({"success": True, "shown": shown})
+
+
+def channel_refusal(channel):
+    """The 400 for a ``select_channel`` that is neither a channel's index (0
+    and up) nor None, or None for one that is: this route's, and Use this
+    model's (rank_routes), which records it before the model starts."""
+    if channel is not None and (isinstance(channel, bool) or not isinstance(channel, int) or channel < 0):
+        return jsonify({"success": False, "error": "select_channel is a channel's index (0 and up), or null"}), 400
+    return None
 
 
 def _move_layer(name, channel):
