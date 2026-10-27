@@ -15,7 +15,8 @@ while its nodes are individually closed: ``closed_Adm`` when an admin has taken
 them out for maintenance, ``closed_Full`` when they are merely saturated. Those
 mean different things to someone deciding where to submit -- the first will not
 clear on its own -- so they are counted separately rather than lumped into one
-"busy" number.
+"busy" number. Neither has a free GPU, however idle its GPUs are: only the
+idle GPUs of hosts that are "ok" are counted as free.
 
 Nothing here raises. A dashboard running somewhere without LSF should show a
 queue picker that still works, just without the annotations.
@@ -84,19 +85,24 @@ def _parse_bqueues(text):
 
 
 def _parse_bhosts_status(text):
-    """Count hosts by state from ``bhosts -w``.
+    """{host: state} from ``bhosts -w``.
 
     ``-w`` is load-bearing: without it LSF collapses every closed_* state to a
     bare "closed", which loses the admin/full distinction that is the whole
     point of looking.
     """
-    counts = {"total": 0, "ok": 0, "closed_admin": 0, "closed_full": 0, "other": 0}
+    states = {}
     for line in (text or "").splitlines()[1:]:
         fields = line.split()
-        if len(fields) < 2:
-            continue
-        status = fields[1]
-        counts["total"] += 1
+        if len(fields) >= 2:
+            states[fields[0]] = fields[1]
+    return states
+
+
+def _count_hosts(states):
+    """How many of ``states``' hosts are in each state that matters here."""
+    counts = {"total": len(states), "ok": 0, "closed_admin": 0, "closed_full": 0, "other": 0}
+    for status in states.values():
         if status == "ok":
             counts["ok"] += 1
         elif status == "closed_Adm":
@@ -110,23 +116,42 @@ def _parse_bhosts_status(text):
 
 
 def _parse_bhosts_gpu(text):
-    """(free, total) GPUs from ``bhosts -gpu``.
+    """{host: (idle, total)} GPUs from ``bhosts -gpu``, idle being those no
+    job holds.
 
-    Rows after the first for a given host omit the host name, so columns are
-    counted from the right: ... NJOBS RUN SUSP RSV.
+    A host's first row names it and the rows of its other GPUs leave the
+    name blank (they start with spaces), so each of those belongs to the
+    last host named; the columns are counted from the right: ... NJOBS RUN
+    SUSP RSV.
     """
-    free = total = 0
+    gpus = {}
+    host = None
     for line in (text or "").splitlines()[1:]:
         fields = line.split()
         if len(fields) < 8:
             continue
+        if not line[0].isspace():
+            host = fields[0]
         njobs = _int(fields[-4])
-        if njobs is None:
+        if host is None or njobs is None:
             continue
-        total += 1
-        if njobs == 0:
-            free += 1
-    return free, total
+        idle, total = gpus.get(host, (0, 0))
+        gpus[host] = (idle + (njobs == 0), total + 1)
+    return gpus
+
+
+def _free_gpus(states, gpus):
+    """(free, total) GPUs of a host group: free are the idle GPUs of the
+    hosts whose state is "ok".
+
+    An idle GPU on a closed host cannot take a job: closed_Adm is a node out
+    for maintenance, closed_Full one whose job slots are all taken. Counting
+    every idle GPU had the picker say "8/80 GPUs free" for gpu_h100 when all
+    eight were on one closed_Adm node, so the queue looked freest and jobs
+    were sent to it to wait out the pending timeout.
+    """
+    free = sum(idle for host, (idle, _) in gpus.items() if states.get(host) == "ok")
+    return free, sum(total for _, total in gpus.values())
 
 
 def _describe(entry):
@@ -183,8 +208,9 @@ def _collect():
     for queue, label, host_group in GPU_QUEUES:
         info = parsed.get(queue, {})
         status = info.get("status", "unknown")
-        hosts = _parse_bhosts_status(_run(["bhosts", "-w", host_group]))
-        gpus_free, gpus_total = _parse_bhosts_gpu(_run(["bhosts", "-gpu", host_group]))
+        states = _parse_bhosts_status(_run(["bhosts", "-w", host_group]))
+        hosts = _count_hosts(states)
+        gpus_free, gpus_total = _free_gpus(states, _parse_bhosts_gpu(_run(["bhosts", "-gpu", host_group])))
         entry = {
             "queue": queue,
             "label": label,

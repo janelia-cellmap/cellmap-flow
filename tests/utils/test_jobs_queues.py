@@ -51,6 +51,30 @@ def test_what_lsf_says_about_the_gpu_queues(fake_lsf, monkeypatch, gpu_queues, k
     assert fake_lsf.commands("bqueues"), "the fake answered"
 
 
+def test_a_closed_hosts_idle_gpus_are_not_free(fake_lsf, monkeypatch):
+    """gpu_h100 said 8 GPUs free, all on a node out for maintenance, so jobs
+    were sent there to wait out the pending timeout."""
+    monkeypatch.setattr(queues, "GPU_QUEUES", (("gpu_h100", "H100", "h100s"),))
+    fake_lsf.answers["bqueues"] = _bqueues({"gpu_h100"})
+    # A host's other GPUs are rows without its name.
+    gpu = (
+        "HOST_NAME  GPU_ID  MODEL  MUSED  MRSV  NJOBS  RUN  SUSP  RSV\n"
+        "h01        0       H100   0M     0M    1      1    0     0\n"
+        "           1       H100   0M     0M    0      0    0     0\n"
+        "h02        0       H100   0M     0M    0      0    0     0\n"
+        "           1       H100   0M     0M    0      0    0     0\n"
+        "h03        0       H100   0M     0M    0      0    0     0\n"
+    )
+    hosts = {
+        "-w": "HOST_NAME  STATUS  JL/U  MAX  NJOBS  RUN  SSUSP  USUSP  RSV\n"
+              "h01 ok - 48 2 2 0 0 0\nh02 closed_Adm - 48 0 0 0 0 0\nh03 closed_Full - 48 48 48 0 0 0\n",
+        "-gpu": gpu,
+    }
+    fake_lsf.answers["bhosts"] = lambda argv, kwargs: hosts[argv[1]]
+    (h100,) = queues.gpu_queue_availability(force=True)["queues"]
+    assert (h100["gpus_free"], h100["gpus_total"]) == (1, 5)
+
+
 AVAILABILITY = {"available": True, "queues": [
     {"queue": "gpu_h100", "accepting": True, "gpus_free": 0, "pending": 40},
     {"queue": "gpu_a100", "accepting": True, "gpus_free": 12, "pending": 0},
