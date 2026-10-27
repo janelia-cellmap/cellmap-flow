@@ -1,4 +1,8 @@
-// The model-advice banner above the dashboard tabs.
+// The model advice: what the server makes of each model's input and output
+// handling. The suggestions for the chain (the input normalization, the
+// postprocessing) are in the Processing tab, above its lists; how a model
+// reads the data's scale is in the banner above the dashboard tabs, on every
+// tab, as it is about the Models tab's Resample.
 //
 // Asks the server what activation the model's output actually has (see
 // cellmap_flow/serving/probe.py) and compares it against the chain
@@ -14,39 +18,44 @@ const CONFIRM_BANNER_MS = 8000;
 
 // The probe is collected during inference-server startup, and models are
 // launched on background threads that the submit request does not wait for,
-// so right after a submit there is usually nothing to report yet. Keep
-// checking until every job has answered, rather than taking one shot at a
-// fixed delay and silently giving up.
-const ADVICE_POLL_INTERVAL_MS = 5000;
-const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
+// so right after a submit there is usually nothing to report yet, and a job
+// queued on the cluster can wait many minutes. So the advice is asked for
+// until every model's probe has answered, however long that takes: every few
+// seconds at first, then less often (lib/poll.js maxIntervalMs).
+const ADVICE_POLL_INTERVAL_MS = 3000;
+const ADVICE_POLL_MAX_INTERVAL_MS = 30000;
 
 // The Processing tab's two lists (shared/op-chain.js) a suggestion's Apply
-// fills in, from initModelAdvice.
-let chains = null;
+// fills in, and its Apply bar's apply (main.js initApply), from
+// initModelAdvice.
+let processing = null;
 
-export function initModelAdvice({ input, postprocess }) {
-  chains = { input, postprocess };
+export function initModelAdvice({ input, postprocess, apply }) {
+  processing = { input, postprocess, apply };
   // Loading a model, not only Submit All, is when advice is most useful.
   listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
+  // The poll waits while the page is hidden, and may have stopped: a tab
+  // shown again asks at once.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshModelAdvice();
+  });
+  // The models running when the page loaded: a YAML's, or a reload's.
+  refreshModelAdvice();
 }
 
-// Tick exactly the suggested steps, fill in their parameters, and move them
-// to the top in the suggested order: steps are applied top to bottom.
-// Defaults assume each step sees the range its usual predecessor produces;
-// where this chain differs, the server says what to use.
-function applyPostprocessSuggestion(names, params) {
-  chains.postprocess.apply(names, params);
+// A suggestion's Apply: make `list` exactly the suggested steps, in the
+// suggested order (steps run top to bottom), each with the parameters the
+// server gives (a normalizer's values; a postprocessor's where this chain
+// needs other than its defaults), and apply the chain as the Apply bar does,
+// with any other edit of the two lists not applied yet.
+function applySuggestion(list, names, params) {
+  list.apply(names, params);
+  processing.apply();
 }
 
-// Same idea for the input side. Normalizers carry parameter values, not just
-// a name, so this fills those in as well as ticking the box.
-function applyInputNormSuggestion(norms, order) {
-  chains.input.apply(order || Object.keys(norms || {}), norms);
-}
-
-// The server repeats its advice on every poll, so the banner cannot simply
+// The server repeats its advice on every poll, so the advice cannot simply
 // be redrawn each time: a suggestion the user dismissed or applied would come
-// back five seconds later, and a confirmation that had timed out reappear.
+// back a few seconds later, and a confirmation that had timed out reappear.
 // So each piece of advice has a key, and once it is hidden (dismissed,
 // applied, or a confirmation's time up) that key stays hidden while the page
 // is open.
@@ -57,11 +66,11 @@ function applyInputNormSuggestion(norms, order) {
 // down stays down when the chain changes, by their Apply, an edit, or the
 // backend; it comes back only when the advice is about something new for the
 // model, as another suggestion or another finding (a probe that answered,
-// other data). The banner itself can name the chain ("currently set: ..."),
+// other data). A suggestion itself can name the chain ("currently set: ..."),
 // so `says` is what it says now, and it is rebuilt, under the same key, when
 // that changes.
 const hiddenAdvice = new Set();
-const shownAdvice = new Map();  // key -> {div, says}: what is in the banner now
+const shownAdvice = new Map();  // key -> {div, says}: what is on the page now
 
 function adviceKey(kind, m, about) {
   return JSON.stringify([kind, m.model || "", about]);
@@ -74,7 +83,7 @@ function hideAdvice(key) {
   if (shown) shown.div.remove();
 }
 
-// Put the advice for `key` in the banner, building it the first time and
+// Put the advice for `key` in `box`, building it the first time and
 // again when what it says changes (`says`, by default nothing beyond the key),
 // and record it in `wanted` so renderModelAdvice keeps it.
 function showAdvice(box, wanted, key, build, says = "") {
@@ -86,7 +95,7 @@ function showAdvice(box, wanted, key, build, says = "") {
     shown = { div: build(), says };
     shownAdvice.set(key, shown);
   }
-  box.appendChild(shown.div);  // (re)appending keeps the banner in poll order
+  box.appendChild(shown.div);  // (re)appending keeps the box in poll order
 }
 
 function adviceButton(className, text, onclick) {
@@ -97,7 +106,7 @@ function adviceButton(className, text, onclick) {
   return btn;
 }
 
-// Model names reach this banner from HuggingFace repo ids and from user YAML,
+// Model names reach the advice from HuggingFace repo ids and from user YAML,
 // and the HF catalogue is third-party data we render verbatim. None of it is
 // trusted markup, so everything interpolated into innerHTML below is escaped.
 function renderInputNormAdvice(m, box, wanted) {
@@ -160,12 +169,10 @@ function renderInputNormAdvice(m, box, wanted) {
                     + "</small>";
     }
     div.appendChild(document.createElement("br"));
-    // Fills the input list in; the Apply bar then counts the change, and
-    // the user's Apply sends it.
-    div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
+    div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
       differences.length ? "Apply the declared values" : "Apply: " + names.join(" → "),
-      function () { applyInputNormSuggestion(sug.input_norm, names); hideAdvice(key); }));
-    div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
+      function () { applySuggestion(processing.input, names, sug.input_norm); hideAdvice(key); }));
+    div.appendChild(adviceButton("btn btn-sm btn-link mt-2", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
   }, says);
@@ -203,11 +210,11 @@ function renderPostprocessAdvice(m, box, wanted) {
     div.innerHTML = html;
     if ((rev.suggest || []).length) {
       div.appendChild(document.createElement("br"));
-      div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
+      div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
         "Apply: " + rev.suggest.join(" → "),
-        function () { applyPostprocessSuggestion(rev.suggest, rev.params); hideAdvice(key); }));
+        function () { applySuggestion(processing.postprocess, rev.suggest, rev.params); hideAdvice(key); }));
     }
-    div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
+    div.appendChild(adviceButton("btn btn-sm btn-link mt-2", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
   }, says);
@@ -248,13 +255,14 @@ function renderVoxelSizeAdvice(m, box, wanted) {
 }
 
 function renderModelAdvice(models) {
-  const box = document.getElementById("modelAdviceBanner");
-  if (!box) return;
+  const banner = document.getElementById("modelAdviceBanner");
+  const chainBox = document.getElementById("processingAdvice");
+  if (!banner || !chainBox) return;
   const wanted = new Set();
   (models || []).forEach(function (m) {
-    renderVoxelSizeAdvice(m, box, wanted);
-    renderInputNormAdvice(m, box, wanted);
-    renderPostprocessAdvice(m, box, wanted);
+    renderVoxelSizeAdvice(m, banner, wanted);
+    renderInputNormAdvice(m, chainBox, wanted);
+    renderPostprocessAdvice(m, chainBox, wanted);
   });
   // Drop what the server no longer says (the chain or the probe moved on);
   // advice not hidden shows again if the server comes back to it.
@@ -265,18 +273,20 @@ function renderModelAdvice(models) {
   });
 }
 
-// One poll of /api/model_advice. Resolves to false to stop polling: every
-// job has answered, the server has nothing to say, or it is unreachable.
+// One poll of /api/model_advice. Resolves to false to stop polling once
+// every model's probe has answered; until then, and after a request that
+// failed (a server slow to answer, or restarting), it asks again. No models
+// yet is a submit whose jobs have not started.
 async function checkAdvice({ stale }) {
   let d;
   try {
     d = await getJSON("/api/model_advice");
   } catch (e) {
     console.log("model advice unavailable", e);
-    return false;
+    return undefined;
   }
   if (stale()) return undefined;  // a newer refresh replaced this one
-  if (!d || !d.success) return false;
+  if (!d || !d.success) return undefined;
   renderModelAdvice(d.models);
   const models = d.models || [];
   const pending = models.length === 0 || models.some(function (m) {
@@ -296,6 +306,7 @@ export function refreshModelAdvice() {
   }
   advicePoller = poll(checkAdvice, {
     intervalMs: ADVICE_POLL_INTERVAL_MS,
-    maxTicks: ADVICE_POLL_MAX_ATTEMPTS + 1,  // the first check, then the retries
+    maxIntervalMs: ADVICE_POLL_MAX_INTERVAL_MS,
+    pauseWhenHidden: true,
   });
 }

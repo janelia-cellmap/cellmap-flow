@@ -458,7 +458,9 @@ Apply, or ``PUT /api/pipeline``, and the layers
    (``static/js/shared/op-chain.js``) and sends ``PUT /api/pipeline`` with
    ``{input_norm, postprocess}`` (``static/js/dashboard/main.js``). Until
    then the bar counts the edits not applied (``op-chain.js``
-   ``chainChanges``, against the chain last applied or shown). The pipeline
+   ``chainChanges``, against the chain last applied or shown). A model
+   advice suggestion's Apply (``static/js/dashboard/model-advice.js``) sets
+   its steps in its list and goes through the same Apply. The pipeline
    builder sends the same, and its canvas as ``builder``, 2 s after its last
    edit (``static/js/pipeline-builder/state.js``).
 #. ``dashboard/routes/pipeline.put_pipeline`` parses the body as a

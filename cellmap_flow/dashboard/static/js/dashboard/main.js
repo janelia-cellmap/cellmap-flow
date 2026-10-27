@@ -62,8 +62,11 @@ function say(notice, text) {
 //
 // The bar counts the edits of the tab's two lists that the backend does not
 // run (op-chain.js pendingChanges, both lists together) and lights its Apply
-// while there are any; Apply sends both lists with PUT /api/pipeline, which
-// sets them and redraws the viewer's layers. Nothing else here sends a chain.
+// while there are any, and each list's sub-tab carries its own count, so an
+// edit in the list not shown is not out of sight; Apply sends both lists
+// with PUT /api/pipeline, which sets them and redraws the viewer's layers.
+// Nothing else here sends a chain: a suggestion's Apply (model-advice.js)
+// fills a list in and calls this Apply.
 //
 // The backend can change its chain itself: a model's start sets the input
 // normalization the model declares when the chain had none
@@ -78,8 +81,10 @@ function initApply(inputChain, postChain) {
   const pending = document.getElementById("applyPending");
   const refused = document.getElementById("applyNotice");
   const parts = [
-    { key: "input_norm", chain: inputChain, name: "input normalization", notice: document.getElementById("inputNormNotice") },
-    { key: "postprocess", chain: postChain, name: "postprocessing", notice: document.getElementById("postProcessNotice") },
+    { key: "input_norm", chain: inputChain, name: "input normalization",
+      notice: document.getElementById("inputNormNotice"), badge: document.getElementById("inputNormPending") },
+    { key: "postprocess", chain: postChain, name: "postprocessing",
+      notice: document.getElementById("postProcessNotice"), badge: document.getElementById("postProcessPending") },
   ];
   let applying = false;
   // The chain the backend runs, as its answers give it ({input_norm,
@@ -98,7 +103,11 @@ function initApply(inputChain, postChain) {
   }
 
   function render() {
-    const total = parts.reduce((sum, part) => sum + part.chain.pendingChanges(), 0);
+    const counts = parts.map((part) => part.chain.pendingChanges());
+    const total = counts[0] + counts[1];
+    // Each sub-tab's badge: its list's count, none at 0 (Bootstrap hides an
+    // empty badge).
+    parts.forEach((part, i) => { part.badge.textContent = counts[i] || ""; });
     button.disabled = applying;
     button.textContent = applying ? "Applying…" : "Apply";
     button.classList.toggle("btn-primary", total > 0);
@@ -243,8 +252,8 @@ initModelsTab();
 document.getElementById("toggleDashboardBtn").addEventListener("click", toggleDashboard);
 const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind: "input" });
 const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });
-initModelAdvice({ input: inputChain, postprocess: postChain });
 const applyBar = initApply(inputChain, postChain);
+initModelAdvice({ input: inputChain, postprocess: postChain, apply: applyBar.apply });
 document.addEventListener("keydown", (event) => applyOnEnter(event, applyBar.apply));
 initServerConfigModal();
 initReviewTab();

@@ -1,16 +1,17 @@
 {# The Processing tab: the steps every model's data goes through, the input
    normalizers before the model and the postprocessing after it, each list
-   under its own heading, with one Apply bar above both.
+   in its own sub-tab, with one Apply bar above both.
 
    The bar stays at the top of the dashboard column while the lists scroll
    under it. It says how many edits of the two lists the backend does not run
    yet (shared/op-chain.js's pendingChanges, the two lists together), and its
    Apply sends both chains (PUT /api/pipeline): they are one request, so one
-   button. js/dashboard/main.js (initApply) drives it. Nothing is sent until
-   Apply is pressed (or Enter in a parameter field). #}
+   button. Each sub-tab's badge counts its own list's. js/dashboard/main.js
+   (initApply) drives them. Nothing is sent until Apply is pressed (or Enter
+   in a parameter field, or a suggestion's Apply). #}
 
 {# A notice: the bar's says, in red (`tone` "danger"), that Apply was
-   refused; a list's, under its heading, that the backend changed that chain
+   refused; a list's, above it, that the backend changed that chain
    itself (a model's start set the input normalization it declares, say).
    Cleared by the next Apply, or its ✕. It is shown and hidden with the
    `hidden` attribute (main.js), so no d-flex here: Bootstrap sets that with
@@ -82,16 +83,39 @@
   <small class="apply-pending mt-1" id="applyPending" aria-live="polite" hidden></small>
   {{ notice("applyNotice", "danger", "mt-2 mb-0") }}
 </div>
+{# The suggestions for the chain, from the models' advice
+   (js/dashboard/model-advice.js): above both sub-tabs, so one for the list
+   not shown is in sight too. A suggestion's Apply sets its list and applies,
+   as the bar's Apply does. #}
+<div id="processingAdvice"></div>
 <div class="alert alert-info" role="alert">
   Drag to reorder: steps run in the order shown, the input normalization
   before the model and the postprocessing after it. An edit in either list
   takes effect when you press Apply.
 </div>
 
-<h5>Input normalization</h5>
-{{ notice("inputNormNotice", "info", "mb-2") }}
-{{ op_list("inputNormForm", "inputNormList", "inputNorm", "normalizer-item", "inputNormCheckbox", input_norm_items) }}
+{# The two lists as sub-tabs, as the Finetune tab's Annotation Crops and
+   Training are. Each badge counts its list's edits not applied (main.js). #}
+<ul class="nav nav-tabs mb-3" id="processingTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="input-norm-tab" data-bs-toggle="tab" data-bs-target="#inputNormPane" type="button" role="tab">
+      Input normalization <span class="badge rounded-pill text-bg-warning" id="inputNormPending" title="Edits not applied"></span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="postprocess-tab" data-bs-toggle="tab" data-bs-target="#postProcessPane" type="button" role="tab">
+      Postprocessing <span class="badge rounded-pill text-bg-warning" id="postProcessPending" title="Edits not applied"></span>
+    </button>
+  </li>
+</ul>
 
-<h5>Postprocessing</h5>
-{{ notice("postProcessNotice", "info", "mb-2") }}
-{{ op_list("postProcessForm", "postProcessList", "postProcess", "postprocessor-item", "postProcessCheckbox", postprocess_items) }}
+<div class="tab-content" id="processingTabContent">
+  <div class="tab-pane fade show active" id="inputNormPane" role="tabpanel">
+    {{ notice("inputNormNotice", "info", "mb-2") }}
+    {{ op_list("inputNormForm", "inputNormList", "inputNorm", "normalizer-item", "inputNormCheckbox", input_norm_items) }}
+  </div>
+  <div class="tab-pane fade" id="postProcessPane" role="tabpanel">
+    {{ notice("postProcessNotice", "info", "mb-2") }}
+    {{ op_list("postProcessForm", "postProcessList", "postProcess", "postprocessor-item", "postProcessCheckbox", postprocess_items) }}
+  </div>
+</div>
