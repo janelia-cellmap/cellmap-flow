@@ -587,7 +587,7 @@
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, as Fit to Paint does for the model seeding the paint.</small>
+        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, and the channel named in the row as the one the model trains (Channel, in the training form, for a model of several channels), as Fit to Paint does for the model seeding the paint.</small>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
         <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
       </div>
@@ -620,6 +620,24 @@
        per Step (head-only).
        web/src/browser.css
        gives the fields the full row. #}
+    {# The Channel, in both modes: which of the model's output channels the
+       paint trains, for a model of several that trains one at a time (its
+       /api/finetune/models entry's channel_choice: a binary target, which
+       would otherwise teach every channel the paint; an affinity or flow
+       model's channels each have a target of their own, and it has no
+       Channel). models.js shows it for such a model, its options the
+       channels by name and its pick the one kept for that model
+       (training-form.js setChannelChoice); training sends it as
+       select_channel, Seed from Prediction reads the same channel, and Use
+       this model sets it to the channel that matched the paint best. Left
+       unpicked, the submit route refuses, saying so. #}
+    <div class="mb-3" id="trainChannelGroup" hidden>
+      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: pick the one your paint is for. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too, and Use this model (Which model to start from) picks the one that matched your paint best.">Channel</label>
+      <select id="trainChannel" class="form-select">
+        <option value="" selected>Pick the channel your paint is for</option>
+      </select>
+      <small class="text-muted d-block">The channel picked learns your paint; the others are held to what the model predicted.</small>
+    </div>
     {% if mode == "browser" %}
     <div class="mb-3" id="finetuneModeGroup" hidden>
       <label for="finetuneMode" class="form-label" title="What trains on the paint. Last layer: the model's output convolution, on the features the rest of the network already computes; seconds, on any machine. Whole network: every weight, with TensorFlow.js on this machine's GPU; minutes, and it can learn what the features miss. The model's manifest says which it offers.">Training</label>

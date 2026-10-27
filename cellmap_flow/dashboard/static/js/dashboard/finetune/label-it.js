@@ -13,6 +13,7 @@ import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { pickedChannel } from "./training-form.js";
 
 // log: the Annotation Crops panel's log.
 export function initLabelIt({ log }) {
@@ -98,10 +99,15 @@ export function initLabelIt({ log }) {
     if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
     return body;
   }
+  // With the training form's Channel when it is shown and picked: a binary
+  // model of several channels then seeds from the channel the paint is for,
+  // not from every channel.
   function seedRequest() {
     const body = seedBody();
     if (seedModel.value) body.model = seedModel.value;
     if (seedMethod.value) body.method = seedMethod.value;
+    const channel = pickedChannel();
+    if (channel !== null) body.select_channel = channel;
     return body;
   }
   function rememberSeedSettings() {

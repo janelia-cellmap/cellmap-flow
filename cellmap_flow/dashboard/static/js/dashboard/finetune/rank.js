@@ -16,20 +16,26 @@
 // makes one the model to finetune: served, a new volume made for it with the
 // paint carried onto its grid, that volume the session's and its paint layer
 // in the viewer. The model picker (models.js pickModel) and the Annotation
-// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow.
+// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow, and
+// a binary model's row's channel (channel_index, the channel that matched
+// best) becomes its Channel in the training form (training-form.js
+// pickChannel), shown once the model is picked if it trains one channel at
+// a time.
 //
 // Fit to Paint, beside Seed from Prediction, does the same for the model
 // that seeds the paint (Label it's Prediction from) without a new volume:
-// it scores that model with the same route, and sets its threshold and,
-// when the stretch won, its window (POST /api/finetune/rank/window). Both
-// it and Use this model mark Seed from Prediction's threshold as set by
-// ranking, and say on the line under Label it's buttons what they set.
+// it scores that model with the same route, and sets its threshold, its
+// Channel and, when the stretch won, its window (POST
+// /api/finetune/rank/window). Both it and Use this model mark Seed from
+// Prediction's threshold as set by ranking, and say on the line under Label
+// it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
 import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { pickChannel } from "./training-form.js";
 
 // A score this close to the best one is marked about as good as it: two
 // points of matching are not worth choosing a model by.
@@ -180,13 +186,30 @@ export function initRank() {
   }
 
   // What Use this model or Fit to Paint set from `row`, the model's score:
-  // the threshold, and the input normalization, stretched to `window` (the
-  // route that set it answered it) or left as it was.
+  // the threshold, a binary model's channel (installChannel), and the input
+  // normalization, stretched to `window` (the route that set it answered
+  // it) or left as it was.
   function fittedText(name, row, window) {
     const input = Array.isArray(window)
       ? `the input normalization now stretches the raw from ${levels(window)} to 0–1, for every model`
       : `the input normalization is left as it was${Array.isArray(row.input_window) ? `, the raw read from ${levels(row.input_window)}` : ""}`;
-    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}, and ${input}.`;
+    const channel = Number.isInteger(row.channel_index) ? `, ${channelSet(row)}` : "";
+    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel}, and ${input}.`;
+  }
+
+  // A binary model's score is read on its best channel (channel_index),
+  // which becomes model `name`'s Channel in the training form
+  // (training-form.js pickChannel): the channel it trains and Seed from
+  // Prediction reads, shown once the model is picked if it trains one
+  // channel at a time (a model of one channel trains that one anyway). An
+  // affinity model's channels are scored together, and set none.
+  function installChannel(name, row) {
+    if (Number.isInteger(row.channel_index)) pickChannel(name, row.channel_index);
+  }
+
+  // What installChannel set, in words.
+  function channelSet(row) {
+    return `the channel it trains and seeds from is ${row.channel}`;
   }
 
   // The threshold a score fitted, made Seed from Prediction's (label-it.js
@@ -401,10 +424,13 @@ export function initRank() {
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
     installThreshold(d.name, row.threshold);
+    // Before the pick below, which shows it.
+    installChannel(d.name, row);
     sayFit(fittedText(d.name, row, d.window), "success");
     const set = [
       Array.isArray(d.window) && `the input normalization stretches the raw from ${levels(d.window)}`,
       Number.isFinite(row.threshold) && `Seed from Prediction's threshold is ${row.threshold}`,
+      Number.isInteger(row.channel_index) && channelSet(row),
     ].filter(Boolean);
     summary = {
       text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
@@ -524,6 +550,7 @@ export function initRank() {
         announce(CHAIN_CHANGED_EVENT);
       }
       installThreshold(name, d.threshold);
+      installChannel(name, d);
       sayFit(fittedText(name, d, window), "success");
     } catch (e) {
       sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");

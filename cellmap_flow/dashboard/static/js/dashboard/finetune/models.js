@@ -5,7 +5,7 @@ import { listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer } from "./requests.js";
-import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
+import { applyModelDefaults, setBrowserTraining, setChannelChoice } from "./training-form.js";
 
 // Models only appear in g.models_config once a pipeline has been submitted
 // on the main tab. The finetune tab is usually opened first, so a single
@@ -23,7 +23,8 @@ let pickWhenListed = null;
 // Picks `name` in the picker as choosing it would (its info, the defaults of
 // its kind, the pick saved with the form), once the list has it: the list is
 // loaded again first, as the model may only now be served. For rank.js's
-// Use this model.
+// Use this model, which keeps the model's Channel first (training-form.js
+// pickChannel), for the form to show once the model is picked.
 export function pickModel(name) {
   if (pickWhenListed) pickWhenListed(name);
 }
@@ -40,8 +41,12 @@ function holdNewVolume(model) {
   button.title = waiting ? `${model.name}: ${model.status}` : "";
 }
 
+// The picked model's info, and the training form's fields that depend on
+// it: the Channel (a model of several channels that trains one at a time),
+// and the browser's Training field or the server's LoRA ranks.
 function displayModelInfo(model) {
   holdNewVolume(model);
+  setChannelChoice(model);
   if (!model) return;
 
   if (model.status) {
@@ -61,7 +66,7 @@ function displayModelInfo(model) {
         <strong>Output Size (nm):</strong> [${esc(model.write_shape.join(', '))}]<br>
         <strong>Voxel Size (nm):</strong> [${esc(model.output_voxel_size.join(', '))}]<br>
         <strong>Crop Shape (voxels):</strong> [${esc(voxelShape.join(', '))}]<br>
-        <strong>Channels:</strong> ${esc(model.output_channels)}
+        <strong>Channels:</strong> ${esc(model.output_channels)}${model.channels ? ` (${esc(model.channels.join(", "))})` : ""}
       </small>
     `;
   }
