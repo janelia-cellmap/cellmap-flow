@@ -10,12 +10,10 @@ modules together:
 - ``rehydrate_session``: follow again the jobs an earlier dashboard left
   running (persistence.rehydrate);
 - ``monitor_job``: what each job's monitor thread runs (monitor);
-- ``restart_finetuning_job`` (restart) and ``cancel_job``;
+- ``restart_finetuning_job`` and ``stop_training_early`` (restart), and
+  ``cancel_job``;
 - ``get_job_status``, ``list_jobs``, ``get_job_logs``, ``get_job``;
 - ``add_listener``, ``remove_listener`` (listener).
-
-Stopping a job early is between the finetune route and the trainer: the
-route writes the run's ``stop_signal.json``.
 """
 
 import logging
@@ -412,3 +410,15 @@ class FinetuneJobManager:
         job = self.jobs[job_id]
         restart.request_restart(job, updated_params)
         return job
+
+    def stop_training_early(self, job_id: str) -> None:
+        """Stop Early: the job's training ends after the epoch it is in, and
+        the job serves what it trained and waits for a restart.
+
+        Sent as a restart is: to the job's control endpoint, else as a file
+        (restart.request_stop). Raises ValueError if the job is not known,
+        or is not training.
+        """
+        if job_id not in self.jobs:
+            raise ValueError(f"Job {job_id} not found")
+        restart.request_stop(self.jobs[job_id])

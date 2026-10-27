@@ -167,9 +167,9 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
     ``loaders``: what each create_dataloader call gives, in turn: a DataLoader,
     an exception (raised), or a callable of the run's record returning either.
     ``server``: replaces starting the inference server. ``restarts``: the
-    requests the job receives in turn, through the restart controller the
-    server would hand them to, or a callable of (signal file, controller)
-    that delivers one itself; None (and running out) is a signal file that
+    requests the job receives in turn, through the JobControl the server
+    would hand them to, or a callable of (signal file, JobControl) that
+    delivers one itself; None (and running out) is a signal file that
     is not a restart request, which ends the job. ``manifest``: the corrections' manifest, None for
     none. ``run_dir``: the output dir, <tmp>/session/runs/run by default.
 
@@ -209,9 +209,9 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
             if request is None:
                 kwargs["signal_file"].write_text("[]")
             elif callable(request):
-                request(kwargs["signal_file"], kwargs["restart_controller"])
+                request(kwargs["signal_file"], kwargs["control"])
             else:
-                kwargs["restart_controller"].request_restart(request)
+                kwargs["control"].request_restart(request)
             return real_wait(**kwargs)
 
         def serve(args, model_config, model, **kwargs):

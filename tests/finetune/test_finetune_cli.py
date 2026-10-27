@@ -1,7 +1,7 @@
 """python -m cellmap_flow.finetune.finetune_cli, through main(): what a run
-serves, what it refuses, what a restart may change, and how a run that
-cannot serve or restart fails. A run with one restart between two
-iterations is test_training_snapshot's.
+serves, what it refuses, what a restart may change, when Stop Early ends its
+training, and how a run that cannot serve or restart fails. A run with one
+restart between two iterations is test_training_snapshot's.
 """
 
 import json
@@ -115,6 +115,57 @@ def test_a_restart_that_cannot_be_set_up_waits_for_the_next(run_cli, tmp_path):
     assert "RESTART_FAILED: no populated chunks" in cli.markers
     assert all(torch.equal(value, states["served"][key]) for key, value in states["meanwhile"].items())
     assert len([line for line in cli.markers if line.startswith("TRAINING_ITERATION_COMPLETE:")]) == 2
+
+
+def _epochs(cli):
+    """How many epochs each iteration of the run started."""
+    return [part.count("Starting epoch") for part in cli.out.split("RESTARTING_TRAINING")]
+
+
+def test_a_stop_asked_for_while_the_job_sets_up_is_kept(run_cli):
+    """No server is up in the first iteration, so the stop comes as
+    stop_signal.json. Training deleted it as stale when it began, and a stop
+    asked for while the model loaded was lost: the run trained every epoch."""
+    def stop_meanwhile(record):
+        record.run.mkdir(parents=True, exist_ok=True)  # as the job manager made it, at submit
+        (record.run / "stop_signal.json").write_text("{}")
+        return run_cli.patches()
+
+    cli = run_cli("--num-epochs", "3", loaders=[stop_meanwhile])
+    assert cli.code == 0 and _epochs(cli) == [0]
+    assert not (cli.run / "stop_signal.json").exists(), "the stop is used up"
+
+
+class _AskedWhileFetched(TensorDataset):
+    """``tensors``' patches; fetching one calls ``ask``."""
+
+    def __init__(self, ask, *tensors):
+        super().__init__(*tensors)
+        self.ask = ask
+
+    def __getitem__(self, index):
+        self.ask()
+        return super().__getitem__(index)
+
+
+def test_a_stop_over_the_control_endpoint_ends_training_after_the_epoch_it_came_in(run_cli, tmp_path):
+    """In the iterations after the first, the server's control endpoint hands
+    the stop over (JobControl is what it calls). One that came before the
+    restart, as the previous training ended on its own, was for that one."""
+    controls = []
+
+    def restart(signal_file, control):
+        controls.append(control)
+        control.request_stop({})
+        control.request_restart({"params": {}})
+
+    def stop_in_epoch_1(record):
+        patches = run_cli.patches().dataset.tensors
+        return DataLoader(_AskedWhileFetched(lambda: controls[0].request_stop({}), *patches), batch_size=2)
+
+    cli = run_cli("--num-epochs", "3", "--auto-serve", "--serve-data-path", str(tmp_path),
+                  restarts=[restart], loaders=[None, stop_in_epoch_1])
+    assert _epochs(cli) == [3, 1]
 
 
 def test_the_cli_takes_every_model_type_the_job_manager_submits():

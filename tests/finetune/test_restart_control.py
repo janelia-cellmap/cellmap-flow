@@ -1,9 +1,9 @@
-"""A finetune job's restart endpoint obeys only the job manager that launched it.
+"""A finetune job's control endpoints obey only the job manager that launched it.
 
 The job's inference server listens on every interface, and a restart can
 change what the job trains on, so an unauthenticated POST used to be enough to
 retrain someone's model with arbitrary settings, including other paths (what a
-restart may change is test_finetune_cli's).
+restart may change is test_finetune_cli's). Stop Early takes the same way.
 """
 
 import os
@@ -12,7 +12,7 @@ import stat
 import pytest
 from starlette.testclient import TestClient
 
-from cellmap_flow.finetune.session_loop import RestartController
+from cellmap_flow.finetune.session_loop import JobControl
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from cellmap_flow.serving.restart_token import (
@@ -47,13 +47,34 @@ def test_a_restart_needs_the_jobs_token():
     with pytest.raises(ValueError, match="restart_token"):
         ChunkmirageServer(RAW, model_config, restart_callback=lambda payload: True)
 
-    trainer = RestartController()
+    trainer = JobControl()
     server = ChunkmirageServer(RAW, model_config, restart_callback=trainer.request_restart,
                                restart_token="the-job-token")
     client = TestClient(server.app)
     signal = {"params": {"learning_rate": 5e-4}}
     for headers in ({}, {TOKEN_HEADER: "guess"}):
         assert client.post("/__control__/restart", json=signal, headers=headers).status_code == 401
-    assert trainer.get_if_triggered() is None
+    assert trainer.take_restart() is None
     assert client.post("/__control__/restart", json=signal, headers={TOKEN_HEADER: "the-job-token"}).status_code == 200
-    assert trainer.get_if_triggered()["params"] == signal["params"]
+    assert trainer.take_restart()["params"] == signal["params"]
+
+
+def test_stop_early_reaches_a_serving_job_over_its_control_endpoint(make_job, monkeypatch):
+    """As a restart does. It used to come only as stop_signal.json, which the
+    trainer's host saw up to a minute late (NFS caches the miss), and the run
+    trained on for several epochs. From iteration 2 on, the job's server is up
+    while it trains."""
+    from cellmap_flow.finetune.job_manager import restart
+
+    job = make_job(inference_server_url="http://gpu1:9000/")
+    control = JobControl()
+    server = ChunkmirageServer(RAW, ScriptModelConfig(script_path=os.path.join(SCRIPT_TEST, "fake_model_script.py")),
+                               restart_callback=control.request_restart, stop_callback=control.request_stop,
+                               restart_token=write_restart_token(job.output_dir))
+    client = TestClient(server.app)
+    monkeypatch.setattr(restart.requests, "post",
+                        lambda url, timeout, **kwargs: client.post(url.removeprefix("http://gpu1:9000"), **kwargs))
+
+    restart.request_stop(job)
+    assert control.take_stop() is not None
+    assert not (job.output_dir / "stop_signal.json").exists()

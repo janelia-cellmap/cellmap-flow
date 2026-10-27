@@ -5,9 +5,11 @@ and trainer, trains, exports into its own iterations/NNN_<ts>/ (see
 run_outputs), and announces the result on stdout (see markers). A served
 job (--auto-serve) then starts, or keeps, its inference server, which shares
 the model object, and waits for a restart: from the server's control
-endpoint (RestartController) or a restart_signal.json in the output
-directory. A restart may change training settings only (cli.RESTARTABLE_ARGS);
-training then starts again from the model the job started from.
+endpoint (JobControl) or a restart_signal.json in the output directory. A
+restart may change training settings only (cli.RESTARTABLE_ARGS); training
+then starts again from the model the job started from. Stop Early reaches
+the trainer the same two ways, as a stop or a stop_signal.json, and ends
+the iteration's training after the epoch it is in.
 
 The job manager follows the job through those stdout lines, and a job
 outlives a dashboard upgrade, so their text and order only change
@@ -35,6 +37,7 @@ from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.data.loader import training_patch_voxels
 from cellmap_flow.finetune.trainer import Finetuner
 from cellmap_flow.finetune.trainer.supervised import probe_output_class
+from cellmap_flow.jobs.spec import exists_now
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.serving.restart_token import read_or_create_restart_token
 from cellmap_flow.utils.device import best_device
@@ -42,20 +45,25 @@ from cellmap_flow.utils.device import best_device
 logger = logging.getLogger(__name__)
 
 
-class RestartController:
-    """Hands a restart from the inference server's thread to the training loop.
+class JobControl:
+    """Hands what the inference server's control endpoints are asked, a
+    restart or a stop, from the server's thread to the job's loop.
 
-    The server's ``/__control__/restart`` endpoint, once it has checked the
-    job's token, calls ``request_restart`` with the request's body; the
-    loop's wait (_wait_for_restart_signal) polls ``get_if_triggered``. A
-    request that comes while the job is still training is kept until the
-    wait; a second one replaces the first.
+    The server's ``/__control__/restart`` and ``/__control__/stop``, once
+    they have checked the job's token, call ``request_restart`` and
+    ``request_stop`` with the request's body. The wait for a restart
+    (_wait_for_restart_signal) takes a restart with ``take_restart``, and
+    the trainer, before each epoch, a stop with ``take_stop`` (through
+    TrainingSession._stop_requested). A request is kept until it is taken; a
+    second one of the same kind replaces the first. A restart drops a stop
+    that came before it: that stop was for the training before, which ended
+    on its own before the stop was taken.
     """
 
     def __init__(self):
-        self._event = threading.Event()
         self._lock = threading.Lock()
-        self._pending = None
+        self._restart = None
+        self._stop = None
 
     def request_restart(self, payload: Optional[dict]) -> bool:
         signal_data = {
@@ -70,17 +78,23 @@ class RestartController:
                 signal_data["params"] = payload["params"]
 
         with self._lock:
-            self._pending = signal_data
-            self._event.set()
+            self._restart = signal_data
+            self._stop = None
         return True
 
-    def get_if_triggered(self) -> Optional[dict]:
-        if not self._event.is_set():
-            return None
+    def take_restart(self) -> Optional[dict]:
         with self._lock:
-            signal_data = self._pending
-            self._pending = None
-            self._event.clear()
+            signal_data, self._restart = self._restart, None
+        return signal_data
+
+    def request_stop(self, payload: Optional[dict]) -> bool:
+        with self._lock:
+            self._stop = payload if isinstance(payload, dict) else {}
+        return True
+
+    def take_stop(self) -> Optional[dict]:
+        with self._lock:
+            signal_data, self._stop = self._stop, None
         return signal_data
 
 
@@ -97,8 +111,7 @@ def _wait_for_port_ready(host: str, port: int, timeout_s: float = 30.0, interval
 
 
 def _start_inference_server_background(
-    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None,
-    on_server=None,
+    args, model_config: ModelConfig, trained_model, control: Optional[JobControl] = None, on_server=None,
 ):
     """
     Start inference server in a background daemon thread.
@@ -111,9 +124,9 @@ def _start_inference_server_background(
         model_config: Base model configuration
         trained_model: The model just trained: LoRA-wrapped, or fully
             finetuned
-        restart_controller: Where the server's restart endpoint hands
-            restart requests, with the job's restart token required; None
-            for a server that takes none
+        control: Where the server's restart and stop endpoints hand their
+            requests, with the job's restart token required; None for a
+            server that takes none
         on_server: Called with the server once it is built
 
     Returns:
@@ -157,10 +170,7 @@ def _start_inference_server_background(
 
     setup_t0 = time.perf_counter()
     logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
-    restart_callback = restart_controller.request_restart if restart_controller is not None else None
-    restart_token = (
-        read_or_create_restart_token(args.output_dir) if restart_callback is not None else None
-    )
+    restart_token = read_or_create_restart_token(args.output_dir) if control is not None else None
     # Served the way it was trained: resampled when the volume is.
     from cellmap_flow.finetune.session.manifest import read_manifest
 
@@ -168,7 +178,8 @@ def _start_inference_server_background(
     server = make_server(
         args.serve_data_path,
         model_config,
-        restart_callback=restart_callback,
+        restart_callback=control.request_restart if control is not None else None,
+        stop_callback=control.request_stop if control is not None else None,
         restart_token=restart_token,
         resample=resample,
     )
@@ -218,15 +229,15 @@ def _restart_timestamp(signal_data: dict) -> Optional[str]:
 def _wait_for_restart_signal(
     signal_file: Optional[Path],
     check_interval: float = 1.0,
-    restart_controller: Optional[RestartController] = None,
+    control: Optional[JobControl] = None,
     applied: Collection[str] = (),
 ):
     """Block until a restart is asked for, and return its signal.
 
     A restart comes from the inference server's control endpoint, through
-    ``restart_controller``, or, when the job manager cannot reach that, as
-    the ``signal_file`` it writes instead. Both carry the job manager's
-    timestamp; a signal whose timestamp is in ``applied`` has been acted on
+    ``control``, or, when the job manager cannot reach that, as the
+    ``signal_file`` it writes instead, looked for with jobs.spec.exists_now
+    as it comes from another host. Both carry the job manager's timestamp; a signal whose timestamp is in ``applied`` has been acted on
     already and is dropped. That happens when the HTTP request got through
     but its reply timed out: the job manager then writes the file as well.
 
@@ -244,8 +255,8 @@ def _wait_for_restart_signal(
 
     unreadable = None  # what the file last failed with, so it is logged once
     while True:
-        if restart_controller is not None:
-            in_memory_signal = restart_controller.get_if_triggered()
+        if control is not None:
+            in_memory_signal = control.take_restart()
             if in_memory_signal is not None:
                 if _restart_timestamp(in_memory_signal) in applied:
                     logger.info(f"Ignoring a restart that was applied already: {in_memory_signal}")
@@ -253,7 +264,7 @@ def _wait_for_restart_signal(
                 logger.info(f"Restart signal received via HTTP control endpoint: {in_memory_signal}")
                 return in_memory_signal
 
-        if signal_file and signal_file.exists():
+        if signal_file and exists_now(signal_file):
             try:
                 signal_data = json.loads(signal_file.read_text())
             except (OSError, ValueError) as e:
@@ -292,8 +303,8 @@ class TrainingSession:
         # is probed, and every trainer is built on it.
         self.device = best_device()
         # Given to the inference server when it starts, which hands it the
-        # restarts it is sent.
-        self.restart_controller = RestartController()
+        # restarts and stops it is sent.
+        self.control = JobControl()
         self.server_started = False
         self.inference_server = None
         self.iteration = 0
@@ -495,6 +506,7 @@ class TrainingSession:
             initial_state=self.initial_state,
             tb_start_step=self.tb_position[0],
             tb_start_epoch=self.tb_position[1],
+            stop_requested=self._stop_requested,
         )
         # Done only now: had the trainer failed, the model would have been
         # reset all the same, and the next restart must reset it again, with
@@ -506,6 +518,29 @@ class TrainingSession:
             logger.info(f"Resuming from checkpoint: {args.resume}")
             trainer.load_checkpoint(args.resume)
         return trainer
+
+    def _stop_requested(self) -> bool:
+        """Whether Stop Early was asked for: the trainer asks before each epoch.
+
+        The job manager asks the server's control endpoint (self.control),
+        or, when it cannot reach the server -- in the first iteration none is
+        running yet -- writes stop_signal.json into the output directory.
+        Either is used up here. The file is written on the dashboard's host,
+        and a plain look for it here missed it for up to a minute (NFS
+        caches the miss; jobs.spec.exists_now). A stop asked for while the
+        job sets up is kept until the first epoch; one left from the
+        training before is the job manager's to clear, when it sends the
+        restart (job_manager.restart).
+        """
+        if self.control.take_stop() is not None:
+            logger.info("Stop received via HTTP control endpoint")
+            return True
+        stop_file = Path(self.args.output_dir) / "stop_signal.json"
+        if exists_now(stop_file):
+            stop_file.unlink(missing_ok=True)
+            logger.info(f"Stop received: {stop_file}")
+            return True
+        return False
 
     def _record_input_norm(self) -> None:
         """Snapshot the manifest's input_norm into metadata.json.
@@ -592,7 +627,7 @@ class TrainingSession:
             return True
         try:
             _start_inference_server_background(
-                self.args, self.model_config, self.model, restart_controller=self.restart_controller,
+                self.args, self.model_config, self.model, control=self.control,
                 on_server=lambda server: setattr(self, "inference_server", server),
             )
         except Exception as e:
@@ -610,7 +645,7 @@ class TrainingSession:
         restart_data = _wait_for_restart_signal(
             signal_file=Path(self.args.output_dir) / "restart_signal.json",
             check_interval=1.0,
-            restart_controller=self.restart_controller,
+            control=self.control,
             applied=self.applied_restarts,
         )
         if restart_data is None:

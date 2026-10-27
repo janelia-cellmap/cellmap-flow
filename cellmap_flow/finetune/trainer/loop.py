@@ -1,4 +1,4 @@
-"""The finetune's training loop: epochs, the best epoch, the stop signal.
+"""The finetune's training loop: epochs, the best epoch, Stop Early.
 
 ``Finetuner`` trains a model on a session's corrections with the settings of
 a ``TrainingOptions``: a LoRA adapter, or every weight (which of the two the
@@ -11,14 +11,15 @@ the distillation term (distillation.Distillation), step, record. Around it:
 - a best checkpoint, chosen by the supervised loss alone, which the export
   loads first; the strategies write and read the files (adaptation.py);
 - TensorBoard, continuing across a job's iterations: tensorboard.py;
-- the single-class warning and the gradient-flow watch: diagnostics.py.
+- the single-class warning, the first batch's summary and the
+  gradient-flow watch: diagnostics.py.
 """
 
 import logging
 import math
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -29,7 +30,7 @@ from torch.utils.data import DataLoader
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.adaptation import strategy_for
 from cellmap_flow.finetune.options import TrainingOptions
-from cellmap_flow.finetune.trainer.diagnostics import GradientFlow, warn_if_single_class
+from cellmap_flow.finetune.trainer.diagnostics import GradientFlow, describe_first_batch, warn_if_single_class
 from cellmap_flow.finetune.trainer.distillation import Distillation
 from cellmap_flow.finetune.trainer.recovery import Precision, probe_precision, survive_oom
 from cellmap_flow.finetune.trainer.supervised import SupervisedLoss
@@ -75,6 +76,9 @@ class Finetuner:
         teacher_model: A full finetune's frozen teacher from a previous iteration, to reuse
         initial_state: A full finetune's starting weights, to reset to; copied from the model if None
         tb_start_step, tb_start_epoch: Where the previous iteration's TensorBoard curves ended
+        stop_requested: Asked before each epoch, the first included, whether
+            to stop there (Stop Early); the training job's says whether the
+            dashboard asked (session_loop.TrainingSession). None: never
         **settings: Fields of TrainingOptions to set over ``options`` (``num_epochs=3``, say)
 
     Examples:
@@ -98,6 +102,7 @@ class Finetuner:
         initial_state: Optional[Dict[str, torch.Tensor]] = None,
         tb_start_step: int = 0,
         tb_start_epoch: int = 0,
+        stop_requested: Optional[Callable[[], bool]] = None,
         **settings,
     ):
         options = TrainingOptions() if options is None else options
@@ -111,6 +116,7 @@ class Finetuner:
         self.num_epochs = options.num_epochs
         self.gradient_accumulation_steps = options.gradient_accumulation_steps
         self.select_channel = options.select_channel
+        self.stop_requested = stop_requested
 
         self.device = best_device() if device is None else torch.device(device)
         logger.info(f"Using device: {self.device}")
@@ -294,14 +300,6 @@ class Finetuner:
         finally:
             self._set_train_mode()
 
-        stop_signal_path = self.output_dir / "stop_signal.json"
-        # Make sure no stale signal from a previous run lingers.
-        try:
-            if stop_signal_path.exists():
-                stop_signal_path.unlink()
-        except Exception:
-            pass
-
         # Resumed runs carry on after the checkpoint's epoch. This looped
         # from 0 regardless, so --resume re-ran every epoch it had already
         # done, and the checkpoint's epoch number was only ever logged.
@@ -314,15 +312,14 @@ class Finetuner:
         for epoch in range(self._start_epoch, self.num_epochs):
             # User-requested graceful stop: drop out of the training loop so
             # the outer flow (inference server + wait for restart) kicks in.
-            if stop_signal_path.exists():
+            # Asked before the first epoch too: a stop asked for while the
+            # job loaded the model used to be deleted here as stale, and the
+            # run trained every epoch.
+            if self.stop_requested is not None and self.stop_requested():
                 log(
                     f"Stop signal received at epoch {epoch+1}/{self.num_epochs}; "
                     f"exiting training loop early."
                 )
-                try:
-                    stop_signal_path.unlink()
-                except Exception:
-                    pass
                 break
             self.current_epoch = epoch
             log(f"Starting epoch {epoch+1} of {self.num_epochs}...")
@@ -516,7 +513,12 @@ class Finetuner:
             if not self._target_checked:
                 self._target_checked = True
                 if not self.supervised.use_flow:
-                    warn_if_single_class(target, mask)
+                    describe_first_batch(target, mask)
+                    # By what is annotated, not by what this batch drew. A
+                    # dataset that cannot say (a test's tensors) is not checked.
+                    class_voxels = getattr(self.dataloader.dataset, "class_voxels", None)
+                    if class_voxels is not None:
+                        warn_if_single_class(*class_voxels)
 
             # Teacher forward pass for distillation (before student pass): the
             # model as it was before this run.
