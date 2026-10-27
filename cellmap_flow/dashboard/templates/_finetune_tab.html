@@ -566,9 +566,10 @@
       <h5 class="d-inline" style="border-bottom: 0;">Which model to start from</h5>
     </summary>
     <div class="card-body" style="border-top: 1px solid var(--border);">
-      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.</p>
+      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.
+        {% if mode == "browser" %}Listed: every model this browser can run (cellmap's, the Hugging Face repos you added, your finetunes); the ticked ones are scored.{% else %}Listed: this session's models, the CellMap catalog and cellmap's Hugging Face models; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
       <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
-             placeholder="Filter: nuc, 16 nm, mito_aff"
+             placeholder="Filter: nuc, 16 nm, mito aff"
              title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
       <small class="d-block text-muted mb-1">Tick
         <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
