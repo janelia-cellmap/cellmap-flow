@@ -463,24 +463,33 @@ SOURCES = ("catalog", "huggingface", "bioimage", "cellpose", "added", "finetuned
 
 
 def _finetune_note(training):
-    """Why a finetune job's model has no ✕ while ``training`` (its
-    FinetuneJob) is alive, or what ✕ does once it has ended; and whether it
-    has ended."""
+    """What ✕ does to a finetune job's model, whose server is ``training``
+    (its FinetuneJob): whether that job has ended, the entry's note, and,
+    while the job is alive, what the ✕ asks before it cancels the job."""
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES
 
     if training is None:
-        return True, "Its finetune job is not known here any more: ✕ takes its layer away."
+        return True, "Its finetune job is not known here any more: ✕ takes its layer away.", None
     status = training.status.value
     if training.status in TERMINAL_STATUSES:
-        return True, f"Its finetune job has ended ({status}), and its server with it: ✕ takes its layer away."
-    return False, (f"Served by its finetune job ({status}), which Restart trains again. Stop that job on "
-                   "the Finetune tab (Cancel) to stop serving it; ✕ then takes its layer away.")
+        return True, f"Its finetune job has ended ({status}), and its server with it: ✕ takes its layer away.", None
+    # Cancelling deletes nothing: each iteration exported into the run's
+    # iterations/ (run_outputs), and its serving YAML is in models/.
+    return False, (
+        f"Served by its finetune job ({status}): ✕ cancels that job, as Cancel on the Finetune tab "
+        "does, and takes its layer away."
+    ), (
+        f"This model is served by its finetune job ({status}). Removing it cancels that job: "
+        "Restart training is no longer possible, and any training under way stops. The weights "
+        f"of each iteration it finished stay saved in {training.output_dir}.\n\n"
+        "Remove it and cancel the job?"
+    )
 
 
 def _loaded_entry(name, job, config, catalog_group):
     """One model's entry of ``loaded_models``."""
     entry = {"name": name, "status": "running" if job is not None else "starting", "removable": True,
-             "note": None, "hf_id": None, "zoo_id": None, "cellpose": None}
+             "note": None, "confirm": None, "hf_id": None, "zoo_id": None, "cellpose": None}
     if _owned_by_finetune(job) or isinstance(config, FinetuneModelConfig):
         from cellmap_flow.dashboard.finetune_layers import training_job_of
 
@@ -488,8 +497,8 @@ def _loaded_entry(name, job, config, catalog_group):
         base = training.model_name if training is not None else None
         entry.update(source="finetuned", detail=f"from {base}" if base else None)
         if _owned_by_finetune(job):
-            ended, note = _finetune_note(training)
-            entry.update(removable=ended, note=note, status="running" if not ended else "ended")
+            ended, note, confirm = _finetune_note(training)
+            entry.update(note=note, confirm=confirm, status="running" if not ended else "ended")
     elif isinstance(config, HuggingFaceModelConfig):
         entry.update(source="huggingface", detail=config.repo, hf_id=config.repo)
     elif isinstance(config, BioModelConfig):
@@ -517,8 +526,10 @@ def loaded_models() -> list:
     catalog group, the repo, the zoo id, the Cellpose model and output, the
     model type, or the base a finetune started from), ``"status"``
     ("running", "starting", or "ended" for a finetune job's model whose job
-    has), ``"removable"``, ``"note"`` (why it cannot be removed, or what ✕
-    does), and what the tab's rows know it by, to untick them: ``"hf_id"``
+    has), ``"removable"`` (true: every model's ✕ works), ``"note"`` (what ✕
+    does, for a finetune job's), ``"confirm"`` (what ✕ asks first, when it
+    does more than stop the model: a finetune job's, which it cancels; else
+    None), and what the tab's rows know it by, to untick them: ``"hf_id"``
     (the Hugging Face row's repo), ``"zoo_id"`` (the zoo row's id) and
     ``"cellpose"`` ({model, output, do_3d} of its Cellpose panel row)``}``.
     """
@@ -537,7 +548,7 @@ def loaded_models() -> list:
 
 
 class NotRemovable(Exception):
-    """A model whose ✕ is disabled: a finetune job's, while the job is alive."""
+    """A model ✕ could not remove: a finetune job's, whose job could not be cancelled."""
 
 
 def remove_model(name: str) -> list:
@@ -549,12 +560,14 @@ def remove_model(name: str) -> list:
     unticked. A model still starting is withdrawn: a job of it waiting in a
     queue is killed now, and whatever its launch still starts is stopped
     as it comes up (``_start``), so a Submit may start it again at once. A
-    finetune job's model is that job's server: while the job is alive it
-    is the Finetune tab's to stop (NotRemovable); once the job has ended,
-    its server has too, and only its layer and its entry among the jobs are
-    left to take away. The model's config goes with it, so Export Config
-    no longer lists a model taken off (a model unticked on Submit keeps
-    its config, for the Models tab's rows and the pipeline builder).
+    finetune job's model is that job's server: while the job is alive, ✕
+    (once the page has asked, see _finetune_note) cancels it as the
+    Finetune tab's Cancel does, and NotRemovable if it cannot; once the job
+    has ended, its server has too, and only its layer and its entry among
+    the jobs are left to take away. The model's config goes with it, so
+    Export Config no longer lists a model taken off (a model unticked on
+    Submit keeps its config, for the Models tab's rows and the pipeline
+    builder).
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -567,10 +580,18 @@ def remove_model(name: str) -> list:
     for job in jobs:
         if _owned_by_finetune(job):
             from cellmap_flow.dashboard.finetune_layers import training_job_of
+            from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES
 
-            ended, note = _finetune_note(training_job_of(job))
+            training = training_job_of(job)
+            ended, _, _ = _finetune_note(training)
             if not ended:
-                raise NotRemovable(f"{name}: {note}")
+                # Its server is the job itself: cancelled as the Finetune tab's Cancel does it.
+                session.finetune_job_manager.cancel_job(training.job_id)
+                if training.status not in TERMINAL_STATUSES:
+                    raise NotRemovable(
+                        f"{name}: its finetune job could not be cancelled (the dashboard's log says why); "
+                        f"it is still {training.status.value}."
+                    )
 
     if launch is not None:
         with _launching_lock:
