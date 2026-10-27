@@ -327,6 +327,10 @@ describe("GET /api/model_advice", () => {
     let m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
     expect(m.input_norm_matches).toBe(true);
     expect(m.input_norm_differences).toEqual([]);
+    // The same map written another way is the declared one.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: [asForm[0], { name: "LambdaNormalizer", expression: "x*2 - 1" }], postprocess: [] }));
+    m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
+    expect(m.input_norm_differences).toEqual([]);
     // The same steps with the expression edited rated "looks right" before.
     await backend.handle(request("PUT", "/api/pipeline", { input_norm: [asForm[0], { name: "LambdaNormalizer", expression: "2*x" }], postprocess: [] }));
     m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];

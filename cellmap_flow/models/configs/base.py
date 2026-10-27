@@ -263,12 +263,15 @@ class ModelConfig:
         gets the same way (``finetune.trainable.finetune_modes``)."""
         return ("lora", "full") if type(self).finetunable else ()
 
-    def declared_input_norm(self):
+    def declared_input_norm(self, data_range=None):
         """The input normalization the model declares itself, as cellmap-flow
         steps (``[{"name": ..., **params}]``), or None when it declares none.
 
         Asked on every dashboard poll, so it must be cheap and must not
-        raise. Only an onnx model's manifest declares any.
+        raise. An onnx model's manifest declares its steps; a cellmap-models
+        export's metadata.json declares the range the model reads
+        (``probe.metadata_input_norm``), which needs ``data_range``, the raw
+        data's (lo, hi), to say what to scale from.
         """
         return None
 

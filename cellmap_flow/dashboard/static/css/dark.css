@@ -87,6 +87,14 @@ small, .text-muted {
   border-bottom-width: 3px;
 }
 
+/* A tab's own sub-tabs (the Processing tab's two lists, the Finetune tab's
+   crops and training): smaller than the dashboard's tabs, so both fit the
+   dashboard column on one row, with the Processing tab's badges. */
+.tab-pane .nav-tabs .nav-link {
+  padding: 8px 8px;
+  font-size: 13px;
+}
+
 /* ---------- Tab Panes ---------- */
 .tab-pane {
   background: transparent;

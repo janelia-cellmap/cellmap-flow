@@ -12,15 +12,19 @@
 // cancel the request itself). fn should handle its own errors; a rejection
 // is logged and the poller carries on.
 //
+// With maxIntervalMs, the wait after each call is twice the one before it,
+// from intervalMs up to maxIntervalMs: a poll that waits on something that
+// can take many minutes asks often at first and seldom later.
+//
 // With pauseWhenHidden, ticks are skipped while the page is hidden, and one
 // that was missed runs as soon as it is shown again.
 //
 // Returns { stop(), restart(), running }: restart() starts over, with a fresh
-// tick count and, if immediate, a call at once; running says whether more
-// calls are due.
-export function poll(fn, { intervalMs, maxTicks = Infinity, pauseWhenHidden = false, immediate = true } = {}) {
+// tick count, the first interval and, if immediate, a call at once; running
+// says whether more calls are due.
+export function poll(fn, { intervalMs, maxIntervalMs = intervalMs, maxTicks = Infinity, pauseWhenHidden = false, immediate = true } = {}) {
   let timer = null;
-  let run = null;  // { controller, calls, busy, missed } for the current run
+  let run = null;  // { controller, calls, busy, missed, waitMs } for the current run
 
   function tick() {
     const current = run;
@@ -35,7 +39,14 @@ export function poll(fn, { intervalMs, maxTicks = Infinity, pauseWhenHidden = fa
       return;
     }
     current.calls += 1;
-    if (current.calls >= maxTicks) finish();
+    const waitMs = Math.min(intervalMs * 2 ** (current.calls - 1), maxIntervalMs);
+    if (current.calls >= maxTicks) {
+      finish();
+    } else if (waitMs !== current.waitMs) {
+      current.waitMs = waitMs;
+      clearInterval(timer);
+      timer = setInterval(tick, waitMs);
+    }
     current.busy = true;
     const signal = current.controller.signal;
     let result;
@@ -70,7 +81,7 @@ export function poll(fn, { intervalMs, maxTicks = Infinity, pauseWhenHidden = fa
   }
 
   function start() {
-    run = { controller: new AbortController(), calls: 0, busy: false, missed: false };
+    run = { controller: new AbortController(), calls: 0, busy: false, missed: false, waitMs: intervalMs };
     timer = setInterval(tick, intervalMs);
     if (pauseWhenHidden) document.addEventListener("visibilitychange", onVisibility);
     if (immediate) tick();

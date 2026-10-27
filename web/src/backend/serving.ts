@@ -109,9 +109,12 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
 
 /** The name of the first of `entries` whose declared input normalization is
  * `chain`'s input part, step for step; null when none is, or the chain has
- * no input normalizers (pipeline.py's input_norm_declared_by). GET
+ * no input normalizers (pipeline.py's input_norm_set_by). GET
  * /api/models/loaded answers it beside the chain, so the page can say where
- * an input normalization a model's start set came from. */
+ * an input normalization a model's start set came from. Every model here
+ * declares its own (its manifest), so the answer has no
+ * input_norm_declared, which the Flask dashboard's says false for a
+ * convention it set; the page reads none as declared. */
 export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
   if (!chain.input_norm.length) return null;
   const live = JSON.stringify(chain.input_norm);

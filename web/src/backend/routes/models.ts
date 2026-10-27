@@ -10,6 +10,7 @@
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
 import type { AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
+import { compileExpression } from "../../infer/expression";
 import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
@@ -238,14 +239,30 @@ function numeric(value: unknown): number | null {
   return null;
 }
 
+/** Where two expressions are compared: a declared "x*2-1" and a typed
+ * "2*x-1" are one map, which the text alone did not say. probe.py's
+ * EXPRESSION_SAMPLES. */
+const EXPRESSION_SAMPLES = [-2, -1, -0.5, 0, 0.25, 0.5, 1, 2, 255];
+
 /** Whether a configured parameter value is the declared one: numbers by
  * value, anything else as text, trimmed and without regard to case (a
- * form's "False", Python's False and JSON's false are one value; an
- * expression is compared as written). probe.py's same_value. */
+ * form's "False", Python's False and JSON's false are one value), and two
+ * expressions by what they give at EXPRESSION_SAMPLES, each through the
+ * whitelist LambdaNormalizer runs it through (compileExpression).
+ * probe.py's same_value. */
 export function sameValue(configured: unknown, declared: unknown): boolean {
   const a = numeric(configured), b = numeric(declared);
   if (a !== null && b !== null) return a === b;
-  return String(configured).trim().toLowerCase() === String(declared).trim().toLowerCase();
+  if (String(configured).trim().toLowerCase() === String(declared).trim().toLowerCase()) return true;
+  try {
+    const f = compileExpression(String(configured)), g = compileExpression(String(declared));
+    return EXPRESSION_SAMPLES.every((x) => {
+      const fx = f(x), gx = g(x);
+      return Math.abs(fx - gx) <= 1e-8 + 1e-5 * Math.abs(gx);
+    });
+  } catch {
+    return false;
+  }
 }
 
 export interface InputNormDifference {

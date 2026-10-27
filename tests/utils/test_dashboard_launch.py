@@ -121,7 +121,7 @@ def test_a_model_started_without_input_normalization_sets_the_one_it_declares(da
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     model = build_model({"type": "script", "script_path": str(script)}, "mine")
-    model.declared_input_norm = lambda: DECLARED  # as an onnx model's manifest declares them
+    model.declared_input_norm = lambda data_range=None: DECLARED  # as an onnx model's manifest declares them
     drawn_through = []
     monkeypatch.setattr(launch, "run_model",
                         lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
@@ -153,7 +153,7 @@ def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(
 
     def declaring(entry, name):
         model = built(entry, name)
-        model.declared_input_norm = lambda: DECLARED
+        model.declared_input_norm = lambda data_range=None: DECLARED
         return model
 
     monkeypatch.setattr(registry, "build_model", declaring)
@@ -173,6 +173,48 @@ def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(
     assert answer.status_code == 200
     assert session.pipeline_spec == PipelineSpec(DECLARED, postprocess)
     assert drawn_through == [PipelineSpec(DECLARED, postprocess)]
+
+
+# What cellmap-models' newer exports declare in metadata.json
+# (cellmap/mito-aff-unetiso-setup-53), and uint8 raw scaled onto it: the
+# CellMap convention's chain, which a CellMap model declaring none gets.
+MIN_MAX = {"method": "min_max", "min": -1.0, "max": 1.0}
+SIGNED = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False},
+          {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+
+
+@pytest.mark.parametrize("metadata, declared", [
+    ({"framework": "torch", "input_normalization": MIN_MAX}, True),
+    ({"framework": "torch"}, False),  # cellmap/mito-aff-unet-setup-16's: nothing declared
+], ids=["declared in metadata.json", "the CellMap convention"])
+def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one_to_one(dashboard, monkeypatch,
+                                                                                       metadata, declared):
+    """A cellmap-models export's metadata.json declares the range the model
+    reads, [-1, 1]; a CellMap model that declares none was trained on it too,
+    by convention. Either's start sets the raw scaled onto it before its
+    layer is drawn, and the page is told which of the two it was."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = get_session()
+    postprocess = [{"name": "SigmoidPostprocessor"}]
+    session.set_pipeline(PipelineSpec([], postprocess))
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": ["cellmap/mito-aff-unetiso-setup-53"]})
+    assert answer.status_code == 200
+    assert session.pipeline_spec == PipelineSpec(SIGNED, postprocess)
+    assert drawn_through == [PipelineSpec(SIGNED, postprocess)]
+    (name,) = [model.name for model in session.models_config]
+    session.jobs = [_Job(name)]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):

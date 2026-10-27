@@ -504,9 +504,10 @@ class OnnxModelConfig(ModelConfig):
             logger.info(f"Could not read {self.name}'s manifest ({e}); trying again after {MANIFEST_RETRY_SECONDS} s")
             return None
 
-    def declared_input_norm(self) -> Optional[list]:
+    def declared_input_norm(self, data_range=None) -> Optional[list]:
         """The input normalization the model's manifest declares, as
-        cellmap-flow steps (``[{"name": ..., **params}]``), or None.
+        cellmap-flow steps (``[{"name": ..., **params}]``), or None. The
+        manifest gives each step's values, so ``data_range`` is not used.
 
         For the dashboard's model advice (``suggest_input_norm``'s
         ``declared``), which asks on every poll (``_declared_manifest``).

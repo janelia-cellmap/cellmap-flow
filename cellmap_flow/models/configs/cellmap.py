@@ -4,11 +4,14 @@ The folder's metadata gives the shapes, voxel sizes and channel names; the
 model is its TorchScript export.
 """
 
+import json
 import logging
+import os
 
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
+from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,7 @@ class CellMapModelConfig(ModelConfig):
             name = folder_path.rstrip("/").split("/")[-1]
         self.name = name
         self.scale = scale
+        self._input_normalization = None
 
     def _get_config(self) -> Config:
         config = Config()
@@ -136,6 +140,18 @@ class CellMapModelConfig(ModelConfig):
         except (OSError, ValueError):
             return None
         return metadata_geometry(metadata)
+
+    def declared_input_norm(self, data_range=None):
+        """Its export's metadata.json's input_normalization
+        (``metadata_input_norm``). cellmap_models' parsed metadata leaves that
+        field out, so the file is read for it, once."""
+        if self._input_normalization is None:
+            try:
+                with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
+                    self._input_normalization = json.load(f).get("input_normalization") or {}
+            except (OSError, ValueError, AttributeError):
+                self._input_normalization = {}
+        return metadata_input_norm(self._input_normalization, data_range)
 
     def to_dict(self):
         """This config as a model entry, which ``registry.build_model`` rebuilds."""

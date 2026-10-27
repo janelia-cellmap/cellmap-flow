@@ -317,7 +317,11 @@
       {% endif %}
     </div>
     <div class="col-3" id="dashboard-column">
-      <div id="modelAdviceBanner" class="mb-3"></div>
+      {# How a model reads the data's scale (js/dashboard/model-advice.js):
+         above the tabs, as it is about the Models tab's Resample. The
+         chain's suggestions are in the Processing tab. Padded as the tabs
+         below it are. #}
+      <div id="modelAdviceBanner" style="padding: 12px 12px 0;"></div>
       {% include "_dashboard.html" %}
     </div>
 
