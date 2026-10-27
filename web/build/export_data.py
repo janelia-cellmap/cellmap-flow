@@ -119,6 +119,8 @@ def python_data():
             "sign_in_first": publish.SIGN_IN_FIRST,
             "token_refused": publish.TOKEN_REFUSED,
             "read_only": publish.READ_ONLY,
+            # A server's smaller copy's folder (web/src/models/index.ts).
+            "small_suffix": publish.SMALL_SUFFIX,
         },
         "ops": {
             "input_norm": ops(get_input_normalizers()),

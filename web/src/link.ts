@@ -11,7 +11,10 @@
 // serves them once a volume is opened); and the query is taken off the
 // address bar, so a later tab completed from this URL starts fresh, as a
 // `#!` state link's is (viewer/index.ts). A model the catalog does not know
-// is logged and left out; the rest run.
+// is logged and left out, and the page says which and why (linkNotes, in
+// the notice main.ts shows): the catalog's reason, such as a model
+// published from a server with no copy for the browser, and the smaller
+// copy to open instead where its repo has one; the rest run.
 //
 // A model finetuned in a browser is kept in that browser alone (IndexedDB,
 // models/finetuned.ts), so its name would mean nothing anywhere else; the
@@ -32,6 +35,7 @@ import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
 import { PYTHON } from "./generated/python-data";
 import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
+import { NoBrowserCopyError } from "./models/hf";
 import { hubName, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import { paintVolumeOf } from "./viewer/layers";
@@ -249,7 +253,8 @@ export async function resolveLinkedModels(
       try {
         entry = await catalog.resolve(ref);
       } catch (e) {
-        leave(ref, `it could not be looked up (${message(e)})`);
+        // A repo that has no browser copy of the model says why itself, and what to open instead.
+        leave(ref, e instanceof NoBrowserCopyError ? e.message : `it could not be looked up (${message(e)})`);
         continue;
       }
       if (!entry) {

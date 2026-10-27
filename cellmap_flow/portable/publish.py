@@ -92,6 +92,11 @@ HUB = "https://huggingface.co"
 HF_OAUTH_CLIENT_ID = "https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd"
 HF_OAUTH_SCOPES = ("openid", "profile", "contribute-repos")
 
+# The folder of a server's smaller copy for the browser (finetune.distill),
+# the model's own with this after it: the browser names it when a ref of a
+# model with no browser copy is opened (web/src/models/index.ts).
+SMALL_SUFFIX = "-small"
+
 # The query parameters of the app's links: web/src/link.ts reads them back
 # under these names (exported to the browser by web/build/export_data.py),
 # and web/src/share-link.ts writes the Share button's with them.

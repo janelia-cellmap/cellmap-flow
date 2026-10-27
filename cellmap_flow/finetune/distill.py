@@ -121,13 +121,11 @@ import time
 from pathlib import Path
 
 from cellmap_flow.finetune import export_web
+from cellmap_flow.portable.publish import SMALL_SUFFIX
 
 logger = logging.getLogger(__name__)
 
 MODULE = "cellmap_flow.finetune.distill"
-# The student's folder, and its export's directory, are the finetuned
-# model's with this after them.
-SUFFIX = "-small"
 CHECKPOINT_NAME = "student_best.pt"
 # The browser catalog's models (cellmap/onnx-web-models) have 5.6M
 # (setup_53) and 10.7M (setup_54) parameters, 22 and 43 MB in fp32, and run
@@ -403,7 +401,7 @@ def distill(yaml_path, corrections_dir, output_dir, *, parameters=None, epochs=N
     best_checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     network.load_state_dict(best_checkpoint["state_dict"])
     teacher_folder = export_web.folder_name(finetuned.name)
-    folder = f"{teacher_folder}{SUFFIX}"
+    folder = f"{teacher_folder}{SMALL_SUFFIX}"
     student_geometry = ModelGeometry(
         input_voxel_size=geometry.input_voxel_size, output_voxel_size=geometry.output_voxel_size,
         read_shape=[n * v for n, v in zip(student.input_size, geometry.input_voxel_size)],
@@ -471,7 +469,8 @@ def start_distill(yaml_path, corrections_dir, run_dir, *, parameters=None, hours
     from cellmap_flow.finetune.model_loading import model_config_from_entry
 
     config, entry = export_web.serving_entry(yaml_path)
-    output_dir = Path(run_dir) / "web_export" / f"{Path(yaml_path).stem}{SUFFIX}"
+    # The student's folder, and its export's directory, are the finetuned model's with SMALL_SUFFIX after them.
+    output_dir = Path(run_dir) / "web_export" / f"{Path(yaml_path).stem}{SMALL_SUFFIX}"
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / export_web.RESULT_NAME).unlink(missing_ok=True)
     args = ["--yaml", str(yaml_path), "--corrections", str(corrections_dir), "--output", str(output_dir),
