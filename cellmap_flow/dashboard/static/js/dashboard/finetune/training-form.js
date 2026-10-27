@@ -223,6 +223,15 @@ export function setChannelChoice(model) {
   select.dataset.model = model.name;
   const kept = String(keptChannels()[model.name] ?? "");
   select.value = options.some((option) => option.value === kept) ? kept : "";
+  if (select.value !== "") showChannel(model.name, Number(select.value));
+}
+
+// Model `name`'s layer in the viewer shows channel `index` (POST
+// /api/finetune/channel), now and whenever it is drawn again, and so do its
+// finetunes': the channel picked is the one to look at. Nothing is lost if
+// it fails: the viewer just shows the channel it showed.
+function showChannel(name, index) {
+  postAnswer("/api/finetune/channel", { model_name: name, select_channel: index }).catch(() => {});
 }
 
 // Makes channel `index` model `name`'s Channel: kept for it, and shown at
@@ -234,6 +243,7 @@ export function pickChannel(name, index) {
   writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) });
   const select = document.getElementById("trainChannel");
   if (select.dataset.model === name) select.value = String(index);
+  showChannel(name, index);
 }
 
 // Whether the Channel is shown for model `name` with nothing picked.
@@ -533,6 +543,12 @@ export function initTrainingForm() {
   if (saved) applySavedState(saved);
   // A restored loss sets the field without a change event.
   updateMarginVisibility();
+
+  // A Channel picked by hand is the one the viewer shows too.
+  const channel = document.getElementById("trainChannel");
+  channel.addEventListener("change", () => {
+    if (channel.dataset.model && channel.value !== "") showChannel(channel.dataset.model, Number(channel.value));
+  });
 
   // Save the state on every change, and on every keystroke in text fields.
   for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect", "trainChannel"]) {

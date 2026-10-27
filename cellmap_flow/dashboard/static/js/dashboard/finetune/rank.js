@@ -97,13 +97,14 @@ const NORM_FROM = {
   none: "none",
 };
 
-// A scored row's two settings, as columns (each a fixed width, so they line
+// A scored row's settings, as columns (each a fixed width, so they line
 // up from row to row): the threshold Seed from Prediction takes, 0.5 when
 // the model's own boundary fits the paint best, else with the match at 0.5;
-// and the input normalization it was read through, where it came from and
-// its steps, stretched to the raw under the paint when that scored clearly
-// better, then with the match unstretched (cellmap_flow/portable/rank.py
-// score_row).
+// the input normalization it was read through, where it came from and its
+// steps, stretched to the raw under the paint when that scored clearly
+// better, then with the match unstretched, and what the others tried
+// matched (cellmap_flow/portable/rank.py score_row); and the sigmoid its
+// layer needs, when it needs one added or taken away (display_postprocess).
 function settingsCells(row) {
   const own = row.cutoff === 0;
   const stretched = Array.isArray(row.window);
@@ -114,7 +115,26 @@ function settingsCells(row) {
     h("span", { title: "The input normalization the model was read through: its own (what it declares, or the CellMap convention for a CellMap model), or yours from the Processing tab when that matched better; Use this model sets it" },
       "Input ", h("strong", {}, NORM_FROM[row.input_norm_from] || "as normalized"),
       Array.isArray(row.input_norm) && row.input_norm.length ? h("span", { class: "text-muted" }, ` ${stepsText(row.input_norm)}`) : "",
-      stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : ""));
+      stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : "",
+      (row.input_norm_others || []).length ? h("span", { class: "text-muted" }, `; ${othersText(row.input_norm_others)}`) : ""),
+    Array.isArray(row.postprocess) && h("span", { title: "The sigmoid the model's output needs to show right, which Use this model sets: added for an output with no activation (logits), taken away from one that has one already" },
+      "Output ", h("strong", {}, outputWords(row.postprocess))));
+}
+
+// What the other input normalizations tried matched: "none 51%".
+function othersText(others) {
+  return others.map((o) => `${NORM_FROM[o.from] || o.from} ${percent(o.matches)}`).join(", ");
+}
+
+// The sigmoid a postprocessing (display_postprocess's) adds or takes away.
+function outputWords(steps) {
+  return steps.some((step) => step.name === "SigmoidPostprocessor") ? "+ sigmoid" : "no second sigmoid";
+}
+
+// The runner-up channels of a binary model's score (channel_matches, the
+// best first): "organelle 78%, er 52%", the two closest.
+function runnersUp(row) {
+  return (row.channel_matches || []).slice(1, 3).map((c) => `${c.channel} ${percent(c.matches)}`).join(", ");
 }
 
 // Normalizer steps in a few words each: a MinMaxNormalizer as the raw's
@@ -221,7 +241,25 @@ export function initRank() {
   // the threshold, the channel when one was set (`channel`, its name), and
   // the input normalization the score was read through (inputText).
   function fittedText(name, row, channel) {
-    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel ? `, ${channelSet(channel)}` : ""}, and ${inputText(row)}.`;
+    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel ? `, ${channelSet(channel)}` : ""}${changesOutput(row) ? `, ${outputText(row)}` : ""}, and ${inputText(row)}.`;
+  }
+
+  // Whether `row` carries postprocessing to set: the sigmoid its layer needs
+  // added or taken away (portable/rank.py display_postprocess).
+  function changesOutput(row) {
+    return Array.isArray(row.postprocess);
+  }
+
+  // The postprocessing a score set, in words.
+  function outputText(row) {
+    return row.postprocess.some((step) => step.name === "SigmoidPostprocessor")
+      ? "a sigmoid turns its output into probabilities"
+      : "the second sigmoid on its output is taken away";
+  }
+
+  // The chain parts a score sets, as Use this model and Fit to Paint send them.
+  function chainParts(row) {
+    return { ...(changesInput(row) ? { input_norm: row.input_norm } : {}), ...(changesOutput(row) ? { postprocess: row.postprocess } : {}) };
   }
 
   // Whether setting `row`'s input normalization changes the session's: it
@@ -237,6 +275,15 @@ export function initRank() {
     if (!changesInput(row)) return "the input normalization is left as it was";
     const from = { declared: "its declared one", convention: "the CellMap convention", assumed: "the assumed [−1, 1]", session: "yours" }[row.input_norm_from] || "the one it was read through";
     return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
+  }
+
+  // Why a score's model fits the paint, in words: how much of it it gets
+  // right, on which channel ahead of which, through which normalization
+  // ahead of which.
+  function whyText(row) {
+    const channel = row.channel ? ` on its ${row.channel} channel${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
+    const others = (row.input_norm_others || []).length ? ` (${othersText(row.input_norm_others)})` : "";
+    return `${percent(row.matches)} of your paint right${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
   }
 
   // A channel set from a score, in words: a binary model's score is read on
@@ -365,7 +412,7 @@ export function initRank() {
     const candidate = ranked.get(row.name);
     const scored = isScored(row);
     const details = [
-      row.channel && `${row.channel} channel`,
+      row.channel && `${row.channel} channel${runnersUp(row) ? ` (${runnersUp(row)})` : ""}`,
       scored && `${Number(row.scored_voxels || 0).toLocaleString()} voxels (${row.object_voxels} object, ${row.background_voxels} background)`,
       row.note,
       Number.isFinite(row.seconds) && `${row.seconds.toFixed(1)} s`,
@@ -445,7 +492,7 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...(changesInput(row) ? { input_norm: row.input_norm } : {}) });
+      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...chainParts(row) });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
@@ -468,14 +515,15 @@ export function initRank() {
     sayFit(fittedText(d.name, row, channel), "success");
     // The Processing tab's input normalization shows it as it now runs
     // (main.js reads the chain again), so a later Apply keeps it.
-    if (Array.isArray(d.input_norm)) announce(CHAIN_CHANGED_EVENT);
+    if (Array.isArray(d.input_norm) || Array.isArray(d.postprocess)) announce(CHAIN_CHANGED_EVENT);
     const set = [
       changesInput(row) && inputText(row),
+      changesOutput(row) && outputText(row),
       Number.isFinite(row.threshold) && `Seed from Prediction's threshold is ${row.threshold}`,
       channel && channelSet(channel),
     ].filter(Boolean);
     summary = {
-      text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
+      text: `${d.name} is the model to finetune now, ${whyText(row)}: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
       tone: "success",
     };
     rankBtn.disabled = false;
@@ -587,8 +635,8 @@ export function initRank() {
         if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
         return;
       }
-      if (changesInput(d)) {
-        const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: d.input_norm });
+      if (changesInput(d) || changesOutput(d)) {
+        const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: d.input_norm, ...chainParts(d) });
         if (!set.success) {
           sayFit(`Could not set the input normalization that fits ${name} to your paint: ${set.error}`, "danger");
           return;
