@@ -568,41 +568,27 @@
     <div class="card-body" style="border-top: 1px solid var(--border);">
       <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.
         {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
-      <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
-             placeholder="Filter: nuc, 16 nm, mito aff"
-             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. A ticked model stays in the list whatever the filter, and Rank scores every ticked one.">
-      {# The Models tab's ways to find a model, over the same lists: its
-         search rule (lib/search.js), its BioImage Zoo filters (EM only,
-         2D/3D; the zoo is server-only), its Hugging Face Refresh and its
-         Add a model (POST /api/finetune/rank/add resolves a reference as
-         POST /api/models/resolve does). rank.js groups the list by the
-         Models tab section each model is under (the candidates' group). #}
-      <div class="d-flex flex-wrap align-items-center column-gap-3 small mb-1">
-        {% if mode != "browser" %}
-        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rankEmOnly">
-          <label class="form-check-label" for="rankEmOnly" title="BioImage Zoo models tagged for electron microscopy only, as the Models tab's zoo list filters them; every other model is EM">EM only</label></div>
-        {% endif %}
-        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rank2d">
-          <label class="form-check-label" for="rank2d" title="Models that read one slice">2D</label></div>
-        <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rank3d">
-          <label class="form-check-label" for="rank3d" title="Models that read a volume">3D</label></div>
-        <button type="button" class="btn btn-link btn-sm p-0" id="rankRefresh" title="List the Hugging Face models again, as the Models tab's Refresh does">Refresh</button>
-      </div>
+      {# The models as the Models tab lists them, made of the same pieces
+         (js/shared/model-list.js): rank.js puts each in a section for the
+         Models tab section it is under (the candidates' group), the
+         running ones' first, with the tab's rows; the Hugging Face and zoo
+         sections with the tab's search bar and Refresh, and the zoo's with
+         its EM only, 2D and 3D (the zoo is server-only); and under them the
+         tab's Add a model (POST /api/finetune/rank/add resolves a reference
+         as POST /api/models/resolve does). The ticks are the ranking's own,
+         the models Rank scores: a ticked model stays in view whatever its
+         section's search, and a section's header says how many it has
+         ticked. #}
       <small class="d-flex flex-wrap align-items-baseline column-gap-2 text-muted mb-1">
         <span>Tick
-          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll" title="Tick every model shown">all (shown)</button> /
-          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone" title="Untick every model: a ticked one is always shown">none</button></span>
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll" title="Tick every model shown in the sections open">all (shown)</button> /
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone" title="Untick every model, in every section">none</button></span>
         <span class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rankTickedOnly">
           <label class="form-check-label" for="rankTickedOnly" title="Show only the models ticked, the ones Rank scores">Ticked only</label></span>
         <span id="rankTickedCount"></span>
       </small>
-      <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
-      <div class="input-group input-group-sm mb-1">
-        <input type="text" class="form-control" id="rankAddRef" autocomplete="off" spellcheck="false"
-               placeholder="Add a model: owner/repo, owner/repo/folder{% if mode != 'browser' %}, a folder, fly:path{% endif %}"
-               title="Any model the Models tab's Add a model takes; it joins the list, ticked, without starting">
-        <button type="button" class="btn btn-outline-secondary" id="rankAddBtn">Add</button>
-      </div>
+      <div class="accordion mb-2" id="rankSections"></div>
+      <div class="add-model mb-1" id="rankAdd"></div>
       <small class="d-block text-muted mb-2">Cellpose models are not ranked: they predict flows, not objects and background.</small>
       <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
         <button type="button" class="btn btn-primary" id="rankBtn" disabled

@@ -132,7 +132,7 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
         postprocess_items=chain_items(in_browser(get_postprocessors_list()), postprocess),
         # The Local Catalog lists paths on the cluster's file systems, which a
         # browser cannot read; the browser's models come from Hugging Face.
-        model_catalog={},
+        catalog_groups=[],
         default_models=[],
         default_hf_repos=[],
         default_bioimage_models=[],

@@ -226,9 +226,13 @@ With paint on one object, scores a few points apart are as good as tied, and
 the list says so; a little paint in two or three places ranks them more
 clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
 voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
-model, which sees none of the dataset's nuclei, matched 50%. The box above
-the list filters it (``nuc``, ``16 nm``, ``affinities``, ``2d``), and only
-the ticked models it shows are ranked.
+model, which sees none of the dataset's nuclei, matched 50%. The models are
+listed as the Models tab lists them, in sections: the ones served, cellmap's
+(with that tab's search bar and Refresh: ``nuc``, ``16 nm``, ``2d``), those
+added by hand (*Add a model* under the sections) and your finetunes. The
+ticks are the ranking's own, and every ticked model is ranked: a ticked one
+stays in view whatever the search, and a section's header says how many it
+has ticked.
 
 *Use this model* makes a ranked model the one to finetune without painting
 again: it is loaded with its layer and picked under *Select Model*, a volume

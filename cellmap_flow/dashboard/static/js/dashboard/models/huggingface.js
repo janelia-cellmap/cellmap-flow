@@ -1,70 +1,66 @@
 // The Hugging Face list: cellmap's models on the Hub (GET
-// /api/huggingface-models, cached; POST .../refresh), loaded when its
-// accordion opens. Submit sends the ticked repos as selected_hf_models.
+// /api/huggingface-models, cached; POST .../refresh), in a section of its own
+// (shared/model-list.js, as every model list is made), loaded when it opens.
+// Submit sends the ticked repos as selected_hf_models.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
-import { dimsWord, matchesWords, searchText } from "../../lib/search.js";
-import { notice, untickBox } from "./row.js";
+import { dimsWord, searchText } from "../../lib/search.js";
+import { listControls, modelRow, modelSection, notice, untickBox } from "../../shared/model-list.js";
 
 // The repos of the Hugging Face models already running, ticked on load; one
 // removed from the Loaded models list is taken out.
 let running = new Set();
 let loaded = false;
+// The section, its search bar and Refresh (shown once there is a list), the
+// line it shows until it is loaded, and its rows.
+let section = null;
+let controls = null;
+let placeholder = null;
+let list = null;
 
-// One row, built from nodes rather than an HTML string: repo ids and model
-// card descriptions come from Hugging Face, not from us.
+// One row; repo ids and model card descriptions come from Hugging Face, not
+// from us, and modelRow builds it from nodes rather than an HTML string.
 function row(modelId, metadata) {
   const displayName = modelId.split("/").pop();
-  const id = "chk_hf_" + displayName;
-  return h("div", {
-    class: "form-check mb-2 hf-model-item",
-    // What lib/search.js matches: the repo, its metadata, and the words the
-    // ranking's filter takes too, its voxel size ("16nm") and "2d" or "3d".
-    "data-search": searchText(modelId, JSON.stringify(metadata), ...(metadata.output_voxel_size || []).map((size) => `${size}nm`),
-      dimsWord(metadata.input_shape)),
-  },
-  h("input", {
-    class: "form-check-input hf-model-checkbox", type: "checkbox", name: "selected_hf_models", id, value: modelId,
+  return modelRow({
+    id: "chk_hf_" + displayName, value: modelId, name: displayName, note: metadata.description,
+    rowClass: "form-check mb-2 hf-model-item", boxClass: "hf-model-checkbox", boxName: "selected_hf_models",
     // Ticked when the page started with it, or when the listing says it is
     // being served (the browser mode's, after a reload or from a link).
     checked: running.has(modelId) || metadata.selected === true,
-  }),
-  h("label", { class: "form-check-label", for: id }, displayName,
-    metadata.description ? [" ", h("small", { style: { color: "#aaa" } }, "- " + metadata.description)] : null));
+    // What lib/search.js matches: the repo, its metadata, and the words the
+    // ranking's filter takes too, its voxel size ("16nm") and "2d" or "3d".
+    search: searchText(modelId, JSON.stringify(metadata), ...(metadata.output_voxel_size || []).map((size) => `${size}nm`),
+      dimsWord(metadata.input_shape)),
+  });
 }
 
 function render(data) {
-  const container = document.getElementById("hfModelsContainer");
-  container.querySelectorAll(".hf-model-item").forEach((el) => el.remove());
-  const placeholder = document.getElementById("hfPlaceholder");
-  if (placeholder) placeholder.remove();
-
+  placeholder.remove();
   if (data.error) {
-    container.append(notice("Error: " + data.error, true));
+    list.replaceChildren(notice("Error: " + data.error, true));
     return;
   }
   const modelIds = Object.keys(data);
   if (modelIds.length === 0) {
-    container.append(notice("No models found."));
+    list.replaceChildren(notice("No models found."));
     return;
   }
-  document.getElementById("hfSearchBar").style.display = "";
-  document.getElementById("hfRefreshBtn").style.display = "";
-  modelIds.forEach((modelId) => container.append(row(modelId, data[modelId])));
+  controls.element.hidden = false;
+  list.replaceChildren(...modelIds.map((modelId) => row(modelId, data[modelId])));
 }
 
 function load(url) {
-  const spinner = document.getElementById("hfLoadingSpinner");
-  spinner.classList.remove("d-none");
+  section.loading(true);
   (url.includes("refresh") ? postJSON(url) : getJSON(url))
     .then((data) => {
-      spinner.classList.add("d-none");
+      section.loading(false);
       render(data);
       loaded = true;
     })
     .catch((err) => {
-      spinner.classList.add("d-none");
+      section.loading(false);
       if (err instanceof ApiError) {
         // The routes answer a failed listing with {"error": ...} and a
         // 500; show it in the list like any other answer.
@@ -72,24 +68,36 @@ function load(url) {
         loaded = true;
         return;
       }
-      const placeholder = document.getElementById("hfPlaceholder");
-      if (placeholder) placeholder.textContent = "Error loading models: " + err;
+      placeholder.textContent = "Error loading models: " + err;
       loaded = false;
     });
 }
 
+// The search: a row shows when it has every word typed.
+function filter() {
+  list.querySelectorAll(".hf-model-item").forEach((item) => {
+    item.style.display = controls.matches(item.dataset) ? "" : "none";
+  });
+}
+
 export function init() {
   running = new Set(pageData().default_hf_repos || []);
-  document.getElementById("collapse_hf").addEventListener("show.bs.collapse", () => {
-    if (!loaded) load("/api/huggingface-models");
+  section = modelSection({
+    id: "hf", title: "cellmap", bodyId: "hfModelsContainer",
+    onOpen: () => {
+      if (!loaded) load("/api/huggingface-models");
+    },
   });
-  document.getElementById("hfRefreshBtn").addEventListener("click", () => load("/api/huggingface-models/refresh"));
-  document.getElementById("hfSearchBar").addEventListener("input", function () {
-    const query = this.value;
-    document.querySelectorAll(".hf-model-item").forEach((item) => {
-      item.style.display = matchesWords(item.getAttribute("data-search"), query) ? "" : "none";
-    });
+  controls = listControls({
+    id: "hf", placeholder: "Search: mito aff, 16 nm, 2d",
+    title: "Every word typed, in the repo, its metadata, its voxel size or its 2D/3D",
+    refreshTitle: "Refresh from Hugging Face", onRefresh: () => load("/api/huggingface-models/refresh"), onChange: filter,
   });
+  controls.element.hidden = true;
+  placeholder = h("p", { class: "text-muted" }, "Click to load Hugging Face models...");
+  list = h("div");
+  section.body.append(controls.element, placeholder, list);
+  document.getElementById("hfModelAccordion").append(section.item);
 }
 
 // POST /api/models' part: the repos ticked.
