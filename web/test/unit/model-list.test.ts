@@ -248,7 +248,7 @@ async function bothTabs() {
   catalog.init();
   huggingface.init();
   page.getElementById("collapse_hf").dispatchEvent({ type: "show.bs.collapse" });
-  initRank();
+  initRank({ form: { gpuQueues: () => [] } });
   page.getElementById("training").className = "tab-pane active";
   const card = page.getElementById("rankSection");
   card.open = true;

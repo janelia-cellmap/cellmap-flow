@@ -52,9 +52,10 @@ def _sanitize_job_name(name: str) -> str:
     return re.sub(r"[\s\-]+", "_", name)
 
 
-def _start(config):
-    """``serving.launch.launch`` for ``config`` on the session's data, or None
-    after logging why the job did not start.
+def _start(config, queue=None):
+    """``serving.launch.launch`` for ``config`` on the session's data, on
+    ``queue`` (the Models tab's queues when None), or None after logging why
+    the job did not start.
 
     These run in the dashboard's launch threads: an uncaught JobStartError
     (including a bsub timeout) only reached stderr, never the log panel.
@@ -68,7 +69,7 @@ def _start(config):
     name = config.name
     try:
         job = launch_server(
-            config, session.dataset_path, queue=session.queue, charge_group=session.charge_group,
+            config, session.dataset_path, queue=queue or session.queue, charge_group=session.charge_group,
             resample=session.resample,
         )
     except JobStartError as e:
@@ -120,10 +121,11 @@ def _reported(launch):
 
 
 @_reported
-def run_model(config, st_data):
+def run_model(config, st_data, queue=None):
     """Start ``config``'s inference server, in its environment, and add its
     layer with ``st_data``, the session's layer blob. The one launcher behind
-    Submit, Add a model and the Training tab's Use this model.
+    Submit, Add a model and the Training tab's Use this model, which gives
+    the Training tab's GPU queues as ``queue`` (the Models tab's otherwise).
 
     A chain with no postprocessing takes what the model's output needs (a
     sigmoid for logits) once its server's probe says what that is
@@ -131,7 +133,7 @@ def run_model(config, st_data):
     this model's layer too."""
     from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
 
-    job = _start(config)
+    job = _start(config, queue)
     if job is not None and not set_needed_postprocess(job):
         _show(job, st_data)
 

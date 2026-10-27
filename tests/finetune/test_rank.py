@@ -196,8 +196,9 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
         session.models_config = [_model("model")]
         session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     else:
-        def start_hosts(command, job_name, **kwargs):
-            job = SimpleNamespace(model_name=job_name, host="http://gpu:9000", kill=lambda: killed.append(job_name))
+        def start_hosts(command, job_name, queue, **kwargs):
+            job = SimpleNamespace(model_name=job_name, host="http://gpu:9000", queue=queue,
+                                  kill=lambda: killed.append(job_name))
             started.append(job)
             return job
 
@@ -205,10 +206,13 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
         monkeypatch.setattr("cellmap_flow.serving.launch.server_command", lambda config, path, resample: "serve")
         monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
 
+    # The queues the Training tab ticks, where one not running starts.
     body = dashboard.post("/api/finetune/rank/score", json={
-        "name": "model", "entry": {"type": "cellmap", "folder_path": "/m", "name": "model"}}).get_json()
+        "name": "model", "entry": {"type": "cellmap", "folder_path": "/m", "name": "model"},
+        "queue": ["gpu_a100", "gpu_rtx6000"]}).get_json()
 
     assert body["success"], body
+    assert [job.queue for job in started] == ([] if running else [["gpu_a100", "gpu_rtx6000"]])
     assert (body["matches"], body["cutoff"], body["channel"], body["window"]) == (1, 0, "nuc", None)
     assert (body["object_voxels"], body["background_voxels"]) == (64, 64)
     # Its logits show right through a sigmoid, which the session's empty

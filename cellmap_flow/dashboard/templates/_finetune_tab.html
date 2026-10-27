@@ -547,6 +547,18 @@
    and training-form.js sets it. #}
 <div class="tab-pane fade" id="training" role="tabpanel"{% if mode == "browser" %} data-training="head"{% endif %}>
 
+{# The GPU queues everything this tab starts on the cluster may run on: a
+   model Rank scores or Use this model serves (rank.js sends them), and the
+   training job and the server of its finetune (job-monitor.js). A dropdown
+   of checkboxes (shared/gpu-queues.js), made by training-form.js. #}
+<div class="mb-3 server-only">
+  <span class="form-label d-block" title="A job goes to whichever of the queues ticked has the most free GPUs, and moves to the next if it has not started in 3 minutes. The Models tab's GPUs are for the models it starts.">
+    GPU Queues <small class="text-muted">for Rank, Use this model and training</small>
+  </span>
+  <div id="gpuQueue" style="max-width: 24rem"></div>
+  <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
+</div>
+
 {# Which model to start from (rank.js), the models the page can run ranked
    by how well each one's prediction already matches the session volume's
    paint (web/src/backend/routes/rank.ts in the browser,
@@ -963,17 +975,6 @@
           <small class="text-muted">
             <span id="augmentAdvice" class="d-block"></span>
           </small>
-        </div>
-      </div>
-    </div>
-
-    <div class="row server-only">
-      <div class="col-md-6">
-        <div class="mb-3">
-          {# The GPU queues the job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
-          <span class="form-label d-block">GPU Queues</span>
-          <div id="gpuQueue"></div>
-          <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
         </div>
       </div>
     </div>

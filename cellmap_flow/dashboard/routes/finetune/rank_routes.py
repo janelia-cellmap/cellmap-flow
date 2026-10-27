@@ -22,11 +22,12 @@ reference, resolved as the Models tab's Add a model resolves it
 (routes/model_resolve.py resolve_request), and answers its candidate,
 starting nothing (a Cellpose model is refused); the session keeps it among
 the candidates (Session.rank_added). POST
-/api/finetune/rank/score {name, entry?} scores one on the session volume's
+/api/finetune/rank/score {name, entry?, queue?} scores one on the session volume's
 paint (portable/rank.py says how; the browser runs the same Python): a running model
 through its server, any other started for the score alone (``entry``, the
 candidate's, says how to build it; a zoo model is served from its own
-environment, as the Models tab serves it) and stopped after, so a ranking leaves
+environment, as the Models tab serves it; ``queue``, the Training tab's GPU
+queues ticked, says where, else the Models tab's) and stopped after, so a ranking leaves
 the Models tab and the cluster as they were. The model is read through
 its own input normalization (what its start sets: its declaration, or the
 CellMap convention) and through the session's when that is another, and
@@ -41,11 +42,11 @@ postprocessing its layer needs to show right instead of the session's,
 ``postprocess`` (portable/rank.py needed_postprocess: the sigmoid added or
 taken away), or null when the session's shows it right.
 POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
-select_channel?} makes the one picked the model to finetune: ``input_norm``
+select_channel?, queue?} makes the one picked the model to finetune: ``input_norm``
 and ``postprocess`` (the row's) made the dashboard's chain first, and
 ``select_channel`` (the row's channel_index) the channel its layer shows
 (Session.shown_channels), then the model running (as the Models tab's Add
-runs it), a volume made for it with the session volume's paint carried onto
+runs it, on ``queue`` as for a score), a volume made for it with the session volume's paint carried onto
 its grid (session/volume.py carry_paint) and its paint layer in the old
 one's place. The old volume is retired (finetune_utils
 retire_annotation_volume): out of the session, kept on disk in its
@@ -76,6 +77,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.portable import rank
 from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
@@ -277,7 +279,7 @@ def rank_score():
     started = time.time()
     try:
         config = _model_config(name, data.get("entry"))
-        host, job = _serving(name, config)
+        host, job = _serving(name, config, queue_list(data.get("queue")))
     except Exception as e:
         return _refused(f"{name} could not be started for its score: {e}")
     try:
@@ -374,7 +376,7 @@ def rank_use():
             # channel, and only moved once the page's pick arrived.
             session.shown_channels[name] = channel
         if name not in running_names():
-            _start_for_good(name, config)
+            _start_for_good(name, config, queue_list(data.get("queue")))
         # One volume a session: the one its manifest now trains on. The old
         # is kept, out of everything's way (annotation_core.carry_onto_model,
         # which training's submit carries through too).
@@ -492,9 +494,11 @@ def _model_config(name, entry):
     return build_model(dict(entry), name)
 
 
-def _serving(name, config):
+def _serving(name, config, queue):
     """``(host, job)``: the running server of ``name``, or one started now for
-    a score (its job, to stop after), as the dashboard starts any model."""
+    a score (its job, to stop after), as the dashboard starts any model, on
+    ``queue``, the Training tab's GPU queues ticked (the Models tab's when
+    none are given)."""
     from cellmap_flow.dashboard.services.launch import running_names
     from cellmap_flow.serving.launch import launch
 
@@ -504,7 +508,7 @@ def _serving(name, config):
     if name in running_names():
         raise RuntimeError("it is starting on the Models tab; score it once its server is up")
     session = get_session()
-    job = launch(config, session.dataset_path, queue=session.queue, charge_group=session.charge_group,
+    job = launch(config, session.dataset_path, queue=queue or session.queue, charge_group=session.charge_group,
                  resample=session.resample)
     return job.host, job
 
@@ -566,14 +570,15 @@ def _served_geometry(name, config, timeout=START_WAIT_SECONDS):
         time.sleep(3)
 
 
-def _start_for_good(name, config):
-    """Start ``name`` as the Models tab's Add does: among the session's models and jobs, with its layer."""
+def _start_for_good(name, config, queue):
+    """Start ``name`` as the Models tab's Add does: among the session's models
+    and jobs, with its layer, on ``queue`` (as for _serving)."""
     from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model
 
     session = get_session()
     drop_config(name)
     session.models_config.append(config)
-    _launch(name, run_model, config, session.layer_blob(), daemon=True)
+    _launch(name, run_model, config, session.layer_blob(), queue, daemon=True)
 
 
 def _offsets(offsets):

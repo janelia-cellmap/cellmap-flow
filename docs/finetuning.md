@@ -187,7 +187,7 @@ On the server only the running ones start ticked: a model that is not running is
 | **Distillation Scope** | (Advanced) Where to apply distillation loss — **Unlabeled** (only on unannotated voxels) or **All** (everywhere). |
 | **Label Smoothing** | Softens hard `0/1` targets. Useful when annotations are noisy; set to `0` if you want sharp targets. |
 | **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
-| **GPU Queues** | The GPU queues the training job may run on, all ticked at first. It goes to the one with the most free GPUs, and moves to the next one ticked if it has not started in 3 minutes (unless *Move a job that has not started* is off in the Models tab's Server Configuration). |
+| **GPU Queues** | At the top of the Training tab: the GPU queues the training job may run on, and the models *Rank* starts for their scores and *Use this model* serves, all ticked at first. It goes to the one with the most free GPUs, and moves to the next one ticked if it has not started in 3 minutes (unless *Move a job that has not started* is off in the Models tab's Server Configuration). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
 
 ### Which models can be finetuned

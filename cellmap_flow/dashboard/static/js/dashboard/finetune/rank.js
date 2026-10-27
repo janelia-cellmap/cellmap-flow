@@ -226,7 +226,8 @@ const OPEN_KEY = "finetuneRankOpen";
 // model: {threshold, model}, kept in this browser for the field's mark.
 const MARK_KEY = "cellmap_flow.seed_threshold_by_ranking";
 
-export function initRank() {
+// form: the training form (training-form.js), for its GPU queues.
+export function initRank({ form }) {
   const section = document.getElementById("rankSection");
   const tickAll = document.getElementById("rankTickAll");
   const tickNone = document.getElementById("rankTickNone");
@@ -849,9 +850,13 @@ export function initRank() {
     announce(MODELS_CHANGED_EVENT);
   }
 
-  // What names `candidate` to the routes: its name, and how to build it.
+  // What names `candidate` to the routes: its name, how to build it, and
+  // the GPU queues ticked at the top of the tab, where a model not running
+  // starts (none before LSF lists them, nor in the browser: the routes then
+  // use the Models tab's).
   function request(candidate) {
-    return { name: candidate.name, ...(candidate.entry ? { entry: candidate.entry } : {}) };
+    const queue = form.gpuQueues();
+    return { name: candidate.name, ...(candidate.entry ? { entry: candidate.entry } : {}), ...(queue.length ? { queue } : {}) };
   }
 
   // One model's score answer, with its name; a request that failed is an

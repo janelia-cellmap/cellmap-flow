@@ -67,7 +67,7 @@ export function initFinetuneTab() {
   initGoodRegionMarks({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form, log });
-  initRank();
+  initRank({ form });
   rememberOpenSections();
 }
 
