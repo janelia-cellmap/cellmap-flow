@@ -45,6 +45,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     served_output_class,
     settings_note,
 )
+from cellmap_flow.dashboard.routes.logging_routes import requested_offset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
 from cellmap_flow.finetune.options import TrainingOptions
@@ -357,17 +358,6 @@ def _read_complete_lines(path, offset):
     return chunk[:cut].decode("utf-8", errors="replace"), offset + cut
 
 
-def _requested_offset(request):
-    """Where the client wants the log from: the SSE Last-Event-ID, else ?offset=."""
-    for raw in (request.headers.get("Last-Event-ID"), request.args.get("offset")):
-        try:
-            if raw not in (None, ""):
-                return max(0, int(raw))
-        except (TypeError, ValueError):
-            pass
-    return 0
-
-
 # Statuses in which the job can still write to its log.
 _LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
 
@@ -389,7 +379,7 @@ def stream_job_logs(job_id):
     the page stayed open.
     """
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
-    start_offset = _requested_offset(request)
+    start_offset = requested_offset(request)
 
     def iter_visible_lines(text):
         for line in text.splitlines():

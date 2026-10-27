@@ -247,16 +247,20 @@ The pages are ES modules served as they are, with no bundler:
                               _models_tab, _processing_tab, _finetune_tab, _run_tab
                               and _review_tab partials
      pipeline_builder_v2.html the pipeline builder
+     _log_panel.html          the dashboard's log at the foot of both pages, with
+                              its stylesheet and script
      bbox_json_template.html
-   dashboard/static/css/      tokens.css (the palette), dark.css, pipeline_builder.css
+   dashboard/static/css/      tokens.css (the palette), dark.css, pipeline_builder.css,
+                              log-panel.css
    dashboard/static/js/
      lib/                     api, dom, page-data, poll, sortable, sse: know no page
-     shared/                  gpu-queues, op-chain, server-config: used by both pages
+     shared/                  gpu-queues, op-chain, server-config, log-panel: used by
+                              both pages
      dashboard/               main.js (the page's entry), connect, models-tab,
                               model-advice; finetune/ and review/, each an index.js
                               that wires one module per part of its tab
      pipeline-builder/        main.js (the entry), state, canvas, nodes, palette,
-                              io, blockwise, bbx, dialogs, log-panel, messages,
+                              io, blockwise, bbx, dialogs, messages,
                               model-config-modal, output-channels
      vendor/js-yaml.js
 
@@ -715,8 +719,8 @@ handler run without an app context. It holds:
 - the finetune and review tabs: ``minio_state``, ``annotation_volumes``,
   ``output_sessions``, ``finetune_job_manager`` (made when first asked for),
   ``review``;
-- the log panel's ``log_buffer`` and ``log_clients``, and the box tool's
-  ``bbx_generator_state``.
+- the log panel's ``log_buffer``, ``log_ids`` and ``log_clients``, and the
+  box tool's ``bbx_generator_state``.
 
 It forwards the rest to the owners above: each setting, ``settings``,
 ``server_config`` and ``save_server_config()``; ``input_norms`` and

@@ -9,7 +9,7 @@
    dashboard's. */
 :root {
   --pb-bg-primary: #0f172a;      /* the page, inputs, palette entries */
-  --pb-bg-tertiary: #334155;     /* toggles, configure buttons, the log header */
+  --pb-bg-tertiary: #334155;     /* toggles, configure buttons */
   --pb-text-secondary: #cbd5e1;  /* lighter than the dashboard's --text-secondary */
   --pb-border-color: #475569;
   --pb-accent-blue: #3b82f6;
@@ -661,68 +661,4 @@ body {
   text-align: center;
   max-width: 300px;
   line-height: 1.5;
-}
-
-/* Log Panel Styles */
-.log-panel {
-  background: var(--bg-muted);
-  border-top: 1px solid var(--pb-border-color);
-  max-height: 250px;
-  min-height: 50px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--pb-bg-tertiary);
-  border-bottom: 1px solid var(--pb-border-color);
-  cursor: pointer;
-  user-select: none;
-}
-
-.log-header span {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--pb-text-secondary);
-}
-
-.log-toggle-btn {
-  background: none;
-  border: none;
-  color: var(--pb-text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0;
-  transition: transform 0.2s;
-}
-
-.log-toggle-btn.collapsed {
-  transform: rotate(180deg);
-}
-
-.log-content {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: var(--pb-bg-primary);
-}
-
-.log-output {
-  padding: 8px 12px;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: var(--pb-text-secondary);
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.log-output:empty::before {
-  content: "Waiting for logs...";
-  color: var(--pb-border-color);
 }
