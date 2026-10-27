@@ -413,6 +413,10 @@ def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_
     # A finetune of it opens on the same channel.
     finetune_layers.add_finetuned_layer(make_job(inference_server_url="http://gpu:9000"), "m_finetuned_1")
     assert position("m_finetuned_1") == [2.5]
+    # Another pick for it moves its running finetune's layer at once too, as the browser's does.
+    session.jobs = [*session.jobs, SimpleNamespace(model_name="m_finetuned_1", host="http://gpu:9000")]
+    dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 3})
+    assert position("m_finetuned_1") == [3.5]
     # A pick forgotten is not shown again; a channel that is no index is refused.
     assert dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": None}).get_json() == {
         "success": True, "shown": False}

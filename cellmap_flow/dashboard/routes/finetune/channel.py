@@ -6,8 +6,8 @@ shows the same in both.
 POST /api/finetune/channel {model_name, select_channel} records the channel
 (an index into the model's output channels, as select_channel takes it, or
 null to forget the pick) as the one to show of that model
-(Session.shown_channels), and moves the model's layer to it, if the viewer
-has one: fly_organelles' layer opened on all_mem, its first of eight, while
+(Session.shown_channels), and moves the model's layer to it, and its
+running finetunes' that follow its pick, if the viewer has them: fly_organelles' layer opened on all_mem, its first of eight, while
 the paint and the training were for mito. Every layer built for the model
 after (a redraw, a start, viewer.layers prediction_layer), and for a
 finetune of it unless one was picked for that (Session.shown_channel),
@@ -51,22 +51,33 @@ def show_channel():
 
 
 def _move_layer(name, channel):
-    """Whether ``name``'s image layer was there to move to ``channel``, and
-    was moved: its local position, as prediction_layer opens one
+    """Whether a layer was there to move to ``channel``, and was moved: the
+    image layer of ``name`` and those of its running finetunes that follow
+    its pick (Session.shown_channel), as the browser's showChannel moves
+    them. After a finetune the base model's layer may be gone, its place
+    taken by ``<name>_finetuned_1``'s, and the training form still names the
+    base. Each moves to its local position as prediction_layer opens one
     (channel_position, over its server's model_info and the session's
-    chain). Nothing else of the layer changes, so the user's shader,
-    opacity and blending stay."""
+    chain); nothing else of a layer changes, so the user's shader, opacity
+    and blending stay."""
     session = get_session()
-    host = running_job_host(name)
-    if session.viewer is None or not host:
+    if session.viewer is None:
         return False
+    models = [job.model_name for job in session.jobs if getattr(job, "model_name", None)
+              and (job.model_name == name or (job.model_name.startswith(f"{name}_finetuned")
+                                              and session.shown_channel(job.model_name) == channel))]
     # Asked before the transaction: a server's answer can take seconds, and
     # the viewer's state is locked for the length of one.
-    position = channel_position(fetch_model_info(host), session.postprocess, channel)
-    if position is None:
-        return False
+    positions = {}
+    for model in dict.fromkeys(models):
+        host = running_job_host(model)
+        position = channel_position(fetch_model_info(host), session.postprocess, channel) if host else None
+        if position is not None:
+            positions[model] = position
+    moved = False
     with session.viewer.txn() as s:
-        if name not in s.layers or s.layers[name].type != "image":
-            return False
-        s.layers[name].local_position = position
-    return True
+        for model, position in positions.items():
+            if model in s.layers and s.layers[model].type == "image":
+                s.layers[model].local_position = position
+                moved = True
+    return moved
