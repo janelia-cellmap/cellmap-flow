@@ -1050,7 +1050,7 @@
     <div class="mt-2" id="publishPanel" hidden>
       <div class="d-flex align-items-baseline gap-2 flex-wrap">
         <span class="text-muted" style="font-size: 0.85rem;" id="hfAccount">Not signed in to Hugging Face</span>
-        <button type="button" class="btn btn-outline-primary btn-sm" id="hfSignInBtn" hidden
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="hfSignInBtn" hidden
                 {% if mode == "browser" %}title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state."{% else %}title="Gives a code to enter at huggingface.co, in any browser; the dashboard is signed in once you have."{% endif %}>Sign in with Hugging Face</button>
         <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
                 title="Forgets the Hugging Face token signed in here.">Sign out</button>
