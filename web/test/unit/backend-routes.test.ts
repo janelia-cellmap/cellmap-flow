@@ -316,7 +316,7 @@ describe("GET /api/model_advice", () => {
 
   it("holds a declared value to its number, not its spelling, and names a value that differs", async () => {
     // The manifest declares MinMax 0..255 then 2*x-1 (backend-fakes.ts); this
-    // is that chain as the Input tab's form sends it.
+    // is that chain as the Processing tab's form sends it.
     const asForm = [
       { name: "MinMaxNormalizer", min_value: "0.0", max_value: "255.0", invert: "False" },
       { name: "LambdaNormalizer", expression: "2*x-1" },

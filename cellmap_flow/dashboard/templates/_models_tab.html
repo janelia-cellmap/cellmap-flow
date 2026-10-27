@@ -297,7 +297,8 @@
         <input class="form-check-input" type="checkbox" id="resampleCheckbox" />
         <label class="form-check-label" for="resampleCheckbox">Resample if no scale matches the model</label>
       </div>
-      <button type="button" class="btn btn-primary" id="submitModelsBtn">
+      <button type="button" class="btn btn-primary" id="submitModelsBtn"
+              title="Runs the ticked models{% if on_cluster %}, each as a GPU job on the cluster,{% endif %} and stops the others. The steps they run through are set on the Processing tab, by its Apply.">
         Submit Models
       </button>
     </div>

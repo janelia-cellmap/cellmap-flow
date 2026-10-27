@@ -84,7 +84,7 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
  * postprocessing stays as it is; the chain is set through setChain, as PUT
  * /api/pipeline sets it, so the models served already are drawn through it
  * too. A chain that has input normalizers already is left alone, and after
- * this only the page's Apply changes it: the Input list shows the chain as
+ * this only the page's Apply changes it: the Processing tab shows the chain as
  * set (GET /api/models/loaded's `pipeline`, which the page reads after every
  * model change) and says where it came from. A model that declares nothing
  * changes nothing, and a declaration naming a step the browser cannot run

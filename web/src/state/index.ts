@@ -24,7 +24,7 @@ export const SESSION_KEY = "cellmap-flow:session";
 /** The chain a fresh session starts with, a fresh copy each call. Every
  * model the browser runs (cellmap/onnx-web-models) was trained on uint8
  * scaled to [-1, 1] and outputs logits, so this is what makes their
- * predictions right; the dashboard's Input and Postprocess tabs show it
+ * predictions right; the dashboard's Processing tab shows it
  * ticked: it is web/build/export_data.py's DEFAULT_CHAIN, the one
  * build/render.py ticks on the page. */
 export function defaultChain(): Chain {

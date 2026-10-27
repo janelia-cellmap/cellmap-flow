@@ -66,7 +66,7 @@ def test_the_page_data_island_parses(page):
 
 
 def _rows(html, row_class, checkbox_class):
-    """(name, checked, {param: value}) for each Input/Postprocess row, in page order."""
+    """(name, checked, {param: value}) for each row of a Processing tab list, in page order."""
     rows = []
     for block in re.split(rf'<div class="{row_class} ', html)[1:]:
         checkbox = re.search(rf'<input[^>]*class="form-check-input {checkbox_class}"[^>]*>', block, re.S).group(0)

@@ -18,8 +18,8 @@ shared::
 A model is named as the Models tab lists it (``setup_53``) or by its
 repository path (``cellmap/onnx-web-models/setup_53``). *Share* in the header
 copies such a link to what you have open, with the view (position, zoom,
-each layer as shown) and the Input and Postprocess settings the models run
-with, for someone else to open. The address bar itself stays bare, so a new
+each layer as shown) and the Processing tab's steps the models run with, for
+someone else to open. The address bar itself stays bare, so a new
 tab starts fresh.
 
 How it works
@@ -33,8 +33,8 @@ chunk, as the viewer asks for them. The models are ONNX exports of cellmap's
 networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-models>`_
 on Hugging Face, cached in the browser after the first download.
 
-It is the same dashboard as the server's: the same Models, Input and
-Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
+It is the same dashboard as the server's: the same Models and Processing
+tabs, the same normalizers and postprocessing steps, a Finetune
 tab that paints and trains in the browser, and a Run tab of its own that
 saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
@@ -76,9 +76,9 @@ tab runs the models served on the Models tab over a region, or the whole
 volume, on your GPU, and saves each one's predictions as an OME-Zarr in a
 folder on your machine, to open in the app again or to copy to the cluster.
 
-1. Tick the models (all are ticked at first). Each runs through the Input and
-   Postprocess steps it is served with, so what is saved is what its layer
-   shows.
+1. Tick the models (all are ticked at first). Each runs through the
+   Processing tab's steps it is served with, so what is saved is what its
+   layer shows.
 2. *Draw a box* adds a ``run_region`` layer to the viewer. Hold ``Ctrl``
    and click two opposite corners of the box in the viewer, scrolling
    between the two clicks to give it depth (a flat box is one chunk

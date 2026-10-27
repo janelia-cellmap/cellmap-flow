@@ -133,8 +133,8 @@ async function boot() {
   document.documentElement.dataset.dashboard = "loaded";
   log("dashboard loaded");
   // The page was rendered with the default chain ticked; when the session's
-  // is another (submitted before this reload, or a shared link's), the Input
-  // and Postprocess lists show that one, which is what the models run through.
+  // is another (submitted before this reload, or a shared link's), the
+  // Processing tab's lists show that one, which is what the models run through.
   const { chain } = session.state;
   if (JSON.stringify(chain) !== JSON.stringify(defaultChain())) dashboard.showChain?.(chain);
   // The connect panel's Browse button and drop target press Connect, which
