@@ -201,6 +201,14 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/seed", () => {
     expect((await histogram(ctx, volume)).get(0)).toBe(60 ** 3);
   });
 
+  it("reads the session's channel only from the volume's model: another model seeds as it would without it", async () => {
+    // A volume for setup_56 (one channel, nuc), whose channel 3 setup_54's
+    // three affinities do not have either: refused above for setup_56 itself.
+    const { h } = await ready(NAME_56);
+    const seeded = body(await h.handle(request("POST", `${BASE}/seed`, { model: NAME_54, select_channel: 3 })));
+    expect(seeded).toMatchObject({ success: true, model: NAME_54 });
+  });
+
   it("asks before labelling a large box, and labels it once confirmed", async () => {
     const { ctx, h } = await ready();
     ctx.viewer.positionNm = [...MIDDLE];

@@ -194,7 +194,9 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   // POST .../seed: fill the unannotated voxels of the box on screen from a
   // model's prediction. JSON body, all optional: size_nm or box_voxels
   // (the box), confirm (label a large box), select_channel (the one channel
-  // to threshold), model (a name from sources; the default when absent),
+  // to threshold, the session's: an index into the volume's model's
+  // channels, so read only from that model or one of its finetunes), model
+  // (a name from sources; the default when absent),
   // method (one the model offers; components when absent), threshold (a
   // probability, 0 to 1; the model's own boundary, 0.5, when absent),
   // min_size (objects of fewer voxels are background), connectivity (1
@@ -229,12 +231,17 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
         throw new Refused(`The annotation volume was painted on ${volume.dataset_path}, but the viewer shows ${dataset.url}: open that dataset again, or make a new volume on this one.`);
       }
       const name = served.entry.name;
+      // The session's channel (the training form's Channel) numbers the
+      // volume's model's channels, so only that model and its finetunes read
+      // it (view_labels._model_read_as); any other seeds as it would without
+      // it (a one-channel model is not asked for the volume model's channel 2).
+      const selectChannel = readAsVolumeModel(name, base) ? body.select_channel ?? null : null;
       // What the seed reads of the model (label_it.seed_channels, the
       // offsets by its channel names) and where the box lies on its level
       // (label_it.placement), by the Python.
       const plan = refusedOr(await ctx.infer.python<SeedPlan | Refusal>(`${LABEL_IT}:seed_plan`, {
         channel_names: served.entry.manifest.channels,
-        select_channel: body.select_channel ?? null,
+        select_channel: selectChannel,
         ...placementArgs(volume, lo, hi, servedLevel(dataset, served.entry)),
       }));
       const outputType = outputTypeOf(served.entry);
@@ -255,7 +262,7 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       // channel trains as a binary target. Ids counting up need room: the
       // Python gives them to an instance target on a uint16 volume, and a
       // uint8 volume reuses free ids (fill.counts_up).
-      const instanceTarget = outputType === "affinities" && (body.select_channel === undefined || body.select_channel === null);
+      const instanceTarget = outputType === "affinities" && selectChannel === null;
       const answer = await fill(ctx, volume, placement.lo, placement.hi, "seed", { instance_target: instanceTarget }, [bytesOf(objects)]);
       return json(200, { ...answer, model: name, threshold: body.threshold ?? null, method });
     } catch (e) {
@@ -542,6 +549,14 @@ function finetuneNumber(name: string, base: string): number | null {
   if (!/^\d+$/.test(rest)) return null;
   const n = Number(rest);
   return n > baseNumber ? n : null;
+}
+
+/** Whether model `name` is read as `base`, the volume's model
+ * (view_labels._model_read_as): it, or one of its finetunes, whose channels
+ * are its own. */
+function readAsVolumeModel(name: string, base: string | null): boolean {
+  if (!base) return false;
+  return name === base || finetuneNumber(name, base) !== null;
 }
 
 /** The served model a seed reads when none is chosen (_prediction_server's

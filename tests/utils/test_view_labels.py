@@ -294,6 +294,23 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
     assert dashboard.post(SEED, json={"model": "gone"}).status_code == 409
 
 
+def test_the_sessions_channel_is_read_only_from_the_volumes_model_and_its_finetunes(dashboard, served, server):
+    """select_channel (the training form's Channel) numbers the volume's
+    model's channels: another model's seed reads as it would without it,
+    so a model of one channel is not asked for channel 2."""
+    labels = served()
+    foreground = np.zeros((16,) * 3, bool)
+    foreground[5:9, 5:9, 5:9] = True
+    server.serve(_predicting(foreground))
+    get_session().jobs = [SimpleNamespace(model_name=name, host=server.host)
+                          for name in ("model", "model_finetuned_1", "other")]
+    for model in ("model", "model_finetuned_1"):
+        assert dashboard.post(SEED, json={"model": model, "select_channel": 2}).status_code == 400
+    assert not labels[:].any()
+    body = dashboard.post(SEED, json={"model": "other", "select_channel": 2}).get_json()
+    assert body["success"] and (labels[6, 6, 6], labels[10, 10, 10]) == (2, 1), body
+
+
 def test_a_volume_painted_before_any_model_seeds_from_the_model_picked_or_the_only_one_served(
         dashboard, served, server, monkeypatch):
     """A volume made before a model was chosen (model_name None) names no
