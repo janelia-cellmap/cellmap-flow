@@ -29,7 +29,7 @@ from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
 from cellmap_flow.dashboard.routes.finetune import restart_key
-from cellmap_flow.dashboard.routes.finetune.annotation_core import paint_first_refusal
+from cellmap_flow.dashboard.routes.finetune.annotation_core import channel_pick_refusal, paint_first_refusal
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -266,6 +266,16 @@ def submit_finetuning():
         if paint_first is not None:
             return paint_first
 
+        # What the model trains on, and so whether it trains one channel at a
+        # time: a model of several channels that does is refused without the
+        # channel the paint is for (annotation_core.channel_pick_refusal).
+        # Both before the manifest is written, as a refused submit changes
+        # nothing.
+        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
+        no_pick = channel_pick_refusal(body.model_name, model_config, output_type, body.select_channel)
+        if no_pick is not None:
+            return no_pick
+
         from cellmap_flow.finetune.session.manifest import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
@@ -280,8 +290,6 @@ def submit_finetuning():
             _refresh_virtual_manifest_for_training(
                 actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
-
-        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
 
         # Whether the session is sparse is read from the volume on disk, which
         # lags the browser's strokes (they go straight to MinIO) by up to the

@@ -277,8 +277,9 @@ class ModelConfig:
 
     def declared_geometry(self):
         """What the model says of its output without being built: ``{"write_shape"
-        (nm, z, y, x), "output_voxel_size" (nm), "output_channels"}``, as its
-        server reports them; None when it says none, or not for certain.
+        (nm, z, y, x), "output_voxel_size" (nm), "output_channels", "channels"
+        (their names, None when it names none)}``, as its server reports them;
+        None when it says none, or not for certain.
 
         For the finetune tab's model list, which asks on every poll while
         the model's server is not up: building the model there loaded its

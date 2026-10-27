@@ -272,6 +272,43 @@ def test_the_model_list_takes_what_a_model_declares_and_never_builds_it(client, 
     assert models["starting"]["status"] != models["stopped"]["status"]
 
 
+ORGANELLES = ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"]
+
+
+class _Organelles(_Declares):
+    """fly_organelles' eight channels, each a class the binary target trains:
+    declared, and named in its metadata.json, as a Hugging Face model's are."""
+
+    def __init__(self, name):
+        super().__init__(name, {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 8,
+                                "channels": ORGANELLES})
+
+    def _load_metadata(self):
+        return {"channels_names": ORGANELLES}
+
+
+def test_the_model_list_says_which_models_train_one_channel_at_a_time(client, monkeypatch):
+    """An affinity model trains every channel at once; the paint is about one
+    of fly_organelles' classes. Told without building either."""
+    affinities = {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3,
+                  "channels": ["mito_aff_z", "mito_aff_y", "mito_aff_x"]}
+    monkeypatch.setattr(get_session(), "models_config", [_Declares("setup_54", affinities), _Organelles("organelles")])
+    models = {m["name"]: m for m in client.get("/api/finetune/models").get_json()["models"]}
+    assert (models["setup_54"]["channel_choice"], models["organelles"]["channel_choice"]) == (False, True)
+    assert models["organelles"]["channels"] == ORGANELLES
+
+
+@pytest.mark.parametrize("pick, refused", [pytest.param({}, True, id="no channel: refused"),
+                                           pytest.param({"select_channel": 2}, False, id="a channel: trained")])
+def test_submit_asks_which_channel_a_model_of_classes_trains(submit, monkeypatch, pick, refused):
+    """Without one, each of the eight was taught the paint: er and nucleus learned "mito"."""
+    monkeypatch.setattr(get_session(), "models_config", [_Organelles("organelles")])
+    job = submit(model_name="organelles", **pick)
+    assert (job.status, job.sent is None) == ((400, True) if refused else (200, False))
+    if not refused:
+        assert job.sent["options"].select_channel == 2
+
+
 MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
 PROXY ="https://gateway.example.org/minio/annotations/vol-1.zarr"
 
