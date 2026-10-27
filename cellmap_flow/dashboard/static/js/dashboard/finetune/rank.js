@@ -496,7 +496,12 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...chainParts(row) });
+      // The channel too, so the model's layer opens on it rather than on
+      // Neuroglancer's middle channel until the page's pick reaches it.
+      d = await postAnswer("/api/finetune/rank/use", {
+        ...request(candidate), ...chainParts(row),
+        ...(Number.isInteger(row.channel_index) ? { select_channel: row.channel_index } : {}),
+      });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
