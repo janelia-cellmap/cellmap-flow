@@ -199,7 +199,7 @@ def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[di
       model's own boundary (cut-off 0), else the probability the paint is
       fitted best above;
     - ``input_window``: the raw's range the model read as 0 to 1, as the
-      Input tab's MinMaxNormalizer takes it: ``window`` when kept, else
+      Processing tab's MinMaxNormalizer takes it: ``window`` when kept, else
       ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer.
     """
     if base is None:

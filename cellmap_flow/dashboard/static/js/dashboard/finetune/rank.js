@@ -518,8 +518,9 @@ export function initRank() {
           return;
         }
         window = set.window;
-        // The Input tab's list shows the stretched normalizer as it now runs
-        // (main.js reads the chain again), so a later Apply keeps it.
+        // The Processing tab's input normalization shows the stretched
+        // normalizer as it now runs (main.js reads the chain again), so a
+        // later Apply keeps it.
         announce(CHAIN_CHANGED_EVENT);
       }
       installThreshold(name, d.threshold);

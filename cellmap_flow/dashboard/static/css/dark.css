@@ -868,19 +868,19 @@ textarea.form-control[readonly] {
   color: var(--text-muted);
 }
 
-/* The Apply bar at the top of the Input and Postprocess tabs
-   (templates/_apply_bar.html): its pending count and its notice are shown
-   and hidden with the `hidden` attribute, so their display is set here, not
-   with Bootstrap's d-block/d-flex, whose !important would override it. */
+/* The Processing tab (templates/_processing_tab.html): its Apply bar's
+   pending count and its notices are shown and hidden with the `hidden`
+   attribute, so their display is set here, not with Bootstrap's
+   d-block/d-flex, whose !important would override it. */
 .apply-pending {
   display: block;
 }
 
-.apply-notice {
+.chain-notice {
   display: flex;
 }
 
 .apply-pending[hidden],
-.apply-notice[hidden] {
+.chain-notice[hidden] {
   display: none;
 }

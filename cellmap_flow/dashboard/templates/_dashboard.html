@@ -16,32 +16,20 @@
           Models
         </button>
       </li>
+      <!-- Processing Tab: the input normalizers and the postprocessing, under
+           one Apply (_processing_tab.html). -->
       <li class="nav-item" role="presentation">
         <button
           class="nav-link active"
-          id="input-tab"
+          id="processing-tab"
           data-bs-toggle="tab"
-          data-bs-target="#input"
+          data-bs-target="#processing"
           type="button"
           role="tab"
-          aria-controls="input"
+          aria-controls="processing"
           aria-selected="true"
         >
-          Input
-        </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button
-          class="nav-link"
-          id="output-tab"
-          data-bs-toggle="tab"
-          data-bs-target="#output"
-          type="button"
-          role="tab"
-          aria-controls="output"
-          aria-selected="false"
-        >
-          Postprocess
+          Processing
         </button>
       </li>
 
@@ -114,19 +102,11 @@
       </div>
       <div
         class="tab-pane fade show active py-3"
-        id="input"
+        id="processing"
         role="tabpanel"
-        aria-labelledby="input-tab"
+        aria-labelledby="processing-tab"
       >
-        {% include "_input_tab.html" %}
-      </div>
-      <div
-        class="tab-pane fade py-3"
-        id="output"
-        role="tabpanel"
-        aria-labelledby="output-tab"
-      >
-        {% include "_output_tab.html" %}
+        {% include "_processing_tab.html" %}
       </div>
 
       <!-- Finetune Tab Content (in both modes, like its tab above) -->

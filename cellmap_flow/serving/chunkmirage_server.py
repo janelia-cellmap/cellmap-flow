@@ -237,8 +237,8 @@ class ChunkmirageServer:
                     f"has no {ARGS_KEY} block. Raw voxel values go to the model "
                     "unmodified. If the model expects normalized input (e.g. [-1, 1]) "
                     "its output will be meaningless. Re-add the layer from the "
-                    "dashboard so the URL carries the current Input/Postprocess "
-                    "configuration."
+                    "dashboard so the URL carries the Processing tab's current "
+                    "steps."
                 )
         else:
             spec, extras = PipelineSpec.from_url_blob(blob)

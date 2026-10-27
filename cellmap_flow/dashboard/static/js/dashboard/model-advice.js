@@ -20,8 +20,8 @@ const CONFIRM_BANNER_MS = 8000;
 const ADVICE_POLL_INTERVAL_MS = 5000;
 const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
 
-// The Input and Postprocess chains (shared/op-chain.js) the Apply buttons
-// change, from initModelAdvice.
+// The Processing tab's two lists (shared/op-chain.js) a suggestion's Apply
+// fills in, from initModelAdvice.
 let chains = null;
 
 export function initModelAdvice({ input, postprocess }) {
@@ -44,37 +44,49 @@ function applyInputNormSuggestion(norms, order) {
   chains.input.apply(order || Object.keys(norms || {}), norms);
 }
 
-// The server repeats the same advice on every poll until the configured
-// chain changes, so the banner cannot simply be redrawn each time: a
-// suggestion the user dismissed or applied came back five seconds later, and
-// a confirmation that had timed out reappeared. Each piece of advice is keyed
-// by what it says, including the chain it was about; once hidden, that key
-// stays hidden, while advice about a changed chain has a new key and shows.
+// The server repeats its advice on every poll, so the banner cannot simply
+// be redrawn each time: a suggestion the user dismissed or applied would come
+// back five seconds later, and a confirmation that had timed out reappear.
+// So each piece of advice has a key, and once it is hidden (dismissed,
+// applied, or a confirmation's time up) that key stays hidden while the page
+// is open.
+//
+// The key is the model, the kind of advice and what the advice is about for
+// that model (the steps and values a suggestion proposes, what a warning
+// found), and never the chain configured now. A suggestion the user turned
+// down stays down when the chain changes, by their Apply, an edit, or the
+// backend; it comes back only when the advice is about something new for the
+// model, as another suggestion or another finding (a probe that answered,
+// other data). The banner itself can name the chain ("currently set: ..."),
+// so `says` is what it says now, and it is rebuilt, under the same key, when
+// that changes.
 const hiddenAdvice = new Set();
-const shownAdvice = new Map();  // key -> element currently in the banner
+const shownAdvice = new Map();  // key -> {div, says}: what is in the banner now
 
-function adviceKey(kind, m, what) {
-  return JSON.stringify([kind, m.model || "", what]);
+function adviceKey(kind, m, about) {
+  return JSON.stringify([kind, m.model || "", about]);
 }
 
 function hideAdvice(key) {
   hiddenAdvice.add(key);
-  const div = shownAdvice.get(key);
+  const shown = shownAdvice.get(key);
   shownAdvice.delete(key);
-  if (div) div.remove();
+  if (shown) shown.div.remove();
 }
 
-// Put the advice for `key` in the banner, building it only the first time,
+// Put the advice for `key` in the banner, building it the first time and
+// again when what it says changes (`says`, by default nothing beyond the key),
 // and record it in `wanted` so renderModelAdvice keeps it.
-function showAdvice(box, wanted, key, build) {
+function showAdvice(box, wanted, key, build, says = "") {
   if (hiddenAdvice.has(key)) return;
   wanted.add(key);
-  let div = shownAdvice.get(key);
-  if (!div) {
-    div = build();
-    shownAdvice.set(key, div);
+  let shown = shownAdvice.get(key);
+  if (!shown || shown.says !== says) {
+    if (shown) shown.div.remove();
+    shown = { div: build(), says };
+    shownAdvice.set(key, shown);
   }
-  box.appendChild(div);  // (re)appending keeps the banner in poll order
+  box.appendChild(shown.div);  // (re)appending keeps the banner in poll order
 }
 
 function adviceButton(className, text, onclick) {
@@ -103,12 +115,11 @@ function renderInputNormAdvice(m, box, wanted) {
   // expression edited): [{step, param, configured, declared}], from the
   // backend, which compares the values as the chain carries them.
   const differences = m.input_norm_differences || [];
-  const key = adviceKey("input", m, [
-    !!m.input_norm_matches, names, sug.input_norm, m.configured_input_norm || [], differences,
-  ]);
   if (m.input_norm_matches) {
     // Confirmation, not a prompt: when the norms came from a yaml there is
-    // no other way to tell whether they suit the model.
+    // no other way to tell whether they suit the model. Shown once for these
+    // steps and values, as a suggestion is.
+    const key = adviceKey("input-matches", m, [names, sug.input_norm]);
     showAdvice(box, wanted, key, function () {
       const div = document.createElement("div");
       div.className = "alert py-1 px-2 " + (assumed ? "alert-secondary" : "alert-success");
@@ -121,6 +132,11 @@ function renderInputNormAdvice(m, box, wanted) {
     });
     return;
   }
+  // The suggestion is the steps and values to set, whether the chain has
+  // other steps or the same ones with other values: one key for both, so a
+  // suggestion turned down is not offered again for a chain edited since.
+  const key = adviceKey("input", m, [names, sug.input_norm]);
+  const says = JSON.stringify([m.configured_input_norm || [], differences]);
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
@@ -152,16 +168,18 @@ function renderInputNormAdvice(m, box, wanted) {
     div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
-  });
+  }, says);
 }
 
 function renderPostprocessAdvice(m, box, wanted) {
   const rev = m.postprocess_review || {};
   if (rev.level !== "suggest" && rev.level !== "warn") return;
   const warn = rev.level === "warn";
-  const key = adviceKey("post", m, [
-    rev.level, rev.message, rev.suggest || [], rev.params || {}, m.configured_postprocess || [],
-  ]);
+  // Keyed by the finding (the level and the message, which name nothing of
+  // the chain), not by the steps proposed: a warning can propose the chain
+  // itself less a step (the second sigmoid), which changes with every edit.
+  const key = adviceKey("post", m, [rev.level, rev.message]);
+  const says = JSON.stringify([rev.suggest || [], rev.params || {}]);
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (warn ? "alert-warning" : "alert-info");
@@ -192,7 +210,7 @@ function renderPostprocessAdvice(m, box, wanted) {
     div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
-  });
+  }, says);
 }
 
 function nm(voxelSize) {
@@ -238,10 +256,11 @@ function renderModelAdvice(models) {
     renderInputNormAdvice(m, box, wanted);
     renderPostprocessAdvice(m, box, wanted);
   });
-  // Drop what the server no longer says (the chain or the probe moved on).
+  // Drop what the server no longer says (the chain or the probe moved on);
+  // advice not hidden shows again if the server comes back to it.
   Array.from(shownAdvice.keys()).forEach(function (key) {
     if (wanted.has(key)) return;
-    shownAdvice.get(key).remove();
+    shownAdvice.get(key).div.remove();
     shownAdvice.delete(key);
   });
 }

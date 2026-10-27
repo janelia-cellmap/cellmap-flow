@@ -244,7 +244,7 @@ The pages are ES modules served as they are, with no bundler:
 
    dashboard/templates/
      index.html               the dashboard page; includes _dashboard.html and the
-                              _input_tab, _output_tab, _models_tab, _finetune_tab
+                              _models_tab, _processing_tab, _finetune_tab, _run_tab
                               and _review_tab partials
      pipeline_builder_v2.html the pipeline builder
      bbox_json_template.html
@@ -453,8 +453,8 @@ A chunk served to Neuroglancer
 Apply, or ``PUT /api/pipeline``, and the layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. The dashboard page's Apply, at the top of the Input and Postprocess tabs
-   (``templates/_apply_bar.html``), reads the ticked ops of both tabs
+#. The dashboard page's Apply, at the top of the Processing tab
+   (``templates/_processing_tab.html``), reads the ticked ops of both its lists
    (``static/js/shared/op-chain.js``) and sends ``PUT /api/pipeline`` with
    ``{input_norm, postprocess}`` (``static/js/dashboard/main.js``). Until
    then the bar counts the edits not applied (``op-chain.js``
@@ -491,7 +491,7 @@ layer is drawn (``routes/pipeline.set_declared_input_norm``, through
 ``setDeclaredInputNorm``, through ``setChain``). After every model change
 the page reads the chain back from ``GET /api/models/loaded``'s
 ``pipeline``, and a list whose chain the backend changed shows it, saying
-so.
+so under its heading.
 
 Launching a model server
 ~~~~~~~~~~~~~~~~~~~~~~~~

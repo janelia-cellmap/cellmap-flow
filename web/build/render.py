@@ -52,8 +52,8 @@ WEB = HERE.parent
 sys.path.insert(1, str(HERE))
 import export_data  # noqa: E402
 
-# The chains a fresh browser session starts with, ticked on the Input and
-# Postprocess tabs with these values (the app's session starts with the same).
+# The chains a fresh browser session starts with, ticked on the Processing
+# tab with these values (the app's session starts with the same).
 DEFAULT_CHAIN = export_data.DEFAULT_CHAIN
 
 # The page's module script and where the dashboard's static files are served,
