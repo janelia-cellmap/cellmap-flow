@@ -124,8 +124,20 @@ function settingsCells(row) {
       Array.isArray(row.input_norm) && row.input_norm.length ? h("span", { class: "text-muted" }, ` ${stepsText(row.input_norm)}`) : "",
       stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : "",
       (row.input_norm_others || []).length ? h("span", { class: "text-muted" }, `; ${othersText(row.input_norm_others)}`) : ""),
-    Array.isArray(row.postprocess) && h("span", { title: "The postprocessing the model's output needs to show right, which Use this model sets: a sigmoid added for an output with no activation (logits) or taken away from one that has one already, and the threshold your paint is fitted best at" },
+    Array.isArray(row.postprocess) && h("span", { title: `The postprocessing the model's output needs to show right, which Use this model sets: a sigmoid added for an output with no activation (logits) or taken away from one that has one already, and the threshold your paint is fitted best at. ${activationText(row)}` },
       "Output ", h("strong", {}, outputWords(row.postprocess))));
+}
+
+// Where the output activation a row was read by came from (the score's
+// output_class_from and output_op, its server's model_info's): the
+// network's last op, which says it for certain, or a guess from the model's
+// output on noise (the browser: its manifest's words).
+function activationText(row) {
+  const op = row.output_op;
+  if (row.output_class_from === "graph" && op) return `Its network ends in ${/^[AEIOU]/.test(op) ? "an" : "a"} ${op}.`;
+  if (row.output_class_from === "probe") return "Its network does not say what its output is: read off its output on noise, a guess.";
+  if (row.output_class_from === "manifest") return "Its network does not say what its output is: read from its manifest's words, a guess.";
+  return "What its output is, neither its network nor its output on noise says.";
 }
 
 // What a score that is right on one class only does, in words: a model

@@ -332,8 +332,11 @@ def rank_score():
                     f"at cut-off {score['cutoff']} ({score['matches_at_zero']:.0%} at 0), read through {NORM_FROM[norm_from]}"
                     + (f", the raw stretched from {window[0]:.1f}-{window[1]:.1f} ({base['matches']:.0%} unstretched)" if window else "")
                     + f", {seconds:.1f} s")
+        # What the output activation it was read by came from, for the row's
+        # Output column to say: its network's last op, or its probe's guess.
+        activation = {key: info.get(key) for key in ("output_class", "output_class_from", "output_op")}
         return jsonify({
-            "success": True, "name": name, **score, "postprocess": postprocess, "seconds": seconds,
+            "success": True, "name": name, **score, "postprocess": postprocess, **activation, "seconds": seconds,
             **({"note": "; ".join(notes)} if notes else {}),
         })
     except Exception as e:
