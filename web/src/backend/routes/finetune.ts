@@ -8,7 +8,9 @@
 //
 // What stands in for the server's pieces: the paint store (ctx.paint,
 // served to the viewer by the service worker) for MinIO and the corrections
-// directory, so a "session" is a volume and its id is its path; the catalog
+// directory, so a "session" is a volume, the one it trains on now, and its
+// id is its path (a volume Use this model superseded is kept in the store
+// but neither listed nor resumed: volume.ts supersedeVolume); the catalog
 // for the models directory; a run in the tab (src/finetune/run.ts) for the
 // cluster job, so a submit needs no output path, queue or charge group, and
 // the server-only fields the form still sends (LoRA rank, patches per
@@ -64,7 +66,7 @@ import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { createVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
+import { createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
@@ -228,10 +230,11 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // POST /api/finetune/channel {model_name, select_channel}: the channel
   // the session shows for the model (select_channel, its index; null clears
-  // the pick), as the form's Channel and Use this model pick it, so the
-  // layer shows what is trained and ranked. It is kept in the session
-  // (shownChannels) and shown now on the model's layer and on its
-  // finetunes' that follow its pick (serving.ts showChannel); a layer built
+  // the pick), as the form's Channel picks it, so the layer shows what is
+  // trained (Use this model sends the row's channel with its own request,
+  // rank.ts, so that it is picked before the model is served). It is kept in
+  // the session (shownChannels) and shown now on the model's layer and on
+  // its finetunes' that follow its pick (pickShownChannel); a layer built
   // for them later opens on it (showLayers). Answers whether a layer was
   // there to change: none is for a model not served, an output with no
   // channel axis or a chain that changes the channel count (displayChannel),
@@ -247,13 +250,9 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if ("error" in pick) return badRequest(pick.error);
     const entry = ctx.infer.served().find((s) => s.entry.name === name)?.entry ?? (await ctx.catalog.list()).find((e) => e.name === name);
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
-    const { channel } = pick, channels = entry.manifest.channels.length;
-    if (channel !== null && channel >= channels) return badRequest(`select_channel ${channel} is not one of ${name}'s output channels: it has ${channels} (0 to ${channels - 1}).`);
-    const shownChannels = { ...ctx.session.state.shownChannels };
-    if (channel === null) delete shownChannels[name];
-    else shownChannels[name] = channel;
-    await ctx.session.update({ shownChannels });
-    return json(200, { success: true, shown: channel !== null && showChannel(ctx, name) });
+    const past = pick.channel === null ? null : notAChannel(entry, pick.channel);
+    if (past) return badRequest(past);
+    return json(200, { success: true, shown: await pickShownChannel(ctx, name, pick.channel) });
   });
 
   // POST /api/finetune/create-volume {model_name} or {voxel_size}: a new
@@ -333,16 +332,20 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     return json(200, { success: true, message: "Layer added to viewer", layer_name: name });
   });
 
-  // POST /api/finetune/list-existing-sessions: every volume in the paint
-  // store, newest first, as a session of its own (the server's sessions
-  // are directories of volumes; here a volume is the unit), in the shape
-  // sessions.js lists: its id as session_id and session_path, its one
-  // volume, its painted chunks, the dataset it was painted on.
+  // POST /api/finetune/list-existing-sessions: the sessions in the paint
+  // store, newest first, each its one current volume: the server's sessions
+  // are directories of volumes, listed by the one their manifest trains on;
+  // here a volume is the unit, and one Use this model superseded
+  // (supersedeVolume) is not listed, since its paint is the current one's
+  // too. In the shape sessions.js lists: the volume's id as session_id and
+  // session_path, the volume, its painted chunks, the model it is for
+  // (model_name, null for one painted before any model), the dataset it was
+  // painted on.
   router.post("/api/finetune/list-existing-sessions", async (_req, _params, ctx) => {
     const sessions: Record<string, unknown>[] = [];
     for (const id of await ctx.paint.volumes()) {
       const volume = await readVolume(ctx.paint, id);
-      if (!volume) continue;
+      if (!volume || volume.superseded_by) continue;
       sessions.push({
         session_id: id,
         session_path: id,
@@ -358,19 +361,22 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // POST /api/finetune/load-existing-volume {source_session_path}: resume a
-  // volume: it becomes the session's. Nothing is copied (the server copies
-  // the source session into a new one, so the original stays as it was;
-  // here the store is the one place and the volume is edited in place), so
-  // the copy counts are zero and the progress route says done at once. A
-  // volume painted on another dataset is refused as the server refuses it:
-  // its voxels are positions in that dataset.
+  // session: its current volume becomes the session's, the one named or,
+  // for one Use this model superseded (named by a list shown before it
+  // ran), the volume that took its place (currentVolume), as the server
+  // resumes only a session's current volume. Nothing is copied (the server
+  // copies that volume into a new session, so the original stays as it
+  // was; here the store is the one place and the volume is edited in
+  // place), so the copy counts are zero and the progress route says done at
+  // once. A volume painted on another dataset is refused as the server
+  // refuses it: its voxels are positions in that dataset.
   router.post("/api/finetune/load-existing-volume", async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
-    const id = volumeIdOf(body.source_session_path);
-    if (!id) return badRequest("source_session_path required: a volume id (no slash)");
-    const volume = await readVolume(ctx.paint, id);
-    if (!volume) return json(404, { success: false, error: `No annotation volume found in ${id}` });
-    const open = ctx.session.state.datasetUrl;
+    const named = volumeIdOf(body.source_session_path);
+    if (!named) return badRequest("source_session_path required: a volume id (no slash)");
+    const volume = await currentVolume(ctx.paint, named);
+    if (!volume) return json(404, { success: false, error: `No annotation volume found in ${named}` });
+    const { id } = volume, open = ctx.session.state.datasetUrl;
     if (open && volume.dataset_path && !sameDataset(volume.dataset_path, open)) {
       return json(409, {
         success: false,
@@ -682,7 +688,7 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
  * string spelling one as the form's select sends it), null when blank (no
  * channel picked), or why it is neither: whether the model has that channel
  * is for the route to say, with the model. */
-function readSelectChannel(value: unknown): { channel: number | null } | { error: string } {
+export function readSelectChannel(value: unknown): { channel: number | null } | { error: string } {
   const channel = blank(value) ? null : Number(value);
   if (channel !== null && !(Number.isInteger(channel) && channel >= 0)) return { error: "select_channel: expected the index of one of the model's output channels, a whole number from 0" };
   return { channel };
@@ -710,8 +716,30 @@ function refuseChannel(entry: ModelEntry, channel: number | null): string | null
     return channelChoice(entry) ? `${entry.name} has ${channels.length} output channels and trains one at a time: pick the channel your paint is for (Channel, in the training form).` : null;
   }
   if (hasAffinityChannels(entry)) return `${entry.name} is an affinity model: its target has a channel of its own for each of its ${channels.length} channels, which train together, so it takes no channel pick (select_channel).`;
-  if (channel >= channels.length) return `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels.length} (0 to ${channels.length - 1}).`;
-  return null;
+  return notAChannel(entry, channel);
+}
+
+/** Why `channel` is not one of `entry`'s output channels (it is past the
+ * last), or null when it is one: a channel picked to train, to show (POST
+ * /api/finetune/channel) or with the model used (rank.ts, Use this model). */
+export function notAChannel(entry: ModelEntry, channel: number): string | null {
+  const channels = entry.manifest.channels.length;
+  return channel < channels ? null : `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels} (0 to ${channels - 1}).`;
+}
+
+/** `channel` made the one the session shows model `name`'s layer on (null:
+ * the pick cleared), kept in the session's shownChannels and shown now on
+ * the layers that open on it (serving.ts showChannel); a layer built for the
+ * model later opens on it (showLayers), so a pick made before the model is
+ * served is the channel its layer first shows. Answers whether a layer was
+ * changed: none is for a model not served, and a pick cleared leaves the
+ * layers as they are. */
+export async function pickShownChannel(ctx: AppContext, name: string, channel: number | null): Promise<boolean> {
+  const shownChannels = { ...ctx.session.state.shownChannels };
+  if (channel === null) delete shownChannels[name];
+  else shownChannels[name] = channel;
+  await ctx.session.update({ shownChannels });
+  return channel !== null && showChannel(ctx, name);
 }
 
 type LossFields = Pick<FinetuneOptions, "lossType" | "margin" | "balanceClasses" | "labelSmoothing" | "distillationLambda" | "distillationScope">;

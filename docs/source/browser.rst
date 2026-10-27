@@ -233,12 +233,15 @@ the ticked models it shows are ranked.
 *Use this model* makes a ranked model the one to finetune without painting
 again: it is loaded with its layer and picked under *Select Model*, a volume
 is made for it, the paint and the good regions are copied into that volume
-on the model's own grid, and its paint layer takes the old one's place (the
-old volume stays, under *Resume Existing Volume*). What its score chose comes
-with it: a stretched raw becomes the session's input normalization (the raw
-is the dataset's, so every model reads it so), and its cut-off becomes *Seed
-from Prediction*'s threshold, marked *set by ranking* beside the field until
-you change it; a line under *Label it*'s buttons says what was set. On the
+on the model's own grid, and its paint layer takes the old one's place. The
+old volume is kept in the browser but retired: *Resume Existing Volume* lists
+only the new one, and an old entry still on screen resumes the new one. What
+its score chose comes with it: the best channel of a model of several is the
+one its layer opens on, a stretched raw becomes the session's input
+normalization (the raw is the dataset's, so every model reads it so), and its
+cut-off becomes *Seed from Prediction*'s threshold, marked *set by ranking*
+beside the field until you change it; a line under *Label it*'s buttons says
+what was set. On the
 same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted
@@ -423,8 +426,9 @@ the page, for trying the panel without a key. The server's guide,
 has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
-Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. The ✕
+Existing Volume* lists the volumes painted here, newest first (one per
+session: a volume *Use this model* has taken the place of is not listed), and
+the Models tab lists the finetuned models under the Hugging Face ones. The ✕
 beside a finetuned model under *Loaded models* (see *Usage* on the
 :doc:`front page <index>`) stops serving it and keeps it, to tick again.
 *Download paint* saves the volume as a zarr (zipped, the server's layout, so a server

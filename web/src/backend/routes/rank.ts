@@ -34,20 +34,24 @@
 // postprocessing its layer needs to show its output as a probability
 // (rank.display_postprocess: a sigmoid added for logits when the session
 // has none, one taken away from an output that has its own), or null.
-// POST /api/finetune/rank/use {name, input_norm?, postprocess?} makes the
-// one picked the model to finetune, the row's steps and postprocessing
-// first made the session chain's (each when given and not the session's
-// already, in one chain set), so it is served through what it was ranked
-// through and shows as it should: served with
-// its layer (as the Models tab's Add serves it), a volume made for it with
-// the session volume's paint carried onto its grid
-// (cellmap_flow/portable/carry.py, the same way) and its good regions, and that volume the session's,
-// its paint layer in the old one's place; the old volume stays in the paint
-// store. POST /api/finetune/rank/input-norm {input_norm, postprocess?}
-// makes them the session chain's alone, with no model served and no volume
-// made: Fit to paint's, for the model already seeding the paint. The
-// channel a row picks is shown by POST /api/finetune/channel (finetune.ts),
-// which the page sends beside these.
+// POST /api/finetune/rank/use {name, select_channel?, input_norm?,
+// postprocess?} makes the one picked the model to finetune, the row's
+// channel first made the one its layer shows (select_channel, the row's
+// channel_index, as POST /api/finetune/channel picks one; an affinity
+// model's row has none), so its layer opens on that channel rather than on
+// Neuroglancer's middle one, and the row's steps and postprocessing made the
+// session chain's (each when given and not the session's already, in one
+// chain set), so it is served through what it was ranked through and shows
+// as it should: served with its layer (as the Models tab's Add serves it), a
+// volume made for it with the session volume's paint carried onto its grid
+// (cellmap_flow/portable/carry.py, the same way) and its good regions, and
+// that volume the session's, its paint layer in the old one's place. The old
+// volume is retired: kept in the paint store, never deleted, but marked
+// superseded (volume.ts supersedeVolume), so the session has one volume, the
+// one it trains on, and the old one is neither listed nor resumed again.
+// POST /api/finetune/rank/input-norm {input_norm, postprocess?} makes them
+// the session chain's alone, with no model served and no volume made: Fit to
+// paint's, for the model already seeding the paint.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { volumeCornerNm } from "../../ai-annotate/fill";
@@ -58,7 +62,7 @@ import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
 import { targetTransformFor } from "../../finetune/target-call";
-import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
+import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume, supersedeVolume } from "../../finetune/volume";
 import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
@@ -69,6 +73,7 @@ import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../view
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
 import { blobFor, declaredInputNorm, pageBase, serveModels, setChain } from "../serving";
+import { notAChannel, pickShownChannel, readSelectChannel } from "./finetune";
 import { readChain } from "./pipeline";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
@@ -184,16 +189,18 @@ export function rankRoutes(router: Router): void {
     }
   });
 
-  // POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?}:
-  // see the top of the file; `input_norm` and `postprocess` are the row's
-  // (`entry`, the server's model config for a model it does not list, is
-  // the catalog's here). Answers the new volume, how much paint it took and
-  // how much was dropped where the old voxels disagreed on the new grid,
-  // and the input normalization and postprocessing it set (each null when
-  // the session's was those steps already). Refused as score is, when the
-  // session's volume is the model's already, and for steps that are not a
-  // list of steps the browser runs (checked as PUT /api/pipeline checks
-  // them), which changes nothing.
+  // POST /api/finetune/rank/use {name, entry?, select_channel?,
+  // input_norm?, postprocess?}: see the top of the file; `select_channel`,
+  // `input_norm` and `postprocess` are the row's (`entry`, the server's model
+  // config for a model it does not list, is the catalog's here). Answers the
+  // new volume, the one it took the place of (from_volume, now superseded),
+  // how much paint it took and how much was dropped where the old voxels
+  // disagreed on the new grid, and the input normalization and
+  // postprocessing it set (each null when the session's was those steps
+  // already). Refused as score is, when the session's volume is the model's
+  // already, for a select_channel that is not one of the model's channels,
+  // and for steps that are not a list of steps the browser runs (checked as
+  // PUT /api/pipeline checks them), each of which changes nothing.
   router.post("/api/finetune/rank/use", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -206,12 +213,18 @@ export function rankRoutes(router: Router): void {
     const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
+    const pick = readSelectChannel(body.select_channel);
+    if ("error" in pick) return badRequest(pick.error);
+    const past = pick.channel === null ? null : notAChannel(entry, pick.channel);
+    if (past) return badRequest(past);
     const read = readParts(body);
     if ("error" in read) return badRequest(read.error);
     try {
-      // The steps it was ranked through and the postprocessing its layer
-      // needs made the session's first, so the model is served through them
-      // (and the models served already redrawn).
+      // The row's channel first, so the layer the model is served with opens
+      // on it (and a layer it has already moves to it), then the steps it was
+      // ranked through and the postprocessing its layer needs, so the model
+      // is served through them (and the models served already redrawn).
+      if (pick.channel !== null) await pickShownChannel(ctx, entry.name, pick.channel);
       const set = await setParts(ctx, read);
       if (set.input_norm) ctx.log(`Input normalization set to the one ${name} was ranked through: ${stepsText(set.input_norm)}`);
       if (set.postprocess) ctx.log(`Postprocessing set to the one ${name}'s layer needs: ${stepsText(set.postprocess)}`);
@@ -229,11 +242,12 @@ export function rankRoutes(router: Router): void {
       const regions = await loadGoodRegions(ctx.paint, from.id);
       if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
       await ctx.session.update({ paintVolume: to.id });
+      await supersedeVolume(ctx.paint, from.id, to.id);
       const layer = paintLayerName(to.id);
       ctx.viewer.removeLayer(paintLayerName(from.id));
       ctx.viewer.setLayers({ [layer]: { ...paintLayer(paintLayerUrl(to.id, pageBase()), to), name: layer } });
       ctx.viewer.selectLayer(layer, PAINT_TAB);
-      ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
+      ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}; ${from.id} is kept, superseded`);
       return json(200, {
         success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, input_norm: set.input_norm, postprocess: set.postprocess,
         painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
