@@ -9,7 +9,7 @@
 // stitch_threshold}.
 import { h } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
-import { tag, untickBox } from "./row.js";
+import { tag, untickBox } from "../../shared/model-list.js";
 
 const OUTPUTS = [
   ["flows", "Flows + probability", "Three channels: flow_y and flow_x (the flows towards each cell's centre) and cell (the cell probability, 0 to 1). Not masks: for those, add the CellposeMasksPostprocessor (it makes masks of these on the server, with thresholds you can change live) or choose Masks. The layer shows the three together: each cell coloured by its flows' direction, dimmed by the probability (untick the shader's flows box for the probability alone)."],

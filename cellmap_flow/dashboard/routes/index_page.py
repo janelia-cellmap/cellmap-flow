@@ -156,7 +156,10 @@ def index():
         neuroglancer_url=viewer_url_for(session.neuroglancer_url, request.headers, request.scheme),
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
-        model_catalog=model_catalog,
+        # The Local Catalog's groups for the Models tab's script to list
+        # (js/dashboard/models/catalog.js), each with its models' names, in
+        # order: lists, as tojson sorts a mapping's keys.
+        catalog_groups=[[group, list(models)] for group, models in model_catalog.items()],
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         default_bioimage_models=default_bioimage_models,

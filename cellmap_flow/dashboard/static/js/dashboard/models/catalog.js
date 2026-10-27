@@ -1,9 +1,25 @@
-// The Local Catalog's boxes (the template renders them from models.yaml) and
-// the boxes of the models added by reference (add-model.js): each is an
-// `input.model-checkbox` in #modelSelectionForm whose value is the model's
-// name. Submit sends the ticked names as selected_models.
-import { h } from "../../lib/dom.js";
-import { untickBox } from "./row.js";
+// The Local Catalog: a section for each of its groups (models.yaml's, and
+// "User" for the session's running models), from the page's
+// #model-catalog-data (routes/index_page.py), with the rows every model list
+// has (shared/model-list.js); and the boxes of the models added by reference
+// (add-model.js). Each box is an `input.model-checkbox` in
+// #modelSelectionForm whose value is the model's name, ticked to start when
+// that model is running. Submit sends the ticked names as selected_models.
+import { pageData } from "../../lib/page-data.js";
+import { modelRow, modelSection, untickBox } from "../../shared/model-list.js";
+
+export function init() {
+  const { groups, ticked } = pageData("model-catalog-data");
+  const accordion = document.getElementById("modelAccordion");
+  groups.forEach(([group, names], i) => {
+    const section = modelSection({ id: String(i + 1), title: group });
+    section.body.append(...names.map((name) => modelRow({
+      id: `chk_${group}_${name}`, value: name, name, checked: ticked.includes(name),
+      boxClass: "model-checkbox", boxName: "selected_models",
+    })));
+    accordion.append(section.item);
+  });
+}
 
 // POST /api/models' part: the names ticked.
 export function payload() {
@@ -21,10 +37,6 @@ export function untick(model) {
 // A ticked box for a model added by reference: Submit keeps it running until
 // it is unticked.
 export function addedBox(name) {
-  const id = "chk_added_" + name;
   document.getElementById("addedModels").append(
-    h("div", { class: "form-check mb-1" },
-      h("input", { class: "form-check-input model-checkbox", type: "checkbox", value: name, id, checked: true }),
-      h("label", { class: "form-check-label", for: id }, name)),
-  );
+    modelRow({ id: "chk_added_" + name, value: name, name, checked: true, boxClass: "model-checkbox", rowClass: "form-check mb-1" }));
 }
