@@ -8,7 +8,8 @@
 // (a download, then a run over the painted chunks) and longer on a server for
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
-// each request, and one not running (cluster) starts unticked. They are
+// each request. In both modes only the models running and the ones added by
+// hand start ticked. They are
 // listed as the Models tab lists them, made of the same pieces
 // (shared/model-list.js): a section for each of the tab's sections a model
 // is under (its group), with the tab's rows, the Hugging Face and zoo

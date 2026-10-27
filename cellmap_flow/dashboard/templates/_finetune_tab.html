@@ -604,7 +604,7 @@
       <small class="d-block text-muted mb-2">Cellpose models are not ranked: they predict flows, not objects and background.</small>
       <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
         <button type="button" class="btn btn-primary" id="rankBtn" disabled
-                title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each; only the running ones start ticked{% endif %}; the Models tab and the viewer are left as they were.">
+                title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each{% endif %}; only the running ones and the ones added start ticked; the Models tab and the viewer are left as they were.">
           Rank models
         </button>
         <button type="button" class="btn btn-outline-danger" id="rankStopBtn" hidden
