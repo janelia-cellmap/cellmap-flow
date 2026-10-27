@@ -1,7 +1,8 @@
 // A model's entry in /api/huggingface-models, in the shape the dashboard's
-// Models tab renders (models-tab.js renderHfModels: the key is the model id,
-// the value is the repo's metadata.json, and only `description` is shown
-// beside the id's last path segment; the whole value goes into the search
+// Models tab renders (dashboard/models/huggingface.js: the key is the model
+// id, the value is the repo's metadata.json, of which `description` is
+// shown beside the id's last path segment, and the listing's facts,
+// listFacts below, as its tags; the whole value goes into the search
 // string). The cellmap PyTorch repos publish metadata.json with the fields
 // listed first below (e.g. cellmap/mito-aff-unet-setup-16); the ONNX exports
 // publish a manifest.json instead, so this builds the same fields from it,
@@ -10,8 +11,15 @@
 // A model finetuned in this browser (finetuned.ts) has the same fields, its
 // description saying where it came from when its record is known: the
 // catalog keeps the registry's last listing and passes the record in.
+//
+// listFacts is what every model list's row says the model is without
+// downloading it (its formats, its ways to finetune, its size, its
+// precisions), added by the routes that list models, the Models tab's and
+// the ranking's (backend/routes/models.ts listModels, rank.ts listingOf), so
+// the two say the same of a model, as the server's do.
 import { FINETUNED_REPO } from "../contracts";
-import type { FinetunedRecord, ModelEntry } from "../contracts";
+import type { FinetunedRecord, ModelEntry, VariantName } from "../contracts";
+import { type FinetuneMode, finetuneModes } from "../finetune/modes";
 
 import { HF_REVISION } from "./hf";
 import { voxelLabel } from "./manifest";
@@ -66,6 +74,49 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     // And where a finetuned model came from, so the base's name or the
     // volume's id find it in the tab's search.
     ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params, ...(record.from_link ? { from_link: record.from_link } : {}) } } : {}),
+  };
+}
+
+/** What a model list's row shows of a model, as its tags, and what its
+ * Sort by size and Runs in the browser read (static/js/shared/model-list.js),
+ * under the names the server's listing gives them (models/hf_catalog.py,
+ * routes/finetune/rank_routes.py candidates), so one page reads both. */
+export interface ListFacts {
+  /** The files it comes as: here always the ONNX export, which is all the
+   * browser runs; the server's lists TorchScript and torch.export too. */
+  formats: string[];
+  /** The ways the browser can finetune it (finetune/modes.ts), as the
+   * training form is offered them; the server's say "lora" and "full". */
+  finetune_modes: FinetuneMode[];
+  /** Its largest file's MB (1e6 bytes, as the manifests' file_mb), or null
+   * when the manifest does not say: what Sort by size orders by. */
+  size_mb: number | null;
+  /** Its browser copy's id: in the browser every model is one, its own
+   * (the server names the cellmap/onnx-web-models folder a repo's copy is
+   * in, or null for a repo with none, which its Runs in the browser hides). */
+  browser_copy: string;
+  /** Each precision it is exported in, with its file's MB, fp32 first
+   * (parseManifest's order of precisions). */
+  variants: { variant: VariantName; file_mb: number }[];
+  /** Its parameter count, or null when the manifest does not say. */
+  params: number | null;
+}
+
+export function listFacts(entry: ModelEntry): ListFacts {
+  // parseManifest lists the variants smallest block first, so each
+  // precision ends on its largest block's file, the one the server's
+  // "largest weights file" would be. Its weights are most of a file, so a
+  // precision's files are about one size at every block.
+  const sizes = new Map<VariantName, number>();
+  for (const v of entry.manifest.variants) sizes.set(v.variant, v.file_mb);
+  const largest = Math.max(0, ...sizes.values());
+  return {
+    formats: ["ONNX"],
+    finetune_modes: finetuneModes(entry),
+    size_mb: largest > 0 ? largest : null,
+    browser_copy: entry.id,
+    variants: [...sizes].map(([variant, file_mb]) => ({ variant, file_mb })),
+    params: entry.manifest.params > 0 ? entry.manifest.params : null,
   };
 }
 

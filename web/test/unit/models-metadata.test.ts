@@ -1,8 +1,10 @@
 // metadataFor: the shape the Models tab renders for a Hugging Face repo,
-// compared with a real PyTorch repo's metadata.json fields.
+// compared with a real PyTorch repo's metadata.json fields; and listFacts,
+// what every model list's row tags a model with.
 import { describe, expect, it } from "vitest";
 
-import { metadataFor } from "../../src/models/metadata";
+import { finetunedEntry } from "../../src/models/finetuned";
+import { listFacts, metadataFor } from "../../src/models/metadata";
 import { entryFixture } from "./models-helpers";
 
 // The keys of cellmap/mito-aff-unet-setup-16's metadata.json (read 2026-10-14).
@@ -29,5 +31,18 @@ describe("metadataFor", () => {
       output_shape: [44, 44, 44],
       onnx_url: entry.onnxUrl,
     });
+  });
+});
+
+describe("listFacts", () => {
+  it("gives a model's format, its ways to finetune, its size and each precision's file size, a finetuned one's its own", () => {
+    const entry = entryFixture("setup_53_2d");
+    expect(listFacts(entry)).toEqual({
+      formats: ["ONNX"], finetune_modes: ["head", "full"], size_mb: 7.75, browser_copy: entry.id,
+      variants: [{ variant: "fp32", file_mb: 7.75 }, { variant: "fp16", file_mb: 3.9 }], params: 1927907,
+    });
+    // A model finetuned in this browser is one file, the one it trained.
+    const finetuned = finetunedEntry(entryFixture("setup_54"), "mito_aff_setup54_16nm-ft1", 42.9);
+    expect(listFacts(finetuned)).toMatchObject({ size_mb: 42.9, browser_copy: finetuned.id, variants: [{ variant: "fp32", file_mb: 42.9 }] });
   });
 });

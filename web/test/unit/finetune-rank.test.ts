@@ -307,7 +307,7 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
 });
 
 describe("the rank routes, without Python", () => {
-  it("list each model under its Models tab section, in the sections' order, and one added by hand under Added from then on, unserved", async () => {
+  it("list each model under its Models tab section, in the sections' order, and one added by hand under Added from then on, unserved, ticking only those two kinds", async () => {
     const ctx = fakeContext();
     const [e54, e56] = ctx.catalog.entries;
     const tuned = finetunedEntry(e56, `${NAME_56}-ft1`);
@@ -315,13 +315,15 @@ describe("the rank routes, without Python", () => {
     ctx.catalog.entries = [tuned, e54, e56, er];
     await ctx.infer.serve(e56, ctx.session.state.chain, "blob", async () => new ArrayBuffer(8));
     const handle = harness(ctx);
-    const groups = async () => body(await handle(request("GET", "/api/finetune/rank/candidates"))).candidates.map((c: any) => [c.name, c.group]);
-    expect(await groups()).toEqual([[NAME_56, "Running"], [NAME_54, "cellmap"], [er.name, "cellmap"], [tuned.name, "Finetuned"]]);
+    // Each candidate's name, group and tick: the served one ticked, as the
+    // server's ranking ticks its running ones, and no other.
+    const groups = async () => body(await handle(request("GET", "/api/finetune/rank/candidates"))).candidates.map((c: any) => [c.name, c.group, c.ticked]);
+    expect(await groups()).toEqual([[NAME_56, "Running", true], [NAME_54, "cellmap", false], [er.name, "cellmap", false], [tuned.name, "Finetuned", false]]);
 
     // Added by its id, a ref the Models tab's Add takes, and answered as the list will list it.
     const added = await handle(request("POST", "/api/finetune/rank/add", { ref: e54.id }));
     expect(body(added)).toMatchObject({ success: true, candidate: { name: NAME_54, group: "Added", ticked: true, served: false } });
-    expect(await groups()).toEqual([[NAME_56, "Running"], [er.name, "cellmap"], [NAME_54, "Added"], [tuned.name, "Finetuned"]]);
+    expect(await groups()).toEqual([[NAME_56, "Running", true], [er.name, "cellmap", false], [NAME_54, "Added", true], [tuned.name, "Finetuned", false]]);
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
 
     // A ref the browser cannot run is refused as the Models tab's resolve refuses it.
