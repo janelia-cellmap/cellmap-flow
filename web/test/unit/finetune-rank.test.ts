@@ -126,7 +126,7 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(scored.input_window).toEqual(scored.window);
     const serves = ctx.infer.serves.length;
     const fitted = body(await handle(request("POST", "/api/finetune/rank/input-norm", { input_norm: scored.input_norm })));
-    expect(fitted).toEqual({ success: true, input_norm: scored.input_norm });
+    expect(fitted).toEqual({ success: true, input_norm: scored.input_norm, postprocess: ctx.session.state.chain.postprocess });
     expect(ctx.session.state.chain.input_norm.find((n) => n.name === "MinMaxNormalizer")).toMatchObject({ min_value: scored.window[0], max_value: scored.window[1] });
     expect(ctx.session.state.paintVolume).toBe(volume);
     // The model served redrawn through the steps, and no other served.
@@ -161,8 +161,28 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const serves = ctx.infer.serves.length;
     const theirs = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
     expect(theirs).toMatchObject({ success: true, matches: 1, input_norm: session, input_norm_from: "session" });
-    expect(theirs.note).toContain("50%");
+    // What its own matched, in the row, which says why the session's.
+    expect(theirs.input_norm_others).toEqual([{ from: "declared", matches: 0.5 }]);
+    expect(theirs.note).toBeUndefined();
     expect(ctx.infer.serves.slice(serves).map((s) => s.chain.input_norm)).toEqual([declared]);
+  });
+
+  it("read a model that declares no input normalization through the assumed [-1, 1], and give its logits the sigmoid it needs", async () => {
+    const { ctx, handle } = await painted({ input_norm: [], postprocess: [] });
+    // fly_organelles' copies declare nothing: a model that sees the object only through [-1, 1].
+    const m = { ...manifest("setup_61", ["mito"], 128), task: "mito", input_norm: [] };
+    const bare = entryFor("setup_61", m, m.variants[0]);
+    ctx.catalog.entries = [...ctx.catalog.entries, bare];
+    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+    const signed = (view: string) => ctx.infer.serves.some((s) => view.includes(s.blob) && s.chain.input_norm.some((n) => n.name === "LambdaNormalizer"));
+    ctx.infer.outputAt = (view, _c, z, y, x) => (signed(view) && inside(z, y, x) ? 4 : -4);
+
+    const row = body(await handle(request("POST", "/api/finetune/rank/score", { name: bare.name })));
+    const assumed = [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255, invert: false }, { name: "LambdaNormalizer", expression: "x*2-1" }];
+    expect(row).toMatchObject({ success: true, matches: 1, input_norm: assumed, input_norm_from: "assumed" });
+    expect(ctx.infer.serves.at(-1)).toMatchObject({ name: bare.name, chain: { input_norm: assumed } });
+    // Logits shown through no postprocessing: the sigmoid that makes them probabilities.
+    expect(row.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
   });
 
   it("read a model's output by its activation, so a sigmoid model scores as the logit model it is equal to", async () => {
@@ -182,6 +202,36 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(asProbability).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
     expect(asLogits).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
     expect(asProbability.loss).toBeCloseTo(asLogits.loss, 5);
+    // Under the session's sigmoid, the probabilities would be squashed again: theirs is taken away;
+    // the logits' is what they need, so nothing changes.
+    expect(asProbability.postprocess).toEqual([]);
+    expect(asLogits.postprocess).toBeNull();
+  });
+
+  it("set the row's postprocessing beside its steps in one chain set, when Use this model and Fit to Paint are given it", async () => {
+    const { ctx, handle } = await painted();
+    const m = { ...manifest("setup_60", ["nuc"], 128), task: "nuc", output: "probabilities (sigmoid applied)" };
+    const sigmoid = entryFor("setup_60", m, m.variants[0]);
+    ctx.catalog.entries = [...ctx.catalog.entries, sigmoid];
+    const row = body(await handle(request("POST", "/api/finetune/rank/score", { name: sigmoid.name })));
+    const stretch = [{ ...row.input_norm[0], max_value: 200 }, row.input_norm[1]];
+    // A postprocessor the browser cannot run: refused, and nothing changes.
+    const before = structuredClone(ctx.session.state.chain);
+    expect(await handle(request("POST", "/api/finetune/rank/use", { name: sigmoid.name, input_norm: stretch, postprocess: [{ name: "NotAPostprocessor" }] }))).toMatchObject({ status: 400 });
+    expect(ctx.session.state.chain).toEqual(before);
+
+    const chainSets = () => ctx.logged.filter((line) => line.startsWith("Chain ")).length;
+    const sets = chainSets();
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: sigmoid.name, input_norm: stretch, postprocess: row.postprocess })));
+    expect(used).toMatchObject({ success: true, input_norm: stretch, postprocess: [] });
+    expect(ctx.session.state.chain).toEqual({ input_norm: stretch, postprocess: [] });
+    expect(chainSets()).toBe(sets + 1);
+    expect(ctx.infer.serves.at(-1)).toMatchObject({ name: sigmoid.name, chain: { input_norm: stretch, postprocess: [] } });
+
+    // Fit to Paint: the postprocessing alone changes, and the answer is the chain as it now is.
+    const fitted = body(await handle(request("POST", "/api/finetune/rank/input-norm", { input_norm: stretch, postprocess: [{ name: "SigmoidPostprocessor" }] })));
+    expect(fitted).toEqual({ success: true, input_norm: stretch, postprocess: [{ name: "SigmoidPostprocessor" }] });
+    expect(ctx.session.state.chain.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
   });
 
   it("make the volume of the model used the session's, its paint carried and its paint layer in the old one's place", async () => {

@@ -11,11 +11,13 @@
 // for. POST /api/finetune/rank/score {name} scores one, as the tab asks for
 // them one at a time and shows each as it comes. A model is scored through
 // each input normalization portable/rank.py's norm_tries gives it, its own
-// (its manifest's declaration) and the session's when that is another, and
-// the better score is kept (best_try): read through none, or another
-// model's, a model's score is noise (fly_organelles fed raw 0 to 255 matched
-// 51% in the server's ranking, which read every model through the session's
-// input normalization). Through the session's, a model already served is
+// (its manifest's declaration, or for a model that declares none what the
+// server's model advice assumes of it: the raw's dtype range to [-1, 1],
+// assumedInputNorm) and the session's when that is another, and the better
+// score is kept (best_try): read through none, or another model's, a
+// model's score is noise (fly_organelles fed raw 0 to 255 matched 51% in the
+// server's ranking, which read every model through the session's input
+// normalization). Through the session's, a model already served is
 // read as it is served, its chunks from the engine's caches where the viewer
 // has had them computed; any other read is served for the score alone, with
 // those normalizers and no layer, and released after, so a ranking leaves
@@ -26,17 +28,26 @@
 // (portable/rank.py says when that is kept). The answer is the ranking's
 // row, as the Python builds it (score_row: the score kept, its threshold,
 // the raw's range it read and the normalizer steps it was read through,
-// input_norm, with where they came from). POST /api/finetune/rank/use
-// {name, input_norm?} makes the one picked the model to finetune, the row's
-// steps first made the session's input normalization (when they are not
-// already), so it is served through what it was ranked through: served with
+// input_norm, with where they came from; and why those: what each channel
+// of a binary model matched, channel_matches, and what the other
+// normalizations tried matched, input_norm_others), with the
+// postprocessing its layer needs to show its output as a probability
+// (rank.display_postprocess: a sigmoid added for logits when the session
+// has none, one taken away from an output that has its own), or null.
+// POST /api/finetune/rank/use {name, input_norm?, postprocess?} makes the
+// one picked the model to finetune, the row's steps and postprocessing
+// first made the session chain's (each when given and not the session's
+// already, in one chain set), so it is served through what it was ranked
+// through and shows as it should: served with
 // its layer (as the Models tab's Add serves it), a volume made for it with
 // the session volume's paint carried onto its grid
 // (cellmap_flow/portable/carry.py, the same way) and its good regions, and that volume the session's,
 // its paint layer in the old one's place; the old volume stays in the paint
-// store. POST /api/finetune/rank/input-norm {input_norm} makes the steps
-// the session's input normalization alone, with no model served and no
-// volume made: Fit to paint's, for the model already seeding the paint.
+// store. POST /api/finetune/rank/input-norm {input_norm, postprocess?}
+// makes them the session chain's alone, with no model served and no volume
+// made: Fit to paint's, for the model already seeding the paint. The
+// channel a row picks is shown by POST /api/finetune/channel (finetune.ts),
+// which the page sends beside these.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { volumeCornerNm } from "../../ai-annotate/fill";
@@ -53,6 +64,7 @@ import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geom
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
 import { entryFor } from "../../models/manifest";
+import { dtypeRange } from "../../viewer/display";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
@@ -81,11 +93,11 @@ export function rankRoutes(router: Router): void {
   });
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
-  // (score_row's, portable/rank.py), how long it took, and a note when some
-  // painted chunks lie where the model's level does not reach, and what the
-  // other input normalization matched when it was read through two.
-  // Refused without a dataset, a volume or paint (400), and for a model the
-  // catalog does not have (404).
+  // (score_row's, portable/rank.py), the postprocessing its layer needs
+  // (postprocess: display_postprocess's steps, or null), how long it took,
+  // and a note when some painted chunks lie where the model's level does
+  // not reach. Refused without a dataset, a volume or paint (400), and for
+  // a model the catalog does not have (404).
   router.post("/api/finetune/rank/score", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -105,15 +117,18 @@ export function rankRoutes(router: Router): void {
     try {
       // The paint scored through each input normalization the model is
       // tried with (rank.norm_tries: its own first, the session's when that
-      // is another), the model served for each score alone and released
-      // after, but read as it is served through the session's steps when it
-      // is served already (sessionsTry says which try those are); and the
-      // best of the scores kept (rank.best_try, its own among equals).
+      // is another; an assumed one after the session's), the model served
+      // for each score alone and released after, but read as it is served
+      // through the session's steps when it is served already (sessionsTry
+      // says which try those are); and the best of the scores kept
+      // (rank.best_try, its own among equals).
       const session = ctx.session.state.chain.input_norm;
-      const tries = await ctx.infer.python<NormTry[]>(`${PORTABLE}:norm_tries`, { own: declaredInputNorm(entry), own_from: "declared", session });
+      const declared = declaredInputNorm(entry);
+      const own = declared.length ? { own: declared, own_from: "declared" } : { own: assumedInputNorm(dataset.dtype), own_from: "assumed" };
+      const tries = await ctx.infer.python<NormTry[]>(`${PORTABLE}:norm_tries`, { ...own, session });
       const asServed = sessionsTry(tries, session);
       const stepsOf = (i: number) => (i === asServed ? session : tries[i].input_norm);
-      const reads: (PaintScore & { entry: ModelEntry })[] = [];
+      const reads: (PaintScore & { served: ServedModel })[] = [];
       for (let i = 0; i < tries.length; i++) {
         let held: Held;
         try {
@@ -122,7 +137,7 @@ export function rankRoutes(router: Router): void {
           return json(400, { success: false, error: `${name} could not be served: ${message(e)}` });
         }
         try {
-          reads.push({ ...(await scorePaint(ctx, dataset, volume, indices, held.served)), entry: held.served.entry });
+          reads.push({ ...(await scorePaint(ctx, dataset, volume, indices, held.served)), served: held.served });
         } finally {
           await held.release();
         }
@@ -137,7 +152,7 @@ export function rankRoutes(router: Router): void {
       // The raw stretched to its own range, when it is narrow, through the
       // steps kept, and the row from the two scores (portable/rank.py).
       const norm = stepsOf(best);
-      const range = await rawWindow(ctx, dataset, kept.entry, kept.read);
+      const range = await rawWindow(ctx, dataset, kept.served.entry, kept.read);
       const stretched = range && (await windowed(ctx, norm, range));
       let alt: RankScore | null = null;
       if (range && stretched) {
@@ -148,17 +163,20 @@ export function rankRoutes(router: Router): void {
           await again.release();
         }
       }
-      const score = (await rankRow(ctx, kept.score, alt, norm, range, tries[best].from))!;
+      // What the other tries matched (those that scored), beside it in the row.
+      const others = reads.flatMap((r, i) => (i === best || !r.score ? [] : [{ from: tries[i].from, matches: r.score.matches }]));
+      const score = (await rankRow(ctx, kept.score, alt, norm, range, tries[best].from, others))!;
+      const postprocess = await ctx.infer.python<Step[] | null>(`${PORTABLE}:display_postprocess`,
+        { output_class: kept.served.info.output_class ?? null, postprocess: ctx.session.state.chain.postprocess, affinity: hasAffinityChannels(entry) });
       const notes = [
         ...(kept.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${kept.blocks} blocks of its output the paint reaches, spread over it`] : []),
         ...(kept.outside ? [`${kept.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
-        ...reads.flatMap((r, i) => (i === best ? [] : [`through ${through(tries[i].from)} it ${r.score ? `matched ${pct(r.score.matches)}` : "scored nothing"}`])),
       ];
       const seconds = (performance.now() - started) / 1000;
       const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(kept.score.matches)} as normalized)` : "";
       ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0) through ${through(score.input_norm_from)}, ${stepsText(score.input_norm)}${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
       return json(200, {
-        success: true, name, ...score, seconds,
+        success: true, name, ...score, postprocess, seconds,
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
@@ -166,11 +184,13 @@ export function rankRoutes(router: Router): void {
     }
   });
 
-  // POST /api/finetune/rank/use {name, input_norm?}: see the top of the
-  // file; `input_norm` is the row's steps. Answers the new volume, how much
-  // paint it took and how much was dropped where the old voxels disagreed on
-  // the new grid, and the input normalization it set (null when the
-  // session's was those steps already). Refused as score is, when the
+  // POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?}:
+  // see the top of the file; `input_norm` and `postprocess` are the row's
+  // (`entry`, the server's model config for a model it does not list, is
+  // the catalog's here). Answers the new volume, how much paint it took and
+  // how much was dropped where the old voxels disagreed on the new grid,
+  // and the input normalization and postprocessing it set (each null when
+  // the session's was those steps already). Refused as score is, when the
   // session's volume is the model's already, and for steps that are not a
   // list of steps the browser runs (checked as PUT /api/pipeline checks
   // them), which changes nothing.
@@ -186,13 +206,15 @@ export function rankRoutes(router: Router): void {
     const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
-    const read = body.input_norm == null ? null : readInputNorm(body.input_norm);
-    if (read && "error" in read) return badRequest(read.error);
+    const read = readParts(body);
+    if ("error" in read) return badRequest(read.error);
     try {
-      // The steps it was ranked through made the session's first, so the
-      // model is served through them (and the models served already redrawn).
-      const inputNorm = read && (await setInputNorm(ctx, read.steps)) ? read.steps : null;
-      if (inputNorm) ctx.log(`Input normalization set to the one ${name} was ranked through: ${stepsText(inputNorm)}`);
+      // The steps it was ranked through and the postprocessing its layer
+      // needs made the session's first, so the model is served through them
+      // (and the models served already redrawn).
+      const set = await setParts(ctx, read);
+      if (set.input_norm) ctx.log(`Input normalization set to the one ${name} was ranked through: ${stepsText(set.input_norm)}`);
+      if (set.postprocess) ctx.log(`Postprocessing set to the one ${name}'s layer needs: ${stepsText(set.postprocess)}`);
       if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
         const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
         await serveModels(ctx, entries, ctx.session.state.chain);
@@ -213,7 +235,7 @@ export function rankRoutes(router: Router): void {
       ctx.viewer.selectLayer(layer, PAINT_TAB);
       ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
       return json(200, {
-        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, input_norm: inputNorm,
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, input_norm: set.input_norm, postprocess: set.postprocess,
         painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
       });
     } catch (e) {
@@ -221,47 +243,71 @@ export function rankRoutes(router: Router): void {
     }
   });
 
-  // POST /api/finetune/rank/input-norm {input_norm}: Fit to paint's, the
-  // steps a score was read through (the score answer's input_norm) made the
-  // session's input normalization, as Use this model makes them, without
-  // serving a model or making a volume. Answers the steps now set; refused
-  // (400) for a body whose input_norm is not a list of steps the browser
-  // runs (checked as PUT /api/pipeline checks them), which changes nothing.
+  // POST /api/finetune/rank/input-norm {input_norm, postprocess?}: Fit to
+  // paint's, the steps a score was read through and the postprocessing it
+  // gave (the score answer's input_norm and postprocess) made the session
+  // chain's, as Use this model makes them, without serving a model or
+  // making a volume. Answers the chain's two parts as they now are; refused
+  // (400) for a body with no input_norm, or with steps that are not a list
+  // of steps the browser runs (checked as PUT /api/pipeline checks them),
+  // which changes nothing.
   router.post("/api/finetune/rank/input-norm", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
-    const read = readInputNorm(body.input_norm);
+    const read = readParts(body);
     if ("error" in read) return badRequest(read.error);
+    if (!read.input_norm) return badRequest("input_norm: expected a list of steps");
     try {
-      if (await setInputNorm(ctx, read.steps)) ctx.log(`Input normalization set to fit the paint: ${stepsText(read.steps)}`);
-      return json(200, { success: true, input_norm: ctx.session.state.chain.input_norm });
+      const set = await setParts(ctx, read);
+      if (set.input_norm) ctx.log(`Input normalization set to fit the paint: ${stepsText(set.input_norm)}`);
+      if (set.postprocess) ctx.log(`Postprocessing set to the one the model's layer needs: ${stepsText(set.postprocess)}`);
+      const { chain } = ctx.session.state;
+      return json(200, { success: true, input_norm: chain.input_norm, postprocess: chain.postprocess });
     } catch (e) {
-      return json(400, { success: false, error: `Could not set the input normalization: ${message(e)}` });
+      return json(400, { success: false, error: `Could not set the input normalization and postprocessing: ${message(e)}` });
     }
   });
 }
 
-/** A request's `input_norm` as steps, checked as PUT /api/pipeline checks a
- * chain's (pipeline.ts readChain: a list, each step one the browser runs),
- * or the reason it is not. */
-function readInputNorm(value: unknown): { steps: Step[] } | { error: string } {
-  const read = readChain({ input_norm: value, postprocess: [] });
-  return "error" in read ? read : { steps: read.chain.input_norm };
+/** A chain's two parts, each null where it is not given (or not changed). */
+interface Parts { input_norm: Step[] | null; postprocess: Step[] | null }
+
+/** The chain's parts a request gives, a row's `input_norm` and
+ * `postprocess`, each null where the body leaves it out; or the reason one
+ * is not a chain part, each checked as PUT /api/pipeline checks a chain's
+ * (pipeline.ts readChain: a list, each step one the browser runs). */
+function readParts(body: Record<string, unknown>): Parts | { error: string } {
+  const given = (v: unknown) => v !== undefined && v !== null;
+  const read = readChain({ input_norm: given(body.input_norm) ? body.input_norm : [], postprocess: given(body.postprocess) ? body.postprocess : [] });
+  if ("error" in read) return read;
+  return { input_norm: given(body.input_norm) ? read.chain.input_norm : null, postprocess: given(body.postprocess) ? read.chain.postprocess : null };
 }
 
-/** `steps` made the session chain's input normalization, its postprocessing
- * as it is, and its layers redrawn through it (serving.ts setChain, as PUT
- * /api/pipeline sets it): the raw is the dataset's, so every model reads it
- * so. Answers whether anything changed: the session's steps already, as a
- * row read through them gives them back, change nothing. */
-async function setInputNorm(ctx: AppContext, steps: Step[]): Promise<boolean> {
+/** `parts` made the session chain's, each in place of the session's own
+ * when given and other than it, in one chain set, and its layers redrawn
+ * through it (serving.ts setChain, as PUT /api/pipeline sets it): the raw
+ * is the dataset's, so every model reads it so. Answers the parts set, each
+ * null where nothing changed: the session's steps already, as a row read
+ * through them gives them back, change nothing. */
+async function setParts(ctx: AppContext, parts: Parts): Promise<Parts> {
   const { chain } = ctx.session.state;
-  if (JSON.stringify(steps) === JSON.stringify(chain.input_norm)) return false;
-  await setChain(ctx, { ...chain, input_norm: steps });
-  return true;
+  const changed = (steps: Step[] | null, now: Step[]) => (steps && JSON.stringify(steps) !== JSON.stringify(now) ? steps : null);
+  const set = { input_norm: changed(parts.input_norm, chain.input_norm), postprocess: changed(parts.postprocess, chain.postprocess) };
+  if (set.input_norm || set.postprocess) await setChain(ctx, { input_norm: set.input_norm ?? chain.input_norm, postprocess: set.postprocess ?? chain.postprocess });
+  return set;
 }
 
-/** Normalizer steps as the log shows them: each by name with its parameters; "none" for none. */
+/** What the server's model advice assumes of a model nothing is known of
+ * (serving/probe.py suggest_input_norm, its low-confidence answer, which
+ * the server's ranking tries as "assumed"): the raw scaled from its dtype's
+ * range (dtypeRange: an integer dtype's own, 0 to 1 for a float) to [0, 1],
+ * then to [-1, 1], which everything in this repo trains on. */
+function assumedInputNorm(dtype: string): Step[] {
+  const [lo, hi] = dtypeRange(dtype);
+  return [{ name: "MinMaxNormalizer", min_value: lo, max_value: hi, invert: false }, { name: "LambdaNormalizer", expression: "x*2-1" }];
+}
+
+/** Chain steps as the log shows them: each by name with its parameters; "none" for none. */
 function stepsText(steps: readonly Step[]): string {
   return steps.map(({ name, ...p }) => `${name}(${Object.entries(p).map(([k, v]) => `${k}=${v}`).join(", ")})`).join(" → ") || "none";
 }
@@ -279,9 +325,11 @@ function sessionsTry(tries: readonly NormTry[], session: readonly Step[]): numbe
   return session.length || tries[0].from === "none" ? 0 : -1;
 }
 
-/** Where a try's input normalization came from (norm_tries's `from`), as the notes and the log say it. */
+/** Where a try's input normalization came from (norm_tries's `from`), as the log says it. */
 function through(from: string): string {
-  return from === "declared" ? "its declared input normalization" : from === "session" ? "the session's input normalization" : "no input normalization";
+  return from === "declared" ? "its declared input normalization"
+    : from === "assumed" ? "the assumed [-1, 1] input normalization"
+      : from === "session" ? "the session's input normalization" : "no input normalization";
 }
 
 /** A model's score on the paint (null when it counted nothing), with how
@@ -411,7 +459,9 @@ type Tallies = Record<string, unknown>[];
  * balanced accuracy at the model's own cut-off, its parts, the score at 0, the loss,
  * the voxels counted and a binary model's channel, by name and by index into its
  * channels, which Use this model sets the form's Channel to (both null for an
- * affinity model's, scored on its channels together). */
+ * affinity model's, scored on its channels together), with what each of a binary
+ * model's channels matched, the best first (channel_matches; none for an affinity
+ * model's). */
 interface RankScore {
   matches: number;
   objects_found: number | null;
@@ -424,6 +474,7 @@ interface RankScore {
   background_voxels: number;
   channel: string | null;
   channel_index: number | null;
+  channel_matches?: { channel: string; channel_index: number; matches: number }[];
 }
 
 /** A model's row of the ranking, as score_row answers it (portable/rank.py): the
@@ -432,7 +483,8 @@ interface RankScore {
  * Prediction's threshold (a probability), the raw's range the model read as 0
  * to 1 (null without a MinMaxNormalizer), and the normalizer steps the score kept
  * was read through, which Use this model and Fit to Paint make the session's, with
- * where they came from (norm_tries's `from`). */
+ * where they came from (norm_tries's `from`), and what the other normalizations
+ * tried matched. */
 interface RankRow extends RankScore {
   window: [number, number] | null;
   matches_without_window?: number;
@@ -440,18 +492,23 @@ interface RankRow extends RankScore {
   input_window: [number, number] | null;
   input_norm: Step[];
   input_norm_from: string;
+  input_norm_others: NormMatch[];
 }
+
+/** What a try other than the one kept matched: its `from` and its score's match. */
+interface NormMatch { from: string; matches: number }
 
 /** One input normalization a model is scored through, as rank.norm_tries answers
  * it: the steps, and where they came from ("declared", the model's manifest;
- * "session"; or "none", the raw as it is, when neither has any). */
+ * "assumed", assumedInputNorm's for a model that declares none; "session"; or
+ * "none", the raw as it is, when neither has any). */
 interface NormTry { input_norm: Step[]; from: string }
 
 /** The ranking's row from `base`, the score read through `norm` (which came from
- * `normFrom`), and `stretched`, the score read through `norm` stretched to `raw`
- * (or null): rank.score_row. */
-function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, norm: readonly Step[], raw: readonly [number, number] | null, normFrom: string): Promise<RankRow | null> {
-  return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw, norm_from: normFrom });
+ * `normFrom`), `stretched`, the score read through `norm` stretched to `raw` (or
+ * null), and `others`, what the other tries matched: rank.score_row. */
+function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, norm: readonly Step[], raw: readonly [number, number] | null, normFrom: string, others: NormMatch[]): Promise<RankRow | null> {
+  return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw, norm_from: normFrom, others });
 }
 
 /** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
