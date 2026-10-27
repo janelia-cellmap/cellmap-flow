@@ -321,14 +321,18 @@ def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(da
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.model_catalog = {"mito": {"mito_16nm": "/models/mito"}}
     monkeypatch.setattr("cellmap_flow.models.hf_catalog.list_huggingface_models",
-                        lambda: {"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8]}})
+                        lambda: {"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8]},
+                                 # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
+                                 "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
 
     body = dashboard.get("/api/finetune/rank/candidates").get_json()
 
     assert body["volume"] == {"id": "vol-1", "model_name": "model", "painted_chunks": 2}
     rows = {c["name"]: c for c in body["candidates"]}
     assert [(n, c["ticked"], c["volume_model"]) for n, c in rows.items()] == [
-        ("model", True, True), ("mito_16nm", False, False), ("nuc_model", False, False)]
+        ("model", True, True), ("mito_16nm", False, False), ("nuc_model", False, False), ("mito_2d", False, False)]
+    # Its dims are what the filter's "2d" finds.
+    assert (rows["mito_2d"]["dims"], rows["nuc_model"]["dims"]) == (2, None)
     assert rows["mito_16nm"]["entry"] == {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}
     assert rows["nuc_model"]["entry"] == {"type": "huggingface", "repo": "org/nuc-model", "name": "nuc_model"}
 

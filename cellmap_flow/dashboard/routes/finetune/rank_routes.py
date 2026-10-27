@@ -72,6 +72,31 @@ NORM_FROM = {
 }
 
 
+def _dims(input_shape):
+    """2 for a model that reads one slice (its input shape's z is 1), 3 for
+    one that reads more, None when the shape is not known: a candidate's
+    ``dims``, which the ranking's filter takes ("2d"), as the browser's
+    (web/src/finetune/modes.ts readsOneSlice). The cellmap exports' metadata
+    says ``spatial_dims`` 3 for their 2D models too (setup-53-2d's input is
+    1 x 556 x 556), so the shape is what tells."""
+    try:
+        return 2 if int(input_shape[0]) == 1 else 3
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _folder_input_shape(folder):
+    """A cellmap export folder's ``input_shape`` (metadata.json), or None."""
+    import json
+    import os
+
+    try:
+        with open(os.path.join(folder, "metadata.json")) as f:
+            return json.load(f).get("input_shape")
+    except (OSError, ValueError):
+        return None
+
+
 def _refused(message, status=400, **extra):
     return jsonify({"success": False, "error": message, **extra}), status
 
@@ -102,11 +127,16 @@ def rank_candidates():
     for config in session.models_config:
         name = getattr(config, "name", None)
         info = fetch_model_info(hosts[name]) if name in hosts else {}
+        # The server's read shape (nm) over its input voxel size: its input in voxels.
+        read, voxel = info.get("read_shape"), info.get("input_voxel_size")
+        shape = [r / v for r, v in zip(read, voxel)] if read and voxel else None
         add(name, task=getattr(type(config), "cli_name", None), finetuned=isinstance(config, FinetuneModelConfig),
-            channels=list(info.get("channels") or []), voxel_size_nm=list(info.get("output_voxel_size") or []))
+            channels=list(info.get("channels") or []), voxel_size_nm=list(info.get("output_voxel_size") or []),
+            dims=_dims(shape))
     for group, models in (session.model_catalog or {}).items():
         for name, folder in models.items():
-            add(name, task=group, source=folder, entry={"type": "cellmap", "folder_path": folder, "name": name})
+            add(name, task=group, source=folder, dims=_dims(_folder_input_shape(folder)),
+                entry={"type": "cellmap", "folder_path": folder, "name": name})
     try:
         from cellmap_flow.models.hf_catalog import list_huggingface_models
 
@@ -114,7 +144,7 @@ def rank_candidates():
             # Named as the Models tab's Submit names it (run_hf_model).
             name = _sanitize_job_name(repo.split("/")[-1])
             add(name, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
-                voxel_size_nm=list(meta.get("output_voxel_size") or []),
+                voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
                 entry={"type": "huggingface", "repo": repo, "name": name})
     except Exception as e:
         logger.warning(f"Which model to start from lists no Hugging Face models: {e}")
