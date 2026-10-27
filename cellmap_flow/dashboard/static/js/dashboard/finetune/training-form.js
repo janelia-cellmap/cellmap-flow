@@ -1,6 +1,7 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
-// next to some of them, and the GPU queue picker.
+// next to some of them, the Channel a model of several channels trains, and
+// the GPU queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
@@ -14,7 +15,8 @@ const FINETUNE_STATE_KEY = "finetuneFormState";
 // - "blank": also when it is "", which is a choice of its own (keep the
 //   manifest's value), not a missing one;
 // - "checkbox": whenever it was saved.
-// The model picker's choice is saved with them, as selectedModelName.
+// The model picker's choice is saved with them, as selectedModelName, and
+// the Channel picked for each model, as channelByModel (see setChannelChoice).
 const SAVED_FIELDS = [
   ["outputPath", "outputPath", "value"],
   ["checkpointPath", "checkpointPath", "value"],
@@ -67,6 +69,8 @@ function saveFinetuneState() {
     state[key] = kind === "checkbox" ? el.checked : held ? el.dataset.kept : el.value;
   }
   state.selectedModelName = document.getElementById("modelSelect").value;
+  const channel = document.getElementById("trainChannel");
+  state.channelByModel = keptChannels(channel.dataset.model, channel.value);
   writeJSON(FINETUNE_STATE_KEY, state);
 }
 
@@ -157,7 +161,90 @@ function trainingParams() {
     const margin = parseFloat(document.getElementById("marginValue").value);
     if (Number.isFinite(margin)) params.margin = margin;
   }
+  // Nothing when the Channel is hidden (the model trains its channels
+  // together), and nothing when it is shown but not picked: the submit
+  // route refuses that, saying why, in both modes.
+  const channel = pickedChannel();
+  if (channel !== null) params.select_channel = channel;
   return params;
+}
+
+// --- The Channel ----------------------------------------------------------
+//
+// A model of several output channels whose target is not affinities or flows
+// (its /api/finetune/models entry's channel_choice) trains one channel at a
+// time: the one picked learns the paint, the others are held to what the
+// model predicted (select_channel). Its indices mean nothing for another
+// model, so the pick is kept per model (channelByModel in the saved state).
+// The select remembers the model it is filled for (data-model, absent while
+// hidden), and a pick is saved under that model: when the model picker
+// changes, saveFinetuneState runs before models.js fills the select for the
+// new model, and must not save the old model's pick as the new one's.
+let channelPlaceholder = null;  // the template's "Pick the channel..." option, kept to put first
+
+// The Channel kept for each model, with `value` as model `name`'s (when
+// `name` is given).
+function keptChannels(name, value) {
+  const kept = { ...((restoreFinetuneState() || {}).channelByModel || {}) };
+  if (name) kept[name] = value;
+  return kept;
+}
+
+// The Channel picked, as an index; null while it is hidden or nothing is
+// picked. What training sends as select_channel, and Seed from Prediction
+// too (label-it.js), so the seed reads the channel the paint is for.
+export function pickedChannel() {
+  const select = document.getElementById("trainChannel");
+  return select.dataset.model && select.value !== "" ? Number(select.value) : null;
+}
+
+// Shows the Channel for `model` (an entry of /api/finetune/models, or null)
+// when it trains one channel at a time, its options the channels by name
+// ("channel <i>" where the names are not known) after the template's
+// placeholder, and its pick the one kept for the model; hides it otherwise.
+// models.js calls it on every load of the list: the options are rebuilt only
+// for another model or other channels, so an open select is not reset under
+// the cursor.
+export function setChannelChoice(model) {
+  const group = document.getElementById("trainChannelGroup");
+  const select = document.getElementById("trainChannel");
+  const choice = Boolean(model && model.channel_choice);
+  group.hidden = !choice;
+  if (!choice) {
+    delete select.dataset.model;
+    return;
+  }
+  channelPlaceholder = channelPlaceholder ?? select.options[0];
+  const names = model.channels || Array.from({ length: model.output_channels }, (_, i) => `channel ${i}`);
+  const options = [channelPlaceholder, ...names.map((name, i) => new Option(name, String(i)))];
+  const key = (opts) => opts.map((o) => `${o.value}|${o.text}`).join(",");
+  if (select.dataset.model === model.name && key(Array.from(select.options)) === key(options)) return;
+  select.replaceChildren(...options);
+  select.dataset.model = model.name;
+  const kept = String(keptChannels()[model.name] ?? "");
+  select.value = options.some((option) => option.value === kept) ? kept : "";
+}
+
+// Makes channel `index` model `name`'s Channel: kept for it, and shown at
+// once when the select is filled for it, else when it is picked. For rank.js's
+// Use this model, the explicit "use what the ranking found": the channel that
+// matched the paint best, for the model it makes the one to finetune, before
+// the model picker has it.
+export function pickChannel(name, index) {
+  writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) });
+  const select = document.getElementById("trainChannel");
+  if (select.dataset.model === name) select.value = String(index);
+}
+
+// pickChannel, only when the Channel is shown for model `name` with nothing
+// picked and has channel `index`: Fit to Paint's, which never overrides a
+// channel the user picked. Returns whether it set it.
+export function fillChannel(name, index) {
+  const select = document.getElementById("trainChannel");
+  const fills = select.dataset.model === name && select.value === ""
+    && Array.from(select.options).some((option) => option.value === String(index));
+  if (fills) pickChannel(name, index);
+  return fills;
 }
 
 // Whether augmentation is worth enabling depends on how many times the run
@@ -439,7 +526,7 @@ export function initTrainingForm() {
   updateMarginVisibility();
 
   // Save the state on every change, and on every keystroke in text fields.
-  for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect"]) {
+  for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect", "trainChannel"]) {
     const el = document.getElementById(id);
     el.addEventListener("change", saveFinetuneState);
     if (el.type === "text" || el.type === "number") {

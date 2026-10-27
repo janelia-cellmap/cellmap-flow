@@ -17,8 +17,11 @@ portable/calls.py; numpy and the standard library only. In short:
   best Dice of its calls against the painted objects (the nearest to 0
   among equals; 0 when only one class is painted). The score at 0 is given
   beside it.
-- A binary model answers with its best channel; an affinity model is scored
-  on its channels together.
+- A binary model answers with its best channel, by name and index
+  (``channel``, ``channel_index``): the one the Finetune tab's Use this
+  model makes the training form's Channel (select_channel) for a model of
+  several, and Fit to Paint when none is picked. An affinity model is
+  scored on its channels together, and answers neither.
 - Where the raw under the paint is narrower than NARROW_WINDOW of the
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
@@ -109,20 +112,22 @@ def tally(tallies: List[dict], target: np.ndarray, mask: np.ndarray, logits: np.
 
 def rank_score(tallies: List[dict], channels: Sequence[str], affinity: bool) -> Optional[dict]:
     """The score of ``tallies``: an affinity model's over its channels
-    together, a binary model's best channel's (by the score, then the lower
-    loss). None when nothing was counted."""
+    together (``channel`` and ``channel_index`` None), a binary model's best
+    channel's (by the score, then the lower loss), ``channel`` its name in
+    ``channels`` ("channel <i>" past them) and ``channel_index`` its index,
+    as select_channel takes it. None when nothing was counted."""
     if affinity:
         all_ = {k: sum(t[k] for t in tallies) for k in tallies[0]}
-        return _score_of(all_, None)
+        return _score_of(all_, None, None)
     best = None
     for c, t in enumerate(tallies):
-        s = _score_of(t, channels[c] if c < len(channels) else f"channel {c}")
+        s = _score_of(t, channels[c] if c < len(channels) else f"channel {c}", c)
         if s and (best is None or s["matches"] > best["matches"] or (s["matches"] == best["matches"] and s["loss"] < best["loss"])):
             best = s
     return best
 
 
-def _score_of(t: dict, channel: Optional[str]) -> Optional[dict]:
+def _score_of(t: dict, channel: Optional[str], channel_index: Optional[int]) -> Optional[dict]:
     if not t["objects"] and not t["background"]:
         return None
 
@@ -150,7 +155,7 @@ def _score_of(t: dict, channel: Optional[str]) -> Optional[dict]:
         "cutoff": float(CUTOFFS[k]), "matches_at_zero": at(zero)[2],
         "loss": sum(losses) / len(losses),
         "scored_voxels": t["objects"] + t["background"], "object_voxels": t["objects"], "background_voxels": t["background"],
-        "channel": channel,
+        "channel": channel, "channel_index": channel_index,
     }
 
 

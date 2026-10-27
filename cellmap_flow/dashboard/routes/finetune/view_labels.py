@@ -509,7 +509,9 @@ def seed_view_from_prediction():
 
     JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
     (label a large box), ``select_channel`` (the channel the session
-    trains, when it trains one), ``model`` (a name from ``seed_sources``;
+    trains, when it trains one: an index into the volume's model's
+    channels, so read only from that model or one of its finetunes),
+    ``model`` (a name from ``seed_sources``;
     the latest finetune, else the base, when absent), ``method`` (one of
     the model's ``seed_sources`` methods; "components" when absent),
     ``threshold`` (probability, 0 to 1; the model's own boundary, 0.5, when
@@ -537,14 +539,17 @@ def seed_view_from_prediction():
                 "Pick the model to seed from under Prediction from: the volume was made before a model was chosen."
             )
         # The model read decides the channels: a finetune's are its base's.
-        channels, output_type, offsets = _seed_plan(
-            _model_read_as(model_name, base_model), data.get("select_channel")
-        )
+        read_as = _model_read_as(model_name, base_model)
+        # The session's channel (the training form's Channel) numbers the
+        # volume's model's channels, so only that model and its finetunes
+        # read it; any other seeds as it would without it (a one-channel
+        # model is not asked for the volume model's channel 2).
+        select_channel = data.get("select_channel") if read_as == base_model else None
+        channels, output_type, offsets = _seed_plan(read_as, select_channel)
         offered = seed_methods(model_name, host, base_model)
         if method not in offered:
             raise _Refused(f"{model_name} cannot seed by {method}; it offers {', '.join(offered)}", 400)
         info = fetch_model_info(host)
-        read_as = _model_read_as(model_name, base_model)
         cellpose_masks = method == "instances" and _serves_cellpose_flows(read_as)
         if cellpose_masks:
             # Its server makes Cellpose's masks of its flows on asking.
@@ -561,7 +566,7 @@ def seed_view_from_prediction():
         )
         # An instance target needs ids apart from its neighbours'; a selected
         # channel trains as a binary target.
-        instance_target = output_type in INSTANCE_TARGETS and data.get("select_channel") is None
+        instance_target = output_type in INSTANCE_TARGETS and select_channel is None
 
         def labels_for(existing):
             # Ids counting up need room: an instance target on a uint16/uint32

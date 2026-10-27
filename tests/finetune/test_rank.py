@@ -2,7 +2,8 @@
 carry_paint, dashboard/routes/finetune/rank_routes.py), as the browser's
 web/test/unit/finetune-rank.test.ts tests it there: the score is balanced
 between object and background paint, read at the model's own cut-off and
-forgiving a binary model the strokes' edges; a model running is read
+forgiving a binary model the strokes' edges; a binary model answers its
+best channel by name and index, an affinity model neither; a model running is read
 through its server and any other started for its score alone; the raw is
 stretched when that scores clearly better; each row gives its threshold
 and input window; Fit to Paint sets them for the model seeding the paint
@@ -48,6 +49,20 @@ def test_the_score_is_balanced_read_at_the_models_cut_off_and_forgives_the_strok
     # A boundary a voxel off counts against it only on the strokes' edge.
     assert _stripes(5, 6, False)["matches"] < 1
     assert _stripes(5, 6, True)["matches"] == 1 and _stripes(5, 6, True)["scored_voxels"] == 32
+
+
+def test_a_binary_model_answers_its_best_channel_by_index_and_an_affinity_model_none():
+    # Three channels, the paint fitted by the second alone: its index is the
+    # training form's Channel (select_channel), which Use this model sets.
+    labels = np.where(np.arange(10) < 5, 2, 1)[None, None].repeat(4, axis=1)
+    fits = np.where(np.arange(10) < 5, 3.0, -3.0)[None, None].repeat(4, axis=1)
+    logits = np.stack([-fits, fits, np.full_like(fits, -3.0)]).astype("f4")
+    tallies = rank.empty_tallies(3)
+    rank.tally(tallies, np.repeat((labels > 1)[None], 3, axis=0), np.repeat((labels > 0)[None], 3, axis=0), logits)
+    binary = rank.rank_score(tallies, ["all_mem", "mito", "er"], False)
+    assert (binary["channel"], binary["channel_index"], binary["matches"]) == ("mito", 1, 1)
+    affinity = rank.rank_score(tallies, ["z", "y", "x"], True)
+    assert (affinity["channel"], affinity["channel_index"]) == (None, None)
 
 
 def test_only_a_narrow_raw_stretches_the_normalizer():
