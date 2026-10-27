@@ -216,8 +216,10 @@ def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> L
     first: ``{"input_norm": steps, "from": where}``.
 
     ``own`` is what the model's start sets (its declaration, ``own_from``
-    "declared"; or its kind's convention, "convention"; [] when nothing is
-    known of it), ``session`` the session's input normalization ("session").
+    "declared"; or its kind's convention, "convention"), else what the model
+    advice assumes for a model nothing is known of ("assumed"; [] when there
+    is nothing to assume), ``session`` the session's input normalization
+    ("session").
     The model's own is always tried: read through another's, or none, a model
     scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
     channel nucleus for paint of mitochondria). The session's is tried too,
@@ -225,7 +227,10 @@ def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> L
     is ("none").
     """
     tries = []
-    for steps, where in ((own, own_from), (session, "session")):
+    # An assumption is tried after the session's, which someone chose, so it
+    # loses a tie to it (best_try keeps the first among equals).
+    order = ((own, own_from), (session, "session"))
+    for steps, where in (order[::-1] if own_from == "assumed" else order):
         steps = [dict(s) for s in steps or []]
         if steps and not any(same_steps(steps, t["input_norm"]) for t in tries):
             tries.append({"input_norm": steps, "from": where})

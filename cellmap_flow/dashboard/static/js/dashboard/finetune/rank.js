@@ -67,14 +67,17 @@ export function rankResults(answers) {
 
 // Whether `candidate` shows under the filter typed: every word of it is in
 // the model's name, task, channels or a voxel size ("16 nm" or "16nm"), or
-// is its "2d" or "3d", or "finetuned", whatever the case. Blank shows all.
+// is its "2d" or "3d", or "finetuned", whatever the case. Spaces, commas,
+// hyphens and underscores all separate words, in the filter and the names
+// alike, so "mito aff", "mito-aff" and "mito_aff" all find
+// mito-aff-unet-setup-16, listed as mito_aff_unet_setup_16. Blank shows all.
 export function matchesFilter(candidate, query) {
-  const words = query.toLowerCase().replace(/(\d)\s+nm\b/g, "$1nm").split(/[\s,]+/).filter(Boolean);
+  const words = query.toLowerCase().replace(/(\d)\s+nm\b/g, "$1nm").split(/[\s,_-]+/).filter(Boolean);
   const text = [
     candidate.name, candidate.task, ...(candidate.channels || []),
     ...(candidate.voxel_size_nm || []).map((size) => `${size}nm`),
     candidate.dims && `${candidate.dims}d`, candidate.finetuned && "finetuned",
-  ].filter(Boolean).join(" ").toLowerCase();
+  ].filter(Boolean).join(" ").toLowerCase().replace(/[_-]+/g, " ");
   return words.every((word) => text.includes(word));
 }
 
@@ -87,6 +90,7 @@ function isScored(answer) {
 const NORM_FROM = {
   declared: "its own",
   convention: "CellMap convention",
+  assumed: "assumed [−1, 1]",
   session: "yours",
   none: "none",
 };
@@ -229,7 +233,7 @@ export function initRank() {
   // it was left as it was.
   function inputText(row) {
     if (!changesInput(row)) return "the input normalization is left as it was";
-    const from = { declared: "its declared one", convention: "the CellMap convention", session: "yours" }[row.input_norm_from] || "the one it was read through";
+    const from = { declared: "its declared one", convention: "the CellMap convention", assumed: "the assumed [−1, 1]", session: "yours" }[row.input_norm_from] || "the one it was read through";
     return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
   }
 

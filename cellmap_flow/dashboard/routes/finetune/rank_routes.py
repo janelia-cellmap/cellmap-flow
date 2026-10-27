@@ -55,6 +55,7 @@ RAW_SAMPLE = 1_000_000
 NORM_FROM = {
     "declared": "its declared input normalization",
     "convention": "the CellMap convention's input normalization",
+    "assumed": "the assumed [-1, 1] input normalization",
     "session": "the session's input normalization",
     "none": "no input normalization",
 }
@@ -282,15 +283,25 @@ def _install_input_norm(steps, required=False):
 
 def _norm_tries(config, session):
     """The input normalizations ``config``'s model is scored through
-    (portable/rank.py norm_tries): what its start sets (routes/pipeline.py
-    start_input_norm: its declaration, or its kind's convention) and the
-    session's."""
+    (portable/rank.py norm_tries): its own and the session's.
+
+    Its own is what its start sets (routes/pipeline.py start_input_norm: its
+    declaration, or its kind's convention), else what the model advice
+    assumes for a model nothing is known of ([-1, 1], "assumed"), which a
+    start does not set but a score may: the score says whether it fits.
+    fly_organelles' /nrs copies declare nothing and are not under the CellMap
+    models' folder, and were read through no normalization at all."""
     from cellmap_flow.dashboard.routes import model_advice
     from cellmap_flow.dashboard.routes.pipeline import start_input_norm
 
-    own, declared = start_input_norm(config, *model_advice.raw_dtype_and_range(session.dataset_path))
-    return rank.norm_tries(own, "declared" if declared else "convention",
-                           [dict(s) for s in session.pipeline_spec.input_norm])
+    raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
+    own, declared = start_input_norm(config, raw_dtype, raw_range)
+    own_from = "declared" if declared else "convention"
+    if not own:
+        suggestion, _ = model_advice.input_norm_suggestion(config, model_advice.model_metadata(config), raw_dtype, raw_range)
+        own = [{"name": name, **suggestion["input_norm"][name]} for name in suggestion["order"]]
+        own_from = "assumed"
+    return rank.norm_tries(own, own_from, [dict(s) for s in session.pipeline_spec.input_norm])
 
 
 def _model_config(name, entry):

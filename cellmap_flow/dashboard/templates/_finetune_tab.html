@@ -569,7 +569,7 @@
       <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.</p>
       <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
              placeholder="Filter: nuc, 16 nm, mito_aff"
-             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito_aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
+             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
       <small class="d-block text-muted mb-1">Tick
         <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
         <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone">none</button>
@@ -587,7 +587,7 @@
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: the average of two shares, which ranks the models: of your painted objects, how many the model calls object, and of your painted background, how many it calls background. 50% is what a model that calls everything background (or everything object) gets; 100% is all of your paint right. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the input normalization the model was read through: its own (what it declares, or the CellMap convention for a CellMap model), or yours from the Processing tab when that matched better; with the raw under your paint stretched when that matched clearly better. Use this model sets the threshold and that input normalization, and the channel named in the row as the Channel the model trains (in the training form, for a model of several channels); Fit to Paint sets the threshold and input normalization for the model seeding the paint, and its Channel only when none is picked.</small>
+        <small class="d-block text-muted mb-1">Match: how much of your paint the model already gets right, objects and background counting equally (50% is guessing, 100% is all of it). Use this model makes it the model to finetune, with the row's threshold, input normalization and channel.</small>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
         <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
       </div>

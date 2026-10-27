@@ -94,6 +94,8 @@ def test_a_model_is_tried_through_its_own_normalization_and_the_sessions():
     same = [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
     assert [t["from"] for t in norm_tries(own, "convention", same)] == ["convention"]
     assert [t["from"] for t in norm_tries(own, "declared", own[:1])] == ["declared", "session"]
+    # An assumption comes after the session's, so it loses a tie to it.
+    assert [t["from"] for t in norm_tries(own, "assumed", own[:1])] == ["session", "assumed"]
     assert norm_tries([], "convention", []) == [{"input_norm": [], "from": "none"}]
     # The better is kept, the model's own among equals.
     assert best_try([{"matches": 0.5}, {"matches": 0.9}]) == 1
@@ -129,6 +131,11 @@ def test_paint_is_carried_onto_another_models_grid(tmp_path, finer):
         assert (carried[2:4, 2:4, 2:4] == 2).all() and carried.sum() == 16
     else:
         assert carried[1, 1, 1] == 2 and carried.sum() == 2
+
+
+def _model(name):
+    """A model config that declares no input normalization (ModelConfig.declared_input_norm), which ranking asks."""
+    return SimpleNamespace(name=name, declared_input_norm=lambda data_range=None: None)
 
 
 @pytest.fixture
@@ -171,7 +178,7 @@ def painted(tmp_path, monkeypatch):
 def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running):
     session, started, killed = get_session(), [], []
     if running:
-        session.models_config = [SimpleNamespace(name="model")]
+        session.models_config = [_model("model")]
         session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     else:
         def start_hosts(command, job_name, **kwargs):
@@ -179,7 +186,7 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
             started.append(job)
             return job
 
-        monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: SimpleNamespace(name=name))
+        monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
         monkeypatch.setattr("cellmap_flow.serving.launch.server_command", lambda config, path, resample: "serve")
         monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
 
@@ -199,7 +206,7 @@ def test_a_model_is_read_through_its_own_input_normalization_when_the_session_ha
     A model is read through what its start sets, and the session's too when
     that is another, the better kept."""
     session = get_session()
-    session.models_config = [SimpleNamespace(name="model")]
+    session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     own = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
     monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline.start_input_norm", lambda config, dtype, range_: (own, False))
@@ -226,9 +233,26 @@ def test_a_model_is_read_through_its_own_input_normalization_when_the_session_ha
     assert "through the session's input normalization it matched 50%" in body["note"]
 
 
+def test_a_model_nothing_declares_is_read_through_the_assumed_normalization(dashboard, painted, monkeypatch):
+    """fly_organelles' /nrs copies declare nothing and are not CellMap's by
+    their folder, so a start sets nothing; they were ranked on raw values
+    ("Input none"). The model advice's assumption is tried instead."""
+    session = get_session()
+    session.models_config = [_model("model")]
+    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.model_advice.raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+
+    body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
+
+    assert body["success"], body
+    assert body["input_norm_from"] == "assumed"
+    assert [s["name"] for s in body["input_norm"]] == ["MinMaxNormalizer", "LambdaNormalizer"]
+    assert body["input_norm"][1]["expression"] == "x*2-1"
+
+
 def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, painted, monkeypatch):
     session = get_session()
-    session.models_config = [SimpleNamespace(name="model")]
+    session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
@@ -245,7 +269,7 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
 
 def test_fit_to_paint_sets_the_threshold_and_input_normalization_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
     session = get_session()
-    session.models_config = [SimpleNamespace(name="model")]
+    session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
@@ -274,7 +298,7 @@ def test_fit_to_paint_sets_the_threshold_and_input_normalization_of_the_model_se
 
 def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(dashboard, painted, monkeypatch):
     session = get_session()
-    session.models_config = [SimpleNamespace(name="model")]
+    session.models_config = [_model("model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     session.model_catalog = {"mito": {"mito_16nm": "/models/mito"}}
     monkeypatch.setattr("cellmap_flow.models.hf_catalog.list_huggingface_models",
@@ -312,7 +336,7 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(name))
     # The chain set, without a raw to redraw the viewer from.
     monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
-    monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: SimpleNamespace(name=name))
+    monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
     body = dashboard.post("/api/finetune/rank/use", json={
         "name": "mito_16nm", "input_norm": [{"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}],
