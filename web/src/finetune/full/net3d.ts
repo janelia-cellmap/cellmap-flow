@@ -53,16 +53,20 @@ import type * as TF from "@tensorflow/tfjs-core";
 
 import type { Tf } from "./cellmap-tfjs-train";
 import { describeSides, opInputs, outputSide, tileSides, type TrainGraph, type TrainOp } from "./graph";
+import type { LossTerms } from "./loss";
 
-/** A step's loss on the network's logits: the total it minimizes, and its terms for the log. */
-export type Loss3d = (z: TF.Tensor5D) => { total: TF.Scalar; supervised: TF.Scalar; distillation: TF.Scalar | null };
+/** A step's loss on the network's logits: the total it minimizes, and its terms for the log (loss.ts lossTerms). */
+export type Loss3d = (z: TF.Tensor5D) => LossTerms;
+
+/** A step's terms as numbers, as they were before the step: Loss3d's, null where it had none. */
+export interface StepTerms { total: number; supervised: number; distillation: number | null; otherChannels: number | null }
 
 export interface Net3d {
   /** One Adam step on the block `x` ([1, D, H, W, 1], NDHWC) with `loss` on
    * the logits ([1, D − context, H − context, W − context, C]); the terms as
    * they were before the step. Throws GpuMemoryError when the GPU ran out of
    * memory, the weights left as they were. */
-  step(x: TF.Tensor5D, loss: Loss3d): Promise<{ total: number; supervised: number; distillation: number | null }>;
+  step(x: TF.Tensor5D, loss: Loss3d): Promise<StepTerms>;
   /** The logits on `x` without a gradient, freeing as it goes (the starting network's, for distillation). */
   forward(x: TF.Tensor5D): TF.Tensor5D;
   /** forward, waiting for the GPU between segments so that it gives back
@@ -726,7 +730,7 @@ export function buildNet3d(tf: Tf, graph: TrainGraph, weights: Record<string, Fl
     return C.get(graph.output) as TF.Tensor5D;
   }
 
-  function step(x: TF.Tensor5D, loss: Loss3d): Promise<{ total: number; supervised: number; distillation: number | null }> {
+  function step(x: TF.Tensor5D, loss: Loss3d): Promise<StepTerms> {
     if (!trains.size) return Promise.reject(new Error(learningRate > 0 ? "no param of the network is trainable" : "this network was built to run forward only (learning rate 0)"));
     try {
       checkBlock(x);
@@ -736,12 +740,12 @@ export function buildNet3d(tf: Tf, graph: TrainGraph, weights: Record<string, Fl
     return submittingEachOp(() => runStep(x, loss));
   }
 
-  async function runStep(x: TF.Tensor5D, loss: Loss3d): Promise<{ total: number; supervised: number; distillation: number | null }> {
+  async function runStep(x: TF.Tensor5D, loss: Loss3d): Promise<StepTerms> {
     if (gpu) await settle(gpu, true);  // the teacher's forward pass, and the last step's leftovers
     const C = new Map<string, TF.Tensor>([[graph.input, x]]);  // checkpoints by name
     const G = new Map<string, TF.Tensor>();  // their gradients
     const grads = new Map<string, TF.Tensor>();  // the params'
-    let terms: { total: TF.Tensor; supervised: TF.Tensor; distillation: TF.Tensor | null } | null = null;
+    let terms: { total: TF.Tensor; supervised: TF.Tensor; distillation: TF.Tensor | null; otherChannels: TF.Tensor | null } | null = null;
     const add = (into: Map<string, TF.Tensor>, name: string, g: TF.Tensor | undefined) => {
       if (!g) return;
       const had = into.get(name);
@@ -754,7 +758,7 @@ export function buildNet3d(tf: Tf, graph: TrainGraph, weights: Record<string, Fl
     const cleanUp = () => {
       for (const [n, t] of C) if (n !== graph.input) t.dispose();
       [...G.values(), ...grads.values()].forEach((t) => t.dispose());
-      if (terms) [terms.total, terms.supervised, terms.distillation].forEach((t) => t?.dispose());
+      if (terms) [terms.total, terms.supervised, terms.distillation, terms.otherChannels].forEach((t) => t?.dispose());
       C.clear(); G.clear(); grads.clear();
     };
     const computed = await guarded(gpu, async () => {
@@ -783,7 +787,7 @@ export function buildNet3d(tf: Tf, graph: TrainGraph, weights: Record<string, Fl
           const out = runUnits(s.from, s.to, given(s), new Set([s.output])).get(s.output)!;
           if (!last) return out;
           const t = loss(out as TF.Tensor5D);
-          terms = { total: t.total, supervised: tf.keep(t.supervised), distillation: t.distillation && tf.keep(t.distillation) };
+          terms = { total: t.total, supervised: tf.keep(t.supervised), distillation: t.distillation && tf.keep(t.distillation), otherChannels: t.otherChannels && tf.keep(t.otherChannels) };
           return t.total;
         }, [...ins.map((n) => C.get(n)!), ...ps.map((n) => P[n])], dy, true);
         if (last) terms!.total = value;
@@ -797,8 +801,8 @@ export function buildNet3d(tf: Tf, graph: TrainGraph, weights: Record<string, Fl
         if (gpu) await settle(gpu, true);
       }
       const t = terms!;
-      const [total, supervised, distillation] = await Promise.all([t.total.data(), t.supervised.data(), t.distillation?.data()]);
-      return { total: total[0], supervised: supervised[0], distillation: distillation ? distillation[0] : null };
+      const [total, supervised, distillation, otherChannels] = await Promise.all([t.total.data(), t.supervised.data(), t.distillation?.data(), t.otherChannels?.data()]);
+      return { total: total[0], supervised: supervised[0], distillation: distillation ? distillation[0] : null, otherChannels: otherChannels ? otherChannels[0] : null };
     });
     if (computed.error || !computed.value) {
       cleanUp();

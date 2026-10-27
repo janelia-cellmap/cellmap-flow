@@ -244,6 +244,23 @@ describe.skipIf(!python)("GET /api/finetune/models", () => {
   });
 });
 
+/** A binary model of eight channels, fly_organelles' (cellmap/fly_organelles_run08), trained one at a time. */
+const ORGANELLES = ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"];
+const organelles = () => entry("fly_organelles_run08", "organelles", ORGANELLES);
+
+describe("GET /api/finetune/models' channels", () => {
+  it("offers the channel pick for a binary model of several channels, and not for an affinity model or a model of one", async () => {
+    const ctx = fakeContext();
+    const many = organelles();
+    await serve(ctx, entry("setup_54"), many, entry("setup_56", "nuc", ["nuc"], 128));
+    const models = body(await harness(ctx).handle(request("GET", "/api/finetune/models"))).models;
+    const byName = Object.fromEntries(models.map((m: any) => [m.name, m]));
+    expect(byName[NAME_54]).toMatchObject({ channels: ["mito_aff_z", "mito_aff_y", "mito_aff_x"], channel_choice: false });
+    expect(byName[many.name]).toMatchObject({ channels: ORGANELLES, channel_choice: true });
+    expect(byName[NAME_56]).toMatchObject({ channels: ["nuc"], channel_choice: false });
+  });
+});
+
 describe.skipIf(!python)("the existing volumes", () => {
   it("resumes a volume as the session's, in place, with its painted chunks counted and its record as metadata", async () => {
     const { ctx, h, id } = await ready();
@@ -286,6 +303,35 @@ describe.skipIf(!python)("POST /api/finetune/submit", () => {
     expect(unpainted.status).toBe(400);
     expect("needs_volume" in body(unpainted)).toBe(false);
     expect(h.jobs.list()).toEqual([]);
+  });
+});
+
+describe.skipIf(!python)("POST /api/finetune/submit of one channel", () => {
+  it("refuses a model of several channels without the channel picked, or with one it has not, trains the one picked and restarts on it", async () => {
+    const ctx = fakeContext();
+    const many = organelles();
+    await serve(ctx, many, entry("setup_54"));
+    const { run, calls } = fakeRun();
+    const h = harness(ctx, { run });
+    await h.handle(request("POST", "/api/finetune/create-volume", { model_name: many.name }));
+    await paint(ctx, ctx.session.state.paintVolume!, [0, 0, 0]);
+    const submit = (extra: Record<string, unknown>) => h.handle(request("POST", "/api/finetune/submit", submitBody(extra)));
+    for (const refused of [{ model_name: many.name }, { model_name: many.name, select_channel: 8 }, { model_name: NAME_54, select_channel: 0 }]) {
+      const res = await submit(refused);
+      expect(res.status).toBe(400);
+      expect(body(res).success).toBe(false);
+    }
+    expect(calls).toHaveLength(0);
+    const picked = body(await submit({ model_name: many.name, select_channel: 2 }));
+    expect(picked.success).toBe(true);
+    const job = h.jobs.get(picked.job_id)!;
+    await job.settled();
+    expect(calls[0].options.selectChannel).toBe(2);
+    expect(job.statusRecord().params).toMatchObject({ select_channel: 2, output_type: "binary" });
+    // Shift+R sends the form without a pick: the restart trains the job's channel.
+    expect(body(await h.handle(request("POST", `/api/finetune/job/${picked.job_id}/restart`, { ...FORM, num_epochs: 1 }))).success).toBe(true);
+    await job.settled();
+    expect(calls[1].options.selectChannel).toBe(2);
   });
 });
 

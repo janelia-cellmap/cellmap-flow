@@ -343,7 +343,9 @@ type Tallies = Record<string, unknown>[];
 
 /** A model's score on the paint, as rank_score answers it (portable/rank.py): the
  * balanced accuracy at the model's own cut-off, its parts, the score at 0, the loss,
- * the voxels counted and a binary model's channel (null for an affinity model's). */
+ * the voxels counted and a binary model's channel, by name and by index into its
+ * channels, which Use this model sets the form's Channel to (both null for an
+ * affinity model's, scored on its channels together). */
 interface RankScore {
   matches: number;
   objects_found: number | null;
@@ -355,6 +357,7 @@ interface RankScore {
   object_voxels: number;
   background_voxels: number;
   channel: string | null;
+  channel_index: number | null;
 }
 
 /** A model's row of the ranking, as score_row answers it (portable/rank.py): the

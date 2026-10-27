@@ -123,7 +123,7 @@ describe("net3d's lean training step", () => {
       for (let i = 0; i < 2; i++) {
         const terms = await lean.step(x, (z) => {
           const supervised = maskedBce(tf, z, target, mask);
-          return { total: tf.clone(supervised), supervised, distillation: null };
+          return { total: tf.clone(supervised), supervised, distillation: null, otherChannels: null };
         });
         expect(terms.supervised).toBeCloseTo(terms.total, 6);
         leanLosses.push(terms.total);

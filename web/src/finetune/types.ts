@@ -162,6 +162,16 @@ export interface FinetuneOptions {
    * noise, flips and quarter turns, as the server's augmentation
    * (augment.ts); the head trains on features computed once, and ignores it. */
   augment: boolean;
+  /** The one output channel the paint is for, by index into the model's
+   * channels (the server's select_channel), or null to train every channel
+   * on the paint (one target for a model of one channel, each its own for
+   * an affinity model). A model of several channels that are not affinities
+   * trains one at a time (target-call.ts channelChoice), as the routes
+   * require: that channel gets the paint's target, and the others stay as
+   * the model had them, in the head by their rows of it left untouched
+   * (run.ts), in the whole network by a hold to the starting network's
+   * prediction (full/loss.ts lossTerms). */
+  selectChannel: number | null;
 }
 
 /** How a run speaks to the job that follows it: its log lines, in the words
@@ -297,4 +307,5 @@ export const DEFAULT_OPTIONS: FinetuneOptions = {
   batchPatches: 1,
   tileSize: null,
   augment: FINETUNE_DEFAULTS.augment,
+  selectChannel: null,
 };
