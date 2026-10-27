@@ -347,6 +347,7 @@ STATUSES = [
     pytest.param("post", "/api/finetune/job/j/cancel", None, "on LSF", 200, id="cancel"),
     pytest.param("post", "/api/finetune/job/j/stop-early", None, None, 200, id="stop early"),
     pytest.param("post", "/api/finetune/job/nope/stop-early", None, None, 404, id="stop an unknown job early"),
+    pytest.param("post", "/api/finetune/job/j/stop-early", None, "waiting", 400, id="stop a job that is not training"),
     pytest.param("post", "/api/finetune/job/j/restart", {}, "waiting", 200, id="restart"),
     pytest.param("post", "/api/finetune/job/j/restart", {}, None, 409, id="restart a job that is not waiting"),
     pytest.param("post", "/api/finetune/submit", {}, None, 400, id="submit without a model"),

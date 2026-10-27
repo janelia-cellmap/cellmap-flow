@@ -148,6 +148,8 @@ class PatchSampler:
             ANCHOR_SHARE by default for a painted session, else 0.
         annotated_chunks: how many chunks hold a voxel of a pool, the
             default epoch length.
+        class_voxels: (background, foreground), how many voxels of the
+            volume are annotated as each, the crops' and the paint's alike.
         corner_nm, shape_voxels: where annotation voxel 0's lower corner is
             (see volume_corner_nm), and the volume's shape in voxels.
         paint_planes: how many painted voxels (of ``sparse``) lie in an x–y,
@@ -336,24 +338,24 @@ class PatchSampler:
         sparse_rows: List[np.ndarray] = []
         n_fg_chunks = 0  # chunks that contributed voxels to a pool
         sparse_is_fg: List[np.ndarray] = []  # per sparse_rows entry, which rows are foreground
+        n_foreground = n_annotated = 0
         for index in chunks:
             chunk_origin = np.array(index, dtype=np.int64) * chunk_shape
             chunk_data = read_chunk(arr, index)
-            if bbox_offsets.shape[0] == 0:
-                # No imported crops: everything is sparse (painted).
-                painted_local = np.argwhere(chunk_data >= 1).astype(np.int64)
-                if not painted_local.size:
-                    # The file exists (zarr writes fill chunks during slab
-                    # writes) but holds no annotation; skip it.
-                    continue
-                n_fg_chunks += 1
-                sparse_rows.append((painted_local + chunk_origin).astype(POOL_DTYPE))
-                sparse_is_fg.append(chunk_data[tuple(painted_local.T)] >= 2)
-                continue
             annotated_local = np.argwhere(chunk_data >= 1).astype(np.int64)
             if not annotated_local.size:
+                # The file exists (zarr writes fill chunks during slab
+                # writes) but holds no annotation; skip it.
                 continue
             is_fg = chunk_data[tuple(annotated_local.T)] >= 2
+            n_foreground += int(is_fg.sum())
+            n_annotated += is_fg.size
+            if bbox_offsets.shape[0] == 0:
+                # No imported crops: everything is sparse (painted).
+                n_fg_chunks += 1
+                sparse_rows.append((annotated_local + chunk_origin).astype(POOL_DTYPE))
+                sparse_is_fg.append(is_fg)
+                continue
             annotated_global = annotated_local + chunk_origin
             in_dense = voxels_inside_any_bbox(annotated_global, bbox_offsets, bbox_ends)
             contributed = False
@@ -388,6 +390,7 @@ class PatchSampler:
                 arr, chunks, chunk_shape, bbox_offsets, bbox_ends
             )
         self.annotated_chunks = n_fg_chunks
+        self.class_voxels = (n_annotated - n_foreground, n_foreground)
 
         n_dense, n_sparse = int(self.dense.shape[0]), int(self.sparse.shape[0])
         if n_dense == 0 and n_sparse == 0:

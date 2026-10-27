@@ -178,9 +178,10 @@ def get_loaded_models():
 def remove_loaded_model():
     """The ✕ of one model on the Loaded models list, ``{"name": ...}``: stop
     that model and take its layer away, and nothing else
-    (services.launch.remove_model). Answers the list as it is then; a 404
-    when no model of that name is running, a 409 for a finetune job's model
-    while the job is alive, which the Finetune tab stops."""
+    (services.launch.remove_model): a finetune job's model's job is
+    cancelled with it. Answers the list as it is then; a 404 when no model
+    of that name is running, a 409 when a finetune job could not be
+    cancelled."""
     body, error = parse(RemoveModel, request.get_json(silent=True))
     if error:
         return error

@@ -17,12 +17,10 @@ the viewer's status bar how it answered one (restart_key).
 """
 
 import os
-import json
 import logging
 import re
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 
 from flask import Response, jsonify, request
@@ -542,40 +540,28 @@ def cancel_job(job_id):
 
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
+    manager = get_session().finetune_job_manager
+    if job_id not in (getattr(manager, "jobs", {}) or {}):
+        return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
     try:
-        jobs = getattr(get_session().finetune_job_manager, "jobs", {}) or {}
-        job = jobs.get(job_id)
-        if job is None:
-            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
-
-        output_dir = Path(job.output_dir)
-        if not output_dir.exists():
-            return jsonify({"success": False, "error": f"Job output dir missing: {output_dir}"}), 400
-
-        signal_path = output_dir / "stop_signal.json"
-        with open(signal_path, "w") as f:
-            json.dump(
-                {
-                    "requested_at": datetime.now().isoformat(),
-                    "reason": "user_requested_stop_early",
-                },
-                f,
-                indent=2,
-            )
-
-        return jsonify(
-            {
-                "success": True,
-                "message": (
-                    "Stop requested. Training will exit after the current epoch; "
-                    "the inference server will then start so you can restart with "
-                    "updated parameters."
-                ),
-            }
-        )
+        # To the job's control endpoint as a restart goes, else as the run's
+        # stop_signal.json (job_manager.restart).
+        manager.stop_training_early(job_id)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error requesting stop-early: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify(
+        {
+            "success": True,
+            "message": (
+                "Stop requested. Training will exit after the current epoch; "
+                "the inference server will then start so you can restart with "
+                "updated parameters."
+            ),
+        }
+    )
 
 
 def _restart_training_settings(job, changes, corrections_dir):
