@@ -119,6 +119,17 @@ function settingsCells(row) {
       "Output ", h("strong", {}, outputWords(row.postprocess))));
 }
 
+// What a score that is right on one class only does, in words: a model
+// that calls (almost) everything object finds every painted object and
+// matches about as well as guessing (objects 99%, background 34%: 66%), and
+// "objects 99%" alone read as good. Null when both are right at least half
+// the time.
+function lopsided(row) {
+  if (Number.isFinite(row.background_right) && row.background_right < 0.5) return "calls most of your background object too";
+  if (Number.isFinite(row.objects_found) && row.objects_found < 0.5) return "misses most of your objects";
+  return null;
+}
+
 // What the other input normalizations tried matched: "none 51%".
 function othersText(others) {
   return others.map((o) => `${NORM_FROM[o.from] || o.from} ${percent(o.matches)}`).join(", ");
@@ -517,7 +528,8 @@ export function initRank() {
           candidate && showButton(candidate))),
       scored
         ? h("div", {}, h("strong", {}, `${percent(row.matches)} match`),
-          ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`)
+          ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`,
+          lopsided(row) && h("span", { class: "text-warning" }, ` · ${lopsided(row)}`))
         : h("div", { class: "small text-danger" }, row.error || "No score in the answer"),
       scored && settingsCells(row),
       details && h("small", { class: "d-block text-muted" }, details));
@@ -643,6 +655,12 @@ export function initRank() {
       rankBtn.disabled = false;
       showResults();
       say(d.error || `Could not make ${candidate.name} the model to finetune.`, "danger");
+      // The route may have done part of it before failing, or before its
+      // answer was lost ("Failed to fetch"): the input normalization and
+      // sigmoid set, the model started. Read the chain, the models and this
+      // list again, so the Processing tab and the lists show what is so.
+      announce(CHAIN_CHANGED_EVENT);
+      announce(MODELS_CHANGED_EVENT);
       return;
     }
     training = { name: d.name, volumeId: d.volume_id };

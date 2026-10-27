@@ -335,7 +335,6 @@ def rank_use():
     from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
     from cellmap_flow.dashboard.services.launch import running_names
     from cellmap_flow.finetune.session.volume import carry_paint
-    from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
     data = request.get_json(silent=True) or {}
     name = str(data.get("name") or "").strip()
@@ -364,7 +363,7 @@ def rank_use():
         if name not in running_names():
             _start_for_good(name, config)
         sync_annotation_volume_from_minio(from_id)
-        to_id, zarr_path, minio_url, _ = make_volume(name, config, resolve_model_geometry(name, config), from_volume["corrections_dir"])
+        to_id, zarr_path, minio_url, _ = make_volume(name, config, _served_geometry(name, config), from_volume["corrections_dir"])
         carried = carry_paint(from_volume, session.annotation_volumes[to_id])
         ensure_minio_serving(zarr_path, to_id, output_base_dir=from_volume["corrections_dir"])
         layer = f"annotation_{to_id}"
@@ -509,6 +508,39 @@ def _serving(name, config):
     job = launch(config, session.dataset_path, queue=session.queue, charge_group=session.charge_group,
                  resample=session.resample)
     return job.host, job
+
+
+# The longest Use this model waits for the model it started to answer with
+# its sizes. A server is usually up 10 to 60 s after its job is submitted; a
+# job still queued for a GPU after this keeps starting, and Use this model
+# can be pressed again once it runs.
+SERVER_WAIT_SECONDS = 180
+
+
+def _served_geometry(name, config, timeout=SERVER_WAIT_SECONDS):
+    """``name``'s geometry, from its server or the geometry cache, waiting up
+    to ``timeout`` seconds for the server Use this model just started; never
+    from the model built in the dashboard.
+
+    resolve_model_geometry builds the model here when neither knows it, and
+    for a model whose metadata names two blocks (jrc_mus-livers' 216 and 288,
+    which only running it tells apart) that loaded its TorchScript on the
+    dashboard's CPU and ran it at 288^3: the dashboard died there
+    ("Segmentation fault"), and the page had "Failed to fetch". Raises
+    RuntimeError when the server has not answered in time."""
+    from cellmap_flow.models import geometry_cache
+
+    deadline = time.time() + timeout
+    while True:
+        # resolve_model_geometry's first two sources, as it asks them.
+        geometry = geometry_cache.model_geometry_config(name) or geometry_cache.load_cached_geometry(config)
+        if geometry is not None:
+            return geometry
+        if time.time() >= deadline:
+            raise RuntimeError(f"{name}'s server did not answer with its sizes within {timeout // 60} minutes "
+                               "(its job may be waiting for a GPU); it keeps starting: press Use this model "
+                               "again once it is running")
+        time.sleep(3)
 
 
 def _start_for_good(name, config):

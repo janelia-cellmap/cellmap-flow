@@ -478,7 +478,14 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
 
     monkeypatch.setattr(annotation_core, "make_volume", make_volume)
     monkeypatch.setattr(finetune_utils, "ensure_minio_serving", lambda *a, **k: None)
-    monkeypatch.setattr(geometry_cache, "resolve_model_geometry", lambda name, config: {})
+    # Its server answers with its sizes once it is up, the second time it is
+    # asked; the model is never built in the dashboard for them (it died
+    # doing that for jrc_mus-livers).
+    answers = iter([None, {"read_shape": 1}])
+    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: next(answers))
+    monkeypatch.setattr(geometry_cache, "load_cached_geometry", lambda config: None)
+    monkeypatch.setattr(geometry_cache, "build_here", lambda config: pytest.fail("built in the dashboard"))
+    monkeypatch.setattr(rank_routes.time, "sleep", lambda seconds: None)
     # The chain set and the channel shown when the model is started, without a raw to redraw the viewer from.
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
         (name, session.pipeline_spec.to_json_data(), session.shown_channel(name))))
