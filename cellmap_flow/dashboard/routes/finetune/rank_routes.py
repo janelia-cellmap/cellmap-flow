@@ -10,19 +10,23 @@ model not running is started on the cluster for its score. POST
 paint (portable/rank.py says how; the browser runs the same Python): a running model
 through its server, any other started for the score alone (``entry``, the
 candidate's, says how to build it) and stopped after, so a ranking leaves
-the Models tab and the cluster as they were. Where the raw under the paint
-is narrow, the same server is asked again through the dashboard's
-normalizer stretched to the raw's window: a server runs the chain each
-request names. The answer is the ranking's row (portable/rank.py
-score_row: the score kept, its threshold and the raw's range it read).
-POST /api/finetune/rank/use {name, entry?, window?} makes the one picked
-the model to finetune: running (as the Models tab's Add runs it), the
-window its score chose (if any) made the dashboard's normalization, a
-volume made for it with the session volume's paint carried onto its grid
-(session/volume.py carry_paint) and its paint layer in the old one's
-place; the old volume stays. POST /api/finetune/rank/window {window} makes
-the window the dashboard's normalization alone, with no model started and
-no volume made: Fit to paint's, for the model already seeding the paint.
+the Models tab and the cluster as they were. The model is read through
+its own input normalization (what its start sets: its declaration, or the
+CellMap convention) and through the session's when that is another, and
+the better kept: a server runs the chain each request names. Where the raw
+under the paint is narrow, the same server is asked again through that
+normalization stretched to the raw's window. The answer is the ranking's
+row (portable/rank.py score_row: the score kept, its threshold, the raw's
+range it read and the steps it was read through, ``input_norm``).
+POST /api/finetune/rank/use {name, entry?, input_norm?} makes the one
+picked the model to finetune: ``input_norm`` (the row's) made the
+dashboard's normalization first, then the model running (as the Models
+tab's Add runs it), a volume made for it with the session volume's paint
+carried onto its grid (session/volume.py carry_paint) and its paint layer
+in the old one's place; the old volume stays. POST
+/api/finetune/rank/input-norm {input_norm} makes the row's steps the
+dashboard's normalization alone, with no model started and no volume
+made: Fit to paint's, for the model already seeding the paint.
 """
 
 import logging
@@ -45,6 +49,15 @@ logger = logging.getLogger(__name__)
 
 # The most raw voxels the raw's window is taken from (every few of them).
 RAW_SAMPLE = 1_000_000
+
+# Where a score's input normalization came from (portable/rank.py
+# norm_tries's ``from``), as the score's notes and the log name it.
+NORM_FROM = {
+    "declared": "its declared input normalization",
+    "convention": "the CellMap convention's input normalization",
+    "session": "the session's input normalization",
+    "none": "no input normalization",
+}
 
 
 def _refused(message, status=400, **extra):
@@ -127,14 +140,18 @@ def rank_score():
         output_type, offsets = autodetect_output_type(config, None, None)
         offsets = None if output_type != "affinities" else _offsets(offsets)
         boxes = [box for box in map(lambda index: _painted_box(volume, index), rank.spread(chunks, rank.RANK_BLOCKS)) if box]
-        base, outside = _score(host, name, volume, boxes, info, offsets)
+        # Through the model's own input normalization and the session's, the
+        # better kept (portable/rank.py norm_tries, best_try).
+        tries = _norm_tries(config, session)
+        scored = [_score(host, name, volume, boxes, info, offsets, t["input_norm"]) for t in tries]
+        k = rank.best_try([s for s, _ in scored]) or 0
+        (base, outside), norm, norm_from = scored[k], tries[k]["input_norm"], tries[k]["from"]
         # The raw stretched to its own range, when it is narrow, and the
         # row from the two scores (portable/rank.py).
-        norm = [dict(s) for s in session.pipeline_spec.input_norm]
         raw = base and _raw_window(volume, boxes)
         stretched = raw and rank.windowed(norm, *raw)
         alt = _score(host, name, volume, boxes, info, offsets, stretched)[0] if base and stretched else None
-        score = rank.score_row(base, alt, norm, raw)
+        score = rank.score_row(base, alt, norm, raw, norm_from)
         if not score:
             return _refused(f"The paint gives {name} nothing to score: "
                             + ("an affinity is between two painted neighbours, so paint strokes, not single voxels." if offsets
@@ -143,12 +160,14 @@ def rank_score():
             *([f"scored under {rank.RANK_BLOCKS} of the {len(chunks)} painted chunks, spread over them"] if len(chunks) > rank.RANK_BLOCKS else []),
             *([f"{outside} of the painted chunks scored lie past its output, and were not scored"] if outside else []),
             *(["started for its score and stopped after"] if job is not None else []),
+            *(f"through {NORM_FROM[t['from']]} it matched {s['matches']:.0%}"
+              for j, (t, (s, _)) in enumerate(zip(tries, scored)) if j != k and s),
         ]
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "
-                    f"at cut-off {score['cutoff']} ({score['matches_at_zero']:.0%} at 0)"
-                    + (f", the raw stretched from {window[0]:.1f}-{window[1]:.1f} ({base['matches']:.0%} as normalized)" if window else "")
+                    f"at cut-off {score['cutoff']} ({score['matches_at_zero']:.0%} at 0), read through {NORM_FROM[norm_from]}"
+                    + (f", the raw stretched from {window[0]:.1f}-{window[1]:.1f} ({base['matches']:.0%} unstretched)" if window else "")
                     + f", {seconds:.1f} s")
         return jsonify({
             "success": True, "name": name, **score, "seconds": seconds,
@@ -184,7 +203,8 @@ def rank_use():
     if from_volume.get("model_name") == name:
         return _refused(f"{from_id} is {name}'s volume already: finetune it as it is.")
     try:
-        window, _ = _install_window(data.get("window"))
+        # Before the model starts, so it is served through it.
+        input_norm = _install_input_norm(data.get("input_norm"))
         config = _model_config(name, data.get("entry"))
         if name not in running_names():
             _start_for_good(name, config)
@@ -204,56 +224,73 @@ def rank_use():
         return jsonify({
             "success": True, "name": name, "volume_id": to_id, "from_volume": from_id, "layer_name": layer,
             "painted_voxels": carried["painted"], "source_voxels": carried["source"], "conflicts": carried["conflicts"],
-            "chunks": carried["chunks"], "window": window,
+            "chunks": carried["chunks"], "input_norm": input_norm,
         })
     except Exception as e:
         logger.error(f"Could not make {name} the model to finetune: {e}", exc_info=True)
         return _refused(f"Could not make {name} the model to finetune: {e}")
 
 
-@finetune_bp.route("/api/finetune/rank/window", methods=["POST"])
-def rank_window():
-    """Fit to paint's: the raw's window a score chose ({window: [lo, hi]},
-    the score answer's) made the dashboard's normalization, as Use this
-    model makes it, without starting a model or making a volume. Answers
-    the window and the normalizer steps now set; refused (400) when the
-    normalization has no MinMaxNormalizer to stretch or the window is not
-    narrower than its range (portable/rank.py windowed), which leaves it as
-    it was."""
+@finetune_bp.route("/api/finetune/rank/input-norm", methods=["POST"])
+def rank_input_norm():
+    """Fit to paint's: the input normalization a score was read through
+    ({input_norm: steps}, the score answer's) made the dashboard's, as Use
+    this model makes it, without starting a model or making a volume.
+    Answers the session's input normalization as it now is; refused (400)
+    for steps that are not a list of normalizers the dashboard has, which
+    leaves it as it was."""
     data = request.get_json(silent=True) or {}
     try:
-        window, steps = _install_window(data.get("window"))
+        steps = _install_input_norm(data.get("input_norm"), required=True)
+    except ValueError as e:
+        return _refused(f"The input normalization was left as it is: {e}")
     except Exception as e:
-        logger.error(f"Could not stretch the input normalization: {e}", exc_info=True)
-        return _refused(f"Could not stretch the input normalization: {e}")
-    if steps is None:
-        return _refused("The input normalization was left as it is: it has no MinMaxNormalizer, "
-                        "or the window is not narrower than its range. Score the model again.")
-    logger.info(f"Stretched the input normalization to the raw's window {window[0]:.1f}-{window[1]:.1f}, to fit the paint")
-    return jsonify({"success": True, "window": window, "input_norm": steps})
+        logger.error(f"Could not set the input normalization: {e}", exc_info=True)
+        return _refused(f"Could not set the input normalization: {e}")
+    if steps is not None:
+        logger.info(f"Input normalization set to fit the paint: {' → '.join(s['name'] for s in steps)}")
+    return jsonify({"success": True, "input_norm": [dict(s) for s in get_session().pipeline_spec.input_norm]})
 
 
-def _install_window(w):
-    """The dashboard's input normalization with its MinMaxNormalizer
-    stretched to the raw's window ``w`` ([lo, hi], the score's) made the
-    session's chain, and the viewer redrawn through it
-    (routes/pipeline.py's setter, as PUT /api/pipeline sets it): the raw is
-    the dataset's, so every model reads it so. Returns ``(window, steps)``:
-    ``w`` as numbers and the normalizer steps set, or ``(None, None)`` when
-    ``w`` is not a pair or the normalization has nothing to stretch to it
-    (rank.windowed), which changes nothing."""
-    from cellmap_flow.dashboard.routes.pipeline import _set_chain_and_redraw
+def _install_input_norm(steps, required=False):
+    """``steps`` (normalizer step dicts, a score's ``input_norm``) made the
+    session's input normalization, its postprocessing kept, and the viewer
+    redrawn through it (routes/pipeline.py's setter, as PUT /api/pipeline
+    sets it): the raw is the dataset's, so every model reads it so. Returns
+    the steps set, or None when ``steps`` is None (and not ``required``) or
+    the session's already (rank.same_steps), which changes nothing. Raises
+    ValueError for steps that are not a list of normalizers the dashboard
+    has, or that one's class refuses, with nothing changed."""
+    from cellmap_flow.dashboard.routes.pipeline import _set_chain_and_redraw, _unknown_op
 
-    if not (isinstance(w, list) and len(w) == 2):
-        return None, None
+    if steps is None and not required:
+        return None
+    if not isinstance(steps, list) or not all(isinstance(s, dict) for s in steps):
+        raise ValueError("input_norm is a list of normalizer steps")
+    unknown = _unknown_op("normalizer", [s.get("name") for s in steps])
+    if unknown:
+        raise ValueError(unknown)
     session = get_session()
-    window = [float(w[0]), float(w[1])]
-    norm = [dict(s) for s in session.pipeline_spec.input_norm]
-    stretched = rank.windowed(norm, *window)
-    if not stretched:
-        return None, None
-    _set_chain_and_redraw(PipelineSpec(stretched, session.pipeline_spec.postprocess), request.host_url)
-    return window, stretched
+    if rank.same_steps(steps, [dict(s) for s in session.pipeline_spec.input_norm]):
+        return None
+    try:
+        _set_chain_and_redraw(PipelineSpec([dict(s) for s in steps], session.pipeline_spec.postprocess), request.host_url)
+    except TypeError as e:
+        raise ValueError(str(e)) from e
+    return steps
+
+
+def _norm_tries(config, session):
+    """The input normalizations ``config``'s model is scored through
+    (portable/rank.py norm_tries): what its start sets (routes/pipeline.py
+    start_input_norm: its declaration, or its kind's convention) and the
+    session's."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.dashboard.routes.pipeline import start_input_norm
+
+    own, declared = start_input_norm(config, *model_advice.raw_dtype_and_range(session.dataset_path))
+    return rank.norm_tries(own, "declared" if declared else "convention",
+                           [dict(s) for s in session.pipeline_spec.input_norm])
 
 
 def _model_config(name, entry):

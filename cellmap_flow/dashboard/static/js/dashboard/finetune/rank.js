@@ -11,11 +11,13 @@
 // each request, and one not running (cluster) starts unticked. A filter narrows the models listed; Rank scores the ticked ones it
 // shows. Each row gives what its score was read at, as the controls it sets
 // take it (portable/rank.py score_row): the threshold, a probability, and
-// the raw's range read as 0 to 1. Show serves a model and adds its layer, as
-// the Models tab's Add does; Use this model (POST /api/finetune/rank/use)
-// makes one the model to finetune: served, a new volume made for it with the
-// paint carried onto its grid, that volume the session's and its paint layer
-// in the viewer. The model picker (models.js pickModel) and the Annotation
+// the input normalization it was read through (input_norm: the model's own,
+// or the session's when that matched better, maybe stretched to the raw
+// under the paint). Show serves a model and adds its layer, as the Models
+// tab's Add does; Use this model (POST /api/finetune/rank/use) makes one the
+// model to finetune: that input normalization the session's, the model
+// served, a new volume made for it with the paint carried onto its grid,
+// that volume the session's and its paint layer in the viewer. The model picker (models.js pickModel) and the Annotation
 // Crops panel's volume buttons (crops.js sessionVolumeChanged) follow, and
 // a binary model's row's channel (channel_index, the channel that matched
 // best) becomes its Channel in the training form (training-form.js
@@ -25,7 +27,8 @@
 // Fit to Paint, beside Seed from Prediction, does the same for the model
 // that seeds the paint (Label it's Prediction from) without a new volume:
 // it scores that model with the same route, and sets its threshold and,
-// when the stretch won, its window (POST /api/finetune/rank/window); its
+// when it is not the session's as it stands, the input normalization its
+// score was read through (POST /api/finetune/rank/input-norm); its
 // Channel only when the form shows one for that model with nothing picked
 // (fillChannel), so a channel the user picked stays. Both it and Use this
 // model mark Seed from Prediction's threshold as set by ranking, and say on
@@ -79,12 +82,22 @@ function isScored(answer) {
   return Boolean(answer.success) && Number.isFinite(answer.matches);
 }
 
+// Where a score's input normalization came from (portable/rank.py
+// norm_tries's `from`), in the row's words.
+const NORM_FROM = {
+  declared: "its own",
+  convention: "CellMap convention",
+  session: "yours",
+  none: "none",
+};
+
 // A scored row's two settings, as columns (each a fixed width, so they line
 // up from row to row): the threshold Seed from Prediction takes, 0.5 when
 // the model's own boundary fits the paint best, else with the match at 0.5;
-// and the raw's range the model reads as 0 to 1, its normalizer's own
-// unless the raw under the paint stretched scored clearly better, then with
-// the match unstretched (cellmap_flow/portable/rank.py score_row).
+// and the input normalization it was read through, where it came from and
+// its steps, stretched to the raw under the paint when that scored clearly
+// better, then with the match unstretched (cellmap_flow/portable/rank.py
+// score_row).
 function settingsCells(row) {
   const own = row.cutoff === 0;
   const stretched = Array.isArray(row.window);
@@ -92,9 +105,21 @@ function settingsCells(row) {
     h("span", { style: { minWidth: "11rem" }, title: "The probability above which the prediction fits your paint best, as Seed from Prediction's threshold takes it; 0.5 is the model's own boundary" },
       "Threshold ", h("strong", {}, String(row.threshold)),
       own ? h("span", { class: "text-muted" }, " (model's own)") : h("span", { class: "text-muted" }, ` (${percent(row.matches_at_zero)} at 0.5)`)),
-    h("span", { title: "The raw's grey levels the model reads as 0 to 1: its normalizer's own, or the raw under your paint stretched, when that matched clearly better" },
-      "Input ", h("strong", {}, Array.isArray(row.input_window) ? levels(row.input_window) : "as normalized"),
-      stretched ? h("span", { class: "text-muted" }, ` stretched (${percent(row.matches_without_window)} unstretched)`) : ""));
+    h("span", { title: "The input normalization the model was read through: its own (what it declares, or the CellMap convention for a CellMap model), or yours from the Processing tab when that matched better; Use this model sets it" },
+      "Input ", h("strong", {}, NORM_FROM[row.input_norm_from] || "as normalized"),
+      Array.isArray(row.input_norm) && row.input_norm.length ? h("span", { class: "text-muted" }, ` ${stepsText(row.input_norm)}`) : "",
+      stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : ""));
+}
+
+// Normalizer steps in a few words each: a MinMaxNormalizer as the raw's
+// range it reads as 0 to 1, a LambdaNormalizer as its expression, any other
+// by its name.
+function stepsText(steps) {
+  return steps.map((step) => {
+    if (step.name === "MinMaxNormalizer") return `${levels([Number(step.min_value ?? 0), Number(step.max_value ?? 255)])} to 0–1`;
+    if (step.name === "LambdaNormalizer") return step.expression;
+    return step.name.replace(/Normalizer$/, "");
+  }).join(" → ");
 }
 
 // A raw window [lo, hi] as grey levels: whole ones for a raw of hundreds of
@@ -188,13 +213,24 @@ export function initRank() {
 
   // What Use this model or Fit to Paint set from `row`, the model's score:
   // the threshold, the channel when one was set (`channel`, its name), and
-  // the input normalization, stretched to `window` (the route that set it
-  // answered it) or left as it was.
-  function fittedText(name, row, window, channel) {
-    const input = Array.isArray(window)
-      ? `the input normalization now stretches the raw from ${levels(window)} to 0–1, for every model`
-      : `the input normalization is left as it was${Array.isArray(row.input_window) ? `, the raw read from ${levels(row.input_window)}` : ""}`;
-    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel ? `, ${channelSet(channel)}` : ""}, and ${input}.`;
+  // the input normalization the score was read through (inputText).
+  function fittedText(name, row, channel) {
+    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel ? `, ${channelSet(channel)}` : ""}, and ${inputText(row)}.`;
+  }
+
+  // Whether setting `row`'s input normalization changes the session's: it
+  // does unless the score was read through the session's as it stands (or
+  // through none, with none set).
+  function changesInput(row) {
+    return Array.isArray(row.input_norm) && (Array.isArray(row.window) || !["session", "none"].includes(row.input_norm_from));
+  }
+
+  // The input normalization a score set, in words, for every model, or that
+  // it was left as it was.
+  function inputText(row) {
+    if (!changesInput(row)) return "the input normalization is left as it was";
+    const from = { declared: "its declared one", convention: "the CellMap convention", session: "yours" }[row.input_norm_from] || "the one it was read through";
+    return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
   }
 
   // A channel set from a score, in words: a binary model's score is read on
@@ -389,8 +425,9 @@ export function initRank() {
   }
 
   // Makes `candidate` the model to finetune, as its score (`row`) found it
-  // best: the raw's window, if one was chosen, as the session's normalizer,
-  // and its threshold as Seed from Prediction's, marked as set by ranking.
+  // best: the input normalization it was read through as the session's
+  // (before the model is served, so it is served through it), and its
+  // threshold as Seed from Prediction's, marked as set by ranking.
   // The ranking stays: the new volume holds the same paint, on the model's
   // grid.
   async function useModel(candidate, row) {
@@ -402,7 +439,7 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...(Array.isArray(row.window) ? { window: row.window } : {}) });
+      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...(changesInput(row) ? { input_norm: row.input_norm } : {}) });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
@@ -422,9 +459,12 @@ export function initRank() {
     const channel = Number.isInteger(row.channel_index) ? row.channel : null;
     // Before the pick below, which shows it.
     if (channel !== null) pickChannel(d.name, row.channel_index);
-    sayFit(fittedText(d.name, row, d.window, channel), "success");
+    sayFit(fittedText(d.name, row, channel), "success");
+    // The Processing tab's input normalization shows it as it now runs
+    // (main.js reads the chain again), so a later Apply keeps it.
+    if (Array.isArray(d.input_norm)) announce(CHAIN_CHANGED_EVENT);
     const set = [
-      Array.isArray(d.window) && `the input normalization stretches the raw from ${levels(d.window)}`,
+      changesInput(row) && inputText(row),
       Number.isFinite(row.threshold) && `Seed from Prediction's threshold is ${row.threshold}`,
       channel && channelSet(channel),
     ].filter(Boolean);
@@ -510,9 +550,10 @@ export function initRank() {
 
   // Fit to Paint: the model seeding the paint scored on it, as a ranking
   // scores one, and what fits it best set as Use this model sets it, with
-  // no new volume: the window first (POST /api/finetune/rank/window, when
-  // the stretched raw won), then the threshold, which was fitted under that
-  // window and so is set only once the window is.
+  // no new volume: the input normalization first (POST
+  // /api/finetune/rank/input-norm, when it is not the session's as it
+  // stands), then the threshold, which was fitted under it and so is set
+  // only once it is.
   async function fitToPaint() {
     if (running || switching !== null || fitting) return;
     const name = seedModel.value;
@@ -532,22 +573,19 @@ export function initRank() {
         if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
         return;
       }
-      let window = null;
-      if (Array.isArray(d.window)) {
-        const set = await postAnswer("/api/finetune/rank/window", { window: d.window });
+      if (changesInput(d)) {
+        const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: d.input_norm });
         if (!set.success) {
-          sayFit(`Could not set the input window that fits ${name} to your paint: ${set.error}`, "danger");
+          sayFit(`Could not set the input normalization that fits ${name} to your paint: ${set.error}`, "danger");
           return;
         }
-        window = set.window;
-        // The Processing tab's input normalization shows the stretched
-        // normalizer as it now runs (main.js reads the chain again), so a
-        // later Apply keeps it.
+        // The Processing tab's input normalization shows it as it now runs
+        // (main.js reads the chain again), so a later Apply keeps it.
         announce(CHAIN_CHANGED_EVENT);
       }
       installThreshold(name, d.threshold);
       const channel = Number.isInteger(d.channel_index) && fillChannel(name, d.channel_index) ? d.channel : null;
-      sayFit(fittedText(name, d, window, channel), "success");
+      sayFit(fittedText(name, d, channel), "success");
     } catch (e) {
       sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");
     } finally {

@@ -49,7 +49,7 @@ URLS = {
     "/api/finetune/rank/candidates": "GET",
     "/api/finetune/rank/score": "POST",
     "/api/finetune/rank/use": "POST",
-    "/api/finetune/rank/window": "POST",
+    "/api/finetune/rank/input-norm": "POST",
     "/api/finetune/read-yaml": "GET",
     "/api/finetune/refresh-annotated-regions": "POST",
     "/api/finetune/submit": "POST",

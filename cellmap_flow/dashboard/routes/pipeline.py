@@ -317,7 +317,7 @@ def _declared_steps(model_config, data_range) -> list:
     return [dict(step) for step in steps or [] if isinstance(step, dict) and step.get("name")]
 
 
-def _start_input_norm(model_config, raw_dtype, raw_range):
+def start_input_norm(model_config, raw_dtype, raw_range):
     """What ``model_config``'s start sets on a chain with no input
     normalization, for raw data of ``raw_dtype`` spanning ``raw_range``: (the
     chain steps, whether the model declares them). Its declaration
@@ -326,7 +326,9 @@ def _start_input_norm(model_config, raw_dtype, raw_range):
     confidence, model_advice.input_norm_suggestion). ``([], False)`` for a
     model nothing is known of, whose suggestion of the range assumed stays a
     suggestion, and without the raw data's range (no dataset open), where
-    the convention's MinMaxNormalizer would be a guess."""
+    the convention's MinMaxNormalizer would be a guess. The Finetune tab's
+    ranking reads a model through these steps too (finetune/rank_routes.py),
+    whatever the chain has."""
     steps = _declared_steps(model_config, raw_range)
     if steps or raw_range is None:
         return steps, bool(steps)
@@ -346,7 +348,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
     The Models tab's Submit (services.launch.update_run_models) calls this
     with the models it is about to start, in the tab's order, before their
     layers are drawn, so they are drawn through it. The first of them with
-    any steps to set (_start_input_norm: declared, or a CellMap or DaCapo
+    any steps to set (start_input_norm: declared, or a CellMap or DaCapo
     model's convention) gives them, and the postprocessing stays as it is;
     the chain is set through _set_chain_and_redraw, as PUT /api/pipeline
     sets it, so the layers of the models already running are redrawn
@@ -367,7 +369,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
         return None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
-        steps, declared = _start_input_norm(model_config, raw_dtype, raw_range)
+        steps, declared = start_input_norm(model_config, raw_dtype, raw_range)
         if not steps:
             continue
         name = getattr(model_config, "name", None)
@@ -392,7 +394,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
 
 def input_norm_set_by(model_configs):
     """The first of ``model_configs`` whose start sets the chain's input
-    part as it stands, step for step (_start_input_norm), as (its name,
+    part as it stands, step for step (start_input_norm), as (its name,
     whether the model declares the steps); ``(None, None)`` when none does,
     or the chain has no input normalizers.
 
@@ -406,7 +408,7 @@ def input_norm_set_by(model_configs):
         return None, None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
-        steps, declared = _start_input_norm(model_config, raw_dtype, raw_range)
+        steps, declared = start_input_norm(model_config, raw_dtype, raw_range)
         if steps == live:
             return getattr(model_config, "name", None), declared
     return None, None

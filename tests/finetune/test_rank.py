@@ -136,7 +136,8 @@ def painted(tmp_path, monkeypatch):
     """The session's volume, a 16^3 grid painted object (2) at 2..6 and
     background (1) at 10..14 on each axis, and a model "model" whose logits
     are ``painted.logits`` (or ``painted.stretched``, read with the raw
-    stretched): +4 in that object, -4 elsewhere, until a test sets them."""
+    stretched to 100..120): +4 in that object, -4 elsewhere, until a test
+    sets them."""
     path = tmp_path / "vol-1.zarr"
     labels = zarr.open_group(str(path), mode="w").require_group("annotation").create_dataset(
         "s0", shape=(16,) * 3, chunks=(8,) * 3, dtype="u1", fill_value=0)
@@ -154,7 +155,8 @@ def painted(tmp_path, monkeypatch):
 
     def read_prediction(host, name, volume, lo, hi, info, postprocess=(), input_norm=None):
         fake.reads.append((host, input_norm))
-        out = fake.stretched if input_norm is not None and fake.stretched is not None else fake.logits
+        stretched = any(step.get("min_value") == 100.0 for step in input_norm or [])
+        out = fake.stretched if stretched and fake.stretched is not None else fake.logits
         return out[(slice(None),) + tuple(slice(a, b) for a, b in zip(lo, hi))], lo, hi
 
     monkeypatch.setattr(view_labels, "read_prediction", read_prediction)
@@ -191,6 +193,39 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
 
+def test_a_model_is_read_through_its_own_input_normalization_when_the_session_has_none(dashboard, painted, monkeypatch):
+    """fly_organelles, ranked with no input normalization set, read raw 0 to
+    255 and matched 51%, nucleus its best channel for paint of mitochondria.
+    A model is read through what its start sets, and the session's too when
+    that is another, the better kept."""
+    session = get_session()
+    session.models_config = [SimpleNamespace(name="model")]
+    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    own = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline.start_input_norm", lambda config, dtype, range_: (own, False))
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.model_advice.raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    # It sees the objects only through its own steps.
+    original = view_labels.read_prediction
+
+    def read(host, name, volume, lo, hi, info, postprocess=(), input_norm=None):
+        out, plo, phi = original(host, name, volume, lo, hi, info, postprocess, input_norm)
+        return (out if input_norm == own else np.full_like(out, -4.0)), plo, phi
+
+    monkeypatch.setattr(view_labels, "read_prediction", read)
+
+    body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
+    assert body["success"], body
+    assert (body["matches"], body["input_norm_from"], body["input_norm"]) == (1, "convention", own)
+    assert all(steps == own for _, steps in painted.reads)
+
+    # With the session's chain as something else that sees nothing, its own
+    # is still kept, and the note says what the other matched.
+    session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
+    body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
+    assert (body["matches"], body["input_norm_from"]) == (1, "convention")
+    assert "through the session's input normalization it matched 50%" in body["note"]
+
+
 def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, painted, monkeypatch):
     session = get_session()
     session.models_config = [SimpleNamespace(name="model")]
@@ -208,7 +243,7 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
     assert painted.reads[-1][1][0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
 
 
-def test_fit_to_paint_sets_the_threshold_and_window_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
+def test_fit_to_paint_sets_the_threshold_and_input_normalization_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
     session = get_session()
     session.models_config = [SimpleNamespace(name="model")]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
@@ -223,16 +258,18 @@ def test_fit_to_paint_sets_the_threshold_and_window_of_the_model_seeding_without
     volumes = dict(session.annotation_volumes)
 
     scored = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
-    fitted = dashboard.post("/api/finetune/rank/window", json={"window": scored["window"]}).get_json()
+    fitted = dashboard.post("/api/finetune/rank/input-norm", json={"input_norm": scored["input_norm"]}).get_json()
 
     assert scored["success"] and fitted["success"], (scored, fitted)
     assert scored["cutoff"] < 0 and scored["threshold"] == round(1 / (1 + math.exp(-scored["cutoff"])), 3)
-    assert fitted["window"] == scored["window"] == scored["input_window"] == [100.0, 120.0]
-    assert session.pipeline_spec.input_norm[0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
+    assert scored["window"] == scored["input_window"] == [100.0, 120.0]
+    stretched = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
+    assert fitted["input_norm"] == scored["input_norm"] == [stretched]
+    assert session.pipeline_spec.input_norm[0] == stretched
     assert session.annotation_volumes == volumes and rank_routes.session_store().session_volume()[0] == "vol-1"
-    # Stretched already: the window is no narrower than the range, and nothing changes.
-    assert not dashboard.post("/api/finetune/rank/window", json={"window": [100, 120]}).get_json()["success"]
-    assert session.pipeline_spec.input_norm[0]["min_value"] == 100.0
+    # Steps the dashboard has no normalizer for change nothing.
+    assert not dashboard.post("/api/finetune/rank/input-norm", json={"input_norm": [{"name": "NoSuchNormalizer"}]}).get_json()["success"]
+    assert session.pipeline_spec.input_norm[0] == stretched
 
 
 def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(dashboard, painted, monkeypatch):
@@ -278,11 +315,12 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: SimpleNamespace(name=name))
 
     body = dashboard.post("/api/finetune/rank/use", json={
-        "name": "mito_16nm", "window": [100, 120],
+        "name": "mito_16nm", "input_norm": [{"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}],
         "entry": {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}}).get_json()
 
     assert body["success"], body
-    assert (body["volume_id"], body["from_volume"], body["window"]) == ("vol-2", "vol-1", [100.0, 120.0])
+    assert (body["volume_id"], body["from_volume"]) == ("vol-2", "vol-1")
+    assert body["input_norm"] == [{"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}]
     # 4^3 object and 4^3 background voxels of 16 nm, 2^3 each at 32 nm.
     assert (body["painted_voxels"], body["source_voxels"], body["conflicts"]) == (16, 128, 0)
     assert launched == ["mito_16nm"] and [c.name for c in session.models_config][-1] == "mito_16nm"

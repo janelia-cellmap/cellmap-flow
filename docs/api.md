@@ -85,7 +85,7 @@ Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m 
 | GET | `/api/finetune/rank/candidates` | both |  |
 | POST | `/api/finetune/rank/score` | both |  |
 | POST | `/api/finetune/rank/use` | both |  |
-| POST | `/api/finetune/rank/window` | both |  |
+| POST | `/api/finetune/rank/input-norm` | both |  |
 | GET | `/api/finetune/view-labels/sources` | both |  |
 | POST | `/api/finetune/view-labels/seed` | both |  |
 | POST | `/api/finetune/view-labels/background` | both |  |
