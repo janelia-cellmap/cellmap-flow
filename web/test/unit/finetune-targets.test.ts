@@ -34,6 +34,16 @@ describe.skipIf(!python)("a chunk's targets, from the portable Python", () => {
     expect(Array.from(nuc.mask)).toEqual([1, 1, 1, 1, 0, 1]);
   });
 
+  it("are one channel's binary target alone when a channel is picked, and an affinity model takes no pick", async () => {
+    const chunk = { index: [0, 0, 0], shape: [1, 2, 3], labels: Uint8Array.from([2, 2, 3, 1, 0, 2]) };
+    const organelles = entry("fly_organelles_run08", "organelles", ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"]);
+    const mito = await targetTransformFor(organelles, infer, 2)(chunk);
+    expect(mito.channels).toBe(1);
+    expect(Array.from(mito.target)).toEqual([1, 1, 1, 0, 0, 1]);
+    expect(Array.from(mito.mask)).toEqual([1, 1, 1, 1, 0, 1]);
+    await expect(targetTransformFor(entry("setup_54"), infer, 0)(chunk)).rejects.toThrow(/affinity/);
+  });
+
   it("pair a cube's z neighbours, channels last, for the whole network's blocks", async () => {
     // A 2³ object whose corner voxel is another object (3): the z affinity
     // pairs each voxel of the lower slice with the one above, 3 over 2 a
