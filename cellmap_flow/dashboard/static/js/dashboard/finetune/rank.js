@@ -276,11 +276,15 @@ export function initRank() {
     return Array.isArray(row.postprocess);
   }
 
-  // The postprocessing a score set, in words.
+  // The postprocessing a score set, in words: the sigmoid its output needs
+  // (or a second one taken away), and the threshold the paint is fitted
+  // best at, in its output's units after that (portable/rank.py
+  // needed_postprocess: on a tanh's [-1, 1], 2p - 1 for the row's p).
   function outputText(row) {
-    return row.postprocess.some((step) => step.name === "SigmoidPostprocessor")
-      ? "a sigmoid turns its output into probabilities"
-      : "the second sigmoid on its output is taken away";
+    const cut = row.postprocess.find((step) => step.name === "ThresholdPostprocessor");
+    const sigmoid = row.postprocess.some((step) => step.name === "SigmoidPostprocessor");
+    if (cut) return `its layer shows ${sigmoid ? "the sigmoid of its output" : "its output"} cut at ${cut.threshold}`;
+    return sigmoid ? "a sigmoid turns its output into probabilities" : "the second sigmoid on its output is taken away";
   }
 
   // The chain parts a score sets, as Use this model and Fit to Paint send them.

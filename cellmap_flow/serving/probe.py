@@ -192,15 +192,24 @@ def review_postprocess(
     """Compare an observed output class against the configured postprocessors.
 
     Returns ``{"level", "message", "suggest"}`` where ``level`` is one of
-    "ok" / "suggest" / "warn", and ``suggest`` is a list of postprocessor names
-    to apply (empty when the current configuration is already sensible).
+    "ok" / "optional" / "suggest" / "warn", and ``suggest`` is a list of
+    postprocessor names to apply (empty when the current configuration is
+    already sensible).
 
     ``level == "warn"`` means the current chain is actively wrong, not merely
-    unconventional.
+    unconventional. ``"optional"`` offers a chain the model's output shows
+    right without: an affinity model's into a segmentation, once its
+    affinities show as probabilities. The page shows it as a quiet line
+    with its Apply: as a suggestion's banner, over the sigmoid a model's
+    start or the ranking set (portable/rank.py needed_postprocess, an
+    affinity model's logits' too), it read as though that were wrong. A
+    threshold is no fault either: the ranking sets one at the probability
+    the paint is fitted best at.
     """
     names = list(postprocess_names or [])
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
+    has_threshold = "ThresholdPostprocessor" in names
 
     def verdict(level, message, suggest):
         """Attach parameter values to whatever chain we are proposing."""
@@ -226,15 +235,18 @@ def review_postprocess(
                     suggest_affinity_chain(output_class),
                 )
             return verdict("ok", "Affinity chain looks complete.", [])
-        return verdict(
-            "suggest",
-            (
-                f"This model has {out_channels} output channels and an affinity "
-                "name, so it probably predicts affinities. The chain below "
-                "converts them to a segmentation."
-            ),
-            suggest_affinity_chain(output_class),
-        )
+        # Unless the activation needs setting first, which the checks below
+        # suggest or warn of: the sigmoid logits with nothing set need, a
+        # second one taken away.
+        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, SIGNED_UNIT) and has_sigmoid)):
+            return verdict(
+                "optional",
+                (
+                    f"its {out_channels} channels look like affinities, which this "
+                    "chain turns into a segmentation."
+                ),
+                suggest_affinity_chain(output_class),
+            )
 
     if output_class == UNIT:
         if has_sigmoid:
@@ -265,7 +277,7 @@ def review_postprocess(
                 ),
                 ["DefaultPostprocessor"],
             )
-        if not has_default:
+        if not (has_default or has_threshold):
             return verdict(
                 "suggest",
                 (
@@ -274,7 +286,8 @@ def review_postprocess(
                 ),
                 ["DefaultPostprocessor"],
             )
-        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output.", [])
+        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output." if has_default
+                       else "Model output is in [-1, 1]; the threshold is left as set.", [])
 
     # UNBOUNDED: logits and signed distances are indistinguishable here, so
     # suggest only when nothing at all is configured, and say why it's a guess.
@@ -283,9 +296,9 @@ def review_postprocess(
             "suggest",
             (
                 "Model output is unbounded, so it has no activation. If these "
-                "are logits, SigmoidPostprocessor converts them to "
-                "probabilities. If they are distances or affinities, leave this "
-                "alone -- the output range cannot tell the two apart."
+                "are logits (an affinity model's are), SigmoidPostprocessor "
+                "converts them to probabilities. If they are distances, leave "
+                "this alone -- the output range cannot tell the two apart."
             ),
             ["SigmoidPostprocessor"],
         )

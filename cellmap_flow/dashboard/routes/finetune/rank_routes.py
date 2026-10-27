@@ -313,6 +313,10 @@ def rank_score():
         # → Threshold 0.076 on mito_aff_resunet_setup_54_2d by hand).
         postprocess = rank.needed_postprocess(
             info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess], score["threshold"])
+        # What the row's buttons set from it: the model advice counts its
+        # input normalization as matching, rather than suggest the declared
+        # one back over it (Session.rank_fits).
+        session.rank_fits[name] = {"input_norm": score["input_norm"], "postprocess": postprocess}
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "

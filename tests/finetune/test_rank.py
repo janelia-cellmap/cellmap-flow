@@ -316,6 +316,16 @@ def test_fit_to_paint_sets_the_input_normalization_and_postprocessing_of_the_mod
     assert fitted["postprocess"] == scored["postprocess"] == shown and len(chains) == 1
     assert session.pipeline_spec.to_json_data() == {"input_norm": [stretched], "postprocess": shown}
     assert session.annotation_volumes == volumes and rank_routes.session_store().session_volume()[0] == "vol-1"
+    # The model advice counts the steps fitted as matching: it suggested the
+    # model's own back over them, whose Apply undid the ranking. The
+    # Processing tab is told the postprocessing was fitted to the paint.
+    from cellmap_flow.dashboard.routes import model_advice
+
+    monkeypatch.setattr(model_advice, "_fetch_probe", lambda host: {"available": False})
+    (advice,) = dashboard.get("/api/model_advice").get_json()["models"]
+    assert advice["input_norm_matches"] and advice["input_norm_fitted"]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["postprocess_from"], loaded["postprocess_fitted"]) == ("model", True)
     # Steps the dashboard has no op for change nothing.
     for body in ({"input_norm": [{"name": "NoSuchNormalizer"}]},
                  {"input_norm": [], "postprocess": [{"name": "NoSuchPostprocessor"}]}):

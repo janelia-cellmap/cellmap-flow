@@ -12,6 +12,10 @@ This endpoint combines two sources into a verdict the UI can show:
 * the model's declared metadata (channel count, name, training framework).
 
 It never changes anything -- callers decide whether to apply the suggestion.
+Nor does it undo what the Finetune tab's ranking set: the input
+normalization the ranking fitted to the paint for a model
+(Session.rank_fits) counts as matching, not as one to suggest the
+declared one back over.
 """
 
 import json
@@ -23,6 +27,7 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.portable.rank import same_steps
 from cellmap_flow.serving.probe import input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
@@ -142,9 +147,27 @@ def _fetch_probe(host: str) -> dict:
     return fetch_model_info(host)
 
 
+def _launching() -> bool:
+    """Whether a model's launch has not returned yet (services/launch.py):
+    its job may be listed already while its start is still to set the
+    chain's postprocessing (routes.pipeline.set_needed_postprocess)."""
+    from cellmap_flow.dashboard.services.launch import _launching, _launching_lock
+
+    with _launching_lock:
+        return bool(_launching)
+
+
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
 def model_advice():
-    """Per-model verdicts on the currently configured input/output handling."""
+    """Per-model verdicts on the currently configured input/output handling.
+
+    ``{"success": true, "models": [...], "starting", "digest"}``: an entry
+    per served model; ``starting``, whether a model's start is still on its
+    way (_launching), and ``digest``, the chain's (PipelineSpec.digest). The
+    page asks again while ``starting``, and reads the chain again when the
+    digest moves: a model's start sets the postprocessing its output needs
+    once its server answers, after the Submit that started it.
+    """
     session = get_session()
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
@@ -222,11 +245,18 @@ def model_advice():
         # 2*x for a manifest's 2*x-1 feed the model something else, and the
         # page said that "looks right". A convention's values are not held
         # to the letter (its x*2-1 is anyone's 2*x-1).
-        entry["input_norm_differences"] = input_norm_differences(configured_steps, declared)
-        entry["input_norm_matches"] = (
+        # The steps the ranking fitted to the paint for this model, which Use
+        # this model, Fit to Paint or Use these settings set (a MinMax
+        # stretched to the raw under the paint, say), match as they are:
+        # suggested the declared ones back, a second Apply undid the ranking.
+        fitted = (session.rank_fits.get(name) or {}).get("input_norm")
+        entry["input_norm_fitted"] = bool(fitted) and same_steps(fitted, [dict(s) for s in session.pipeline_spec.input_norm])
+        entry["input_norm_differences"] = [] if entry["input_norm_fitted"] else input_norm_differences(configured_steps, declared)
+        entry["input_norm_matches"] = entry["input_norm_fitted"] or (
             list(configured_norm) == list(suggestion["order"])
             and not entry["input_norm_differences"]
         )
         results.append(entry)
 
-    return jsonify({"success": True, "models": results})
+    return jsonify({"success": True, "models": results, "starting": _launching(),
+                    "digest": session.pipeline_spec.digest()})
