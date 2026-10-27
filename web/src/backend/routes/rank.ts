@@ -52,6 +52,14 @@
 // POST /api/finetune/rank/input-norm {input_norm, postprocess?} makes them
 // the session chain's alone, with no model served and no volume made: Fit to
 // paint's, for the model already seeding the paint.
+//
+// The list offers the models the Models tab does, found the same way: each
+// candidate is under the tab's section it would be listed in (GROUPS:
+// Running, cellmap, Added, Finetuned), the tab's Refresh (POST
+// /api/huggingface-models/refresh) reads the catalog again and the next
+// listing is of what it read, and POST /api/finetune/rank/add {ref} adds a
+// model by hand, by any ref the tab's Add a model takes, to every listing
+// after, without serving it.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { volumeCornerNm } from "../../ai-annotate/fill";
@@ -67,6 +75,7 @@ import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
+import { HF_REPO } from "../../models";
 import { entryFor } from "../../models/manifest";
 import { dtypeRange } from "../../viewer/display";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
@@ -74,6 +83,7 @@ import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
 import { blobFor, declaredInputNorm, pageBase, serveModels, setChain } from "../serving";
 import { notAChannel, pickShownChannel, readSelectChannel } from "./finetune";
+import { resolveRef } from "./models";
 import { readChain } from "./pipeline";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
@@ -84,17 +94,30 @@ const RAW_SAMPLE = 1_000_000;
 export function rankRoutes(router: Router): void {
   router.get("/api/finetune/rank/candidates", async (_req, _params, ctx) => {
     const volume = await sessionVolume(ctx);
-    const served = new Set(ctx.infer.served().map((s) => s.entry.id));
-    const entries = await ctx.catalog.list();
+    const candidates = (await ctx.catalog.list()).map(listingOf(ctx, volume));
     return json(200, {
       success: true,
       volume: volume ? { id: volume.id, model_name: volume.model_name, painted_chunks: (await paintedChunkIndices(ctx.paint, volume.id)).length } : null,
-      candidates: entries.map((e) => ({
-        name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,
-        voxel_size_nm: e.manifest.output_voxel_size_nm, dims: readsOneSlice(e) ? 2 : 3,
-        finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), volume_model: volume?.model_id === e.id,
-      })),
+      // In the groups' order, each group's in the catalog's (a stable sort).
+      candidates: candidates.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group)),
     });
+  });
+
+  // POST /api/finetune/rank/add {ref}: a model added to the list by hand,
+  // by any ref the Models tab's Add a model takes (models.ts resolveRef, the
+  // resolve POST /api/models/resolve answers from, so a ref it refuses is
+  // refused here the same way), remembered in the session (rankAdded) and
+  // answered as every listing after lists it: under Added, ticked (under
+  // Running while it is served). Nothing is served: Rank scores it as it
+  // scores any candidate, found by its name in the catalog, whose entry it
+  // is.
+  router.post("/api/finetune/rank/add", async (req, _params, ctx) => {
+    const resolved = await resolveRef(req, ctx);
+    if ("refused" in resolved) return resolved.refused;
+    const { entry } = resolved;
+    const { rankAdded } = ctx.session.state;
+    if (!rankAdded.includes(entry.id)) await ctx.session.update({ rankAdded: [...rankAdded, entry.id] });
+    return json(200, { success: true, candidate: listingOf(ctx, await sessionVolume(ctx))(entry) });
   });
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
@@ -577,6 +600,54 @@ async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): 
   await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
   const { painted, source, conflicts, chunks } = value;
   return { painted, source, conflicts, chunks };
+}
+
+/** The Models tab's sections a candidate is listed under, in the order the
+ * list gives them, as the server's ranking groups its own ("Running", its
+ * catalog's groups, "Hugging Face", "BioImage Zoo"): the models served now;
+ * the catalog's own, cellmap/onnx-web-models' (HF_REPO); those added by
+ * hand (POST /api/finetune/rank/add), and any other repo's; and the models
+ * finetuned in this browser (FINETUNED_REPO). */
+const GROUPS = ["Running", "cellmap", "Added", "Finetuned"] as const;
+type Group = (typeof GROUPS)[number];
+
+/** A model of the ranking's list, as rank.js shows and filters it: what it
+ * predicts, at what voxel size, in 2D or 3D (dims, by the slices it reads),
+ * the group it is listed under, whether it is served and whether the
+ * session's volume is painted for it. Each starts ticked: the browser runs
+ * every one itself, where the server starts one not running on the cluster
+ * for its score and leaves it unticked. */
+interface Candidate {
+  name: string;
+  repo: string;
+  folder: string;
+  task: string;
+  channels: string[];
+  voxel_size_nm: number[];
+  dims: 2 | 3;
+  group: Group;
+  finetuned: boolean;
+  served: boolean;
+  ticked: true;
+  volume_model: boolean;
+}
+
+/** Each entry's candidate, for the session as it is now (`volume` its
+ * volume): the listing's and rank/add's answer alike. Its group is Running
+ * while it is served, Added once added by hand, else its repo's. */
+function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEntry) => Candidate {
+  const served = new Set(ctx.infer.served().map((s) => s.entry.id));
+  const added = new Set(ctx.session.state.rankAdded);
+  const group = (e: ModelEntry): Group => {
+    if (served.has(e.id)) return "Running";
+    if (added.has(e.id)) return "Added";
+    return e.repo === HF_REPO ? "cellmap" : e.repo === FINETUNED_REPO ? "Finetuned" : "Added";
+  };
+  return (e) => ({
+    name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,
+    voxel_size_nm: e.manifest.output_voxel_size_nm, dims: readsOneSlice(e) ? 2 : 3, group: group(e),
+    finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), ticked: true, volume_model: volume?.model_id === e.id,
+  });
 }
 
 async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {

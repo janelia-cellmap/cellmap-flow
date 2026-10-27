@@ -118,6 +118,11 @@ export interface SessionState {
    * model finetuned from it (serving.ts shownChannel). The server's
    * `shown_channels` on its dashboard session. */
   shownChannels: Record<string, number>;
+  /** The models added to Which model to start from's list by hand (POST
+   * /api/finetune/rank/add): their catalog ids, in the order added, so
+   * every listing after lists them under Added. The server's `rank_added`
+   * on its dashboard session. */
+  rankAdded: string[];
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that
