@@ -12,9 +12,14 @@
 // listed as the Models tab lists them, made of the same pieces
 // (shared/model-list.js): a section for each of the tab's sections a model
 // is under (its group), with the tab's rows, the Hugging Face and zoo
-// sections' search bar, Refresh and filters, and its Add a model. The ticks
-// are the ranking's own, not the Models tab's: a ticked model stays in view
-// whatever its section's search, and Rank scores every ticked one. Each
+// sections' search bar, Refresh and filters (a server's Hugging Face section
+// showing only the models with a browser copy to start, as the Models tab's
+// does, and both modes' in order of name or size), and its Add a model;
+// each row tagged with what the model is (shared/model-list.js factTags,
+// from the candidate's formats, finetune modes, size and browser copy). The
+// ticks are the ranking's own, not the Models tab's: a ticked model stays in
+// view whatever its section's search and filters, and Rank scores every
+// ticked one. Each
 // row of the ranking gives what its score was read at, as the controls it sets
 // take it (portable/rank.py score_row): the threshold, a probability, and
 // the input normalization it was read through (input_norm: the model's own,
@@ -505,6 +510,7 @@ export function initRank({ form }) {
       ? listControls({
         id: "rankHf", placeholder: "Search: mito aff, 16 nm, 2d", title: "Every word typed, in the model's name, task, channels, voxel size or its 2D/3D",
         refreshTitle: "Refresh from Hugging Face", onRefresh: () => fetchList("hf", true), onChange: showCandidates,
+        browser: !isBrowserMode(), sort: true,
       })
       : kind === "zoo"
         ? listControls({
@@ -520,8 +526,9 @@ export function initRank({ form }) {
 
   // A model's row, as the Models tab's: a zoo model's as its zoo list has it,
   // with why it cannot be ranked under it when nothing says its voxel size;
-  // any other's its name, with what it predicts at what voxel size beside.
-  // The volume's model says it is the one painted for.
+  // any other's its name, with what it predicts at what voxel size beside
+  // and what it is as tags (the candidate's facts). The volume's model says
+  // it is the one painted for.
   function candidateRow(candidate, id) {
     const paintedFor = candidate.volume_model ? " (painted for)" : "";
     const options = {
@@ -540,15 +547,16 @@ export function initRank({ form }) {
     }
     return modelRow({
       ...options, value: candidate.name, name: candidate.name + paintedFor, note: describe(candidate),
-      title: candidate.source || `${candidate.repo}/${candidate.folder}`, search: candidateText(candidate),
+      title: candidate.source || `${candidate.repo}/${candidate.folder}`, search: candidateText(candidate), facts: candidate,
     });
   }
 
-  // The sections, each with its models' rows: the rows not shown hidden, the
-  // count of those ticked in its header, the zoo's count of those shown in
-  // its controls, and under Ticked only the sections with none ticked
-  // hidden. A section is put back in its place only when the order changed:
-  // moved, its search bar would lose what is being typed.
+  // The sections, each with its models' rows, in the order its controls
+  // choose: the rows not shown hidden, the count of those ticked in its
+  // header, the count of those shown in its controls (and of those hidden
+  // for having no browser copy), and under Ticked only the sections with
+  // none ticked hidden. A section is put back in its place only when the
+  // order changed: moved, its search bar would lose what is being typed.
   function showCandidates() {
     tickAll.disabled = tickNone.disabled = running;
     tickedCount.textContent = `${candidates.filter(isTicked).length} ticked`;
@@ -561,15 +569,16 @@ export function initRank({ form }) {
     candidates.forEach((candidate, i) => rowsByName.set(candidate.name, candidateRow(candidate, `rankCandidate${i}`)));
     for (const [group, { section: made, controls, list, kind }] of sections) {
       const members = candidates.filter((candidate) => candidate.group === group);
-      const rows = members.map((candidate) => {
+      const listed = members.map((candidate) => {
         const row = rowsByName.get(candidate.name);
         row.hidden = !visible(candidate, row);
         return row;
       });
+      const rows = controls ? controls.sorted(listed) : listed;
       const ticked = members.filter(isTicked).length;
       const inView = rows.filter((row) => !row.hidden).length;
       made.count(ticked ? `${ticked} ticked` : "");
-      if (controls) controls.count(inView, rows.length);
+      if (controls) controls.count(inView, rows.length, rows.filter((row) => row.hidden && !tickedOnly.checked && controls.noCopy(row.dataset)).length);
       made.item.hidden = tickedOnly.checked && !ticked;
       const empty = !rows.length && (listErrors[kind] ? notice(listErrors[kind], true)
         : notice(kind && !cached[kind] ? NOT_LOADED[kind] : "No models found."));

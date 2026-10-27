@@ -1,10 +1,14 @@
 // The Hugging Face list: cellmap's models on the Hub (GET
 // /api/huggingface-models, cached; POST .../refresh), in a section of its own
-// (shared/model-list.js, as every model list is made), loaded when it opens.
-// Submit sends the ticked repos as selected_hf_models.
+// (shared/model-list.js, as every model list is made), loaded when it opens,
+// each row tagged with what its listing says the model is (its formats,
+// finetune modes, size and browser copy). On a server only the models with
+// a copy that runs in the browser are shown to start (Runs in the browser,
+// ticked); the rows are in order of name, or of size. Submit sends the
+// ticked repos as selected_hf_models.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
-import { pageData } from "../../lib/page-data.js";
+import { isBrowserMode, pageData } from "../../lib/page-data.js";
 import { dimsWord, searchText } from "../../lib/search.js";
 import { listControls, modelRow, modelSection, notice, untickBox } from "../../shared/model-list.js";
 
@@ -25,7 +29,7 @@ function row(modelId, metadata) {
   const displayName = modelId.split("/").pop();
   return modelRow({
     id: "chk_hf_" + displayName, value: modelId, name: displayName, note: metadata.description,
-    rowClass: "form-check mb-2 hf-model-item", boxClass: "hf-model-checkbox", boxName: "selected_hf_models",
+    rowClass: "form-check mb-2 hf-model-item", boxClass: "hf-model-checkbox", boxName: "selected_hf_models", facts: metadata,
     // Ticked when the page started with it, or when the listing says it is
     // being served (the browser mode's, after a reload or from a link).
     checked: running.has(modelId) || metadata.selected === true,
@@ -49,6 +53,7 @@ function render(data) {
   }
   controls.element.hidden = false;
   list.replaceChildren(...modelIds.map((modelId) => row(modelId, data[modelId])));
+  filter();
 }
 
 function load(url) {
@@ -73,11 +78,22 @@ function load(url) {
     });
 }
 
-// The search: a row shows when it has every word typed.
+// The search and Runs in the browser: a row shows when it has every word
+// typed and, while that is ticked, a browser copy. A ticked row stays in
+// view, as the zoo's does, so nothing is submitted unseen: the models
+// running start ticked, with a copy or not. Then the rows in the order
+// chosen, and the count of those shown.
 function filter() {
-  list.querySelectorAll(".hf-model-item").forEach((item) => {
-    item.style.display = controls.matches(item.dataset) ? "" : "none";
+  const rows = [...list.querySelectorAll(".hf-model-item")];
+  let noCopy = 0;
+  const shown = rows.filter((item) => {
+    const show = controls.matches(item.dataset) || item.querySelector(".hf-model-checkbox").checked;
+    item.style.display = show ? "" : "none";
+    if (!show && controls.noCopy(item.dataset)) noCopy += 1;
+    return show;
   });
+  list.replaceChildren(...controls.sorted(rows));
+  controls.count(shown.length, rows.length, noCopy);
 }
 
 export function init() {
@@ -92,6 +108,7 @@ export function init() {
     id: "hf", placeholder: "Search: mito aff, 16 nm, 2d",
     title: "Every word typed, in the repo, its metadata, its voxel size or its 2D/3D",
     refreshTitle: "Refresh from Hugging Face", onRefresh: () => load("/api/huggingface-models/refresh"), onChange: filter,
+    browser: !isBrowserMode(), sort: true,
   });
   controls.element.hidden = true;
   placeholder = h("p", { class: "text-muted" }, "Click to load Hugging Face models...");
