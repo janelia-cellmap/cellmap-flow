@@ -12,6 +12,7 @@ from cellmap_flow.finetune.options import OUTPUT_CLASSES, TrainingOptions
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.models.geometry import channel_names_of
+from cellmap_flow.portable import volume as portable_volume
 # INSTANCE_TARGETS: the targets trained on instances, whose annotation
 # volumes hold an id per object; imported from here by the routes.
 from cellmap_flow.portable.volume import INSTANCE_TARGETS, annotation_dtype  # noqa: F401
@@ -442,22 +443,34 @@ def rewrite_minio_url_for_proxy(minio_url, request=None):
 
 
 def write_volume_manifest(volume):
-    """Mark an annotation volume as trainable by writing its manifest.
+    """Make an annotation volume its session's, trainable, by writing its manifest.
 
     ``create_dataloader`` requires this manifest: it is what points the
     trainer at the volume zarr to stream patches from, and it carries the
     patch geometry, the dense/sparse ratio and the dashboard's chains. The
     good regions beside it are honoured through the same dataset. Without
-    one, training raises rather than fall back to anything.
+    one, training raises rather than fall back to anything. It also says
+    which volume is the session's (SessionStore.session_volume).
 
     Returns the manifest path, or None when the volume record is too
     incomplete to describe (a resumed session whose .zattrs predates these
     fields, say). Nothing is guessed: such a session cannot be trained, and
     submit refuses it.
+
+    A volume painted before any model gets none (portable/volume.py
+    training_refusal: it is on no model's grid), and any manifest in its
+    corrections dir is removed: one naming the volume before it kept that
+    one the session's, so Rank and Use this model read the old paint while
+    the user painted the new, and a restart or a resumed copy trained on it.
     """
-    from cellmap_flow.finetune.session.manifest import write_manifest
+    from cellmap_flow.finetune.session.manifest import remove_manifest, write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
 
+    if portable_volume.training_refusal(volume) and volume.get("corrections_dir"):
+        if remove_manifest(str(volume["corrections_dir"])):
+            logger.info(f"Removed the manifest in {volume['corrections_dir']}: its volume is now "
+                        f"{volume.get('zarr_path')}, painted before any model, which is not trained on.")
+        return None
     try:
         if not volume.get("corrections_dir"):
             raise ValueError(f"The record of volume {volume.get('zarr_path')} has no corrections_dir.")

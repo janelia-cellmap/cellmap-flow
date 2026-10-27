@@ -352,15 +352,15 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(annotation_core, "make_volume", make_volume)
     monkeypatch.setattr(finetune_utils, "ensure_minio_serving", lambda *a, **k: None)
     monkeypatch.setattr(geometry_cache, "resolve_model_geometry", lambda name, config: {})
-    # The chain set when the model is started, without a raw to redraw the viewer from.
+    # The chain set and the channel shown when the model is started, without a raw to redraw the viewer from.
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
-        (name, session.pipeline_spec.to_json_data())))
+        (name, session.pipeline_spec.to_json_data(), session.shown_channel(name))))
     monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
     stretched, sigmoid = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}, {"name": "SigmoidPostprocessor"}
     body = dashboard.post("/api/finetune/rank/use", json={
-        "name": "mito_16nm", "input_norm": [stretched], "postprocess": [sigmoid],
+        "name": "mito_16nm", "input_norm": [stretched], "postprocess": [sigmoid], "select_channel": 2,
         "entry": {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}}).get_json()
 
     assert body["success"], body
@@ -368,8 +368,9 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     assert (body["input_norm"], body["postprocess"]) == ([stretched], [sigmoid])
     # 4^3 object and 4^3 background voxels of 16 nm, 2^3 each at 32 nm.
     assert (body["painted_voxels"], body["source_voxels"], body["conflicts"]) == (16, 128, 0)
-    # Served through both.
-    assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]})]
+    # Served through both, its layer opening on the channel the paint matched
+    # (not Neuroglancer's middle one, until the page's pick arrived).
+    assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]}, 2)]
     assert [c.name for c in session.models_config][-1] == "mito_16nm"
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
 

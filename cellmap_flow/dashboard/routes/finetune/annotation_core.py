@@ -102,7 +102,9 @@ def make_paint_volume(voxel_size, corrections_dir):
     ``voxel_size`` (nm, z, y, x; None: the level the viewer shows,
     ``shown_voxel_size``): written, served and registered as the session's,
     as make_volume's, and returned as it returns one. It gets no training
-    manifest, as it is not trained on (``paint_first_refusal``)."""
+    manifest, as it is not trained on (``paint_first_refusal``), and the
+    session's manifest is removed (common.write_volume_manifest), so that
+    it, not a volume before it, is the session's."""
     session = get_session()
     size = list(voxel_size) if voxel_size is not None else shown_voxel_size()
     geometry = plan_paint_volume(session.dataset_path, size, resample=session.resample)
@@ -112,7 +114,8 @@ def make_paint_volume(voxel_size, corrections_dir):
 def _made(geometry, model_name, annotation_dtype, corrections_dir):
     """make_volume's and make_paint_volume's volume of ``geometry``, for
     ``model_name`` (None: for no model), written, served and registered as
-    the session's; a model's also in the session's training manifest."""
+    the session's; a model's also in the session's training manifest, which
+    a volume for no model removes."""
     session = get_session()
     volume_id, zarr_path, minio_url = serve_new_volume(
         geometry, corrections_dir, session.dataset_path, model_name, annotation_dtype
@@ -126,9 +129,10 @@ def _made(geometry, model_name, annotation_dtype, corrections_dir):
             corrections_dir=corrections_dir,
         ),
     )
-    if model_name is not None:
-        # The trainer finds the volume only through this manifest.
-        write_volume_manifest(session.annotation_volumes[volume_id])
+    # The trainer finds the volume only through this manifest, and every
+    # route the session's volume (session_store's session_volume): a volume
+    # for no model gets none, and takes away one naming another volume.
+    write_volume_manifest(session.annotation_volumes[volume_id])
     refresh_annotated_regions_layer()
     return volume_id, zarr_path, minio_url, geometry
 

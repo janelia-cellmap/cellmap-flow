@@ -84,3 +84,32 @@ def test_a_periodic_round_pulls_strokes_and_leaves_the_viewer_alone(tmp_path, mo
 
     assert (corrections / "vol.zarr" / "annotation" / "s0" / "0.0.0").read_bytes() == b"stroke"
     assert pushes == []
+
+
+def test_a_sync_registers_no_volume_and_the_sessions_volume_is_its_manifests(tmp_path, monkeypatch):
+    """A resumed session got every volume of its source with the .minio that
+    held them, and the periodic sync registered each one it found in the
+    bucket: the session's volume, the last registered, became the original
+    4 nm paint, while the manifest trained the newest volume."""
+    from cellmap_flow.finetune.session.store import SessionStore
+
+    s3 = FakeS3()
+    corrections = tmp_path / "corrections"
+    for name in ("vol-new", "vol-old"):
+        s3.put(f"annotations/{name}.zarr/.zattrs", b'{"type": "annotation_volume"}', "e0")
+        s3.put(f"annotations/{name}.zarr/annotation/s0/0.0.0", b"stroke", "e1")
+        (corrections / f"{name}.zarr").mkdir(parents=True)
+        (corrections / f"{name}.zarr" / ".zattrs").write_text(json.dumps({"type": "annotation_volume"}))
+    (corrections / "_virtual_sources.json").write_text(json.dumps({"volume_zarr_path": str(corrections / "vol-new.zarr")}))
+    monkeypatch.setattr(session_minio, "make_s3_filesystem", lambda state: s3)
+    monkeypatch.setattr(sync, "sync_zarr_group_metadata", lambda *a: set())
+    state = {"ip": "127.0.0.1", "port": 9000, "bucket": "annotations", "output_base": str(corrections)}
+    volumes = {"vol-new": {"zarr_path": str(corrections / "vol-new.zarr"), "corrections_dir": str(corrections),
+                           "chunk_sync_state": {}}}
+
+    assert sync.sync_all(force=False, state=state, volumes=volumes) == 1
+    assert list(volumes) == ["vol-new"] and not (corrections / "vol-old.zarr" / "annotation").exists()
+    # Registered after it all the same, the manifest's volume is the session's.
+    store = SessionStore({}, volumes)
+    store.register_volume("vol-old", zarr_path=str(corrections / "vol-old.zarr"), corrections_dir=str(corrections))
+    assert store.session_volume()[0] == "vol-new"

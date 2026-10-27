@@ -15,7 +15,6 @@ take the session's own credentials; tensorstore, under worldarray, takes S3
 credentials only from the environment.
 """
 
-import json
 import logging
 import os
 import threading
@@ -23,6 +22,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Optional
 
 import s3fs
 import worldarray as wa
@@ -293,7 +293,14 @@ def sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bo
 
 
 def sync_all(force: bool = True, *, state, volumes) -> int:
-    """Sync every annotation volume in MinIO to local disk.
+    """Sync every registered annotation volume from MinIO to local disk.
+
+    The registry's volumes, not the bucket's. The bucket keeps every volume
+    MinIO ever served from its data directory: one retired by Use this model
+    (store.SessionStore.retire_volume), and every volume of a resumed
+    session's source whose ``.minio`` came along. Synced from the bucket's
+    listing, each of those was registered as it went (volume_record), and the
+    session's volume became whichever was listed last.
 
     Returns the number of volumes that had changed chunks, or -1 if MinIO
     is not initialized.
@@ -305,44 +312,33 @@ def sync_all(force: bool = True, *, state, volumes) -> int:
 
         # DEBUG: the periodic sync runs this every 30 s.
         logger.debug(f"Syncing all annotations from MinIO (force={force})...")
-        s3 = minio.make_s3_filesystem(state)
-        zarr_ids = [
-            Path(c).name.replace(".zarr", "") for c in s3.ls(state["bucket"]) if c.endswith(".zarr")
-        ]
-        checked = synced = failed = 0
-        for zid in zarr_ids:
-            # Only annotation volumes are synced: they are all the dashboard
-            # serves. Anything else in the bucket is a crop zarr of the
-            # removed create-crop route, whose crops nothing trains on.
-            attrs_path = f"{state['bucket']}/{zid}.zarr/.zattrs"
-            try:
-                if (
-                    not s3.exists(attrs_path)
-                    or json.loads(s3.cat(attrs_path)).get("type") != "annotation_volume"
-                ):
-                    continue
-            except Exception as e:
-                # Counted, so an unreadable volume shows in the summary
-                # instead of passing for a quiet steady state.
-                logger.debug(f"Could not read root attrs for {zid}: {e}")
-                failed += 1
-                continue
-            checked += 1
-            if sync_volume(zid, force=force, state=state, volumes=volumes):
-                synced += 1
+        volume_ids = list(volumes)
+        synced = sum(1 for volume_id in volume_ids if sync_volume(volume_id, force=force, state=state, volumes=volumes))
 
         # Say whether nothing changed or something is broken. A count of the
         # volumes that changed alone prints the same line for the healthy
         # idle case and a broken sync, which made a real sync failure take a
-        # day to spot.
+        # day to spot; sync_volume logs each failure itself.
         if synced:
-            summary = f"{synced} updated, {checked - synced} unchanged"
+            summary = f"{synced} updated, {len(volume_ids) - synced} unchanged"
         else:
-            summary = f"no changes ({checked} checked)"
-        if failed:
-            summary += f", {failed} could not be read"
+            summary = f"no changes ({len(volume_ids)} checked)"
         logger.info(f"Annotation sync: {summary}")
         return synced
+
+
+def retire_volume(volume_id, store, *, state) -> Optional[str]:
+    """Pull a volume's last strokes from MinIO, then take it out of the
+    session, kept on disk (``store``'s SessionStore.retire_volume); returns
+    where it went, as that does.
+
+    Both under the sync's lock: a periodic sync between the two, or during
+    the move, would write chunks into the zarr as it moved and make its old
+    path again. What MinIO holds of it stays there, unsynced from then on.
+    """
+    with _sync_lock:
+        sync_volume(volume_id, state=state, volumes=store.volumes())
+        return store.retire_volume(volume_id)
 
 
 def periodic_sync_once(*, state, volumes) -> None:

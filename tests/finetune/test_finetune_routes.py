@@ -217,28 +217,39 @@ def _zarr(path, **attrs):
     (path / ".zattrs").write_text(json.dumps(attrs))
 
 
-def test_resuming_offers_the_volume_the_session_trains_on_first(client, tmp_path):
+def test_a_session_is_listed_as_the_volume_it_trains_on_alone(client, tmp_path):
     """Resume took whichever zarr os.listdir() gave first, crop zarrs and legacy
     per-chunk extracts included, and counted the extracts' chunks: 0 for a
-    painted session."""
+    painted session. Then it counted every volume's: 50 chunks for 20
+    painted and carried onto three models' grids."""
     corrections = tmp_path / "out" / "20260101_000000" / "corrections"
     _zarr(corrections / "aaa_crop.zarr", dataset_path="/raw")  # a crop, listed first
-    _zarr(corrections / "vol-old.zarr", type="annotation_volume")
+    _zarr(corrections / "vol-old.zarr", type="annotation_volume", model_name="m")
     time.sleep(0.01)
-    _zarr(corrections / "vol-new.zarr", type="annotation_volume")
+    _zarr(corrections / "vol-new.zarr", type="annotation_volume", model_name=None)
     _zarr(corrections / "vol-x_chunk_1.zarr", type="annotation_volume")  # a legacy extract
-    s0 = corrections / "vol-new.zarr" / "annotation" / "s0"
-    s0.mkdir(parents=True)
-    for key in (".zarray", "0.0.0", "0.0.1"):
-        (s0 / key).write_bytes(b"x")
-    (corrections / "_virtual_sources.json").write_text(json.dumps({"volume_zarr_path": str(corrections / "vol-old.zarr")}))
+    for name, keys in (("vol-old", ("0.0.0",)), ("vol-new", ("0.0.0", "0.0.1"))):
+        s0 = corrections / f"{name}.zarr" / "annotation" / "s0"
+        s0.mkdir(parents=True)
+        for key in (".zarray", *keys):
+            (s0 / key).write_bytes(b"x")
+    manifest = corrections / "_virtual_sources.json"
+    manifest.write_text(json.dumps({"volume_zarr_path": str(corrections / "vol-old.zarr")}))
     _zarr(tmp_path / "out" / "20250101_000000" / "corrections" / "v_chunk_0_0_0.zarr", source="sparse_volume")
 
-    sessions = client.post("/api/finetune/list-existing-sessions", json={"output_path": str(tmp_path / "out")}
+    def listed():
+        return client.post("/api/finetune/list-existing-sessions", json={"output_path": str(tmp_path / "out")}
                            ).get_json()["sessions"]
+
+    sessions = listed()
     assert [s["session_id"] for s in sessions] == ["20260101_000000"], "extracts alone are nothing to resume"
-    assert [v["volume_id"] for v in sessions[0]["volumes"]] == ["vol-old", "vol-new"]
-    assert sessions[0]["chunk_count"] == 2
+    assert [v["volume_id"] for v in sessions[0]["volumes"]] == ["vol-old"]
+    assert (sessions[0]["chunk_count"], sessions[0]["model_name"]) == (1, "m")
+    # Without a manifest, the volume written last.
+    manifest.unlink()
+    (session,) = listed()
+    assert ([v["volume_id"] for v in session["volumes"]], session["chunk_count"], session["model_name"]) == (
+        ["vol-new"], 2, None)
 
 
 class _Declares:
