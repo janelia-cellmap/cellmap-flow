@@ -11,13 +11,15 @@
 // through; Use this model picks the row's channel before the model is
 // served, sets those steps, carries the paint onto the model's grid, makes
 // its volume the session's and retires the old one, and Fit to Paint's
-// input-norm route sets the steps alone.
+// input-norm route sets the steps alone, which the model advice then takes
+// as the model's own.
 // Without Pyodide (no network for numpy's wheel) these skip.
 import { describe, expect, it, vi } from "vitest";
 
 import { writeBox } from "../../src/ai-annotate/fill";
 import { Router } from "../../src/backend/router";
 import { finetuneRoutes } from "../../src/backend/routes/finetune";
+import { modelRoutes } from "../../src/backend/routes/models";
 import { rankRoutes } from "../../src/backend/routes/rank";
 import type { ApiRequest, ApiResponse, Chain, PaintVolume } from "../../src/contracts";
 import { readVolume } from "../../src/finetune/volume";
@@ -35,10 +37,12 @@ function body(res: ApiResponse): any {
   return res.json;
 }
 
-/** The finetune routes (create-volume) beside the rank routes, on `ctx`. */
+/** The finetune routes (create-volume) and the model routes (the advice)
+ * beside the rank routes, on `ctx`. */
 function harness(ctx: FakeContext) {
   const router = new Router();
   finetuneRoutes(router, { run: async () => { throw new Error("no finetune run here"); } });
+  modelRoutes(router);
   rankRoutes(router);
   return (req: ApiRequest) => router.handle(req, ctx);
 }
@@ -138,6 +142,10 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(fitted).toEqual({ success: true, input_norm: scored.input_norm, postprocess: ctx.session.state.chain.postprocess });
     expect(ctx.session.state.chain.input_norm.find((n) => n.name === "MinMaxNormalizer")).toMatchObject({ min_value: scored.window[0], max_value: scored.window[1] });
     expect(ctx.session.state.paintVolume).toBe(volume);
+    // The model advice takes the steps fitted for the model as its own, not
+    // its declared range to suggest back over them.
+    const [advised] = body(await handle(request("GET", "/api/model_advice"))).models;
+    expect(advised).toMatchObject({ model: NAME_56, input_norm_matches: true, input_norm_differences: [] });
     // The model served redrawn through the steps, and no other served.
     expect(ctx.infer.serves.slice(serves).map((s) => s.name)).toEqual([NAME_56]);
     // Not a list of steps, or a step the browser cannot run: refused, and nothing changes.
@@ -190,8 +198,9 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const assumed = [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255, invert: false }, { name: "LambdaNormalizer", expression: "x*2-1" }];
     expect(row).toMatchObject({ success: true, matches: 1, input_norm: assumed, input_norm_from: "assumed" });
     expect(ctx.infer.serves.at(-1)).toMatchObject({ name: bare.name, chain: { input_norm: assumed } });
-    // Logits shown through no postprocessing: the sigmoid that makes them probabilities.
-    expect(row.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    // Logits shown through no postprocessing: the sigmoid that makes them
+    // probabilities, then the threshold fitted to the paint.
+    expect(row.postprocess).toEqual([{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: row.threshold }]);
   });
 
   it("read a model's output by its activation, so a sigmoid model scores as the logit model it is equal to", async () => {
@@ -211,10 +220,11 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(asProbability).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
     expect(asLogits).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
     expect(asProbability.loss).toBeCloseTo(asLogits.loss, 5);
-    // Under the session's sigmoid, the probabilities would be squashed again: theirs is taken away;
-    // the logits' is what they need, so nothing changes.
-    expect(asProbability.postprocess).toEqual([]);
-    expect(asLogits.postprocess).toBeNull();
+    // Under the session's sigmoid, the probabilities would be squashed again:
+    // theirs is taken away; the logits' is what they need. Each then cut at
+    // its threshold.
+    expect(asProbability.postprocess).toEqual([{ name: "ThresholdPostprocessor", threshold: asProbability.threshold }]);
+    expect(asLogits.postprocess).toEqual([{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: asLogits.threshold }]);
   });
 
   it("set the row's postprocessing beside its steps in one chain set, when Use this model and Fit to Paint are given it", async () => {
@@ -232,10 +242,12 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const chainSets = () => ctx.logged.filter((line) => line.startsWith("Chain ")).length;
     const sets = chainSets();
     const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: sigmoid.name, input_norm: stretch, postprocess: row.postprocess })));
-    expect(used).toMatchObject({ success: true, input_norm: stretch, postprocess: [] });
-    expect(ctx.session.state.chain).toEqual({ input_norm: stretch, postprocess: [] });
+    expect(used).toMatchObject({ success: true, input_norm: stretch, postprocess: row.postprocess });
+    expect(ctx.session.state.chain).toEqual({ input_norm: stretch, postprocess: row.postprocess });
     expect(chainSets()).toBe(sets + 1);
-    expect(ctx.infer.serves.at(-1)).toMatchObject({ name: sigmoid.name, chain: { input_norm: stretch, postprocess: [] } });
+    expect(ctx.infer.serves.at(-1)).toMatchObject({ name: sigmoid.name, chain: { input_norm: stretch, postprocess: row.postprocess } });
+    // The Processing tab is told the postprocessing was fitted to the paint, and for which model.
+    expect(body(await handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: sigmoid.name, postprocess_fitted: true });
 
     // Fit to Paint: the postprocessing alone changes, and the answer is the chain as it now is.
     const fitted = body(await handle(request("POST", "/api/finetune/rank/input-norm", { input_norm: stretch, postprocess: [{ name: "SigmoidPostprocessor" }] })));

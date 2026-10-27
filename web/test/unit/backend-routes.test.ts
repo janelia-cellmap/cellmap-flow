@@ -11,6 +11,7 @@ import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
 import { entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -137,6 +138,26 @@ describe("POST /api/models", () => {
     expect(ctx.session.state.chain).toEqual(expected);
   });
 
+  it("sets the postprocessing a model starting needs, from its manifest's output, only when the chain has none", async (t) => {
+    // The rule is the portable Python's (rank.needed_postprocess), in node's Pyodide.
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    const backend = createBackend(ctx);
+    // setup_54's affinities are logits too: the sigmoid, before it is served.
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    const expected = { input_norm: inputNorm, postprocess: [{ name: "SigmoidPostprocessor" }] };
+    expect(ctx.session.state.chain).toEqual(expected);
+    expect(ctx.infer.served().map((s) => decodeArgs(s.view.split(ARGS_KEY)[1]).chain)).toEqual([expected]);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: NAME_54, postprocess_fitted: false });
+    // The user's steps since are theirs: the next start leaves them, and the list says nothing set them.
+    const theirs = [{ name: "ThresholdPostprocessor", threshold: 0.3 }];
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: theirs }));
+    await backend.handle(request("POST", "/api/models/add", { entry: { type: "onnx", repo: "cellmap/onnx-web-models", folder: "setup_56", name: NAME_56 } }));
+    expect(ctx.session.state.chain.postprocess).toEqual(theirs);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: null, postprocess_fitted: null });
+  }, 120_000);  // Pyodide and numpy load the first time, a few seconds
+
   it("refuses a reference that is not a model the browser runs, changing nothing", async () => {
     const ctx = fakeContext();
     const res = await createBackend(ctx).handle(submit(["cellmap/some-pytorch-model"]));
@@ -155,7 +176,9 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
   it("lists the served models in order, each with where it came from and the Hugging Face row that ticks it", async () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx);
-    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({ success: true, models: [], pipeline: defaultChain(), input_norm_from: null });
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
+      success: true, models: [], pipeline: defaultChain(), input_norm_from: null, postprocess_from: null, postprocess_fitted: null,
+    });
     await backend.handle(submit([HF56, HF54]));
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
       success: true,
@@ -163,6 +186,9 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
       // the chain they run through; the default's input normalization is what both declare
       pipeline: defaultChain(),
       input_norm_from: NAME_56,
+      // the default's sigmoid was there before either started
+      postprocess_from: null,
+      postprocess_fitted: null,
     });
   });
 

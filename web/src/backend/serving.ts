@@ -10,13 +10,16 @@
 // view with an onnxruntime-web session behind it (src/infer), so starting
 // one is Inference.serve and stopping one is ServedModel.dispose. A model's
 // start sets the input normalization it declares when the chain has none
-// (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm).
+// (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm), and
+// the postprocessing its output needs when the chain has none
+// (setNeededPostprocess).
 import { ARGS_KEY } from "../contracts";
 import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
 import { SUPPORTED_NORMALIZERS } from "../infer/norms";
 import { entryFor } from "../models";
 import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs } from "../shared/args";
+import { outputClassOf } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
 import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
 
@@ -107,6 +110,59 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
   }
   return null;
 }
+
+/** Set the postprocessing a model's output needs as the chain's, as part of
+ * starting it, when the chain has none (routes/pipeline.py's
+ * set_needed_postprocess, as a model's server first answers its probe).
+ * Returns the name of the model whose output it is for, or null when
+ * nothing changed.
+ *
+ * The Models tab's Submit and Add (routes/models.ts) call this with the
+ * models they are about to serve that are not served yet (`starting`) and
+ * every model they serve (`serving`, those among them), after
+ * setDeclaredInputNorm and before serving them. A model's output class is
+ * its manifest's (shared/model-info.ts outputClassOf, what its served
+ * ModelInfo says), and what it needs is cellmap_flow/portable/rank.py's
+ * needed_postprocess on an empty chain with no threshold, the rule the
+ * ranking's rows follow too: a sigmoid for logits, affinities' included,
+ * nothing for an output that has its activation. The first of `starting`
+ * that needs steps gives them, unless they would show another of `serving`
+ * wrong (a sigmoid on an output that has one: the rule would take it away
+ * again), set through setChain so the models served already are drawn
+ * through them too, and remembered as the start's (the session's
+ * startPostprocess), so GET /api/models/loaded can say where they came
+ * from. A chain with postprocessing already is the user's (or a model's, or
+ * the ranking's) and is left alone. A start does not fail on this: when the
+ * Python cannot be called, the chain is left as it is, saying why. */
+export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
+  if (ctx.session.state.chain.postprocess.length) return null;
+  const needed = (entry: ModelEntry, postprocess: Step[]) =>
+    ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: outputClassOf(entry.manifest.output), postprocess, threshold: null });
+  for (const entry of starting) {
+    let steps: Step[] | null;
+    const wrong: string[] = [];
+    try {
+      steps = await needed(entry, []);
+      if (!steps?.length) continue;
+      for (const other of serving) if (other.id !== entry.id && (await needed(other, steps)) !== null) wrong.push(other.name);
+    } catch (e) {
+      ctx.log(`The postprocessing ${entry.name}'s output needs was not set: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+    if (wrong.length) {
+      ctx.log(`${entry.name}'s output needs ${stepNames(steps).join(" → ")}, but it is not set: it would show ${wrong.join(", ")} wrong`);
+      return null;
+    }
+    await setChain(ctx, { input_norm: ctx.session.state.chain.input_norm, postprocess: steps });
+    await ctx.session.update({ startPostprocess: { model: entry.name, postprocess: steps } });
+    ctx.log(`Postprocessing set to what ${entry.name}'s output needs: ${stepNames(steps).join(" → ")}`);
+    return entry.name;
+  }
+  return null;
+}
+
+/** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
+export const PORTABLE = "cellmap_flow.portable.calls";
 
 /** The name of the first of `entries` whose declared input normalization is
  * `chain`'s input part, step for step; null when none is, or the chain has

@@ -17,7 +17,8 @@ import type { NgLayer, NgState } from "../../src/viewer/state";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
   const current: SessionState = {
-    datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], ...state,
+    datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [],
+    rankFits: {}, startPostprocess: null, ...state,
   };
   return {
     get state() { return current; },
