@@ -570,7 +570,7 @@
         {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
       <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
              placeholder="Filter: nuc, 16 nm, mito aff"
-             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
+             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito aff, 2d. A ticked model stays in the list whatever the filter, and Rank scores every ticked one.">
       {# The Models tab's ways to find a model, over the same lists: its
          search rule (lib/search.js), its BioImage Zoo filters (EM only,
          2D/3D; the zoo is server-only), its Hugging Face Refresh and its

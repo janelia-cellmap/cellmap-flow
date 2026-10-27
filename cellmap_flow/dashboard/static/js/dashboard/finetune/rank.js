@@ -8,8 +8,8 @@
 // (a download, then a run over the painted chunks) and longer on a server for
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
-// each request, and one not running (cluster) starts unticked. A filter narrows the models listed; Rank scores the ticked ones it
-// shows. Each row gives what its score was read at, as the controls it sets
+// each request, and one not running (cluster) starts unticked. A filter narrows the models listed, a ticked one staying in view, and Rank scores every ticked
+// one. Each row gives what its score was read at, as the controls it sets
 // take it (portable/rank.py score_row): the threshold, a probability, and
 // the input normalization it was read through (input_norm: the model's own,
 // or the session's when that matched better, maybe stretched to the raw
@@ -384,11 +384,13 @@ export function initRank() {
     return refreshing;
   }
 
-  // Whether `candidate` shows: it matches the filter typed, and the 2D / 3D
-  // and EM only boxes, as the Models tab's zoo list filters (neither of 2D
-  // and 3D ticked: either; EM only leaves out the zoo models not tagged EM,
-  // every other model being EM).
+  // Whether `candidate` shows: it is ticked (a ticked one stays in view, as
+  // the Models tab's zoo list keeps it, so nothing is ranked unseen), or it
+  // matches the filter typed and the 2D / 3D and EM only boxes, as the zoo
+  // list filters (neither of 2D and 3D ticked: either; EM only leaves out
+  // the zoo models not tagged EM, every other model being EM).
   function visible(candidate) {
+    if (!unticked.has(candidate.name)) return true;
     const dims = [[only2d, 2], [only3d, 3]].filter(([box]) => box.checked).map(([, d]) => d);
     return matchesFilter(candidate, filter.value)
       && (!dims.length || dims.includes(candidate.dims))
@@ -685,12 +687,14 @@ export function initRank() {
     setBusy(rankBtn, true, "Ranking...");
     // A volume made, or a model added, since the list was shown is in this one.
     const state = await listCandidates();
-    const chosen = shown().filter((candidate) => !unticked.has(candidate.name));
+    // Every ticked model, which visible() keeps in view: one the filter hid
+    // used to be left out of the ranking though it was ticked.
+    const chosen = candidates.filter((candidate) => !unticked.has(candidate.name));
     if (!state.ready || !chosen.length) {
       running = false;
       setBusy(rankBtn, false);
       showCandidates();
-      if (state.ready) say("Tick at least one of the models shown to rank.", "warning");
+      if (state.ready) say("Tick at least one model to rank.", "warning");
       else showReadiness(state);
       return;
     }
