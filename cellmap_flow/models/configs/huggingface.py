@@ -7,9 +7,10 @@ launch command never downloads it.
 
 import logging
 import time
+from types import SimpleNamespace
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
-from cellmap_flow.models.configs.cellmap import CellMapModelConfig
+from cellmap_flow.models.configs.cellmap import CellMapModelConfig, metadata_geometry
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,12 @@ class HuggingFaceModelConfig(ModelConfig):
             )
             return {}
         return self._metadata
+
+    def declared_geometry(self):
+        """Its metadata.json's, as a cellmap export's (``metadata_geometry``):
+        that file is downloaded, not the model."""
+        metadata = self._load_metadata()
+        return metadata_geometry(SimpleNamespace(**metadata)) if isinstance(metadata, dict) else None
 
     def _launch_params(self) -> dict:
         # Not to_dict(): that downloads metadata.json for the pipeline builder,

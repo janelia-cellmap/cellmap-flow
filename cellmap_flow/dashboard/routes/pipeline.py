@@ -176,11 +176,12 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     every step (or takes ``built``, the steps already built) before it
     assigns anything, so a step its class refuses raises here with nothing
     changed. ``builder``, the pipeline builder's canvas as a BuilderCanvas
-    dict, is kept when given. Then the raw layer and each prediction layer
-    are rebuilt: a prediction layer's URL carries the chain (the args blob,
-    with the dashboard's address, or else ``dashboard_url``, the request's,
-    and the chain's digest: Session.layer_blob), and its server runs the
-    chain of the layer it is asked for.
+    dict, is kept when given. Then each prediction layer is rebuilt: its URL
+    carries the chain (the args blob, with the dashboard's address, or else
+    ``dashboard_url``, the request's, and the chain's digest:
+    Session.layer_blob), and its server runs the chain of the layer it is
+    asked for. The raw layer is rebuilt only when the input normalization
+    changed (or the viewer has none): it is drawn through the normalizers.
 
     The viewer is left alone when the chain is the one it already shows: the
     chain was this already, the raw layer is there, and every job's layer
@@ -233,7 +234,8 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # the old normalization would then map every voxel outside the new range,
     # showing solid black or white. Drop it and let get_raw_layer() recompute
     # percentiles through the normalizers now in effect.
-    if previous_norm_signature != _chain_signature(session.input_norms):
+    input_changed = previous_norm_signature != _chain_signature(session.input_norms)
+    if input_changed:
         if session.shaders.pop("data", None) is not None:
             logger.info(
                 "Input normalization changed; recomputing the raw contrast "
@@ -258,19 +260,27 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 )
             session.shader_controls.pop(name, None)
 
+    # A raw layer built again is a new source, with a token of its own, so
+    # the browser drops every raw chunk it has and fetches them all again
+    # through this process: the raw stayed black for a long while after an
+    # Apply that changed only the postprocessing. Its chunks only change
+    # with the input normalization, so otherwise the one shown stays, with
+    # the shader and controls the user has on it.
+    # .state, not .txn(): this only reads.
+    redraw_raw = input_changed or "data" not in session.viewer.state.layers
     # Without a contrast of the user's to restore, the raw's is sampled where
     # the viewer is looking, as neuroglancer's 1-99% button would be.
-    # .state, not .txn(): this only reads.
-    view = view_of(session.viewer.state) if session.shaders.get("data") is None else None
+    view = view_of(session.viewer.state) if redraw_raw and session.shaders.get("data") is None else None
 
     drawn = []
     with session.viewer.txn() as s:
-        # The user's raw-layer contrast/shader, instead of the fresh default
-        # get_raw_layer() always builds, which otherwise resets it every time
-        # the pipeline is (re)submitted.
-        session.raw = raw_layer(session.dataset_path, shader=session.shaders.get("data"),
-                                shader_controls=session.shader_controls.get("data"), view=view)
-        replace_layer(s.layers, "data", session.raw)
+        if redraw_raw:
+            # The user's raw-layer contrast/shader, instead of the fresh
+            # default get_raw_layer() always builds, which otherwise resets
+            # it every time the pipeline is (re)submitted.
+            session.raw = raw_layer(session.dataset_path, shader=session.shaders.get("data"),
+                                    shader_controls=session.shader_controls.get("data"), view=view)
+            replace_layer(s.layers, "data", session.raw)
         for index, job in enumerate(session.jobs):
             model = job.model_name
             host = job.host

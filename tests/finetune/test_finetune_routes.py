@@ -241,8 +241,39 @@ def test_resuming_offers_the_volume_the_session_trains_on_first(client, tmp_path
     assert sessions[0]["chunk_count"] == 2
 
 
+class _Declares:
+    """A model that says ``declared`` of its geometry, and that is never to be built."""
+
+    def __init__(self, name, declared=None):
+        self.name, self.declared = name, declared
+
+    def declared_geometry(self):
+        return self.declared
+
+    @property
+    def config(self):
+        raise AssertionError(f"{self.name} was built to read its geometry")
+
+
+def test_the_model_list_takes_what_a_model_declares_and_never_builds_it(client, monkeypatch):
+    """The Finetune tab asks every two seconds while a model's server is not
+    up, and each answer built the model in the dashboard to read its sizes:
+    25 s on its CPU for a 3 GB TorchScript."""
+    from cellmap_flow.dashboard.services import launch
+
+    declared = {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3}
+    monkeypatch.setattr(get_session(), "models_config",
+                        [_Declares("onnx", declared), _Declares("starting"), _Declares("stopped")])
+    monkeypatch.setattr(launch, "running_names", lambda: {"onnx", "starting"})
+    models = {m["name"]: m for m in client.get("/api/finetune/models").get_json()["models"]}
+    assert {k: models["onnx"][k] for k in declared} == declared
+    # Without a geometry, why not: its server is not up yet, or it is not running.
+    assert set(models["starting"]) == set(models["stopped"]) == {"name", "status", "finetune_modes"}
+    assert models["starting"]["status"] != models["stopped"]["status"]
+
+
 MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
-PROXY = "https://gateway.example.org/minio/annotations/vol-1.zarr"
+PROXY ="https://gateway.example.org/minio/annotations/vol-1.zarr"
 
 
 @pytest.mark.parametrize("template, headers, expected", [

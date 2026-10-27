@@ -272,6 +272,20 @@ class ModelConfig:
         """
         return None
 
+    def declared_geometry(self):
+        """What the model says of its output without being built: ``{"write_shape"
+        (nm, z, y, x), "output_voxel_size" (nm), "output_channels"}``, as its
+        server reports them; None when it says none, or not for certain.
+
+        For the finetune tab's model list, which asks on every poll while
+        the model's server is not up: building the model there loaded its
+        weights and ran a forward on the dashboard's CPU (25 s for a 3 GB
+        TorchScript). So it must be cheap and must not raise, as
+        declared_input_norm. A type declares it from what describes the model
+        (a metadata.json, a manifest, its entry).
+        """
+        return None
+
     def trainable_model(self):
         """The torch module the finetune trainer trains, or None for
         ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).

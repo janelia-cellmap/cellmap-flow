@@ -15,7 +15,6 @@ its paint onto a model's grid (rank_routes).
 import functools
 import logging
 import os
-import time
 
 from flask import jsonify, request
 
@@ -42,7 +41,7 @@ from cellmap_flow.finetune.session.volume import (
     plan_volume,
     raw_voxel_sizes,
 )
-from cellmap_flow.models.geometry_cache import build_here, resolve_model_geometry
+from cellmap_flow.models.geometry_cache import resolve_model_geometry
 from cellmap_flow.portable import volume as portable_volume
 from cellmap_flow.serving.client import (
     fetch_model_info,
@@ -190,23 +189,6 @@ def _get_selected_model_config(model_name):
     return model_config, None
 
 
-# ``model_config.config`` is far from free: for a script model it executes the
-# config file, which downloads weights and runs torch.export before it can
-# report a shape. ModelConfig caches the result, but only on success -- a
-# failure leaves ``_config`` None, so the next access redoes the whole thing.
-# The finetune tab polls this endpoint every two seconds while it waits for a
-# model, which turns one failure (a busy GPU, say) into hundreds of full model
-# loads. Remember failures briefly instead, short enough that a transient cause
-# still recovers on its own.
-_CONFIG_FAILURE_COOLDOWN_SECONDS = 60
-_config_failure_until = {}
-
-
-def _config_retry_blocked(name) -> bool:
-    until = _config_failure_until.get(name)
-    return until is not None and time.time() < until
-
-
 def _geometry_from_server(name):
     """Geometry from the running inference server, which already has the model."""
     return model_geometry(fetch_model_info(running_job_host(name)))
@@ -223,32 +205,19 @@ def _geometry_from_saved_pipeline(name):
     }
 
 
-def _geometry_from_local_load(name, model_config):
-    """Last resort: build the model here just to read its shape.
+def _declared_geometry(model_config):
+    """What ``model_config`` declares of its geometry without being built
+    (``ModelConfig.declared_geometry``), or None."""
+    declared = getattr(model_config, "declared_geometry", None)
+    return model_geometry(declared()) if callable(declared) else None
 
-    Only reached when no server is up and nothing was saved, because it is by
-    far the most expensive and least reliable source -- see the note on
-    _CONFIG_FAILURE_COOLDOWN_SECONDS above.
-    """
-    if model_config is None or _config_retry_blocked(name):
-        return None
-    try:
-        # Refuses a model that runs in its own environment, with a message
-        # that says so, rather than half-building it with this env's packages.
-        config = build_here(model_config)
-        _config_failure_until.pop(name, None)
-        return {
-            "write_shape": list(config.write_shape),
-            "output_voxel_size": list(config.output_voxel_size),
-            "output_channels": config.output_channels,
-        }
-    except Exception as e:
-        _config_failure_until[name] = time.time() + _CONFIG_FAILURE_COOLDOWN_SECONDS
-        logger.warning(
-            f"Could not extract config for {name}: {e}. Not retrying for "
-            f"{_CONFIG_FAILURE_COOLDOWN_SECONDS}s."
-        )
-        return None
+
+def _waiting(name):
+    """Why ``name`` has no geometry yet: its server is not up, or it is not
+    running at all (stopped on the Models tab, its config kept)."""
+    from cellmap_flow.dashboard.services.launch import running_names
+
+    return "waiting for its server" if name in running_names() else "not running"
 
 
 def _finetune_modes(model_config):
@@ -266,6 +235,14 @@ def _finetune_modes(model_config):
 
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
+    """The models to finetune, and the raw's levels: ``{"models",
+    "selected_model", "raw_voxel_sizes"}``.
+
+    Each model is ``{"name", "write_shape" (nm), "output_voxel_size",
+    "output_channels", "finetune_modes"}``; one whose geometry nothing knows
+    yet is ``{"name", "status", "finetune_modes"}`` instead, its ``status``
+    "waiting for its server" or, stopped on the Models tab, "not running".
+    """
     try:
         models = []
         seen = set()
@@ -287,17 +264,19 @@ def get_finetune_models():
         for name in names:
             if name in seen:
                 continue
-            # Cheapest and most reliable source first. Asking the server costs
-            # one HTTP round trip; loading the model locally costs a weight
-            # download, a torch.export and a CUDA context.
+            # The server's first, as it serves the model; else what the
+            # pipeline builder saved, or what the model declares. Never the
+            # model built here: the tab asks every two seconds while it waits
+            # for a server, and building it loaded its weights and ran a
+            # forward on the dashboard's CPU (25 s for a 3 GB TorchScript). A
+            # model none of them knows is listed with why it has no geometry
+            # yet, its ``status``, until its server answers.
             geometry = (
                 _geometry_from_server(name)
                 or _geometry_from_saved_pipeline(name)
-                or _geometry_from_local_load(name, configs_by_name.get(name))
+                or _declared_geometry(configs_by_name.get(name))
+                or {"status": _waiting(name)}
             )
-            if geometry is None:
-                logger.warning(f"No configuration available for model: {name}")
-                continue
             seen.add(name)
             models.append({"name": name, **geometry,
                            "finetune_modes": _finetune_modes(configs_by_name.get(name))})

@@ -7,11 +7,24 @@ keeps the base model's geometry, at the voxel sizes the finetune was
 trained at when those differ (``trained_at_geometry``).
 """
 
+import logging
+
 import numpy as np
 
 from cellmap_flow.models import entry
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.geometry import _numbers, _voxels
+
+logger = logging.getLogger(__name__)
+
+
+def _at_voxel_size(shape, voxel_size, trained):
+    """``(voxel size, shape)``: ``shape`` (nm) of ``voxel_size`` voxels, as
+    many voxels of ``trained`` instead; as they are when ``trained`` is None."""
+    if trained is None:
+        return voxel_size, shape
+    voxels = np.asarray(_voxels(shape, voxel_size), dtype=float)
+    return _numbers(trained), _numbers(voxels * np.asarray(trained, dtype=float))
 
 
 def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict:
@@ -31,14 +44,9 @@ def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None)
     geometry = {}
     for which, trained in (("input", input_voxel_size), ("output", output_voxel_size)):
         shape_key = "read_shape" if which == "input" else "write_shape"
-        base_size = getattr(base_cfg, f"{which}_voxel_size")
-        base_shape = getattr(base_cfg, shape_key)
-        if trained is None:
-            geometry[f"{which}_voxel_size"], geometry[shape_key] = base_size, base_shape
-            continue
-        voxels = np.asarray(_voxels(base_shape, base_size), dtype=float)
-        geometry[f"{which}_voxel_size"] = _numbers(trained)
-        geometry[shape_key] = _numbers(voxels * np.asarray(trained, dtype=float))
+        geometry[f"{which}_voxel_size"], geometry[shape_key] = _at_voxel_size(
+            getattr(base_cfg, shape_key), getattr(base_cfg, f"{which}_voxel_size"), trained
+        )
     return geometry
 
 
@@ -168,6 +176,20 @@ class FinetuneModelConfig(ModelConfig):
     def finetune_modes(self):
         """Its base's: continuing a finetune trains the same network."""
         return self.base_model_config.finetune_modes()
+
+    def declared_geometry(self):
+        """Its base's, at the output voxel size the finetune was trained at
+        (``trained_at_geometry``); None when the base declares none."""
+        try:
+            base = self.base_model_config.declared_geometry()
+        except Exception as e:
+            # A base entry that does not build says why when the model is built.
+            logger.debug(f"No declared geometry for {self.name}: {e}")
+            return None
+        if base is None:
+            return None
+        voxel_size, shape = _at_voxel_size(base["write_shape"], base["output_voxel_size"], self.output_voxel_size)
+        return {**base, "write_shape": list(shape), "output_voxel_size": list(voxel_size)}
 
     def trainable_model(self):
         """The module it serves (its base's trainable module with the adapter
