@@ -12,7 +12,11 @@ model, whose flows the ranking does not score), each catalog group's
 (``hf_cached`` and ``zoo_cached`` say whether there were any: none is
 fetched here, so a listing never waits on the Hub or bioimage.io; the tab's
 Refresh fetches them), then the ones given here by reference ("Added"),
-with the session's volume and the model it is for. Each not running says
+with the session's volume and the model it is for. Each carries what every
+model list shows of a model (models/hf_catalog.py FACTS: its formats, finetune
+modes, size and browser copy), as the Hugging Face list cached them for its
+repo, from the files of a catalog model's folder, or from a repo's own when
+it is added by reference. Each not running says
 how to build it (``entry``, the one the Models tab starts it from); only the
 running ones and the added start ticked, as a model not running is started
 on the cluster for its score. A zoo model whose voxel size nothing says
@@ -150,6 +154,43 @@ def _candidate(name, group, served, volume, **fields):
     }
 
 
+def _running_facts(config, hf):
+    """What the model lists show of a running model (models/hf_catalog.py
+    FACTS): its repo's, as the Hugging Face list cached them (``hf``), or its
+    export folder's; nothing for a model of any other kind."""
+    from cellmap_flow.models.hf_catalog import facts_of, folder_facts
+
+    repo = getattr(config, "repo", None)
+    if repo and repo in (hf or {}):
+        return facts_of(hf[repo])
+    folder = getattr(getattr(config, "cellmap_model", None), "folder_path", None)
+    return folder_facts(folder) if folder else {}
+
+
+def _added_facts(resolved):
+    """What the model lists show of a model added by reference
+    (models/hf_catalog.py FACTS), found once, here, and kept with it, so no
+    listing asks for them: a Hugging Face repo's as the Hugging Face list
+    cached them, else from its own files (David's finetuned exports with
+    their pruned browser copies); a cellmap export folder's from its files;
+    nothing for any other kind, or when the Hub cannot say."""
+    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts, repo_facts
+
+    entry = resolved.entry()
+    if resolved.type == "cellmap" and entry.get("folder_path"):
+        return folder_facts(entry["folder_path"])
+    if resolved.type != "huggingface" or not entry.get("repo"):
+        return {}
+    cached = (cached_huggingface_models() or {}).get(entry["repo"])
+    if cached is not None:
+        return facts_of(cached)
+    try:
+        return repo_facts(entry["repo"], entry.get("revision"))
+    except Exception as e:
+        logger.warning(f"Could not list the files of {entry['repo']} ({e}): added without its formats and size")
+        return {}
+
+
 def _refused(message, status=400, **extra):
     return jsonify({"success": False, "error": message, **extra}), status
 
@@ -159,11 +200,12 @@ def rank_candidates():
     from cellmap_flow.dashboard.services.launch import _sanitize_job_name, bioimage_model_entry
     from cellmap_flow.models.bioimage_catalog import cached_bioimage_models
     from cellmap_flow.models.configs.finetune import FinetuneModelConfig
-    from cellmap_flow.models.hf_catalog import cached_huggingface_models
+    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts
 
     session = get_session()
     volume_id, volume = session_store().session_volume()
     hosts = {job.model_name: job.host for job in session.jobs if getattr(job, "host", None)}
+    hf = cached_huggingface_models()
     candidates = {}
 
     def add(name, group, **fields):
@@ -181,7 +223,7 @@ def rank_candidates():
         shape = [r / v for r, v in zip(read, voxel)] if read and voxel else None
         add(name, RUNNING, task=getattr(type(config), "cli_name", None),
             finetuned=isinstance(config, FinetuneModelConfig), channels=list(info.get("channels") or []),
-            voxel_size_nm=list(info.get("output_voxel_size") or []), dims=_dims(shape))
+            voxel_size_nm=list(info.get("output_voxel_size") or []), dims=_dims(shape), **_running_facts(config, hf))
     # Before the lists, so one added by hand keeps its group and its tick
     # when a list has it too.
     for name, fields in session.rank_added.items():
@@ -189,14 +231,13 @@ def rank_candidates():
     for group, models in (session.model_catalog or {}).items():
         for name, folder in models.items():
             add(name, group, task=group, source=folder, dims=_dims(_folder_input_shape(folder)),
-                entry={"type": "cellmap", "folder_path": folder, "name": name})
-    hf = cached_huggingface_models()
+                entry={"type": "cellmap", "folder_path": folder, "name": name}, **folder_facts(folder))
     for repo, meta in (hf or {}).items():
         # Named as the Models tab's Submit names it (run_hf_model).
         name = _sanitize_job_name(repo.split("/")[-1])
         add(name, HUGGING_FACE, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
             voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
-            entry={"type": "huggingface", "repo": repo, "name": name})
+            entry={"type": "huggingface", "repo": repo, "name": name}, **facts_of(meta))
     zoo = cached_bioimage_models()
     for model in (zoo or {}).get("models", []):
         # Built as the Models tab's Submit builds it with its voxel size
@@ -251,7 +292,7 @@ def rank_add():
                   else "add it on the Models tab (Add a model), which asks for them; started there, it is listed here")
         return _refused(f"{resolved.name}, {resolved.how}, needs {needs}: {remedy}.", needs=resolved.needs)
     fields = {"task": resolved.type, "source": data["ref"].strip(),
-              "finetuned": resolved.type == "finetune", "entry": resolved.entry()}
+              "finetuned": resolved.type == "finetune", "entry": resolved.entry(), **_added_facts(resolved)}
     get_session().rank_added[resolved.name] = fields
     _, volume = session_store().session_volume()
     candidate = _candidate(resolved.name, ADDED, bool(running_job_host(resolved.name)), volume, ticked=True, **fields)

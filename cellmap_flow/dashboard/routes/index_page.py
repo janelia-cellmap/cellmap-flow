@@ -140,6 +140,7 @@ def index():
 
     # The Hugging Face and zoo rows to tick: the loaded models', running or starting.
     from cellmap_flow.dashboard.services.launch import configs_by_name, loaded_models
+    from cellmap_flow.models.hf_catalog import folder_facts
 
     loaded, configs = loaded_models(), configs_by_name()
     default_hf_repos = [model["hf_id"] for model in loaded if model["hf_id"]]
@@ -158,8 +159,12 @@ def index():
         postprocess_items=postprocess_items,
         # The Local Catalog's groups for the Models tab's script to list
         # (js/dashboard/models/catalog.js), each with its models' names, in
-        # order: lists, as tojson sorts a mapping's keys.
-        catalog_groups=[[group, list(models)] for group, models in model_catalog.items()],
+        # order: lists, as tojson sorts a mapping's keys; and what each
+        # model's folder holds, by name, for its row's tags
+        # (models/hf_catalog.py folder_facts: its files listed, nothing
+        # loaded). "User"'s running models have no folder here.
+        catalog_groups=[[group, list(models), {name: folder_facts(folder) for name, folder in models.items() if folder}]
+                        for group, models in model_catalog.items()],
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         default_bioimage_models=default_bioimage_models,
