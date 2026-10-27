@@ -8,8 +8,9 @@
 // JSON, rejects as fetch and Response.json() do.
 import { poll } from "../../lib/poll.js";
 
-export function getAnswer(url) {
-  return fetch(url).then((response) => response.json());
+// signal: an AbortSignal that cancels the request (a poll's).
+export function getAnswer(url, { signal } = {}) {
+  return fetch(url, { signal }).then((response) => response.json());
 }
 
 // getAnswer, except that a 404 resolves to null: the route saying that what

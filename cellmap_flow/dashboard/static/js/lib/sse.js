@@ -1,8 +1,9 @@
 // A server-sent log stream that picks up where it stopped (the dashboard's
-// log protocol, routes/finetune/training.py):
-// - each event's id is the byte offset in the log just after its lines, and
-//   the browser sends the last one back as Last-Event-ID when it reconnects
-//   by itself after an error, so nothing is replayed;
+// log protocol, routes/finetune/training.py and routes/logging_routes.py):
+// - each event's id is its place in the log (in a finetune job's, the byte
+//   offset just after its lines; in the dashboard's own, its record's
+//   number), and the browser sends the last one back as Last-Event-ID when
+//   it reconnects by itself after an error, so nothing is replayed;
 // - `offset` starts a new stream part-way through (?offset=N), after what
 //   the page already shows;
 // - the server ends a finished log with a "done" event, whose data is the

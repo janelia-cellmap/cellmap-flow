@@ -1,0 +1,18 @@
+{# The dashboard's log at the foot of the page: a bar with the latest line
+   that opens to the lines before it. Its stylesheet and script come with it
+   (static/js/shared/log-panel.js, which mounts it). log_panel_open: whether
+   it starts open, until it is toggled on this page. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/log-panel.css') }}" />
+<section id="log-panel" class="log-panel collapsed" data-open="{{ 'true' if log_panel_open else 'false' }}">
+  <button type="button" class="log-header" aria-expanded="false" aria-controls="log-content"
+    title="What the dashboard itself logs. A model server's own output is on the Models tab, under Show Job Logs.">
+    <span class="log-title">Dashboard log</span>
+    <span class="log-status"></span>
+    <span class="log-latest"></span>
+    <span class="log-toggle" aria-hidden="true">&#9660;</span>
+  </button>
+  <div id="log-content" class="log-content" hidden>
+    <div class="log-output"></div>
+  </div>
+</section>
+<script type="module" src="{{ url_for('static', filename='js/shared/log-panel.js') }}"></script>

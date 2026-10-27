@@ -1,0 +1,93 @@
+/* The dashboard's log at the foot of the page (templates/_log_panel.html).
+   Its page lays out in a column the height of the window, so the panel takes
+   its height from what is above it, the viewer, rather than covering it.
+   The colours are tokens.css's, which both pages' stylesheets import. */
+.log-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-hover);
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 12px;
+  background: var(--bg-muted);
+  border: none;
+  color: var(--text-secondary);
+  font: 12px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.log-title {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.log-status {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+
+.log-status:empty {
+  display: none;
+}
+
+/* The latest record's first line, shown while the panel is collapsed. */
+.log-latest {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  color: var(--text-muted);
+}
+
+.log-panel:not(.collapsed) .log-latest {
+  visibility: hidden;
+}
+
+.log-toggle {
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+
+.log-panel.collapsed .log-toggle {
+  transform: rotate(180deg);
+}
+
+.log-content {
+  height: min(240px, 35vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.log-output {
+  padding: 6px 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-output:empty::before {
+  content: "Waiting for logs...";
+  color: var(--text-placeholder);
+}
+
+.log-panel .log-warning {
+  color: var(--warning);
+}
+
+.log-panel .log-error {
+  color: var(--danger);
+}
