@@ -204,8 +204,12 @@ export function initJobMonitor({ picker, form, log }) {
       corrections_path: correctionsPath,
       ...training,
       auto_serve: document.getElementById("autoServeCheck").checked,
-      queue: document.getElementById("gpuQueue").value,
     };
+    // The queues ticked. None: nothing is chosen and LSF has not listed the
+    // queues yet, so the picker would show every one ticked, which is the
+    // server's default too.
+    const queues = form.gpuQueues();
+    if (queues.length) params.queue = queues;
     // Add optional checkpoint path override if provided
     const checkpointPath = document.getElementById("checkpointPath").value.trim();
     if (checkpointPath) {

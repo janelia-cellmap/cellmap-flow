@@ -206,10 +206,10 @@ def build_arg_parser():
     )
     parser.add_argument(
         "--queue",
-        type=str,
+        nargs="+",
         default=None,
-        help="LSF queue written into the generated serving YAMLs "
-             f"(default: {current_site().default_queue})"
+        help="LSF queue, or queues, written into the generated serving YAMLs "
+             f"(default: {' '.join(current_site().default_queues)})"
     )
     parser.add_argument(
         "--charge-group",

@@ -1145,7 +1145,13 @@
     "BlockwiseSettings": {
       "description": "The pipeline builder's blockwise settings. All three counts are\nrequired, as whole numbers; a missing one is reported as None.",
       "properties": {
-        "queue": {},
+        "queue": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "charge_group": {},
         "nb_cores_master": {
           "default": null,
@@ -1990,14 +1996,10 @@
           "type": "boolean"
         },
         "queue": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "charge_group": {
           "anyOf": [
@@ -2268,8 +2270,15 @@
     },
     "ServerConfigUpdate": {
       "additionalProperties": true,
-      "description": "Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those\nsent change. The counts must be whole numbers; the rest are kept as sent,\nand keys that are not settings are ignored.",
+      "description": "Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those\nsent change. The counts must be whole numbers and the queue a list of at\nleast one queue; the rest are kept as sent, and keys that are not\nsettings are ignored.",
       "properties": {
+        "queue": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "nb_cores_master": {
           "default": null,
           "type": "integer"

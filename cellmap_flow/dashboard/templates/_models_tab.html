@@ -231,8 +231,9 @@
             <p class="text-muted small mb-2">No cluster here (no <code>bsub</code>): models and finetuning run on this machine, and these settings are not used.</p>
             {% endif %}
             <div class="mb-2">
-              <label class="form-label" for="cfg_queue">GPU Queue</label>
-              <select class="form-select form-select-sm" id="cfg_queue"></select>
+              {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
+              <span class="form-label d-block">GPU Queues</span>
+              <div id="cfg_queue"></div>
             </div>
             <div class="mb-2">
               <label class="form-label" for="cfg_charge_group">Charge Group</label>
@@ -248,11 +249,12 @@
             </div>
             <div class="mb-2 form-check">
               <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
-              <label class="form-check-label" for="cfg_cycle_gpu_queues">Try other GPU queues</label>
+              <label class="form-check-label" for="cfg_cycle_gpu_queues">Move a job that has not started</label>
               <div class="form-text">
-                If the queue above is full or closed, submit to whichever GPU
-                queue has capacity instead of waiting. Uncheck to always use
-                the queue above, however long it takes to start.
+                A job goes to the queue ticked above with the most free GPUs;
+                if it has not started there in 3 minutes, it moves to the next
+                one ticked. Uncheck to always use the first queue ticked,
+                however long it takes to start.
               </div>
             </div>
             <div class="mb-2">
@@ -274,12 +276,9 @@
     <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
       {% if on_cluster %}
       <div>
-        <label class="form-label mb-1" for="gpuQueueSelect">GPU</label>
-        <select
-          id="gpuQueueSelect"
-          class="form-select form-select-sm"
-          style="min-width: 20rem"
-        ></select>
+        {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
+        <span class="form-label d-block mb-1">GPUs</span>
+        <div id="gpuQueuePicker" style="min-width: 20rem"></div>
       </div>
       {% elif mode == "browser" %}
       {# The browser mode (web/build/render.py sets mode); Flask passes no mode

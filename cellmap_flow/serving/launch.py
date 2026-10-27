@@ -6,7 +6,7 @@ command line it runs.
 dashboard's Models tab (its catalog, Hugging Face, zoo and Cellpose picks,
 Add a model, and a model ticked again) and the Training tab's ranking. It
 applies the one data path and scale rule (``config.yaml.resolve_data_path``),
-falls back to the saved launcher settings for the queue and charge group,
+falls back to the saved launcher settings for the queues and charge group,
 builds the command and starts the job (``jobs.launch.start_hosts``), which
 it returns.
 
@@ -83,11 +83,13 @@ def server_command(model_config, data_path: str, resample: bool = True) -> str:
 def remembered(queue, charge_group):
     """``(queue, charge_group)`` for a command-line launch: the ones given,
     else the saved launcher settings'; the ones given are saved for the next
-    run and the dashboard."""
+    run and the dashboard. ``queue`` is ``-q``'s text, one queue or several
+    (queues.queue_list), and comes back a list."""
+    from cellmap_flow.jobs.queues import queue_list
     from cellmap_flow.jobs.settings import launcher_settings
 
     settings = launcher_settings()
-    queue = queue or settings.queue
+    queue = queue_list(queue) or settings.queue
     charge_group = charge_group or settings.charge_group
     settings.queue = queue
     if charge_group:
@@ -103,8 +105,10 @@ def launch(model, data_path: str, *, queue=None, charge_group=None, resample: bo
     is built first (``registry.build_model``). The server reads
     ``data_path`` with the model's ``scale`` applied
     (``config.yaml.resolve_data_path``), resampling it to the model's voxel
-    size when ``resample``. ``queue`` and ``charge_group`` default to the
-    saved launcher settings (``jobs.settings``). The job is named after the
+    size when ``resample``. ``queue``, the GPU queues it may run on (a
+    list; start_hosts tries them in the order queues.candidates gives), and
+    ``charge_group`` default to the saved launcher settings
+    (``jobs.settings``). The job is named after the
     model, and is returned once its server has announced its address, or at
     once when ``wait_for_host`` is off.
 

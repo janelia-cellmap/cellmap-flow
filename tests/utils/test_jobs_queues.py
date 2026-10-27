@@ -51,22 +51,51 @@ def test_what_lsf_says_about_the_gpu_queues(fake_lsf, monkeypatch, gpu_queues, k
     assert fake_lsf.commands("bqueues"), "the fake answered"
 
 
+def test_a_closed_hosts_idle_gpus_are_not_free(fake_lsf, monkeypatch):
+    """gpu_h100 said 8 GPUs free, all on a node out for maintenance, so jobs
+    were sent there to wait out the pending timeout."""
+    monkeypatch.setattr(queues, "GPU_QUEUES", (("gpu_h100", "H100", "h100s"),))
+    fake_lsf.answers["bqueues"] = _bqueues({"gpu_h100"})
+    # A host's other GPUs are rows without its name.
+    gpu = (
+        "HOST_NAME  GPU_ID  MODEL  MUSED  MRSV  NJOBS  RUN  SUSP  RSV\n"
+        "h01        0       H100   0M     0M    1      1    0     0\n"
+        "           1       H100   0M     0M    0      0    0     0\n"
+        "h02        0       H100   0M     0M    0      0    0     0\n"
+        "           1       H100   0M     0M    0      0    0     0\n"
+        "h03        0       H100   0M     0M    0      0    0     0\n"
+    )
+    hosts = {
+        "-w": "HOST_NAME  STATUS  JL/U  MAX  NJOBS  RUN  SSUSP  USUSP  RSV\n"
+              "h01 ok - 48 2 2 0 0 0\nh02 closed_Adm - 48 0 0 0 0 0\nh03 closed_Full - 48 48 48 0 0 0\n",
+        "-gpu": gpu,
+    }
+    fake_lsf.answers["bhosts"] = lambda argv, kwargs: hosts[argv[1]]
+    (h100,) = queues.gpu_queue_availability(force=True)["queues"]
+    assert (h100["gpus_free"], h100["gpus_total"]) == (1, 5)
+
+
 AVAILABILITY = {"available": True, "queues": [
     {"queue": "gpu_h100", "accepting": True, "gpus_free": 0, "pending": 40},
     {"queue": "gpu_a100", "accepting": True, "gpus_free": 12, "pending": 0},
     {"queue": "gpu_h200", "accepting": True, "gpus_free": 4, "pending": 2},
+    {"queue": "gpu_rtx6000", "accepting": False, "gpus_free": 30, "pending": 0},
 ]}
 
 
-@pytest.mark.parametrize("cycle, expected", [
-    # The one asked for first, then the most free GPUs first.
-    pytest.param({}, ["gpu_h100", "gpu_a100", "gpu_h200"], id="cycling-by-default"),
-    # Work pinned to a queue on purpose waits for it, and LSF isn't asked.
-    pytest.param({"cycle": False}, ["gpu_h100"], id="pinned"),
+@pytest.mark.parametrize("ticked, cycle, expected", [
+    # The freest of the queues ticked first, then the next freest; one LSF
+    # knows nothing of (a YAML's gpu_l4) after those, and a closed one last.
+    # gpu_a100 has the most free GPUs, and is never tried: it is not ticked.
+    pytest.param(["gpu_rtx6000", "gpu_l4", "gpu_h100", "gpu_h200"], {},
+                 ["gpu_h200", "gpu_h100", "gpu_l4", "gpu_rtx6000"], id="freest-ticked-first"),
+    # A YAML's one queue.
+    pytest.param("gpu_h100", {}, ["gpu_h100"], id="one-queue"),
+    # Work pinned to a queue on purpose waits for the first, and LSF isn't asked.
+    pytest.param(["gpu_h200", "gpu_a100"], {"cycle": False}, ["gpu_h200"], id="pinned"),
 ])
-def test_the_queues_a_job_is_tried_on(monkeypatch, cycle, expected):
+def test_the_queues_a_job_is_tried_on(monkeypatch, ticked, cycle, expected):
     asked = []
     monkeypatch.setattr(queues, "gpu_queue_availability", lambda force=False: asked.append(1) or AVAILABILITY)
-    assert queues.candidates("gpu_h100", **cycle) == expected
+    assert queues.candidates(ticked, **cycle) == expected
     assert len(asked) == (0 if cycle.get("cycle") is False else 1)
-

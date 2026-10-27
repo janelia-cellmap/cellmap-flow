@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
     "-q",
     "--queue",
     default=None,
-    help="Queue for job submission (default: the saved queue)",
+    help="GPU queue for the job, or several, comma-separated, to go to the freest "
+        "(default: the saved queues)",
 )
 @click.option(
     "-P", "--project", default=None, help="Project/chargeback group for billing"
@@ -135,7 +136,8 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         "--queue",
         default=None,
         type=str,
-        help="Queue for job submission (default: the saved queue)",
+        help="GPU queue for the job, or several, comma-separated, to go to the freest "
+        "(default: the saved queues)",
     )(command_func)
 
     command_func = click.option(

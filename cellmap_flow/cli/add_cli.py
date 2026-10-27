@@ -50,7 +50,8 @@ def entry_yaml(resolved) -> str:
 @click.option("--run", "run_now", is_flag=True,
               help="Serve the model on --data-path right away and open the viewer, as `cellmap_flow yaml` does.")
 @click.option("-d", "--data-path", default=None, help="The dataset --run serves it on.")
-@click.option("-q", "--queue", default=None, help="Queue for --run's job (default: the saved queue)")
+@click.option("-q", "--queue", default=None,
+              help="GPU queue for --run's job, or several, comma-separated (default: the saved queues)")
 @click.option("-P", "--project", default=None, help="Project/chargeback group for --run's job (default: the saved one)")
 @resample_option()
 def add(ref, name, voxel_size, offline, run_now, data_path, queue, project, resample):

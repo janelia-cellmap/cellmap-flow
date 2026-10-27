@@ -26,9 +26,10 @@ RUN = ["run", "-m", "script", "-c", f"script_path={SCRIPT}", "-d", RAW]  # the a
 
 
 @pytest.mark.parametrize("argv, queue, project", [
-    pytest.param(PER_TYPE, "gpu_a100", "saved_grp", id="saved"),
-    pytest.param(RUN, "gpu_a100", "saved_grp", id="saved-through-the-run-alias"),
-    pytest.param(PER_TYPE + ["-q", "gpu_h200", "-P", "grp"], "gpu_h200", "grp", id="explicit-q-and-P-win"),
+    pytest.param(PER_TYPE, ["gpu_a100"], "saved_grp", id="saved"),
+    pytest.param(RUN, ["gpu_a100"], "saved_grp", id="saved-through-the-run-alias"),
+    # One queue is a list of one.
+    pytest.param(PER_TYPE + ["-q", "gpu_h200", "-P", "grp"], ["gpu_h200"], "grp", id="explicit-q-and-P-win"),
 ])
 def test_without_q_or_P_the_saved_queue_and_project_are_used_and_kept(monkeypatch, tmp_path, argv, queue, project):
     """-q defaulted to gpu_h100, unlike -P, and that was then saved: running a
@@ -38,7 +39,7 @@ def test_without_q_or_P_the_saved_queue_and_project_are_used_and_kept(monkeypatc
     monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts",
                         lambda command, queue, charge_group, job_name, **_: launched.append((queue, charge_group)))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
-    settings.launcher_settings().queue = "gpu_a100"
+    settings.launcher_settings().queue = ["gpu_a100"]
     settings.launcher_settings().charge_group = "saved_grp"
     result = CliRunner().invoke(cli, argv)
     assert result.exit_code == 0, result.output + repr(result.exception)
