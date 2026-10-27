@@ -213,9 +213,12 @@ export function predictionLayer(served: ServedModel, chain: Chain, color: string
 }
 
 /** A layer's `localPosition` showing `channel` of its channel axis: the
- * channel's centre, as Neuroglancer places them. */
+ * channel's centre. The served array's OME translation is 0 on its channel
+ * axis, a voxel centre, so channel k lies over [k - 0.5, k + 0.5) and its
+ * centre is k (layers.py's channel_position): at k + 0.5 the layer showed
+ * the channel after the one picked. */
 export function channelPosition(channel: number): number[] {
-  return [channel + 0.5];
+  return [channel];
 }
 
 // ---------------------------------------------------------------------------

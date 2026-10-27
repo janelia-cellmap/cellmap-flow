@@ -274,15 +274,15 @@ describe("POST /api/finetune/channel", () => {
     expect(ctx.viewer.layers[many.name].localPosition).toBeUndefined();
 
     expect(body(await pick(many.name, 2))).toEqual({ success: true, shown: true });
-    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2.5]);
+    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2]);
     // Another chain is another source, whose layer opened on the first channel.
     await setChain(ctx, { ...ctx.session.state.chain, postprocess: [] });
-    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2.5]);
+    expect(ctx.viewer.layers[many.name].localPosition).toEqual([2]);
     // A finetune of it has its channels, and opens on its pick.
     const tuned = finetunedEntry(many, `${many.name}-ft1`);
     await ctx.session.update({ models: [many, tuned] });
     await serveModels(ctx, [many, tuned], ctx.session.state.chain);
-    expect(ctx.viewer.layers[tuned.name].localPosition).toEqual([2.5]);
+    expect(ctx.viewer.layers[tuned.name].localPosition).toEqual([2]);
     // A chain that keeps two channels numbers them anew: none is shown.
     await setChain(ctx, { ...ctx.session.state.chain, postprocess: [{ name: "ChannelSelection", channels: "2,3" }] });
     expect(ctx.viewer.layers[many.name].localPosition).toBeUndefined();

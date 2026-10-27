@@ -218,16 +218,19 @@ def display_channel(info, postprocess, shown=None):
 
 def channel_position(info, postprocess, shown=None):
     """The local position an image layer of a model opens at: the channel
-    display_channel gives, at its centre, as neuroglancer places them
-    (neuroglancer's channel axis is a local dimension, its position the
-    channel shown). None, which leaves neuroglancer's (the first), without
+    display_channel gives, at its centre (neuroglancer's channel axis is a
+    local dimension, its position the channel shown). The served array's
+    OME translation is 0 on its channel axis, a voxel centre, so channel k
+    lies over [k - 0.5, k + 0.5) and its centre is k: at k + 0.5, the
+    position this was, fly_organelles' layer showed mito (2) with its
+    channel box at 1, organelle. None, which leaves neuroglancer's (the first), without
     one, and while a flow model's channels are shown together
     (flow_channels), whose shader reads every one. prediction_layer opens a
     layer at it, and POST /api/finetune/channel moves a layer shown to it."""
     channel = display_channel(info, postprocess, shown)
     if channel is None or flow_channels(info, postprocess) is not None:
         return None
-    return [channel + 0.5]
+    return [float(channel)]
 
 
 def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None, view=None):
