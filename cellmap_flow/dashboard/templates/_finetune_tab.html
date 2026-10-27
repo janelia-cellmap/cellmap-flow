@@ -629,13 +629,14 @@
        channels by name and its pick the one kept for that model
        (training-form.js setChannelChoice); training sends it as
        select_channel, Seed from Prediction reads the same channel, Use this
-       model sets it to the channel that matched the paint best, and Fit to
-       Paint fills that in only when nothing is picked. Left unpicked, the
-       submit route refuses, saying so. #}
+       model sets it to the channel that matched the paint best, and Rank,
+       Fit to Paint and Train fill that in only when nothing is picked: Train
+       scores the model on the paint first (job-monitor.js). Left unpicked
+       still, the submit route refuses, saying so. #}
     <div class="mb-3" id="trainChannelGroup" hidden>
-      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: pick the one your paint is for. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too, and Use this model (Which model to start from) picks the one that matched your paint best, as Fit to Paint does when none is picked.">Channel</label>
+      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: the one your paint is for. Left on the best match, Train (and Rank, and Fit to Paint) picks the channel that matches your paint best and says which. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too.">Channel</label>
       <select id="trainChannel" class="form-select">
-        <option value="" selected>Pick the channel your paint is for</option>
+        <option value="" selected>Best match for your paint</option>
       </select>
       <small class="text-muted d-block">The channel picked learns your paint; the others are held to what the model predicted.</small>
     </div>

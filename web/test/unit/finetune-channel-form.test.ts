@@ -64,7 +64,7 @@ async function setUp() {
     return elements.get(id)!;
   };
   element("page-data").textContent = JSON.stringify({ mode: "server" });
-  element("trainChannel").options = [new FakeOption("Pick the channel your paint is for", "")];
+  element("trainChannel").options = [new FakeOption("Best match for your paint", "")];
   const stored = new Map<string, string>();
   vi.stubGlobal("window", { localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) } });
   vi.stubGlobal("document", { getElementById: element, hidden: false, addEventListener: () => {}, removeEventListener: () => {} });

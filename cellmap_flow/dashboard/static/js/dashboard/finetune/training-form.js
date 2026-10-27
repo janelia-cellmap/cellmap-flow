@@ -236,13 +236,22 @@ export function pickChannel(name, index) {
   if (select.dataset.model === name) select.value = String(index);
 }
 
+// Whether the Channel is shown for model `name` with nothing picked.
+// Training it then first picks the channel that matches the paint best
+// (job-monitor.js), as a score of it does here (fillChannel).
+export function channelUnpicked(name) {
+  const select = document.getElementById("trainChannel");
+  return select.dataset.model === name && select.value === "";
+}
+
 // pickChannel, only when the Channel is shown for model `name` with nothing
-// picked and has channel `index`: Fit to Paint's, which never overrides a
-// channel the user picked. Returns whether it set it.
+// picked and has channel `index`: what a score of the model does with the
+// channel that matched best (Fit to Paint's, Rank's for the model being
+// trained, Train's), which never overrides a channel the user picked.
+// Returns whether it set it.
 export function fillChannel(name, index) {
   const select = document.getElementById("trainChannel");
-  const fills = select.dataset.model === name && select.value === ""
-    && Array.from(select.options).some((option) => option.value === String(index));
+  const fills = channelUnpicked(name) && Array.from(select.options).some((option) => option.value === String(index));
   if (fills) pickChannel(name, index);
   return fills;
 }

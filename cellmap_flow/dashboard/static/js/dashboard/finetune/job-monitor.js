@@ -21,6 +21,7 @@ import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
+import { channelUnpicked, fillChannel } from "./training-form.js";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
 // ("shift+keyr": the key, whatever the keyboard layout types with it):
@@ -173,6 +174,22 @@ export function initJobMonitor({ picker, form, log }) {
     if (!correctionsPath && !browser) {
       alert("Please specify the output path where annotation crops are saved");
       return;
+    }
+
+    // A model of several channels trains the one the paint is for. With none
+    // picked, the one that matches the paint best, as Rank scores it (the
+    // score's channel_index); a score that fails leaves it unpicked, and the
+    // submit route's refusal says to pick one.
+    if (channelUnpicked(selectedModel.name)) {
+      setBusy(startFinetuningBtn, true, "Finding the channel your paint is for...");
+      const scored = await postAnswer("/api/finetune/rank/score", { name: selectedModel.name })
+        .catch((error) => ({ success: false, error: error.message || String(error) }));
+      setBusy(startFinetuningBtn, false);
+      if (scored.success && Number.isInteger(scored.channel_index) && fillChannel(selectedModel.name, scored.channel_index)) {
+        appendLog(`Channel: ${scored.channel}, the one that matches your paint best (${Math.round(scored.matches * 100)}% match). Pick another in the training form to train that one instead.`);
+      } else if (!scored.success) {
+        appendLog(`Could not find the channel your paint is for: ${scored.error}`);
+      }
     }
 
     let training;

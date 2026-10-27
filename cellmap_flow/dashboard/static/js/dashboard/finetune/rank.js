@@ -22,7 +22,9 @@
 // a binary model's row's channel (channel_index, the channel that matched
 // best) becomes its Channel in the training form (training-form.js
 // pickChannel), shown once the model is picked if it trains one channel at
-// a time.
+// a time. Rank itself fills the Channel of the model the form shows, when
+// none is picked (fillChannel): that is the model painted for, which has no
+// Use this model.
 //
 // Fit to Paint, beside Seed from Prediction, does the same for the model
 // that seeds the paint (Label it's Prediction from) without a new volume:
@@ -525,10 +527,18 @@ export function initRank() {
     showCandidates();
     showResults();
     const started = performance.now();
+    // The model the training form's Channel is shown for (the one painted
+    // for, which has no Use this model) gets the channel that matched best,
+    // when none is picked (fillChannel).
+    let filled = null;
     for (let i = 0; i < chosen.length && !stopping; i++) {
       const starting = chosen[i].cluster && !chosen[i].served ? ", starting it on the cluster first" : "";
       say(`Scoring ${chosen[i].name} (${i + 1} of ${chosen.length})${starting}...`);
-      answers.push(await score(chosen[i]));
+      const answer = await score(chosen[i]);
+      answers.push(answer);
+      if (isScored(answer) && Number.isInteger(answer.channel_index) && fillChannel(answer.name, answer.channel_index)) {
+        filled = ` ${answer.name}'s Channel is now ${answer.channel}, the one that matched best.`;
+      }
       showResults();
     }
     running = false;
@@ -545,7 +555,7 @@ export function initRank() {
     summary = best && best.best
       ? {
         text: `${done} in ${seconds} s: ${best.name} matches your paint best, ${percent(best.matches)}` +
-              (tied ? `; ${tied} more ${tied === 1 ? "is" : "are"} about as good.` : "."),
+              (tied ? `; ${tied} more ${tied === 1 ? "is" : "are"} about as good.` : ".") + (filled || ""),
         tone: "muted",
       }
       : { text: `${done} in ${seconds} s: none could be scored (each row says why).`, tone: "danger" };
