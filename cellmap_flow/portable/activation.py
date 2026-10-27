@@ -50,7 +50,9 @@ CLIP_OPS = {"clip": "Clip", "clamp": "Clip", "hardtanh": "Clip"}
 # distance, whatever its weights. The normalizations among them are affine
 # per channel once trained.
 LINEAR_OPS = {
-    "conv": "Conv", "convolution": "Conv", "convtranspose": "ConvTranspose",
+    # aten::_convolution_mode is a TorchScript conv with padding="same"
+    # (mito-aff-unet-setup-16's last).
+    "conv": "Conv", "convolution": "Conv", "convolutionmode": "Conv", "convtranspose": "ConvTranspose",
     "gemm": "Linear", "linear": "Linear", "addmm": "Linear", "matmul": "MatMul", "mm": "MatMul", "bmm": "MatMul",
     "batchnorm": "BatchNorm", "batchnormalization": "BatchNorm", "nativebatchnorm": "BatchNorm",
     "nativebatchnormlegitnotraining": "BatchNorm", "cudnnbatchnorm": "BatchNorm",
