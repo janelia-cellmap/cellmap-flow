@@ -61,9 +61,16 @@ def cpu_state_copy(model: nn.Module) -> Dict[str, torch.Tensor]:
 
 
 def frozen_teacher_copy(model: nn.Module) -> nn.Module:
-    """A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune."""
+    """A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune.
+
+    Copied under no_grad, so every copied parameter is a leaf: a TorchScript
+    module's deepcopy clones its parameters, and a clone made with grad on is
+    not one, whose requires_grad cannot be changed. fly_organelles' /nrs copies
+    (TorchScript only), trained in full on one channel, failed at setup so:
+    the hold on the other channels always makes this teacher."""
     try:
-        teacher = copy.deepcopy(model)
+        with torch.no_grad():
+            teacher = copy.deepcopy(model)
     except Exception as e:
         raise ValueError(
             "Distillation on a full finetune (--lora-r 0) needs a frozen copy "

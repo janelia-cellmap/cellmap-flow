@@ -185,3 +185,15 @@ def test_the_single_class_warning_goes_by_what_is_annotated(make_trainer, caplog
     with caplog.at_level(logging.WARNING, logger=diagnostics):
         trainer.train()
     assert any(r.name == diagnostics and r.levelno == logging.WARNING for r in caplog.records) == warned
+
+
+def test_a_torchscript_model_gets_a_frozen_teacher():
+    """fly_organelles' /nrs copies are TorchScript only: trained in full on
+    one channel, whose other channels the teacher holds, setup failed with
+    "you can only change requires_grad flags of leaf variables"."""
+    model = torch.jit.script(nn.Sequential(nn.Conv3d(1, 2, 3), nn.Sigmoid()))
+    teacher = frozen_teacher_copy(model)
+    x = torch.rand(1, 1, 5, 5, 5)
+    assert torch.allclose(teacher(x), model(x))
+    assert not any(p.requires_grad for p in teacher.parameters())
+    assert all(p.requires_grad for p in model.parameters())
