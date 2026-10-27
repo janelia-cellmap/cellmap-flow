@@ -9,7 +9,7 @@
 // currently configured. Only renders when there is something to say.
 import { getJSON } from "../lib/api.js";
 import { esc } from "../lib/dom.js";
-import { listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
+import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { poll } from "../lib/poll.js";
 
 // A confirmation needs no decision from anyone, so it should not sit at the
@@ -124,6 +124,23 @@ function renderInputNormAdvice(m, box, wanted) {
   // expression edited): [{step, param, configured, declared}], from the
   // backend, which compares the values as the chain carries them.
   const differences = m.input_norm_differences || [];
+  if (m.input_norm_fitted) {
+    // The steps the Finetune tab's ranking fitted to the paint for this
+    // model (Use this model, Fit to Paint, Use these settings): a
+    // confirmation too, never the declared steps suggested back over them,
+    // whose Apply undid the ranking.
+    const configured = m.configured_input_norm || [];
+    const key = adviceKey("input-fitted", m, configured);
+    showAdvice(box, wanted, key, function () {
+      const div = document.createElement("div");
+      div.className = "alert alert-success py-1 px-2";
+      div.innerHTML = "<small><strong>Input normalization fitted to your paint</strong> for <code>"
+                    + esc(m.model || "model") + "</code> by the ranking: " + esc(configured.join(" → ")) + ".</small>";
+      setTimeout(function () { hideAdvice(key); }, CONFIRM_BANNER_MS);
+      return div;
+    });
+    return;
+  }
   if (m.input_norm_matches) {
     // Confirmation, not a prompt: when the norms came from a yaml there is
     // no other way to tell whether they suit the model. Shown once for these
@@ -178,8 +195,32 @@ function renderInputNormAdvice(m, box, wanted) {
   }, says);
 }
 
+// A chain the model's output shows right without (an affinity model's into
+// a segmentation): one quiet line with its Apply, not a suggestion's banner,
+// which over the sigmoid a start or the ranking set read as though that
+// were wrong.
+function renderOptionalPostprocess(m, rev, box, wanted) {
+  const suggest = rev.suggest || [];
+  if (!suggest.length) return;
+  const key = adviceKey("post-optional", m, [rev.message, suggest]);
+  showAdvice(box, wanted, key, function () {
+    const div = document.createElement("div");
+    div.className = "small text-muted mb-2";
+    div.innerHTML = "Optional for <code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline me-2", "Apply: " + suggest.join(" → "),
+      function () { applySuggestion(processing.postprocess, suggest, rev.params); hideAdvice(key); }));
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
+      function () { hideAdvice(key); }));
+    return div;
+  }, JSON.stringify(rev.params || {}));
+}
+
 function renderPostprocessAdvice(m, box, wanted) {
   const rev = m.postprocess_review || {};
+  if (rev.level === "optional") {
+    renderOptionalPostprocess(m, rev, box, wanted);
+    return;
+  }
   if (rev.level !== "suggest" && rev.level !== "warn") return;
   const warn = rev.level === "warn";
   // Keyed by the finding (the level and the message, which name nothing of
@@ -273,10 +314,19 @@ function renderModelAdvice(models) {
   });
 }
 
+// The chain's digest the last answer of the server's gave (the browser's
+// backend answers none): a model's start sets the postprocessing its output
+// needs once its server answers (routes/pipeline.py
+// set_needed_postprocess), after the Submit that started it, so when the
+// digest moves the Processing tab reads the chain again (main.js, on
+// CHAIN_CHANGED_EVENT).
+let adviceDigest;
+
 // One poll of /api/model_advice. Resolves to false to stop polling once
-// every model's probe has answered; until then, and after a request that
-// failed (a server slow to answer, or restarting), it asks again. No models
-// yet is a submit whose jobs have not started.
+// every model's probe has answered and no model's start is on its way
+// (`starting`); until then, and after a request that failed (a server slow
+// to answer, or restarting), it asks again. No models yet is a submit whose
+// jobs have not started.
 async function checkAdvice({ stale }) {
   let d;
   try {
@@ -288,8 +338,12 @@ async function checkAdvice({ stale }) {
   if (stale()) return undefined;  // a newer refresh replaced this one
   if (!d || !d.success) return undefined;
   renderModelAdvice(d.models);
+  if (d.digest !== undefined && d.digest !== adviceDigest) {
+    adviceDigest = d.digest;
+    announce(CHAIN_CHANGED_EVENT);
+  }
   const models = d.models || [];
-  const pending = models.length === 0 || models.some(function (m) {
+  const pending = models.length === 0 || d.starting === true || models.some(function (m) {
     return !m.probe_available;
   });
   return pending ? undefined : false;

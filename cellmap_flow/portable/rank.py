@@ -39,8 +39,10 @@ portable/calls.py; numpy and the standard library only. In short:
   model and Fit to Paint make the session's, with what the other channels
   and normalizations matched (``channel_matches``, ``input_norm_others``):
   why this one. Both modes answer it as it is, so their tables agree.
-- Beside it, the sigmoid the model's layer needs to show right
-  (``display_postprocess``), which they set too.
+- Beside it, the postprocessing the model's layer needs to show a good
+  prediction (``needed_postprocess``): the sigmoid its output needs and the
+  threshold fitted to the paint, which they set too, as a model's start
+  sets the sigmoid alone.
 
 The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
 default loss, is given beside the score: about 0.69 is guessing, about 0.20
@@ -262,29 +264,54 @@ def best_try(scores: Sequence[Optional[dict]]) -> Optional[int]:
     return best
 
 
-def display_postprocess(output_class: Optional[str], postprocess: Sequence[dict], affinity: bool) -> Optional[List[dict]]:
-    """The postprocessing a ranked model's layer needs instead of
-    ``postprocess`` (the session's steps) to show its output as values in [0,
-    1] or [-1, 1], or None when it shows as it is: what Use this model and
-    Fit to Paint set beside the input normalization.
+SIGMOID = "SigmoidPostprocessor"
+THRESHOLD = "ThresholdPostprocessor"
 
-    Only the sigmoid, the one step whose absence or excess shows a model
-    wrong: one added for an output with no activation (``output_class``
-    UNBOUNDED, logits) when nothing is configured, as the model advice
-    suggests (serving/probe.py review_postprocess); one taken away from an
-    output that has one already (UNIT, SIGNED_UNIT), which a second flattens.
-    An affinity model's postprocessing (a watershed into a segmentation) is
-    left as the Processing tab's suggestion, as is everything else.
+
+def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
+                       threshold: Optional[float] = None) -> Optional[List[dict]]:
+    """The postprocessing a model's layer needs instead of ``postprocess``
+    (the session's steps) to show a good prediction, or None when it shows
+    one as it is: what a model's start sets on a chain with none (no
+    ``threshold``), and what Use this model, Fit to Paint and Use these
+    settings set beside the input normalization (the ranking row's
+    ``threshold``). ``output_class`` is the model's output activation
+    (portable/label_it.py, as its server's probe answers it); with None,
+    not known, nothing changes.
+
+    Two steps are this rule's, on a chain of nothing else:
+
+    - The activation: a sigmoid for an output with none (UNBOUNDED, logits)
+      when the chain has none, and is empty or is given a threshold. A
+      threshold alone on logits shows them cut at a logit (0, the model's
+      own boundary, as a rule); a sigmoid put ahead of it would cut the
+      probabilities there instead, everything object at 0. An affinity
+      model's logits need it as much as any model's: the chain into a
+      segmentation (serving/probe.py suggest_affinity_chain) stays the
+      model advice's optional offer.
+    - ``threshold``, a probability as the ranking's row gives it (0.5 at
+      the model's own boundary): a ThresholdPostprocessor at it, in place of
+      one the chain has, in the units of the output after the activation:
+      the probability itself after the sigmoid and on an output in [0, 1]
+      (UNIT); 2p - 1 on one in [-1, 1] (SIGNED_UNIT, a tanh), whose
+      probability label_it.probability reads as (x + 1) / 2.
+
+    A chain with any other step (a watershed, DefaultPostprocessor, a
+    ChannelSelection) is the user's and left as it is, but for one thing: a
+    sigmoid on an output that has one already (UNIT, SIGNED_UNIT) is taken
+    away from any chain, as a second sigmoid flattens the contrast (the
+    model advice warns of it: serving/probe.py review_postprocess).
     """
-    if affinity:
-        return None
     steps = [dict(s) for s in postprocess or []]
-    sigmoid = [s for s in steps if s.get("name") == "SigmoidPostprocessor"]
-    if output_class == UNBOUNDED and not steps:
-        return [{"name": "SigmoidPostprocessor"}]
-    if output_class in (UNIT, SIGNED_UNIT) and sigmoid:
-        return [s for s in steps if s.get("name") != "SigmoidPostprocessor"]
-    return None
+    needed = [s for s in steps if s.get("name") != SIGMOID] if output_class in (UNIT, SIGNED_UNIT) else steps
+    if output_class not in (UNBOUNDED, UNIT, SIGNED_UNIT) or any(s.get("name") not in (SIGMOID, THRESHOLD) for s in needed):
+        return None if needed == steps else needed
+    if output_class == UNBOUNDED and (not needed or threshold is not None) and all(s.get("name") != SIGMOID for s in needed):
+        needed = [{"name": SIGMOID}, *needed]
+    if threshold is not None:
+        value = round(2 * float(threshold) - 1, 3) if output_class == SIGNED_UNIT else float(threshold)
+        needed = [s for s in needed if s.get("name") != THRESHOLD] + [{"name": THRESHOLD, "threshold": value}]
+    return None if needed == steps else needed
 
 
 def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict],

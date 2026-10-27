@@ -29,13 +29,15 @@ rather than being stored beside the real one:
   ``shader_controls``, ``extra_layers``, ``shown_channels``; and
   ``layer_blob()``, the chain as every prediction layer's URL carries it,
   and ``shown_channel()``, the channel a model's layer opens on.
-- The models: ``models_config``, ``model_catalog``.
+- The models: ``models_config``, ``model_catalog``, and
+  ``start_postprocess``, the postprocessing a model's start set.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
   ``annotation_volumes``, ``output_sessions``; the models its ranking was
-  given by reference, ``rank_added``; its AI annotation's
+  given by reference, ``rank_added``, and what it fitted each model's
+  settings to, ``rank_fits``; its AI annotation's
   ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
   ``restart_key`` that restarts one from the viewer; the Review tab's
   ``review``.
@@ -73,8 +75,9 @@ class Session:
     # name cannot coexist.
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
                  "shader_controls", "extra_layers", "shown_channels",
-                 "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
-                 "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added", "review",
+                 "models_config", "model_catalog", "start_postprocess", "_builder_state", "builder_model_configs",
+                 "tmp_dir", "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added",
+                 "rank_fits", "review",
                  "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_ids",
                  "log_clients", "bbx_generator_state")
 
@@ -119,6 +122,12 @@ class Session:
         self.models_config = []
         # {group: {model name: path}}, the Models tab's catalog.
         self.model_catalog = yaml.safe_load(files("cellmap_flow.models").joinpath("models.yaml").read_text()) or {}
+        # {"model", "postprocess"}: the postprocessing a model's start set on
+        # a chain with none, and the model (routes/pipeline.py
+        # set_needed_postprocess), which GET /api/models/loaded says the
+        # chain's came from while it is still that; None until a start sets
+        # any.
+        self.start_postprocess = None
 
         # The pipeline builder's last apply
         self._builder_state = {key: [] for key in _BUILDER_KEYS}
@@ -152,6 +161,16 @@ class Session:
         # model's resolve), which every listing of its candidates includes
         # after, until the dashboard stops; nothing is started for them.
         self.rank_added = {}
+        # {model name: {"input_norm", "postprocess"}}: the settings the
+        # ranking's last score of each model fitted to the paint (its row's
+        # input normalization, and the postprocessing its layer needs, None
+        # when the chain needed none), which Use this model, Fit to Paint
+        # and Use these settings set from. The model advice does not suggest
+        # another input normalization over them, and GET /api/models/loaded
+        # says the chain's postprocessing was fitted to the paint while it
+        # is theirs (routes/model_advice.py, routes/pipeline.py
+        # postprocess_set_by).
+        self.rank_fits = {}
         # The Review tab's open index (review_routes.ReviewSession), or None
         # until /api/review/open.
         self.review = None

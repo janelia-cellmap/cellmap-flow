@@ -157,24 +157,31 @@ def get_loaded_models():
     (services.launch.loaded_models), and the chain they run through.
 
     ``{"success": true, "models": [...], "pipeline": {"input_norm",
-    "postprocess"}, "input_norm_from", "input_norm_declared"}``:
-    ``pipeline`` is the chain as it is set (PUT /api/pipeline's answer gives
-    it the same way), ``input_norm_from`` the loaded model whose start set
-    its input part as it is, else None, and ``input_norm_declared`` whether
-    that model declares it (False: the convention for its kind of model;
-    None with no such model; routes.pipeline.input_norm_set_by). The page
-    reads them after every model change: a model's start can set the input
-    normalization (routes.pipeline.set_declared_input_norm), and the
-    Processing tab's input list then shows it, saying from which model and
-    on what grounds.
+    "postprocess"}, "input_norm_from", "input_norm_declared",
+    "postprocess_from", "postprocess_fitted"}``: ``pipeline`` is the chain
+    as it is set (PUT /api/pipeline's answer gives it the same way),
+    ``input_norm_from`` the loaded model whose start set its input part as
+    it is, else None, and ``input_norm_declared`` whether that model
+    declares it (False: the convention for its kind of model; None with no
+    such model; routes.pipeline.input_norm_set_by). ``postprocess_from`` is
+    the loaded model whose settings its postprocessing is, else None, and
+    ``postprocess_fitted`` whether the ranking fitted them to the paint
+    (False: the model's start set the sigmoid its logits need; None with no
+    such model; routes.pipeline.postprocess_set_by). The page reads them
+    after every model change: a model's start can set the input
+    normalization (routes.pipeline.set_declared_input_norm) and the
+    postprocessing (set_needed_postprocess), and the Processing tab's list
+    then shows it, saying from which model and on what grounds.
     """
-    from cellmap_flow.dashboard.routes.pipeline import input_norm_set_by
+    from cellmap_flow.dashboard.routes.pipeline import input_norm_set_by, postprocess_set_by
 
     models = loaded_models()
     configs = configs_by_name()
     set_by, declared = input_norm_set_by([configs[m["name"]] for m in models if m["name"] in configs])
+    post_by, fitted = postprocess_set_by([m["name"] for m in models])
     return jsonify({"success": True, "models": models, "pipeline": get_session().pipeline_spec.to_json_data(),
-                    "input_norm_from": set_by, "input_norm_declared": declared})
+                    "input_norm_from": set_by, "input_norm_declared": declared,
+                    "postprocess_from": post_by, "postprocess_fitted": fitted})
 
 
 @models_bp.route("/api/models/remove", methods=["POST"])

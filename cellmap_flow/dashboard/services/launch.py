@@ -118,9 +118,16 @@ def _reported(launch):
 def run_model(config, st_data):
     """Start ``config``'s inference server, in its environment, and add its
     layer with ``st_data``, the session's layer blob. The one launcher behind
-    Submit, Add a model and the Training tab's Use this model."""
+    Submit, Add a model and the Training tab's Use this model.
+
+    A chain with no postprocessing takes what the model's output needs (a
+    sigmoid for logits) once its server's probe says what that is
+    (routes.pipeline.set_needed_postprocess); the redraw that sets it draws
+    this model's layer too."""
+    from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
+
     job = _start(config)
-    if job is not None:
+    if job is not None and not set_needed_postprocess(job):
         _show(job, st_data)
 
 
