@@ -101,3 +101,19 @@ def test_lora_is_offered_only_when_the_export_can_take_an_adapter(monkeypatch, t
         (tmp_path / name).write_bytes(b"")
 
     assert CellMapModelConfig(folder_path=str(tmp_path)).finetune_modes() == modes
+
+
+@pytest.mark.parametrize("files, modes", [
+    (["metadata.json", "model.pt", "model.ts", "model.onnx"], ("full",)),
+    (["metadata.json", "model.pt2", "model.ts", "model.onnx"], ("lora", "full")),
+], ids=["torchscript-only", "with-an-export"])
+def test_lora_is_offered_for_a_hugging_face_export_only_when_it_has_a_model_pt2(monkeypatch, files, modes):
+    """cellmap/jrc_mus-livers_16nm_to_8nm_mito, model.pt, model.ts and
+    model.onnx, was offered LoRA and failed at the job's start, as the /nrs
+    folders without a model.pt2 did; read from the repo's file list."""
+    from cellmap_flow.models import resolve
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(resolve, "_hf_files", lambda repo, revision: files)
+
+    assert HuggingFaceModelConfig("cellmap/jrc_mus-livers_16nm_to_8nm_mito").finetune_modes() == modes
