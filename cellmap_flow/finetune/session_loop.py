@@ -34,7 +34,7 @@ from cellmap_flow.finetune import markers, run_outputs
 from cellmap_flow.finetune.adaptation import strategy_for
 from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform, options_of, update_run_metadata
 from cellmap_flow.finetune.data import create_dataloader
-from cellmap_flow.finetune.data.loader import training_patch_voxels
+from cellmap_flow.finetune.data.loader import patch_refusal, training_patch_voxels
 from cellmap_flow.finetune.trainer import Finetuner
 from cellmap_flow.finetune.trainer.supervised import probe_output_class
 from cellmap_flow.jobs.spec import exists_now
@@ -452,6 +452,12 @@ class TrainingSession:
         if self.iteration > 1:
             markers.emit(markers.RESTART_STATUS, "Loading corrections...")
         logger.info(f"Loading corrections from {args.corrections}...")
+        # A volume made for another model, on another grid (a restart reads
+        # the session's manifest again, which Use this model may have moved
+        # to another model's volume), is refused before a patch is read.
+        refusal = patch_refusal(args.corrections, self.model_config)
+        if refusal:
+            raise ValueError(refusal)
         dataloader = create_dataloader(
             args.corrections,
             batch_size=options.batch_size,
