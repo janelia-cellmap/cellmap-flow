@@ -9,6 +9,9 @@ regions, ``volume.py`` and ``regions.py``). ``label_it.py`` is Label it's
 segmentation of a prediction, read by
 ``dashboard/routes/finetune/view_labels.py`` and, through
 ``label_it_calls.py``, by ``web/src/backend/routes/view-labels.ts``.
+``activation.py`` reads a model's output activation from its network's
+graph, for the inference server (inference/runner.py) and the browser's
+served model (web/src/finetune/onnx-proto.ts, through ``calls.py``).
 ``tests/portable/test_boundary.py`` holds every module here to that
 boundary. Nothing here reads a file, a zarr or the network: the callers do,
 around it (``finetune/session/volume.py``'s ``carry_paint`` and

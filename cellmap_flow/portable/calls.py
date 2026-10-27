@@ -3,14 +3,14 @@ runs through chunkmirage's ``Engine.call("cellmap_flow.portable.calls:<name>",
 args, arrays)`` (``chunkmirage.calls`` says the shape: ``fn(args, arrays)``,
 ``args`` the JSON arguments, ``arrays`` the bytes sent beside them, in order;
 a JSON value, bytes, or a pair of JSON and arrays back). Each decodes its
-arrays, calls the maths in ``rank.py`` or ``carry.py`` and encodes the
-answer; the maths is not here. The workers take turns, so what a call needs
+arrays, calls the maths in ``rank.py``, ``carry.py`` or ``activation.py``
+and encodes the answer; the maths is not here. The workers take turns, so what a call needs
 from the one before (the rank's tallies) travels in its JSON.
 """
 
 import numpy as np
 
-from cellmap_flow.portable import rank
+from cellmap_flow.portable import activation, rank
 from cellmap_flow.portable.carry import Grid, carry as carry_core, parts
 
 _BINS = ("object_bins", "background_bins")
@@ -66,6 +66,14 @@ def needed_postprocess(args, arrays):
     prediction, with a ThresholdPostprocessor at ``threshold`` (a
     probability) when that is given, or null."""
     return rank.needed_postprocess(args.get("output_class"), args["postprocess"], args.get("threshold"))
+
+
+def output_activation(args, arrays):
+    """``activation.output_activation``: the output activation of a served
+    model's graph, ``nodes`` (each ``{"op", "inputs", "outputs"}``, a clip's
+    ``min`` and ``max`` where read) read back from its value ``output``, as
+    ``{"output_class", "op"}``; null when the graph does not say."""
+    return activation.output_activation(args["nodes"], args["output"])
 
 
 def rank_row(args, arrays):
