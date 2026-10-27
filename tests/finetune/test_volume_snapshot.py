@@ -268,3 +268,20 @@ def test_new_volume_without_a_model_or_a_size_is_at_the_level_the_viewer_shows(w
     created = world.client.post("/api/finetune/create-volume", json={"output_path": str(world.tmp / "a")}).get_json()
     assert created["success"], created
     assert created["metadata"]["output_voxel_size"] == [voxel] * 3
+
+
+def test_crops_load_with_no_model_picked(world):
+    """Load crops from YAML refused at once with no model picked, a volume
+    in the session or not: the model only lays a new volume on its grid.
+    With neither, the volume is painted before any model, as New Volume
+    makes one; with a volume, the crops go into it."""
+    from cellmap_flow.dashboard.state import get_session
+
+    post = lambda **body: world.client.post("/api/finetune/load-crops", json=body).get_json()  # noqa: E731
+    body = {"output_path": str(world.tmp / "c"), "yaml": str(world.tmp / "crops.yaml")}
+
+    first = post(**body)
+    assert first["success"], first
+    assert get_session().annotation_volumes[first["volume_id"]]["model_name"] is None
+    again = post(**body)
+    assert again["success"] and again["volume_id"] == first["volume_id"]

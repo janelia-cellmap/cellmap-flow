@@ -342,13 +342,15 @@ class CreateVolume(BaseModel):
 
 
 class LoadCrops(BaseModel):
-    """Crops imported into the session's annotation volume for ``model_name``:
-    ``yaml`` is the YAML's text or its path, ``output_path`` as for
-    CreateVolume, and ``load_id`` names the import's progress."""
+    """Crops imported into the session's annotation volume: ``yaml`` is the
+    YAML's text or its path, ``output_path`` as for CreateVolume, and
+    ``load_id`` names the import's progress. ``model_name``, the model
+    picked, is only asked for when the session has no volume yet, to lay a
+    new one on its grid; without one the new volume is painted before any
+    model, as New Volume makes one."""
 
     yaml: Annotated[str, _required("yaml", message="Missing 'yaml' field")] = Field(None, validate_default=True)
-    model_name: Annotated[str, _required("model_name", message="Missing 'model_name' field")] = Field(
-        None, validate_default=True)
+    model_name: Optional[str] = None
     output_path: Any = None
     load_id: Any = None
 

@@ -2015,15 +2015,22 @@
       "type": "object"
     },
     "LoadCrops": {
-      "description": "Crops imported into the session's annotation volume for ``model_name``:\n``yaml`` is the YAML's text or its path, ``output_path`` as for\nCreateVolume, and ``load_id`` names the import's progress.",
+      "description": "Crops imported into the session's annotation volume: ``yaml`` is the\nYAML's text or its path, ``output_path`` as for CreateVolume, and\n``load_id`` names the import's progress. ``model_name``, the model\npicked, is only asked for when the session has no volume yet, to lay a\nnew one on its grid; without one the new volume is painted before any\nmodel, as New Volume makes one.",
       "properties": {
         "yaml": {
           "default": null,
           "type": "string"
         },
         "model_name": {
-          "default": null,
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "output_path": {},
         "load_id": {}

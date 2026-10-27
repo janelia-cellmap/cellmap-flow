@@ -367,13 +367,16 @@ export interface CreateVolume {
   output_path?: unknown;
 }
 /**
- * Crops imported into the session's annotation volume for ``model_name``:
- * ``yaml`` is the YAML's text or its path, ``output_path`` as for
- * CreateVolume, and ``load_id`` names the import's progress.
+ * Crops imported into the session's annotation volume: ``yaml`` is the
+ * YAML's text or its path, ``output_path`` as for CreateVolume, and
+ * ``load_id`` names the import's progress. ``model_name``, the model
+ * picked, is only asked for when the session has no volume yet, to lay a
+ * new one on its grid; without one the new volume is painted before any
+ * model, as New Volume makes one.
  */
 export interface LoadCrops {
   yaml?: string;
-  model_name?: string;
+  model_name?: string | null;
   output_path?: unknown;
   load_id?: unknown;
 }
