@@ -53,12 +53,14 @@
 // status answers carry no count. job-monitor.js decides from its card
 // whether the job can take the restart, and says why not in the tab's logs:
 // this Neuroglancer's status bar is not reachable from the page.
+import { volumeCornerNm } from "../../ai-annotate/fill";
 import type { AppContext, FinetunedRecord, LayerSpec, ModelEntry, PaintVolume } from "../../contracts";
 import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
 import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
 import { defaultTile, is3d, tileChoices } from "../../finetune/full/graph";
 import { BLOCK_COSTS, checkTileSide, writableBlocks } from "../../finetune/full/run-full";
 import { webgpuMissing } from "../../finetune/full/tfjs";
+import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { finetuneModes, MODE_NOUN, readsOneSlice, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
@@ -66,7 +68,7 @@ import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
+import { CHUNK_DIR, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
@@ -431,7 +433,14 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // a model of several channels trained one at a time without the channel
   // picked, or a pick it cannot take (refuseChannel), and for a mode the
   // model's manifest does not offer, a tile or block side its graph does not
-  // take, or a 3D model's batch of more than one block.
+  // take, or a 3D model's batch of more than one block. A model whose grid
+  // is not the volume's (another model's volume, whose blocks and voxel
+  // sizes are not this one's: the portable Python's carry_note says) has the
+  // paint carried onto its grid first, as Use this model carries it
+  // (carryOnto), after every refusal, so a refused submit changes nothing;
+  // the chain and the channel stay as the user set them. The answer then
+  // says so: `carried` {from_model, from_volume, volume_id, chunks}, and the
+  // note names both grids.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -448,7 +457,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }
     const model = ctx.infer.served().find((s) => s.entry.name === name);
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
-    if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
+    const dataset = ctx.infer.dataset();
+    if (!dataset) return badRequest(NO_DATASET);
     const paintFirst = await trainingRefusal(ctx.infer, volume);
     if (paintFirst) return json(400, { success: false, error: paintFirst, paint_first: true });
     // The mode the form asks for; a body without one (an older tab) the
@@ -458,19 +468,41 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if ("error" in training) return badRequest(training.error);
     const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
+    // The volume the model trains on: the session's, or, for a model on
+    // another grid, a new one with the paint carried onto it.
+    let trained = volume, chunks = painted, carried: Record<string, unknown> | null = null, carryNote: string | null = null;
+    if (volume.model_id !== model.entry.id) {
+      let to: PaintVolume;
+      try {
+        to = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
+      } catch (e) {
+        return badRequest(message(e));
+      }
+      const change = await ctx.infer.python<{ note?: string; error?: string }>(`${VOLUME_CALLS}:carry_note`, { from: volume, to, kept: "in this browser, marked superseded" });
+      if (change.error) return badRequest(change.error);
+      if (change.note) {
+        const moved = await carryOnto(ctx, volume, to, name);
+        [trained, chunks, carryNote] = [to, moved.chunks, change.note];
+        carried = { from_model: volume.model_name, from_volume: volume.id, volume_id: to.id, chunks: moved.chunks };
+      }
+    }
     const autoServe = body.auto_serve !== false;
     const outputType = hasAffinityChannels(model.entry) ? "affinities" : "binary";
     const job = jobs.submit({
       ctx,
       entry: model.entry,
-      volume,
+      volume: trained,
       options: training.options,
-      params: { model_name: name, corrections_path: volume.id, ...training.params, auto_serve: autoServe, output_type: outputType },
+      params: { model_name: name, corrections_path: trained.id, ...training.params, auto_serve: autoServe, output_type: outputType },
       autoServe,
     });
     const channel = training.options.selectChannel;
     const channelWords = channel === null ? "" : `'s channel ${channel} (${model.entry.manifest.channels[channel]})`;
-    ctx.log(`Finetune job ${job.id}: ${name}${channelWords} on ${painted} painted chunk${painted === 1 ? "" : "s"} of ${volume.id}`);
+    const chunkWords = `${chunks} painted chunk${chunks === 1 ? "" : "s"}`;
+    ctx.log(`Finetune job ${job.id}: ${name}${channelWords} on ${chunkWords} of ${trained.id}`);
+    const where = training.options.mode === "full"
+      ? `The model's whole network trains in this browser with TensorFlow.js on the paint of the ${chunkWords}; the finetuned model is kept in this browser and listed on the Models tab.`
+      : `The model's head (its last layer) trains in this browser on the ${chunkWords}; the finetuned model is kept in this browser and listed on the Models tab.`;
     return json(200, {
       success: true,
       job_id: job.id,
@@ -478,9 +510,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       output_dir: job.toDict().output_dir,
       output_type: outputType,
       message: "Finetuning job submitted successfully",
-      note: training.options.mode === "full"
-        ? `The model's whole network trains in this browser with TensorFlow.js on the paint of the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`
-        : `The model's head (its last layer) trains in this browser on the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`,
+      note: carryNote ? `${carryNote} ${where}` : where,
+      ...(carried ? { carried } : {}),
     });
   });
 
@@ -740,6 +771,65 @@ export async function pickShownChannel(ctx: AppContext, name: string, channel: n
   else shownChannels[name] = channel;
   await ctx.session.update({ shownChannels });
   return channel !== null && showChannel(ctx, name);
+}
+
+/** What carryPaint did: the new volume's voxels painted, the old volume's painted
+ * voxels they came from, the new voxels left unpainted because their old voxels
+ * disagreed, and the new volume's chunks written. */
+export interface Carried { painted: number; source: number; conflicts: number; chunks: number }
+
+/** `from`'s paint carried onto `to`, a volume planned over the same dataset
+ * for model `name` on its grid (planVolume, not yet written): Use this
+ * model's (rank.ts) and training's submit for a model on another grid. `to`
+ * is written (createVolume), the paint carried onto it (carryPaint) with
+ * its good regions (boxes in nm, the same on any grid), and made the
+ * session's volume, its paint layer in `from`'s place; `from` is retired,
+ * kept in the store but superseded (supersedeVolume), so the session has
+ * one volume, the one it trains on. The chain and the channel shown are left
+ * as they are: Use this model sets those itself. Answers carryPaint's
+ * counts, the good regions carried and the new paint layer's name. */
+export async function carryOnto(ctx: AppContext, from: PaintVolume, to: PaintVolume, name: string): Promise<Carried & { goodRegions: number; layer: string }> {
+  await createVolume(ctx.paint, to);
+  const carried = await carryPaint(ctx, from, to);
+  const regions = await loadGoodRegions(ctx.paint, from.id);
+  if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
+  await ctx.session.update({ paintVolume: to.id });
+  await supersedeVolume(ctx.paint, from.id, to.id);
+  const layer = paintLayerName(to.id);
+  ctx.viewer.removeLayer(paintLayerName(from.id));
+  ctx.viewer.setLayers({ [layer]: { ...paintLayer(paintLayerUrl(to.id, pageBase()), to), name: layer } });
+  ctx.viewer.selectLayer(layer, PAINT_TAB);
+  ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}; ${from.id} is kept, superseded`);
+  return { ...carried, goodRegions: regions.length, layer };
+}
+
+/** The portable Python's carry of paint from one grid to another
+ * (cellmap_flow/portable/calls.py carry_paint, over portable/carry.py). */
+const CARRY_PAINT = "cellmap_flow.portable.calls:carry_paint";
+
+/** The paint of `from` copied into `to`, an empty volume over the same dataset on
+ * another model's grid (createVolume'd): cellmap_flow.portable.carry, in the engine's
+ * Python, with the paint store's reads and writes around it here. The old volume's
+ * painted chunks go whole, both grids placed by their volume's dataset_offset_nm
+ * (voxel 0's centre, fill.ts volumeCornerNm), and the new chunks that got paint come
+ * back whole, to be written as they are. */
+async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): Promise<Carried> {
+  const grid = (v: PaintVolume) => ({ corner_nm: volumeCornerNm(v.dataset_offset_nm, v.output_voxel_size), voxel_nm: v.output_voxel_size, shape: v.dataset_shape_voxels, chunks: v.chunk_size });
+  const indices: number[][] = [], labels: ArrayBuffer[] = [];
+  for (const index of await paintedChunkIndices(ctx.paint, from.id)) {
+    const chunk = await readPaintedChunk(ctx.paint, from, index);
+    if (chunk) { indices.push(index); labels.push(bytesOf(chunk.labels)); }
+  }
+  const { value, arrays } = await ctx.infer.python<{ value: Carried & { indices: number[][] }; arrays: ArrayBuffer[] }>(
+    CARRY_PAINT, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
+  await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
+  const { painted, source, conflicts, chunks } = value;
+  return { painted, source, conflicts, chunks };
+}
+
+/** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
+export function bytesOf(a: ArrayBufferView): ArrayBuffer {
+  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
 }
 
 type LossFields = Pick<FinetuneOptions, "lossType" | "margin" | "balanceClasses" | "labelSmoothing" | "distillationLambda" | "distillationScope">;

@@ -50,7 +50,9 @@ its grid (session/volume.py carry_paint) and its paint layer in the old
 one's place. The old volume is retired (finetune_utils
 retire_annotation_volume): out of the session, kept on disk in its
 corrections dir's ``superseded/``, so the session has the one volume, the
-new one, which its manifest trains on. POST /api/finetune/rank/input-norm
+new one, which its manifest trains on. The carry is
+annotation_core.carry_onto_model, which training's submit carries through
+too, for a model whose grid is not the volume's. POST /api/finetune/rank/input-norm
 {input_norm, postprocess?} makes the row's steps the dashboard's chain
 alone, with no model started and no volume made: Fit to paint's, for the
 model already seeding the paint.
@@ -63,7 +65,7 @@ import numpy as np
 from flask import jsonify, request
 from scipy.special import logit
 
-from cellmap_flow.dashboard.finetune_utils import retire_annotation_volume, sync_annotation_volume_from_minio
+from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.channel import channel_refusal
 from cellmap_flow.dashboard.routes.finetune.common import (
@@ -330,11 +332,8 @@ def rank_score():
 
 @finetune_bp.route("/api/finetune/rank/use", methods=["POST"])
 def rank_use():
-    from cellmap_flow.dashboard.routes.finetune.annotation_core import make_volume
-    from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer, refresh_annotated_regions_layer
-    from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+    from cellmap_flow.dashboard.routes.finetune.annotation_core import carry_onto_model
     from cellmap_flow.dashboard.services.launch import running_names
-    from cellmap_flow.finetune.session.volume import carry_paint
 
     data = request.get_json(silent=True) or {}
     name = str(data.get("name") or "").strip()
@@ -362,28 +361,14 @@ def rank_use():
             session.shown_channels[name] = channel
         if name not in running_names():
             _start_for_good(name, config)
-        sync_annotation_volume_from_minio(from_id)
-        to_id, zarr_path, minio_url, _ = make_volume(name, config, _served_geometry(name, config), from_volume["corrections_dir"])
-        carried = carry_paint(from_volume, session.annotation_volumes[to_id])
-        ensure_minio_serving(zarr_path, to_id, output_base_dir=from_volume["corrections_dir"])
-        layer = f"annotation_{to_id}"
-        if session.viewer is not None:
-            with session.viewer.txn() as s:
-                old = f"annotation_{from_id}"
-                if old in s.layers:
-                    del s.layers[old]
-            add_annotation_layer(session.viewer, layer, f"{minio_url}/annotation")
-        # One volume a session: the one its manifest now trains on (make_volume
-        # wrote it). The old is kept, out of everything's way.
-        superseded = retire_annotation_volume(from_id)
-        refresh_annotated_regions_layer()
-        logger.info(f"Carried {from_id}'s paint to {to_id} for {name}: {carried['painted']} voxels from {carried['source']}"
-                    + (f"; {carried['conflicts']} left unpainted where object and background met in one voxel" if carried["conflicts"] else "")
-                    + (f"; {from_id} kept in {superseded}" if superseded else ""))
+        # One volume a session: the one its manifest now trains on. The old
+        # is kept, out of everything's way (annotation_core.carry_onto_model,
+        # which training's submit carries through too).
+        carried = carry_onto_model(name, config, _served_geometry(name, config), from_id, from_volume)
         return jsonify({
-            "success": True, "name": name, "volume_id": to_id, "from_volume": from_id, "layer_name": layer,
-            "painted_voxels": carried["painted"], "source_voxels": carried["source"], "conflicts": carried["conflicts"],
-            "chunks": carried["chunks"], "input_norm": input_norm, "postprocess": postprocess,
+            "success": True, "name": name, "volume_id": carried["volume_id"], "from_volume": from_id,
+            "layer_name": carried["layer_name"], "painted_voxels": carried["painted"], "source_voxels": carried["source"],
+            "conflicts": carried["conflicts"], "chunks": carried["chunks"], "input_norm": input_norm, "postprocess": postprocess,
         })
     except Exception as e:
         logger.error(f"Could not make {name} the model to finetune: {e}", exc_info=True)

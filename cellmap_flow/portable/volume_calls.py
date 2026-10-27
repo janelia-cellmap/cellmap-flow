@@ -1,6 +1,8 @@
-"""What the browser calls to plan an annotation volume and its good regions:
-the functions ``web/src/finetune/volume.ts``, ``web/src/finetune/good-regions.ts``
-and ``web/src/finetune/run.ts`` run through chunkmirage's
+"""What the browser calls to plan an annotation volume and its good regions,
+and to tell whether a model trains on the session's volume as it is: the
+functions ``web/src/finetune/volume.ts``, ``web/src/finetune/good-regions.ts``,
+``web/src/finetune/run.ts`` and ``web/src/backend/routes/finetune.ts``'s
+submit run through chunkmirage's
 ``Engine.call("cellmap_flow.portable.volume_calls:<name>", args, arrays)``
 (``calls.py`` says the shape). Each takes plain numbers in its JSON and
 answers JSON; the rules are ``volume.py``'s and ``regions.py``'s, which the
@@ -63,6 +65,28 @@ def training_refusal(args, arrays):
     ``{}``."""
     refusal = volume.training_refusal(args.get("volume") or {})
     return {"error": refusal} if refusal else {}
+
+
+def _grid(volume) -> dict:
+    """A browser volume's (or a plan's) grid as ``volume.GRID_FIELDS`` has
+    it: its ``chunk_size`` is the model's output block."""
+    return {"input_size": volume["input_size"], "output_size": volume["chunk_size"],
+            "input_voxel_size": volume["input_voxel_size"], "output_voxel_size": volume["output_voxel_size"]}
+
+
+@_refusal
+def carry_note(args, arrays):
+    """Training's submit with a model whose grid is not the session
+    volume's: ``{"note": volume.carried_note(...)}`` when ``to`` (the volume
+    planned for the model to train) is on another grid than ``from`` (the
+    session's volume, its paint's), each a volume as the browser keeps it,
+    and ``kept`` where the old one is kept; ``{}`` when they are on one
+    grid (``volume.same_grid``), and the model trains on the volume as it is."""
+    old, new = args["from"], args["to"]
+    if volume.same_grid(_grid(old), _grid(new)):
+        return {}
+    return {"note": volume.carried_note(old.get("model_name"), _grid(old), new.get("model_name"), _grid(new),
+                                        args.get("kept") or "")}
 
 
 def _layer_boxes(entries) -> list:

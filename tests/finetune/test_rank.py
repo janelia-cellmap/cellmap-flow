@@ -461,7 +461,6 @@ def test_a_model_added_by_reference_is_resolved_as_add_a_model_resolves_it_and_l
 
 
 def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(dashboard, painted, monkeypatch, viewer, tmp_path):
-    from cellmap_flow.dashboard import finetune_utils
     from cellmap_flow.dashboard.routes.finetune import annotation_core
     from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
     from cellmap_flow.dashboard.services import launch
@@ -477,7 +476,7 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
         return "vol-2", str(tmp_path / "vol-2.zarr"), "http://minio/vol-2.zarr", None
 
     monkeypatch.setattr(annotation_core, "make_volume", make_volume)
-    monkeypatch.setattr(finetune_utils, "ensure_minio_serving", lambda *a, **k: None)
+    monkeypatch.setattr(annotation_core, "ensure_minio_serving", lambda *a, **k: None)
     # Its server answers with its sizes once it is up, the second time it is
     # asked; the model is never built in the dashboard for them (it died
     # doing that for jrc_mus-livers).

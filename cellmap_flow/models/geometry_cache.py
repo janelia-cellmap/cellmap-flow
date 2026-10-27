@@ -186,6 +186,16 @@ def build_here(model_config):
     return model_config.config
 
 
+def known_geometry(model_name, model_config):
+    """The five geometry fields from the first two sources alone, its
+    running server's or this cache's, as a geometry_stand_in; None when
+    neither knows them. Never the model built here: the finetune routes ask
+    this in the dashboard, where a build loads the model and runs it on the
+    dashboard's CPU (dashboard/routes/finetune/rank_routes.py
+    _served_geometry says how that ended)."""
+    return model_geometry_config(model_name) or load_cached_geometry(model_config)
+
+
 def resolve_model_geometry(model_name, model_config):
     """The five geometry fields, by the cheapest route that can supply them.
 
@@ -195,11 +205,7 @@ def resolve_model_geometry(model_name, model_config):
     Raises ModelEnvError for a model that runs in its own environment when
     neither its server nor the cache knows its geometry.
     """
-    geometry = model_geometry_config(model_name)
-    if geometry is not None:
-        return geometry
-
-    geometry = load_cached_geometry(model_config)
+    geometry = known_geometry(model_name, model_config)
     if geometry is not None:
         return geometry
 

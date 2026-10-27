@@ -48,7 +48,9 @@
 // that volume the session's, its paint layer in the old one's place. The old
 // volume is retired: kept in the paint store, never deleted, but marked
 // superseded (volume.ts supersedeVolume), so the session has one volume, the
-// one it trains on, and the old one is neither listed nor resumed again.
+// one it trains on, and the old one is neither listed nor resumed again. The
+// carry is finetune.ts carryOnto, which training's submit carries through
+// too, for a model whose grid is not the volume's.
 // POST /api/finetune/rank/input-norm {input_norm, postprocess?} makes them
 // the session chain's alone, with no model served and no volume made: Fit to
 // paint's, for the model already seeding the paint.
@@ -62,15 +64,13 @@
 // after, without serving it.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
-import { volumeCornerNm } from "../../ai-annotate/fill";
 import { percentile } from "../../ai-annotate/mask";
 import type { AppContext, Chain, DatasetInfo, ModelEntry, PaintVolume, ServedModel, Step } from "../../contracts";
 import { FINETUNED_REPO } from "../../contracts";
-import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
 import { targetTransformFor } from "../../finetune/target-call";
-import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume, supersedeVolume } from "../../finetune/volume";
+import { hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
@@ -78,11 +78,10 @@ import { probability } from "../../label-it/segment";
 import { HF_REPO } from "../../models";
 import { entryFor } from "../../models/manifest";
 import { dtypeRange } from "../../viewer/display";
-import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
-import { blobFor, declaredInputNorm, pageBase, serveModels, setChain } from "../serving";
-import { notAChannel, pickShownChannel, readSelectChannel } from "./finetune";
+import { blobFor, declaredInputNorm, serveModels, setChain } from "../serving";
+import { bytesOf, carryOnto, notAChannel, pickShownChannel, readSelectChannel } from "./finetune";
 import { resolveRef } from "./models";
 import { readChain } from "./pipeline";
 
@@ -258,22 +257,14 @@ export function rankRoutes(router: Router): void {
       }
       const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
       if (!served) throw new Error(`${name} did not start`);
+      // The volume made for it, the paint and good regions carried onto it,
+      // and the old one superseded (finetune.ts carryOnto, which training's
+      // submit carries through too, for a model on another grid).
       const to = await planVolume(ctx.infer, dataset, served.entry, ctx.session.state.chain);
-      await createVolume(ctx.paint, to);
-      const carried = await carryPaint(ctx, from, to);
-      // Good regions are boxes in nm, the same on any grid: they go with the paint.
-      const regions = await loadGoodRegions(ctx.paint, from.id);
-      if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
-      await ctx.session.update({ paintVolume: to.id });
-      await supersedeVolume(ctx.paint, from.id, to.id);
-      const layer = paintLayerName(to.id);
-      ctx.viewer.removeLayer(paintLayerName(from.id));
-      ctx.viewer.setLayers({ [layer]: { ...paintLayer(paintLayerUrl(to.id, pageBase()), to), name: layer } });
-      ctx.viewer.selectLayer(layer, PAINT_TAB);
-      ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}; ${from.id} is kept, superseded`);
+      const carried = await carryOnto(ctx, from, to, name);
       return json(200, {
-        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, input_norm: set.input_norm, postprocess: set.postprocess,
-        painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: carried.layer, input_norm: set.input_norm, postprocess: set.postprocess,
+        painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: carried.goodRegions,
       });
     } catch (e) {
       return json(400, { success: false, error: `Could not make ${name} the model to finetune: ${message(e)}` });
@@ -548,11 +539,6 @@ function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, 
   return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw, norm_from: normFrom, others });
 }
 
-/** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
-function bytesOf(a: ArrayBufferView): ArrayBuffer {
-  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
-}
-
 /** `norm` with its MinMaxNormalizer set to the raw's window, or null (rank.windowed:
  * no such normalizer, no window, or one not narrower than NARROW_WINDOW of its range). */
 function windowed(ctx: AppContext, norm: readonly Step[], [lo, hi]: readonly [number, number]): Promise<Step[] | null> {
@@ -575,31 +561,6 @@ function paintedBox(chunk: PaintedChunk): { lo: number[]; hi: number[] } | null 
     for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], at[a]); hi[a] = Math.max(hi[a], at[a] + 1); }
   });
   return hi[0] < 0 ? null : { lo, hi };
-}
-
-/** What carryPaint did: the new volume's voxels painted, the old volume's painted
- * voxels they came from, the new voxels left unpainted because their old voxels
- * disagreed, and the new volume's chunks written. */
-interface Carried { painted: number; source: number; conflicts: number; chunks: number }
-
-/** The paint of `from` copied into `to`, an empty volume over the same dataset on
- * another model's grid (createVolume'd): cellmap_flow.portable.carry, in the engine's
- * Python, with the paint store's reads and writes around it here. The old volume's
- * painted chunks go whole, both grids placed by their volume's dataset_offset_nm
- * (voxel 0's centre, fill.ts volumeCornerNm), and the new chunks that got paint come
- * back whole, to be written as they are. */
-async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): Promise<Carried> {
-  const grid = (v: PaintVolume) => ({ corner_nm: volumeCornerNm(v.dataset_offset_nm, v.output_voxel_size), voxel_nm: v.output_voxel_size, shape: v.dataset_shape_voxels, chunks: v.chunk_size });
-  const indices: number[][] = [], labels: ArrayBuffer[] = [];
-  for (const index of await paintedChunkIndices(ctx.paint, from.id)) {
-    const chunk = await readPaintedChunk(ctx.paint, from, index);
-    if (chunk) { indices.push(index); labels.push(bytesOf(chunk.labels)); }
-  }
-  const { value, arrays } = await ctx.infer.python<{ value: Carried & { indices: number[][] }; arrays: ArrayBuffer[] }>(
-    `${PORTABLE}:carry_paint`, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
-  await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
-  const { painted, source, conflicts, chunks } = value;
-  return { painted, source, conflicts, chunks };
 }
 
 /** The Models tab's sections a candidate is listed under, in the order the

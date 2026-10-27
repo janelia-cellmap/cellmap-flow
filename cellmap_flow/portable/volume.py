@@ -280,3 +280,60 @@ def training_refusal(volume):
     PAINT_FIRST_TRAINING for a paint-first volume, which names no model,
     so no model's blocks are its chunks to train on."""
     return PAINT_FIRST_TRAINING if not _field(volume, "model_name") else None
+
+
+# What a model trains on of a volume, its grid: the model's input and output
+# blocks in voxels (the training manifest's patch) and their voxel sizes. A
+# model trains on a volume whose grid is its own; training another model on
+# it carries the paint onto that model's grid first (carried_note), as Use
+# this model does. The keys are the server's volume record's; callers hand
+# a plan's or the browser's volume's ``chunk_size`` in as ``output_size``.
+GRID_FIELDS = ("input_size", "output_size", "input_voxel_size", "output_voxel_size")
+
+
+def same_grid(a, b) -> bool:
+    """Whether grids ``a`` and ``b`` (mappings of GRID_FIELDS) are one: the
+    same blocks, voxel for voxel, at the same voxel sizes (float noise of nm
+    aside). A volume made for a model is on the grid of that model, of its
+    finetunes and of any model of the same sizes; a model on another grid
+    took the volume's 178^3 blocks at 8 nm for its own 1 x 556 x 556 at 16
+    and torch.export refused them."""
+    sizes = ("input_size", "output_size")
+    if any([round(float(v)) for v in _field(a, key)] != [round(float(v)) for v in _field(b, key)] for key in sizes):
+        return False
+    return all(len(_field(a, key)) == len(_field(b, key))
+               and np.allclose(_numbers(_field(a, key), key), _numbers(_field(b, key), key), rtol=WHOLE_VOXEL_TOLERANCE, atol=0)
+               for key in ("input_voxel_size", "output_voxel_size"))
+
+
+def _nm(voxel_size) -> str:
+    """A voxel size as the sentences say it: "8 nm" for one the same along
+    every axis, "40×4×4 nm" for another."""
+    sizes = [f"{float(v):g}" for v in voxel_size]
+    return f"{sizes[0] if len(set(sizes)) == 1 else '×'.join(sizes)} nm"
+
+
+def grid_text(grid) -> str:
+    """A grid (GRID_FIELDS) as the sentences name it: its input block to its
+    output block, "178×178×178 → 56×56×56 at 8 nm", each at its own voxel
+    size when the two differ ("1×556×556 at 8 nm → 1×468×468 at 16 nm")."""
+    def block(key):
+        return "×".join(str(round(float(v))) for v in _field(grid, key))
+
+    voxel_in, voxel_out = _nm(_field(grid, "input_voxel_size")), _nm(_field(grid, "output_voxel_size"))
+    if voxel_in == voxel_out:
+        return f"{block('input_size')} → {block('output_size')} at {voxel_out}"
+    return f"{block('input_size')} at {voxel_in} → {block('output_size')} at {voxel_out}"
+
+
+def carried_note(from_model, from_grid, to_model, to_grid, kept) -> str:
+    """What training's submit says, in both modes, when the session volume
+    was on ``from_model``'s grid and the model to train, ``to_model``, is on
+    another: the paint carried onto that model's grid, as Use this model
+    carries it, both grids named (grid_text), and where the old volume is
+    kept (``kept``, the mode's words). The input normalization, the
+    postprocessing and the channel stay what the user set: only the volume
+    changed."""
+    return (f"Your paint was on {from_model or 'another model'}'s grid ({grid_text(from_grid)}): it was carried onto "
+            f"{to_model}'s ({grid_text(to_grid)}), as Use this model does, and {to_model} trains on that. "
+            f"The old volume is kept {kept}.")

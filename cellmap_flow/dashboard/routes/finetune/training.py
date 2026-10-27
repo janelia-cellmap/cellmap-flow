@@ -1,7 +1,10 @@
 """Training jobs: submitting one, restarting it, and following it.
 
 Routes:
-- POST ``/api/finetune/submit``: a job for a model over a session's corrections;
+- POST ``/api/finetune/submit``: a job for a model over a session's corrections,
+  its paint first carried onto the model's grid when the session's volume
+  is on another (annotation_core.grid_change, carry_onto_model: what Use
+  this model does), which the answer says (``carried``, ``note``);
 - POST ``/api/finetune/job/<job_id>/restart``: the next iteration, with new settings;
 - GET ``/api/finetune/jobs``: every job, including those a dashboard before
   this one started (they are looked for first);
@@ -29,7 +32,13 @@ from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
 from cellmap_flow.dashboard.routes.finetune import restart_key
-from cellmap_flow.dashboard.routes.finetune.annotation_core import channel_pick_refusal, paint_first_refusal
+from cellmap_flow.dashboard.routes.finetune.annotation_core import (
+    carry_onto_model,
+    channel_pick_refusal,
+    grid_change,
+    paint_first_refusal,
+    volume_grid,
+)
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -50,6 +59,7 @@ from cellmap_flow.finetune.options import TrainingOptions
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import exists_now
+from cellmap_flow.portable import volume as portable_volume
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +252,25 @@ def get_job_logs(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _carried(model_name, model_config, geometry, from_id, from_volume):
+    """Submit's carry of the session volume ``from_id``'s paint onto
+    ``model_name``'s grid (annotation_core.carry_onto_model, as Use this model
+    carries it; ``geometry`` and the volume as grid_change found them), and
+    what the answer says of it: ``(carried, note)``. ``carried`` is
+    ``{"from_model", "from_volume", "volume_id", "chunks"}``, for the page to
+    follow the new volume (job-monitor.js); ``note`` names both grids and
+    where the old volume is kept (portable/volume.py carried_note), which
+    the page's log shows."""
+    moved = carry_onto_model(model_name, model_config, geometry, from_id, from_volume)
+    kept = moved["superseded"] or os.path.join(from_volume["corrections_dir"], "superseded")
+    note = portable_volume.carried_note(
+        from_volume.get("model_name"), volume_grid(from_volume), model_name, volume_grid(moved["volume"]), f"in {kept}"
+    )
+    carried = {"from_model": from_volume.get("model_name"), "from_volume": from_id,
+               "volume_id": moved["volume_id"], "chunks": moved["chunks"]}
+    return carried, note
+
+
 @finetune_bp.route("/api/finetune/submit", methods=["POST"])
 def submit_finetuning():
     body, refused = parse(FinetuneSubmit, request.get_json() or {})
@@ -275,6 +304,26 @@ def submit_finetuning():
         no_pick = channel_pick_refusal(body.model_name, model_config, output_type, body.select_channel)
         if no_pick is not None:
             return no_pick
+        asked = body.options(
+            output_type=output_type, offsets=offsets, output_class=served_output_class(body.model_name),
+        )
+        if asked.mode == "head":
+            return jsonify({"success": False, "error": (
+                "The last layer (mode head) is trained in the browser; a training job trains "
+                "a LoRA adapter (lora) or every weight (full)."
+            )}), 400
+
+        # A model whose grid is not the session volume's (another model's,
+        # a 3D one's 178^3 at 8 nm for a 2D one's 1 x 556 x 556 at 16) has
+        # the paint carried onto its grid first, as Use this model carries
+        # it, and trains on that; the chain and the channel stay as the user
+        # set them. Its job read the volume's patches and torch.export
+        # refused them. The carry is the last thing before the manifest and
+        # the job, after every refusal, so a refused submit changes nothing.
+        carry, unknown = grid_change(body.model_name, model_config, actual_corrections_path)
+        if unknown is not None:
+            return unknown
+        carried, carried_note = _carried(body.model_name, model_config, *carry) if carry else (None, None)
 
         from cellmap_flow.finetune.session.manifest import read_manifest
 
@@ -300,16 +349,8 @@ def submit_finetuning():
         # minutes; it is only the chunk diff now.
         _pull_annotations("Submit pre-sync")
         has_sparse = detect_sparse_annotations(actual_corrections_path)
-        asked = body.options(
-            output_type=output_type, offsets=offsets, output_class=served_output_class(body.model_name),
-        )
-        if asked.mode == "head":
-            return jsonify({"success": False, "error": (
-                "The last layer (mode head) is trained in the browser; a training job trains "
-                "a LoRA adapter (lora) or every weight (full)."
-            )}), 400
         settings = asked.for_session(sparse=has_sparse)
-        note = settings_note(asked, settings)
+        note = " ".join(filter(None, (carried_note, settings_note(asked, settings))))
 
         session = get_session()
         # Before the job exists: submitting starts its monitor, which tells
@@ -340,6 +381,8 @@ def submit_finetuning():
         }
         if note:
             response["note"] = note
+        if carried:
+            response["carried"] = carried
         return jsonify(response)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
