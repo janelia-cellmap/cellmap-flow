@@ -109,8 +109,9 @@ const NORM_FROM = {
 // the input normalization it was read through, where it came from and its
 // steps, stretched to the raw under the paint when that scored clearly
 // better, then with the match unstretched, and what the others tried
-// matched (cellmap_flow/portable/rank.py score_row); and the sigmoid its
-// layer needs, when it needs one added or taken away (display_postprocess).
+// matched (cellmap_flow/portable/rank.py score_row); and the postprocessing
+// its layer needs, when it needs any: the sigmoid added or taken away and
+// the threshold the paint is fitted best at (needed_postprocess).
 function settingsCells(row) {
   const own = row.cutoff === 0;
   const stretched = Array.isArray(row.window);
@@ -123,7 +124,7 @@ function settingsCells(row) {
       Array.isArray(row.input_norm) && row.input_norm.length ? h("span", { class: "text-muted" }, ` ${stepsText(row.input_norm)}`) : "",
       stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : "",
       (row.input_norm_others || []).length ? h("span", { class: "text-muted" }, `; ${othersText(row.input_norm_others)}`) : ""),
-    Array.isArray(row.postprocess) && h("span", { title: "The sigmoid the model's output needs to show right, which Use this model sets: added for an output with no activation (logits), taken away from one that has one already" },
+    Array.isArray(row.postprocess) && h("span", { title: "The postprocessing the model's output needs to show right, which Use this model sets: a sigmoid added for an output with no activation (logits) or taken away from one that has one already, and the threshold your paint is fitted best at" },
       "Output ", h("strong", {}, outputWords(row.postprocess))));
 }
 
@@ -143,9 +144,13 @@ function othersText(others) {
   return others.map((o) => `${NORM_FROM[o.from] || o.from} ${percent(o.matches)}`).join(", ");
 }
 
-// The sigmoid a postprocessing (display_postprocess's) adds or takes away.
+// A row's postprocessing (needed_postprocess's), in short: "+ sigmoid, cut
+// at 0.731", "cut at 0.731" for an output that has its activation, or "no
+// second sigmoid" when the steps are the chain's with its sigmoid taken away.
 function outputWords(steps) {
-  return steps.some((step) => step.name === "SigmoidPostprocessor") ? "+ sigmoid" : "no second sigmoid";
+  const cut = steps.find((step) => step.name === "ThresholdPostprocessor");
+  const words = [steps.some((step) => step.name === "SigmoidPostprocessor") && "+ sigmoid", cut && `cut at ${cut.threshold}`].filter(Boolean);
+  return words.length ? words.join(", ") : "no second sigmoid";
 }
 
 // The rest of a binary model's channels beside its best (channel_matches,
@@ -304,7 +309,8 @@ export function initRank() {
   }
 
   // Whether `row` carries postprocessing to set: the sigmoid its layer needs
-  // added or taken away (portable/rank.py display_postprocess).
+  // added or taken away, and the threshold (portable/rank.py
+  // needed_postprocess).
   function changesOutput(row) {
     return Array.isArray(row.postprocess);
   }
