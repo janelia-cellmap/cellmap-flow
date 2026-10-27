@@ -21,7 +21,11 @@
 // or the whole network (finetune/full), with the server's Batch Size in
 // tiles (a 3D model's one block a step), a tile or block side of its own,
 // which the models route offers with what a step costs (fullTraining), and
-// augmentation. The good
+// augmentation. Both train one channel of a model whose several channels
+// are not affinities (target-call.ts channelChoice, which the models route
+// answers as channel_choice), the one the form's Channel picks
+// (select_channel), and submit refuses such a model without the pick
+// (refuseChannel). The good
 // regions' routes are routes/good-regions.ts, and the patch tools' Label it
 // and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
@@ -55,6 +59,7 @@ import { finetuneModes, MODE_NOUN, readsOneSlice, refuseMode, sourceOf } from ".
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
+import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
 import { createVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
@@ -158,14 +163,15 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   }
 
   /** The form's training fields read (readTraining) and checked against
-   * `entry`; a 3D model's whole-network side is kept in the job's params as
-   * block_size, which the job card shows as a cube. */
+   * `entry`, its channel pick among them (refuseChannel); a 3D model's
+   * whole-network side is kept in the job's params as block_size, which the
+   * job card shows as a cube. */
   async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<ReturnType<typeof readTraining>> {
     const lossRefused = mode === "full" ? null : refuseLoss(body.loss_type);
     if (lossRefused) return { error: lossRefused };
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return training;
-    const refused = entry ? await refuseFull(entry, training.options) : null;
+    const refused = entry ? refuseChannel(entry, training.options.selectChannel) ?? (await refuseFull(entry, training.options)) : null;
     if (refused) return { error: refused };
     if (entry && training.options.mode === "full" && !readsOneSlice(entry) && "tile_size" in training.params) {
       const { tile_size: side, ...params } = training.params;
@@ -188,7 +194,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // GET /api/finetune/models: the served models, with the geometry the tab
   // shows (write_shape in nm, the voxel size, the channels), from the
-  // engine's model info as the Python asks each inference server, and the
+  // engine's model info as the Python asks each inference server, the
+  // channels' names (the manifest's) and whether the model trains one of
+  // them at a time (channel_choice: target-call.ts channelChoice), for the
+  // form's Channel, and the
   // ways each can be finetuned here, from its manifest (finetune/modes.ts:
   // "head", "full"), as the server answers finetune_modes; a model whose
   // manifest declares none has the head the graph is found to end in. A
@@ -205,6 +214,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
         write_shape: s.info.write_shape,
         output_voxel_size: s.info.output_voxel_size,
         output_channels: s.info.output_channels,
+        channels: s.entry.manifest.channels.length ? [...s.entry.manifest.channels] : null,
+        channel_choice: channelChoice(s.entry),
         finetune_modes: modes,
         ...(modes.includes("full") ? { full_training: await fullTraining(s.entry) } : {}),
       };
@@ -379,8 +390,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // without a dataset, on a volume painted before any model (paint_first:
   // trainingRefusal's sentence, the server's, says to Use this model), with
   // a loss that needs a server (the head's: the whole network has its own),
-  // and for a mode the model's manifest does not offer, a tile or block side
-  // its graph does not take, or a 3D model's batch of more than one block.
+  // a model of several channels trained one at a time without the channel
+  // picked, or a pick it cannot take (refuseChannel), and for a mode the
+  // model's manifest does not offer, a tile or block side its graph does not
+  // take, or a 3D model's batch of more than one block.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -417,7 +430,9 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       params: { model_name: name, corrections_path: volume.id, ...training.params, auto_serve: autoServe, output_type: outputType },
       autoServe,
     });
-    ctx.log(`Finetune job ${job.id}: ${name} on ${painted} painted chunk${painted === 1 ? "" : "s"} of ${volume.id}`);
+    const channel = training.options.selectChannel;
+    const channelWords = channel === null ? "" : `'s channel ${channel} (${model.entry.manifest.channels[channel]})`;
+    ctx.log(`Finetune job ${job.id}: ${name}${channelWords} on ${painted} painted chunk${painted === 1 ? "" : "s"} of ${volume.id}`);
     return json(200, {
       success: true,
       job_id: job.id,
@@ -476,10 +491,14 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // POST /api/finetune/job/:id/restart: the form's parameters again (the
   // same body as submit, less the model), a new run from the trained head.
+  // The job's channel when the body picks none (Shift+R, or an older tab):
+  // a restart trains what the job trains, as the server's keeps
+  // select_channel; another channel picked trains that one from there.
   router.post("/api/finetune/job/:id/restart", async (req, params) => {
-    const body = objectBody(req) ?? {};
-    // The job's own mode unless the body names one (jobs.restart refuses a switch).
     const job = jobs.get(params.id);
+    const sent = objectBody(req) ?? {};
+    const body = blank(sent.select_channel) && job ? { ...sent, select_channel: job.args.options.selectChannel } : sent;
+    // The job's own mode unless the body names one (jobs.restart refuses a switch).
     const mode = body.finetune_mode ?? job?.args.options.mode ?? "head";
     const training = await checkedTraining(body, mode, job?.args.entry);
     if ("error" in training) return badRequest(training.error);
@@ -598,7 +617,9 @@ function refuseLoss(loss: unknown): string | null {
  * trainer takes, checked, as run.ts's options and as the job's params (the
  * card shows the loss, margin and distillation from them). finetune_mode
  * says what trains, "head" when absent. Both modes take the loss fields
- * (readLoss). For the head, batch_pixels is the browser's own: voxels per
+ * (readLoss) and select_channel, the channel picked (a whole number, or
+ * absent for none; whether the model has it is refuseChannel's to say,
+ * with the model). For the head, batch_pixels is the browser's own: voxels per
  * Adam step, where the server's batch_size counts patches. The fields only
  * a cluster job uses (lora_r, patches_per_epoch, rehearsal_fraction, queue,
  * checkpoint_path, and for the head batch_size and augment) are left out
@@ -614,13 +635,40 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
   const loss = readLoss(body);
   if ("error" in loss) return loss;
-  if (mode === "full") return readFullTraining(body, epochs, learningRate, loss);
+  const selectChannel = blank(body.select_channel) ? null : Number(body.select_channel);
+  if (selectChannel !== null && !(Number.isInteger(selectChannel) && selectChannel >= 0)) return { error: "select_channel: expected the index of one of the model's output channels, a whole number from 0" };
+  const training = mode === "full" ? readFullTraining(body, epochs, learningRate, loss) : readHeadTraining(body, epochs, learningRate, loss);
+  if ("error" in training) return training;
+  return {
+    options: { ...training.options, selectChannel },
+    params: { ...training.params, ...(selectChannel === null ? {} : { select_channel: selectChannel }) },
+  };
+}
+
+/** readTraining's head part: the loss fields, and the batch in voxels (batch_pixels). */
+function readHeadTraining(body: Record<string, unknown>, epochs: number, learningRate: number, loss: { options: LossFields; params: Record<string, unknown> }): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const batchPixels = numberOr(body.batch_pixels, DEFAULT_OPTIONS.batchPixels);
   if (!Number.isInteger(batchPixels) || batchPixels < 1 || batchPixels > MAX_BATCH_PIXELS) return { error: `batch_pixels: expected a whole number of voxels per step, from 1 to ${MAX_BATCH_PIXELS}` };
   return {
     options: { ...DEFAULT_OPTIONS, epochs, learningRate, ...loss.options, batchPixels },
     params: { num_epochs: epochs, learning_rate: learningRate, ...loss.params, batch_pixels: batchPixels, finetune_mode: "head" },
   };
+}
+
+/** Why `entry` cannot train with `channel` picked (null: none), or null
+ * when it can: no pick for a model that trains one channel at a time
+ * (channelChoice), in the server's words, the form's Channel named; a pick
+ * for an affinity model, each of whose channels has a target of its own
+ * and which train together (the server's cli refuses select_channel with
+ * affinities); a pick past its channels. */
+function refuseChannel(entry: ModelEntry, channel: number | null): string | null {
+  const channels = entry.manifest.channels;
+  if (channel === null) {
+    return channelChoice(entry) ? `${entry.name} has ${channels.length} output channels and trains one at a time: pick the channel your paint is for (Channel, in the training form).` : null;
+  }
+  if (hasAffinityChannels(entry)) return `${entry.name} is an affinity model: its target has a channel of its own for each of its ${channels.length} channels, which train together, so it takes no channel pick (select_channel).`;
+  if (channel >= channels.length) return `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels.length} (0 to ${channels.length - 1}).`;
+  return null;
 }
 
 type LossFields = Pick<FinetuneOptions, "lossType" | "margin" | "balanceClasses" | "labelSmoothing" | "distillationLambda" | "distillationScope">;
@@ -682,8 +730,13 @@ function readFullTraining(body: Record<string, unknown>, epochs: number, learnin
 
 /** A body field as a number (the form sends numbers; a string is read), or `fallback` when absent. */
 function numberOr(value: unknown, fallback: number): number {
-  if (value === undefined || value === null || value === "") return fallback;
+  if (blank(value)) return fallback;
   return typeof value === "number" ? value : Number(value);
+}
+
+/** Whether a body field is absent: undefined, null, or the form's blank "". */
+function blank(value: unknown): boolean {
+  return value === undefined || value === null || value === "";
 }
 
 /** The job's log as server-sent events (training.py's stream_job_logs): the
