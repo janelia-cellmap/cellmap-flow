@@ -111,8 +111,9 @@ export interface SessionState {
    * models; the store's listing is the durable one. */
   paintVolume: string | null;
   /** The channel each model's layer shows, by model name, as POST
-   * /api/finetune/channel sets it (the training form's Channel, and Use this
-   * model's pick): the channel's index into the model's output channels. A
+   * /api/finetune/channel sets it (the training form's Channel) and Use this
+   * model does (the row's channel, before the model is served): the
+   * channel's index into the model's output channels. A
    * layer built for the model later opens on it, and so does one for a
    * model finetuned from it (serving.ts shownChannel). The server's
    * `shown_channels` on its dashboard session. */
@@ -649,4 +650,8 @@ export interface PaintVolume {
   postprocess: Step[];
   created_at: string;
   resample?: boolean;
+  /** The volume that took this one's place (the browser's own field): Use
+   * this model carried this volume's paint to it, and this one is kept but
+   * no longer the session's (supersedeVolume). Absent on a current volume. */
+  superseded_by?: string;
 }

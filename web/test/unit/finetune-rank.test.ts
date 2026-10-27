@@ -6,8 +6,9 @@
 // score alone; a model is read through its own input normalization and the
 // session's, the better kept; a known paint and output rank as they always
 // did; each row gives its threshold, input window and the steps it was read
-// through; Use this model sets those steps, carries the paint onto the
-// model's grid and makes its volume the session's, and Fit to Paint's
+// through; Use this model picks the row's channel before the model is
+// served, sets those steps, carries the paint onto the model's grid, makes
+// its volume the session's and retires the old one, and Fit to Paint's
 // input-norm route sets the steps alone.
 // Without Pyodide (no network for numpy's wheel) these skip.
 import { describe, expect, it, vi } from "vitest";
@@ -250,6 +251,38 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(ctx.viewer.removed).toContain(paintLayerName(before));
     expect(Object.keys(ctx.viewer.layers)).toContain(paintLayerName(used.volume_id));
     expect(body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54 }))).success).toBe(false);
+  });
+
+  it("retire the old volume when a model is used: kept, superseded, no longer listed, and resuming it resumes the new one", async () => {
+    const { ctx, handle } = await painted();
+    const before = ctx.session.state.paintVolume!;
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54 })));
+    expect(used.success).toBe(true);
+    // Both volumes are in the store; the old one names the one that took its place.
+    expect(await ctx.paint.volumes()).toEqual([before, used.volume_id].sort());
+    expect(await readVolume(ctx.paint, before)).toMatchObject({ superseded_by: used.volume_id });
+    // One session listed: the new volume, its chunks alone, the model it is for.
+    const { sessions } = body(await handle(request("POST", "/api/finetune/list-existing-sessions", {})));
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ session_id: used.volume_id, chunk_count: used.chunks, model_name: NAME_54, volumes: [{ volume_id: used.volume_id }] });
+    // The old id (a list shown before Use this model) resumes the new volume.
+    await ctx.session.update({ paintVolume: null });
+    expect(body(await handle(request("POST", "/api/finetune/load-existing-volume", { source_session_path: before })))).toMatchObject({ success: true, volume_id: used.volume_id });
+    expect(ctx.session.state.paintVolume).toBe(used.volume_id);
+  });
+
+  it("pick the row's channel before the model is served, so its layer opens on it", async () => {
+    const { ctx, handle } = await painted();
+    const organelles = entry("fly_organelles_run08", "organelles", ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"]);
+    ctx.catalog.entries = [...ctx.catalog.entries, organelles];
+    // Past its channels: refused, nothing picked or served.
+    expect(await handle(request("POST", "/api/finetune/rank/use", { name: organelles.name, select_channel: 8 }))).toMatchObject({ status: 400 });
+    expect(ctx.session.state.shownChannels).toEqual({});
+    expect(ctx.infer.served().map((s) => s.entry.name)).not.toContain(organelles.name);
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: organelles.name, select_channel: 2 })));
+    expect(used.success).toBe(true);
+    expect(ctx.session.state.shownChannels).toEqual({ [organelles.name]: 2 });
+    expect(ctx.viewer.layers[organelles.name].localPosition).toEqual([2]);
   });
 });
 
