@@ -94,7 +94,7 @@ it("sends the Channel picked for the model picked, kept per model", async () => 
 
   pick(run08);
   expect(element("trainChannelGroup").hidden).toBe(false);
-  expect(names()).toEqual(["all_mem", "mito", "er"]);
+  expect(names()).toEqual(["all_mem (0)", "mito (1)", "er (2)"]);
   expect(form.trainingParams()).not.toHaveProperty("select_channel");
   channel.value = "1";
   form.save();

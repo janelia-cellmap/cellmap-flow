@@ -21,7 +21,7 @@ import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
-import { channelUnpicked, fillChannel } from "./training-form.js";
+import { channelLabel, channelUnpicked, fillChannel } from "./training-form.js";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
 // ("shift+keyr": the key, whatever the keyboard layout types with it):
@@ -186,7 +186,7 @@ export function initJobMonitor({ picker, form, log }) {
         .catch((error) => ({ success: false, error: error.message || String(error) }));
       setBusy(startFinetuningBtn, false);
       if (scored.success && Number.isInteger(scored.channel_index) && fillChannel(selectedModel.name, scored.channel_index)) {
-        appendLog(`Channel: ${scored.channel}, the one that matches your paint best (${Math.round(scored.matches * 100)}% match). Pick another in the training form to train that one instead.`);
+        appendLog(`Channel: ${channelLabel(scored.channel, scored.channel_index)}, the one that matches your paint best (${Math.round(scored.matches * 100)}% match). Pick another in the training form to train that one instead.`);
       } else if (!scored.success) {
         appendLog(`Could not find the channel your paint is for: ${scored.error}`);
       }

@@ -41,7 +41,7 @@ import { readJSON, writeJSON } from "../../lib/stored.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
-import { fillChannel, pickChannel } from "./training-form.js";
+import { channelLabel, fillChannel, pickChannel } from "./training-form.js";
 
 // A score this close to the best one is marked about as good as it: two
 // points of matching are not worth choosing a model by.
@@ -131,10 +131,14 @@ function outputWords(steps) {
   return steps.some((step) => step.name === "SigmoidPostprocessor") ? "+ sigmoid" : "no second sigmoid";
 }
 
-// The runner-up channels of a binary model's score (channel_matches, the
-// best first): "organelle 78%, er 52%", the two closest.
+// The rest of a binary model's channels beside its best (channel_matches,
+// the best first): the two closest, by name, number and match ("next: mito
+// (2) 85%, er (3) 60%"), or that none does better than guessing.
 function runnersUp(row) {
-  return (row.channel_matches || []).slice(1, 3).map((c) => `${c.channel} ${percent(c.matches)}`).join(", ");
+  const others = (row.channel_matches || []).slice(1);
+  if (!others.length) return "";
+  if (others[0].matches <= 0.505) return "every other channel 50% or less";
+  return `next: ${others.slice(0, 2).map((c) => `${channelLabel(c.channel, c.channel_index, false)} ${percent(c.matches)}`).join(", ")}`;
 }
 
 // Normalizer steps in a few words each: a MinMaxNormalizer as the raw's
@@ -281,7 +285,7 @@ export function initRank() {
   // right, on which channel ahead of which, through which normalization
   // ahead of which.
   function whyText(row) {
-    const channel = row.channel ? ` on its ${row.channel} channel${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
+    const channel = row.channel ? ` on its ${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
     const others = (row.input_norm_others || []).length ? ` (${othersText(row.input_norm_others)})` : "";
     return `${percent(row.matches)} of your paint right${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
   }
@@ -412,7 +416,7 @@ export function initRank() {
     const candidate = ranked.get(row.name);
     const scored = isScored(row);
     const details = [
-      row.channel && `${row.channel} channel${runnersUp(row) ? ` (${runnersUp(row)})` : ""}`,
+      row.channel && `${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` · ${runnersUp(row)}` : ""}`,
       scored && `${Number(row.scored_voxels || 0).toLocaleString()} voxels (${row.object_voxels} object, ${row.background_voxels} background)`,
       row.note,
       Number.isFinite(row.seconds) && `${row.seconds.toFixed(1)} s`,
@@ -509,7 +513,7 @@ export function initRank() {
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
     installThreshold(d.name, row.threshold);
-    const channel = Number.isInteger(row.channel_index) ? row.channel : null;
+    const channel = Number.isInteger(row.channel_index) ? channelLabel(row.channel, row.channel_index) : null;
     // Before the pick below, which shows it.
     if (channel !== null) pickChannel(d.name, row.channel_index);
     sayFit(fittedText(d.name, row, channel), "success");
@@ -585,7 +589,7 @@ export function initRank() {
       const answer = await score(chosen[i]);
       answers.push(answer);
       if (isScored(answer) && Number.isInteger(answer.channel_index) && fillChannel(answer.name, answer.channel_index)) {
-        filled = ` ${answer.name}'s Channel is now ${answer.channel}, the one that matched best.`;
+        filled = ` ${answer.name}'s Channel is now ${channelLabel(answer.channel, answer.channel_index)}, the one that matched best.`;
       }
       showResults();
     }
@@ -646,7 +650,7 @@ export function initRank() {
         announce(CHAIN_CHANGED_EVENT);
       }
       installThreshold(name, d.threshold);
-      const channel = Number.isInteger(d.channel_index) && fillChannel(name, d.channel_index) ? d.channel : null;
+      const channel = Number.isInteger(d.channel_index) && fillChannel(name, d.channel_index) ? channelLabel(d.channel, d.channel_index) : null;
       sayFit(fittedText(name, d, channel), "success");
     } catch (e) {
       sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");

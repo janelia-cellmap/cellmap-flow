@@ -215,7 +215,8 @@ export function setChannelChoice(model) {
     return;
   }
   channelPlaceholder = channelPlaceholder ?? select.options[0];
-  const names = model.channels || Array.from({ length: model.output_channels }, (_, i) => `channel ${i}`);
+  const names = model.channels ? model.channels.map((name, i) => channelLabel(name, i, false))
+    : Array.from({ length: model.output_channels }, (_, i) => `channel ${i}`);
   const options = [channelPlaceholder, ...names.map((name, i) => new Option(name, String(i)))];
   const key = (opts) => opts.map((o) => `${o.value}|${o.text}`).join(",");
   if (select.dataset.model === model.name && key(Array.from(select.options)) === key(options)) return;
@@ -224,6 +225,12 @@ export function setChannelChoice(model) {
   const kept = String(keptChannels()[model.name] ?? "");
   select.value = options.some((option) => option.value === kept) ? kept : "";
   if (select.value !== "") showChannel(model.name, Number(select.value));
+}
+
+// A channel by name and number, the number the viewer's channel slider
+// (the layer's c') shows: "organelle (channel 1)", or "organelle (1)" short.
+export function channelLabel(name, index, long = true) {
+  return Number.isInteger(index) ? `${name} (${long ? "channel " : ""}${index})` : name;
 }
 
 // Model `name`'s layer in the viewer shows channel `index` (POST
