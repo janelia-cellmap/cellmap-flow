@@ -195,6 +195,10 @@ export function initRank() {
   const refreshBtn = document.getElementById("rankRefresh");
   const addRef = document.getElementById("rankAddRef");
   const addBtn = document.getElementById("rankAddBtn");
+  // Ticked only shows the models Rank scores, and the count beside it says
+  // how many. Tick none unticks every one: a ticked one is always shown.
+  const tickedOnly = document.getElementById("rankTickedOnly");
+  const tickedCount = document.getElementById("rankTickedCount");
   const rankBtn = document.getElementById("rankBtn");
   const stopBtn = document.getElementById("rankStopBtn");
   const status = document.getElementById("rankStatus");
@@ -391,6 +395,7 @@ export function initRank() {
   // the zoo models not tagged EM, every other model being EM).
   function visible(candidate) {
     if (!unticked.has(candidate.name)) return true;
+    if (tickedOnly.checked) return false;
     const dims = [[only2d, 2], [only3d, 3]].filter(([box]) => box.checked).map(([, d]) => d);
     return matchesFilter(candidate, filter.value)
       && (!dims.length || dims.includes(candidate.dims))
@@ -406,6 +411,8 @@ export function initRank() {
   // under (the candidates' group, in the order the route gives them).
   function showCandidates() {
     tickAll.disabled = tickNone.disabled = running;
+    const ticked = candidates.filter((candidate) => !unticked.has(candidate.name)).length;
+    tickedCount.textContent = `${ticked} ticked`;
     const none = candidates.length && !shown().length
       && h("small", { class: "text-muted" }, "No model matches the filter.");
     let group = null;
@@ -419,7 +426,11 @@ export function initRank() {
         h("input", {
           type: "checkbox", class: "form-check-input", id, value: candidate.name,
           checked: !unticked.has(candidate.name), disabled: running,
-          onChange: (e) => (e.target.checked ? unticked.delete(candidate.name) : unticked.add(candidate.name)),
+          onChange: (e) => {
+            if (e.target.checked) unticked.delete(candidate.name);
+            else unticked.add(candidate.name);
+            showCandidates();
+          },
         }),
         h("label", { class: "form-check-label", for: id, title: candidate.source || `${candidate.repo}/${candidate.folder}` },
           candidate.name, candidate.volume_model ? " (painted for)" : "", " ",
@@ -785,7 +796,7 @@ export function initRank() {
   seedThreshold.addEventListener("change", showMark);
   showMark();
   filter.addEventListener("input", showCandidates);
-  for (const box of [emOnly, only2d, only3d]) if (box) box.addEventListener("change", showCandidates);
+  for (const box of [emOnly, only2d, only3d, tickedOnly]) if (box) box.addEventListener("change", showCandidates);
   addBtn.addEventListener("click", addModel);
   addRef.addEventListener("keydown", (e) => { if (e.key === "Enter") addModel(); });
   refreshBtn.addEventListener("click", refreshModels);

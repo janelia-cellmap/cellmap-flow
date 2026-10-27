@@ -588,10 +588,14 @@
           <label class="form-check-label" for="rank3d" title="Models that read a volume">3D</label></div>
         <button type="button" class="btn btn-link btn-sm p-0" id="rankRefresh" title="List the Hugging Face models again, as the Models tab's Refresh does">Refresh</button>
       </div>
-      <small class="d-block text-muted mb-1">Tick
-        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
-        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone">none</button>
-        (shown)</small>
+      <small class="d-flex flex-wrap align-items-baseline column-gap-2 text-muted mb-1">
+        <span>Tick
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll" title="Tick every model shown">all (shown)</button> /
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone" title="Untick every model: a ticked one is always shown">none</button></span>
+        <span class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rankTickedOnly">
+          <label class="form-check-label" for="rankTickedOnly" title="Show only the models ticked, the ones Rank scores">Ticked only</label></span>
+        <span id="rankTickedCount"></span>
+      </small>
       <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
       <div class="input-group input-group-sm mb-1">
         <input type="text" class="form-control" id="rankAddRef" autocomplete="off" spellcheck="false"
