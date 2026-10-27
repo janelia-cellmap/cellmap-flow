@@ -576,6 +576,21 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* A publish's progress and links, on the Training Status card whether its
+   panel is open or not. Its repository's name and its lines, which name
+   files, wrap anywhere, and a failed job's log keeps its lines. */
+.publish-progress {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.publish-progress .publish-result-head strong,
+.publish-progress > .small {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 /* A publish's links, each under its name and Copy, wrapping anywhere. */
 .publish-result {
   display: grid;
@@ -591,6 +606,7 @@ textarea.form-control[readonly] {
 .publish-result-head {
   display: flex;
   align-items: baseline;
+  gap: 0.5em;
   color: var(--text-muted);
 }
 
@@ -598,6 +614,8 @@ textarea.form-control[readonly] {
   margin-left: auto;
   padding: 0;
   font-size: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* The AI panel's API key and access token: text fields shown as dots, so a
