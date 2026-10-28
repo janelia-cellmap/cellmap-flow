@@ -126,11 +126,12 @@ export interface SessionState {
   /** What the ranking's last score of each model fitted to the paint, by
    * the model's name: its row's input normalization and the postprocessing
    * its layer needs (null when the chain needed none), which Use this
-   * model, Fit to Paint and Use these settings set from (rank.ts's score).
-   * The model advice does not suggest another input normalization over
-   * them, and GET /api/models/loaded says the chain's postprocessing was
-   * fitted to the paint while it is theirs. The server's `rank_fits` on its
-   * dashboard session. */
+   * model, Fit to Paint and Use these settings set from (rank.ts's score),
+   * and its row's threshold. The model advice does not suggest another
+   * input normalization over them, and cuts an affinity model's chain into
+   * a segmentation at the threshold; GET /api/models/loaded says the
+   * chain's postprocessing was fitted to the paint while it is theirs. The
+   * server's `rank_fits` on its dashboard session. */
   rankFits: Record<string, RankFit>;
   /** The postprocessing a model's start set on a chain with none, and the
    * model (serving.ts setNeededPostprocess), which GET /api/models/loaded
@@ -143,6 +144,8 @@ export interface SessionState {
 export interface RankFit {
   input_norm: Step[];
   postprocess: Step[] | null;
+  /** The row's threshold, a probability; null in a fit stored before it was kept. */
+  threshold: number | null;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that

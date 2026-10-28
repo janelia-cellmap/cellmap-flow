@@ -4,7 +4,8 @@
 // on the raw's grid (planPaintVolume: not trained on, its paint carried onto
 // a model's grid by Use this model), written as zarr v2
 // files into the paint store (volumeFiles), read back for training
-// (readVolume, the painted chunks), and retired, kept but no longer the
+// (readVolume, the painted chunks) and for the annotated regions' boxes
+// (chunkBoxes), and retired, kept but no longer the
 // session's, once Use this model has carried its paint to another
 // (supersedeVolume, currentVolume). This file reads what the plan is made
 // from (the raw level the model reads, the model's blocks) and writes and
@@ -14,6 +15,7 @@ import { volumeCornerNm } from "../ai-annotate/fill";
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
 import { chooseRawLevel, geometryOf } from "../infer/geometry";
 import { stamp } from "../shared/format";
+import type { RegionBox } from "../viewer/layers";
 import { decodeState } from "../viewer/share";
 import { pointerNm } from "../viewer/state";
 import type { PaintedChunk } from "./types";
@@ -326,6 +328,24 @@ export async function paintedChunkIndices(store: PaintStore, id: string): Promis
     if (index) indices.push(index);
   }
   return indices;
+}
+
+/** A box over each chunk of `indices` (grid indices, z, y, x, as
+ * paintedChunkIndices gives them), in world nm on the volume's grid and
+ * labelled `painted:<chunk key>`, as overlay.py's
+ * refresh_annotated_regions_layer draws a painted chunk: from the lower
+ * corner of the chunk's first voxel to the far corner of its last. Voxel 0's
+ * corner is half a voxel before dataset_offset_nm, which is its centre
+ * (volumeCornerNm), so each box lies on the labels the viewer shows. */
+export function chunkBoxes(volume: PaintVolume, indices: readonly number[][]): RegionBox[] {
+  const voxel = volume.output_voxel_size;
+  const corner = volumeCornerNm(volume.dataset_offset_nm, voxel);
+  const size = volume.chunk_size.map((chunk, a) => chunk * voxel[a]);
+  return indices.map((index) => ({
+    label: `painted:${chunkKey(index)}`,
+    offset_nm: index.map((i, a) => corner[a] + i * size[a]),
+    shape_nm: size,
+  }));
 }
 
 /** A chunk's bytes as the volume's labels: the dtype `.zarray` declares, little-endian, C order. */

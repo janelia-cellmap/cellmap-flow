@@ -33,7 +33,8 @@
 // normalizations tried matched, input_norm_others), with the
 // postprocessing its layer needs to show a good prediction
 // (rank.needed_postprocess: the sigmoid its output needs, a second one
-// taken away, and a binary model's threshold at the row's), or null.
+// taken away, and a threshold at the row's, an affinity model's too), or
+// null.
 // POST /api/finetune/rank/use {name, select_channel?, input_norm?,
 // postprocess?} makes the one picked the model to finetune, the row's
 // channel first made the one its layer shows (select_channel, the row's
@@ -196,26 +197,26 @@ export function rankRoutes(router: Router): void {
       // What the other tries matched (those that scored), beside it in the row.
       const others = reads.flatMap((r, i) => (i === best || !r.score ? [] : [{ from: tries[i].from, matches: r.score.matches }]));
       const score = (await rankRow(ctx, kept.score, alt, norm, range, tries[best].from, others))!;
-      // What its layer needs to show a good prediction as the session's chain
-      // stands (rank.needed_postprocess): the sigmoid its output needs and,
-      // for a binary model, a threshold at the row's, fitted to the paint,
-      // which Use this model, Fit to Paint and Use these settings set beside
-      // the input normalization. An affinity model gets the sigmoid alone:
-      // the watershed that makes its objects (AffinityPostprocessor, the
-      // model advice's optional chain) joins neighbours by how far their
-      // affinity is above its bias, so it needs graded affinities, not the
-      // 0s and 1s of a threshold, which it reads as 0-255 and divides by
-      // 255, leaving no edge at the bias and no object. Its fitted threshold
-      // is still the row's, Seed from Prediction's.
-      const postprocess = await ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, {
-        output_class: kept.served.info.output_class ?? null, postprocess: ctx.session.state.chain.postprocess,
-        threshold: hasAffinityChannels(entry) ? null : score.threshold,
-      });
+      // What its layer needs to show what was scored as the session's chain
+      // stands (rank.needed_postprocess): the sigmoid its output needs and a
+      // threshold at the row's, fitted to the paint, which Use this model,
+      // Fit to Paint and Use these settings set beside the input
+      // normalization. An affinity model's too: its score called a painted
+      // pair joined where its affinity is above that cut-off, so a threshold
+      // there on each channel shows the decision the score read. Its objects
+      // stay optional: the watershed that makes them needs the affinities
+      // graded, not the 0s and 1s of a threshold, so the model advice's
+      // affinity chain replaces the threshold and joins neighbours above the
+      // same cut-off (its bias).
+      const postprocess = await ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`,
+        { output_class: kept.served.info.output_class ?? null, postprocess: ctx.session.state.chain.postprocess, threshold: score.threshold });
       // Remembered as what the paint fitted this model to (the session's
       // rankFits), so the model advice keeps to these steps once they are
-      // the chain's, and the Processing tab says where the postprocessing
-      // came from.
-      await ctx.session.update({ rankFits: { ...ctx.session.state.rankFits, [entry.name]: { input_norm: score.input_norm, postprocess } } });
+      // the chain's and cuts an affinity chain at the row's threshold, and
+      // the Processing tab says where the postprocessing came from.
+      await ctx.session.update({
+        rankFits: { ...ctx.session.state.rankFits, [entry.name]: { input_norm: score.input_norm, postprocess, threshold: score.threshold } },
+      });
       const notes = [
         ...(kept.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${kept.blocks} blocks of its output the paint reaches, spread over it`] : []),
         ...(kept.outside ? [`${kept.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),

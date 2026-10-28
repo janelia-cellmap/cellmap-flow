@@ -34,6 +34,12 @@ export function initModelAdvice({ input, postprocess, apply }) {
   processing = { input, postprocess, apply };
   // Loading a model, not only Submit All, is when advice is most useful.
   listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
+  // So is a chain the backend set itself with no model change (Fit to
+  // Paint, Use these settings: finetune/rank.js): an affinity model's chain
+  // into a segmentation is then offered cut at the threshold the ranking
+  // fitted, where the line shown, once every probe had answered and the
+  // poll stopped, still cut at 0.5.
+  listen(CHAIN_CHANGED_EVENT, () => refreshModelAdvice());
   // The poll waits while the page is hidden, and may have stopped: a tab
   // shown again asks at once.
   document.addEventListener("visibilitychange", () => {

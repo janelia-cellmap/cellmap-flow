@@ -393,7 +393,7 @@
     {
       "method": "POST",
       "path": "/api/finetune/refresh-annotated-regions",
-      "availability": "stub",
+      "availability": "both",
       "request": null
     },
     {

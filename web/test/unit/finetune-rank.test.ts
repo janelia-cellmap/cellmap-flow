@@ -92,14 +92,26 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
   });
 
-  it("give an affinity model's layer the sigmoid alone, its fitted threshold kept for Seed from Prediction", async () => {
-    // The watershed that makes its objects needs its affinities graded: the
-    // threshold its row set ahead of it left 0s and 1s, and no objects.
-    const { handle } = await painted({ input_norm: [], postprocess: [] });
+  it("give an affinity model's layer the sigmoid and the threshold fitted to the paint, and its objects cut there by the advice", async () => {
+    // Its score called a painted pair joined above the cut-off, so the row
+    // shows that decision; the chain into a segmentation stays one click
+    // away, without the threshold (which left the watershed 0s and 1s, and
+    // no objects), joining neighbours above the same cut-off. The painted
+    // pairs at -1 over the rest at -4: a cut-off under the model's own fits them.
+    const { ctx, handle } = await painted({ input_norm: [], postprocess: [] });
+    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+    ctx.infer.outputAt = (_view, _c, z, y, x) => (inside(z, y, x) ? -1 : -4);
     const aff = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));
     expect(aff).toMatchObject({ success: true, channel: null });
     expect(aff.threshold).toBeGreaterThan(0);
-    expect(aff.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    expect(aff.threshold).toBeLessThan(0.5);
+    expect(aff.postprocess).toEqual([{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: aff.threshold }]);
+
+    expect(body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, postprocess: aff.postprocess }))).success).toBe(true);
+    const { models } = body(await handle(request("GET", "/api/model_advice")));
+    const review = models.find((m: any) => m.model === NAME_54).postprocess_review;
+    expect(review).toMatchObject({ level: "optional", suggest: ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"] });
+    expect(review.params.AffinityPostprocessor.bias).toBe(aff.threshold);
   });
 
   it("score a model added by hand by the name its candidate answers", async () => {

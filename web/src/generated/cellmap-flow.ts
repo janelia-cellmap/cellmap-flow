@@ -796,7 +796,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/load-existing-volume", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/load-existing-volume-progress", availability: "stub", request: null },
   { method: "POST", path: "/api/finetune/sync-annotations", availability: "stub", request: null },
-  { method: "POST", path: "/api/finetune/refresh-annotated-regions", availability: "stub", request: null },
+  { method: "POST", path: "/api/finetune/refresh-annotated-regions", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/session-volume", availability: "browser", request: null },
   { method: "GET", path: "/api/finetune/volume/<volume_id>/download", availability: "browser", request: null },
   { method: "POST", path: "/api/finetune/delete-volume", availability: "browser", request: null },

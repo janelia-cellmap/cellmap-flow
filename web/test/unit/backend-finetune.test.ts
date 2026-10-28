@@ -12,14 +12,15 @@ import { type FinetuneDeps, finetuneRoutes, RESTART_EVENT } from "../../src/back
 import { rankRoutes } from "../../src/backend/routes/rank";
 import { Router } from "../../src/backend/router";
 import { serveModels, setChain, shownChannel } from "../../src/backend/serving";
-import type { ApiRequest, ApiResponse, ModelEntry } from "../../src/contracts";
+import type { ApiRequest, ApiResponse, ModelEntry, PaintVolume } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
 import { parseTrainGraph } from "../../src/finetune/full/graph";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
-import { CHUNK_DIR, chunkKey, planVolume, readVolume } from "../../src/finetune/volume";
+import { CHUNK_DIR, chunkKey, createVolume, planVolume, readVolume } from "../../src/finetune/volume";
 import { finetunedEntry } from "../../src/models/finetuned";
 import { entryFor, parseManifest } from "../../src/models/manifest";
-import { paintLayerName } from "../../src/viewer/layers";
+import { defaultChain } from "../../src/state";
+import { ANNOTATED_REGIONS_LAYER, paintLayerName } from "../../src/viewer/layers";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
 import { readMetadata } from "./onnx-metadata";
@@ -334,6 +335,51 @@ describe.skipIf(!python)("the existing volumes", () => {
     // the same dataset under another spelling is the same dataset
     await ctx.session.update({ datasetUrl: `${DATASET.url}/s0` });
     expect(body(await h.handle(request("POST", "/api/finetune/load-existing-volume", { source_session_path: id }))).success).toBe(true);
+  });
+});
+
+describe("POST /api/finetune/refresh-annotated-regions", () => {
+  // Chunks of 2×4×4 voxels at 8 nm, voxel 0 centred at (12, 4, 4) nm: its
+  // corner, where chunk 0's box starts, is half a voxel before, (8, 0, 0).
+  const VOLUME: PaintVolume = {
+    id: "vol-00000001-20261015-120000", type: "annotation_volume", model_name: NAME_54, model_id: "setup_54", dataset_path: DATASET.url,
+    chunk_size: [2, 4, 4], input_size: [10, 12, 12], output_voxel_size: [8, 8, 8], input_voxel_size: [8, 8, 8],
+    dataset_offset_nm: [12, 4, 4], dataset_shape_voxels: [4, 8, 8], dtype: "uint8",
+    input_norm: defaultChain().input_norm, postprocess: defaultChain().postprocess, created_at: "2026-10-15T12:00:00.000Z",
+  };
+
+  /** The session painting into VOLUME, with `chunks` painted; `redraw` clicks the button. */
+  async function painted(...chunks: number[][]) {
+    const ctx = fakeContext();
+    await createVolume(ctx.paint, VOLUME);
+    await ctx.session.update({ paintVolume: VOLUME.id });
+    for (const index of chunks) await paint(ctx, VOLUME.id, index);
+    const h = harness(ctx);
+    return { ctx, redraw: () => h.handle(request("POST", "/api/finetune/refresh-annotated-regions", {})).then(body) };
+  }
+
+  /** The annotated_regions layer's boxes, [pointA, pointB] in the viewer's x, y, z. */
+  const boxes = (ctx: FakeContext) => (ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].annotations as { pointA: number[]; pointB: number[] }[]).map((a) => [a.pointA, a.pointB]);
+
+  it("draws a box over each painted chunk where the viewer shows its labels, and counts them", async () => {
+    const { ctx, redraw } = await painted([0, 0, 0], [1, 0, 1]);
+    expect(await redraw()).toEqual({ success: true, count: 2 });
+    expect(ctx.viewer.layers[ANNOTATED_REGIONS_LAYER]).toMatchObject({ type: "annotation", visible: false });
+    expect(boxes(ctx)).toEqual([
+      [[0, 0, 8], [32, 32, 24]],
+      [[32, 0, 24], [64, 32, 40]],
+    ]);
+  });
+
+  it("draws them again in the one layer, left shown once the user shows it", async () => {
+    const { ctx, redraw } = await painted([0, 0, 0]);
+    await redraw();
+    delete ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].visible;
+    await paint(ctx, VOLUME.id, [1, 1, 1]);
+    expect((await redraw()).count).toBe(2);
+    expect(Object.keys(ctx.viewer.layers)).toEqual([ANNOTATED_REGIONS_LAYER]);
+    expect(boxes(ctx)).toHaveLength(2);
+    expect(ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].visible).toBeUndefined();
   });
 });
 
