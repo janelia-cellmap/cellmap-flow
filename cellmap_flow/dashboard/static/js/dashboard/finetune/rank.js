@@ -148,7 +148,7 @@ function activationText(row) {
 
 // What a score that is right on one class only does, in words: a model
 // that calls (almost) everything object finds every painted object and
-// matches about as well as guessing (objects 99%, background 34%: 66%), and
+// matches no better than guessing (objects 99%, background 34%: 58%), and
 // "objects 99%" alone read as good. Null when both are right at least half
 // the time.
 function lopsided(row) {
@@ -365,13 +365,13 @@ export function initRank({ form }) {
     return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
   }
 
-  // Why a score's model fits the paint, in words: how much of it it gets
-  // right, on which channel ahead of which, through which normalization
-  // ahead of which.
+  // Why a score's model fits the paint, in words: how well it matches, on
+  // which channel ahead of which, through which normalization ahead of
+  // which.
   function whyText(row) {
     const channel = row.channel ? ` on its ${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
     const others = (row.input_norm_others || []).length ? ` (${othersText(row.input_norm_others)})` : "";
-    return `${percent(row.matches)} of your paint right${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
+    return `${percent(row.matches)} match${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
   }
 
   // A channel set from a score, in words: a binary model's score is read on
