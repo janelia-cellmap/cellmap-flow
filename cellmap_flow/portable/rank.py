@@ -275,9 +275,10 @@ def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
     one as it is: what a model's start sets on a chain with none (no
     ``threshold``), and what Use this model, Fit to Paint and Use these
     settings set beside the input normalization (the ranking row's
-    ``threshold``). ``output_class`` is the model's output activation
-    (portable/label_it.py, as its server's probe answers it); with None,
-    not known, nothing changes.
+    ``threshold``; none for an affinity model, whose watershed needs its
+    affinities graded, not 0 or 1). ``output_class`` is the model's output
+    activation (portable/label_it.py, as its server's probe answers it);
+    with None, not known, nothing changes.
 
     Two steps are this rule's, on a chain of nothing else:
 
