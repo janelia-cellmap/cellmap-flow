@@ -388,9 +388,8 @@ class Finetuner:
         for epoch in range(self._start_epoch, self.num_epochs):
             # User-requested graceful stop: drop out of the training loop so
             # the outer flow (inference server + wait for restart) kicks in.
-            # Asked before the first epoch too: a stop asked for while the
-            # job loaded the model used to be deleted here as stale, and the
-            # run trained every epoch.
+            # Asked before the first epoch too, so that a stop asked for while
+            # the job loaded the model ends the run before it trains.
             if self.stop_requested is not None and self.stop_requested():
                 log(
                     f"Stop signal received at epoch {epoch+1}/{self.num_epochs}; "
@@ -644,8 +643,8 @@ class Finetuner:
                     loss = loss + self.distillation.weight * distill_loss
                 # Every channel but the one trained, held to the starting
                 # model's prediction on every voxel: they share the network,
-                # and without it they drifted wherever training the selected
-                # one took them.
+                # and without it they would drift wherever training the
+                # selected one took them.
                 if self.distillation.holds_others:
                     others_loss = self.distillation.others_term(output.float(), teacher_pred)
                     loss = loss + OTHER_CHANNELS_WEIGHT * others_loss

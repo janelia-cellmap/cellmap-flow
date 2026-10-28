@@ -39,9 +39,10 @@ def warn_if_single_class(background, foreground):
     """Say so when every annotated voxel carries the same label.
 
     ``background`` and ``foreground`` count the voxels annotated as each in
-    the whole volume (the dataset's ``class_voxels``). This went by the
-    first batch, and warned in every iteration of a session painted with
-    both, whose first eight patches happened to hold no background.
+    the whole volume (the dataset's ``class_voxels``), not in a batch: a
+    session painted with both can draw a first batch of one class
+    (describe_first_batch), and would be told to paint the other in every
+    iteration.
 
     Gradient descent can only do one thing with a target that is all 1:
     raise the prediction everywhere. The model duly does that, globally,

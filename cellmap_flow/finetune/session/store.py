@@ -94,19 +94,18 @@ class SessionStore:
         That is the one the session's manifest trains on (trained_volume_name)
         when it is registered, else the last one registered: for
         ``corrections_dir``, or, when it is None, for the corrections dir of
-        the last volume registered for any. Every route asks this, so Rank,
-        Use this model, Seed, a crop import, the good regions and training
-        all mean the volume training reads; load-crops used to take the first
-        instead, and imported into one volume while the user painted another.
+        the last volume registered for any. Every route asks this, so that
+        Rank, Use this model, Seed, a crop import, the good regions and
+        training all mean the volume training reads.
 
-        The manifest first, not the last registered alone: a resumed session
-        had every volume of its source copied and the periodic sync
-        registered each one it found in MinIO, so "the last registered" was
-        whichever the sync listed last -- the original 4 nm paint, while the
-        manifest pointed training at the newest volume, and Rank scored one
-        volume, training read another and Use this model carried from a
-        third. The manifest is read on every call (one small file), as a
-        dashboard restart forgets the registry but not it.
+        The manifest first, not the last registered alone: the registry can
+        hold several volumes of a session, in the order they were registered
+        (by New Volume, a resume, the periodic sync's listing of MinIO), and
+        only the manifest says which one training reads. By the registry
+        alone, Rank could score one volume while training read another and
+        Use this model carried from a third. The manifest is read on every
+        call (one small file), as a dashboard restart forgets the registry
+        but not it.
         """
         registered = [
             (volume_id, record)
@@ -139,9 +138,10 @@ class SessionStore:
         registry all the same, and the manifest names the volume that
         replaced it, so the session's volume is that one either way.
 
-        Use this model retires the volume it carried the paint from: kept
-        beside the new one, every volume a session ever had was listed,
-        resumed, drawn and synced, four copies of one paint in one session.
+        Use this model retires the volume it carried the paint from, so that
+        the session has one volume: kept beside the new one, the old one
+        would be listed, resumed, drawn and synced with it, one paint in two
+        volumes of one session.
         """
         record = self._volumes.pop(volume_id, None)
         zarr_path = str((record or {}).get("zarr_path") or "").rstrip("/")
