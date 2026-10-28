@@ -52,8 +52,7 @@ tabs, the same normalizers and postprocessing steps, a Finetune
 tab that paints and trains in the browser, and a Save predictions tab of
 its own that saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
-TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model's whole
-network (the 2D models' can train in the browser), crops imported from disk,
+TensorFlow, DaCapo, BioImage.io, Cellpose), crops imported from disk,
 the Pipeline Builder and blockwise runs on the cluster. Those are the server
 mode's (:doc:`cli`).
 
@@ -521,7 +520,7 @@ Browsers and devices
   instead of well under one.
 - **Phones.** The viewer fills the screen and the *Dashboard* button in the
   header opens the controls over it.
-- **Memory.** Model files are 11–43 MB each, kept in IndexedDB; the page
+- **Memory.** Model files are 4–43 MB each, kept in IndexedDB; the page
   picks a smaller variant (fp16, int8 weights) when the GPU's limits call for
   it.
 

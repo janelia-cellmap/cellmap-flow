@@ -501,8 +501,8 @@ open by `<owner>/<repo>`, and, where onnx_web can make one, in the catalog's
 format in the model's folder (cellmap-models' onnx_web in fp32, fp16 and
 int8 weights, checked against PyTorch on the training data); then uploads
 with `huggingface_hub` the files, the same card and manifest from
-`portable/publish.py`, in one commit. A model too big for an .onnx file, or
-2D, has the root's export alone, and the answer's links are null. It signs in by OAuth's device code
+`portable/publish.py`, in one commit. A model too big for an .onnx file has
+the root's export alone, and the answer's links are null. It signs in by OAuth's device code
 (the popup cannot return to a cluster node's address), or takes the token
 `huggingface_hub` already has or a pasted one; the credentials answer says
 which the panel offers.
