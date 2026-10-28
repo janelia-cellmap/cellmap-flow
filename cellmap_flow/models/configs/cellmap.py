@@ -159,12 +159,10 @@ class CellMapModelConfig(ModelConfig):
         names without loading them: the model list asks on every poll. Both
         while the folder cannot be listed."""
         folder = getattr(self.cellmap_model, "folder_path", None)
-        if folder and os.path.isdir(folder):
-            try:
-                return export_finetune_modes(os.listdir(folder))
-            except OSError:
-                pass
-        return ("lora", "full")
+        try:
+            return export_finetune_modes(os.listdir(folder)) if folder else ("lora", "full")
+        except OSError:  # not a folder, or not one this process may list
+            return ("lora", "full")
 
     def declared_geometry(self):
         """Its export's metadata.json's (``metadata_geometry``), read without the model."""
