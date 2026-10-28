@@ -352,10 +352,12 @@ function affinityChain(outputClass: string): string[] {
 /** probe.py's suggest_postprocess_params: the values the steps of `chain`
  * need, from the range that reaches each (a DefaultPostprocessor after a
  * sigmoid maps [0, 1] onto 0-255, where its defaults map [-1, 1]), and an
- * AffinityPostprocessor's bias and neighborhood, cut to the model's
- * `channels` and written as Python writes a list; only the steps whose
- * defaults are wrong for the chain. */
-function postprocessParams(chain: string[], outputClass: string, channels: number): Record<string, Record<string, number | string>> {
+ * AffinityPostprocessor's bias, `bias` (the cut-off the ranking fitted to
+ * the paint, its row's threshold) or the midpoint 0.5 when null, and its
+ * neighborhood, cut to the model's `channels` and written as Python writes
+ * a list; only the steps whose defaults are wrong for the chain, and the
+ * AffinityPostprocessor's bias and neighborhood always. */
+function postprocessParams(chain: string[], outputClass: string, channels: number, bias: number | null): Record<string, Record<string, number | string>> {
   const params: Record<string, Record<string, number | string>> = {};
   let range: number[] | null = outputClass === "unit" ? [0, 1] : outputClass === "signed_unit" ? [-1, 1] : null;
   for (const name of chain) {
@@ -369,8 +371,10 @@ function postprocessParams(chain: string[], outputClass: string, channels: numbe
       params[name] = { threshold: range ? (range[0] + range[1]) / 2 : 0 };
       range = [0, 1];
     } else if (name === "AffinityPostprocessor") {
+      // Its bias the cut-off fitted, where the score called a painted pair
+      // joined, so the objects are cut where the score read the model.
       const offsets = NEIGHBORHOOD_OFFSETS.slice(0, channels);
-      params[name] = { bias: 0.5, ...(channels ? { neighborhood: `[${offsets.map((o) => `[${o.join(", ")}]`).join(", ")}]` } : {}) };
+      params[name] = { bias: bias ?? 0.5, ...(channels ? { neighborhood: `[${offsets.map((o) => `[${o.join(", ")}]`).join(", ")}]` } : {}) };
       range = null;
     }
   }
@@ -383,16 +387,21 @@ function postprocessParams(chain: string[], outputClass: string, channels: numbe
  * model (there is no output probe in the browser): a threshold ahead of
  * the watershed warned of, as is an output nothing puts in [0, 1] for it;
  * and, once its affinities show (as probabilities, the sigmoid its start
- * or the ranking set on logits), the chain into a segmentation offered as
- * "optional", one quiet line with its Apply. Any other model, or an
- * affinity model whose activation is still to set, is "unknown", which the
- * banner does not show. */
-function postprocessReview(served: ServedModel, names: string[]): PostprocessReview {
+ * or the ranking set on logits, with the ranking's threshold), the chain
+ * into a segmentation offered as "optional", one quiet line with its
+ * Apply. The chains suggested join neighbours above `threshold`, the one
+ * the ranking fitted to the paint for the model (its rankFits'), or 0.5
+ * when it has none, and say so. Any other model, or an affinity model
+ * whose activation is still to set, is "unknown", which the banner does
+ * not show. */
+function postprocessReview(served: ServedModel, names: string[], threshold: number | null): PostprocessReview {
   const outputClass = served.info.output_class ?? null;
   const channels = served.info.output_channels;
   if (outputClass && hasAffinityChannels(served.entry)) {
     const verdict = (level: PostprocessReview["level"], message: string, suggest: string[]): PostprocessReview =>
-      ({ level, message, suggest, params: postprocessParams(suggest, outputClass, channels) });
+      ({ level, message, suggest, params: postprocessParams(suggest, outputClass, channels, threshold) });
+    // The affinity the watershed joins neighbours above, as the messages say it.
+    const cut = threshold === null ? "0.5" : `${threshold} (fitted to your paint)`;
     if (names.includes("AffinityPostprocessor")) {
       // Whether the affinities reach it in [0, 1], or DefaultPostprocessor's 0-255.
       const scaled = names.includes("DefaultPostprocessor") || names.includes("SigmoidPostprocessor") || outputClass === "unit";
@@ -403,7 +412,7 @@ function postprocessReview(served: ServedModel, names: string[]): PostprocessRev
       const ahead = names.indexOf("AffinityPostprocessor");
       if (names.slice(0, ahead).includes("ThresholdPostprocessor")) {
         return verdict("warn",
-          "A ThresholdPostprocessor comes before the AffinityPostprocessor, so the watershed gets 0s and 1s instead of affinities and finds no objects: take the threshold out.",
+          `A ThresholdPostprocessor comes before the AffinityPostprocessor, so the watershed gets 0s and 1s instead of affinities and finds no objects: take the threshold out, and neighbours join above ${cut}.`,
           scaled ? names.filter((n, i) => i > ahead || n !== "ThresholdPostprocessor") : affinityChain(outputClass));
       }
       if (!scaled) {
@@ -413,8 +422,15 @@ function postprocessReview(served: ServedModel, names: string[]): PostprocessRev
       }
       return verdict("ok", "Affinity chain looks complete.", []);
     }
+    // The chain into a segmentation, offered over whatever shows the
+    // affinities: the ranking's row among them, the sigmoid and the
+    // threshold fitted to the paint (only the threshold on a tanh's or a
+    // sigmoid's output). It replaces the threshold, which would leave the
+    // watershed 0s and 1s, and joins neighbours above the same cut-off.
+    // Unless the activation needs setting first: the sigmoid logits with
+    // nothing set need, or a second one to take away.
     const unset = (outputClass === "unbounded" && !names.length) || ((outputClass === "unit" || outputClass === "signed_unit") && names.includes("SigmoidPostprocessor"));
-    if (!unset) return verdict("optional", `its ${channels} channels look like affinities, which this chain turns into a segmentation.`, affinityChain(outputClass));
+    if (!unset) return verdict("optional", `its ${channels} channels look like affinities, which this chain turns into a segmentation, joined above ${cut}.`, affinityChain(outputClass));
   }
   return {
     level: "unknown",
@@ -425,12 +441,12 @@ function postprocessReview(served: ServedModel, names: string[]): PostprocessRev
 
 /** One model's entry of /api/model_advice. There is no output probe in the
  * browser (probe_available: false); the postprocessing review is an
- * affinity model's (postprocessReview), and "unknown" for any other, which
- * the banner does not show. The input normalization is the one the model's
- * manifest declares, which suggest_input_norm treats as declared metadata:
- * high confidence, and a match when the configured steps are those in
- * that order with the declared values (inputNormDifferences says where
- * a value is not).
+ * affinity model's (postprocessReview, its chain cut at the threshold
+ * `fit` holds), and "unknown" for any other, which the banner does not
+ * show. The input normalization is the one the model's manifest declares,
+ * which suggest_input_norm treats as declared metadata: high confidence,
+ * and a match when the configured steps are those in that order with the
+ * declared values (inputNormDifferences says where a value is not).
  *
  * The input normalization the ranking fitted this model to (`fit`, the
  * session's rankFits for it: the steps its last score was read through,
@@ -462,7 +478,7 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
     input_voxel_size: served.info.input_voxel_size,
     input_resampled_from: null,
     input_relabelled_from: null,
-    postprocess_review: postprocessReview(served, configuredPost),
+    postprocess_review: postprocessReview(served, configuredPost, fit?.threshold ?? null),
     input_norm_suggestion: order.length
       ? { input_norm: declared, order, reason: "Declared in the model's manifest (cellmap/onnx-web-models)", confidence: "high" }
       : { input_norm: null, order: [], reason: "The model's manifest does not say", confidence: "low" },

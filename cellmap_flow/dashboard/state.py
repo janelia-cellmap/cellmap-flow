@@ -161,15 +161,16 @@ class Session:
         # model's resolve), which every listing of its candidates includes
         # after, until the dashboard stops; nothing is started for them.
         self.rank_added = {}
-        # {model name: {"input_norm", "postprocess"}}: the settings the
-        # ranking's last score of each model fitted to the paint (its row's
-        # input normalization, and the postprocessing its layer needs, None
-        # when the chain needed none), which Use this model, Fit to Paint
-        # and Use these settings set from. The model advice does not suggest
-        # another input normalization over them, and GET /api/models/loaded
-        # says the chain's postprocessing was fitted to the paint while it
-        # is theirs (routes/model_advice.py, routes/pipeline.py
-        # postprocess_set_by).
+        # {model name: {"input_norm", "postprocess", "threshold"}}: the
+        # settings the ranking's last score of each model fitted to the paint
+        # (its row's input normalization, and the postprocessing its layer
+        # needs, None when the chain needed none), which Use this model, Fit
+        # to Paint and Use these settings set from, and its row's threshold.
+        # The model advice does not suggest another input normalization over
+        # them, and cuts an affinity model's chain into a segmentation at
+        # the threshold; GET /api/models/loaded says the chain's
+        # postprocessing was fitted to the paint while it is theirs
+        # (routes/model_advice.py, routes/pipeline.py postprocess_set_by).
         self.rank_fits = {}
         # The Review tab's open index (review_routes.ReviewSession), or None
         # until /api/review/open.

@@ -248,10 +248,13 @@ old volume is kept in the browser but retired: *Resume Existing Volume* lists
 only the new one, and an old entry still on screen resumes the new one. What
 its score chose comes with it: the best channel of a model of several is the
 one its layer opens on, a stretched raw becomes the session's input
-normalization (the raw is the dataset's, so every model reads it so), and its
-cut-off becomes *Seed from Prediction*'s threshold, marked *set by ranking*
-beside the field until you change it; a line under *Label it*'s buttons says
-what was set. On the
+normalization (the raw is the dataset's, so every model reads it so), its
+layer shows what was scored (the sigmoid its logits need, and a threshold at
+its cut-off: for an affinity model on each channel, whose objects the
+Processing tab then offers as an *Optional* chain into a segmentation that
+joins neighbours above the same cut-off), and its cut-off becomes *Seed from
+Prediction*'s threshold, marked *set by ranking* beside the field until you
+change it; a line under *Label it*'s buttons says what was set. On the
 same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted

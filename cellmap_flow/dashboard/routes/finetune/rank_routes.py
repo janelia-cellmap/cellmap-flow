@@ -40,8 +40,8 @@ every channel matched, ``channel_matches``, and what the other
 normalizations tried did, ``input_norm_others``: why this one), and the
 postprocessing its layer needs to show right instead of the session's,
 ``postprocess`` (portable/rank.py needed_postprocess: the sigmoid added or
-taken away, and a binary model's threshold; an affinity model's watershed
-needs its affinities graded), or null when the session's shows it right.
+taken away, and the threshold fitted to the paint, an affinity model's
+too), or null when the session's shows it right.
 POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
 select_channel?, queue?} makes the one picked the model to finetune: ``input_norm``
 and ``postprocess`` (the row's) made the dashboard's chain first, and
@@ -313,24 +313,25 @@ def rank_score():
             *([f"{outside} of the painted chunks scored lie past its output, and were not scored"] if outside else []),
             *(["started for its score and stopped after"] if job is not None else []),
         ]
-        # What its layer needs to show a good prediction, as the session's
+        # What its layer needs to show what was scored, as the session's
         # chain stands (portable/rank.py needed_postprocess): the sigmoid its
-        # output needs and, for a binary model, the threshold fitted to the
-        # paint, which Use this model, Fit to Paint and Use these settings set
-        # beside the input normalization. An affinity model gets the sigmoid
-        # alone: the watershed that makes its objects (AffinityPostprocessor,
-        # the model advice's optional chain) joins neighbours by how far their
-        # affinity is above its bias, so it needs graded affinities, not the
-        # 0s and 1s of a threshold, which it read as 0-255 and divided by 255:
-        # no edge reached the bias and no object came out. Its fitted
-        # threshold is still the row's, Seed from Prediction's.
+        # output needs and the threshold fitted to the paint, which Use this
+        # model, Fit to Paint and Use these settings set beside the input
+        # normalization. An affinity model's too: its score called a painted
+        # pair joined where its affinity is above that cut-off, so a
+        # threshold there on each channel shows the decision the score read.
+        # Its objects stay optional: the watershed that makes them needs the
+        # affinities graded, not the 0s and 1s of a threshold, so the model
+        # advice's affinity chain replaces the threshold and joins
+        # neighbours above the same cut-off (its bias).
         postprocess = rank.needed_postprocess(
-            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess],
-            None if offsets else score["threshold"])
+            info.get("output_class"), [dict(s) for s in session.pipeline_spec.postprocess], score["threshold"])
         # What the row's buttons set from it: the model advice counts its
         # input normalization as matching, rather than suggest the declared
-        # one back over it (Session.rank_fits).
-        session.rank_fits[name] = {"input_norm": score["input_norm"], "postprocess": postprocess}
+        # one back over it, and cuts an affinity chain at its threshold
+        # (Session.rank_fits).
+        session.rank_fits[name] = {"input_norm": score["input_norm"], "postprocess": postprocess,
+                                   "threshold": score["threshold"]}
         seconds = time.time() - started
         window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "

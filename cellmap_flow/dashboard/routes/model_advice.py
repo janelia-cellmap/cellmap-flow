@@ -15,7 +15,8 @@ It never changes anything -- callers decide whether to apply the suggestion.
 Nor does it undo what the Finetune tab's ranking set: the input
 normalization the ranking fitted to the paint for a model
 (Session.rank_fits) counts as matching, not as one to suggest the
-declared one back over.
+declared one back over, and an affinity model's chain into a segmentation
+is offered cut at the threshold it fitted.
 """
 
 import json
@@ -229,6 +230,9 @@ def model_advice():
                 out_channels=out_channels,
                 model_name=meta.get("model_name") or name or "",
                 channels_names=meta.get("channels_names"),
+                # The threshold the ranking fitted to the paint for it, which
+                # an affinity chain's watershed joins neighbours above.
+                threshold=(session.rank_fits.get(name) or {}).get("threshold"),
             )
 
         # Input side is a declared convention, not something we can observe.
