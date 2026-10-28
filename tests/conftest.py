@@ -108,6 +108,14 @@ def _fresh_process_state(monkeypatch):
     monkeypatch.setattr(launch, "_starting", set())
     monkeypatch.setattr(launch, "_failed", {})
     monkeypatch.setattr(state, "_session", state.Session())
+    # The dashboard's launches on their way, and why each last failed: a
+    # launch thread one test left running (a model started for real, its job
+    # never answering) counted as running in a later test of the same worker,
+    # and its name came back in that test's list of models.
+    services_launch = sys.modules.get("cellmap_flow.dashboard.services.launch")
+    if services_launch is not None:
+        monkeypatch.setattr(services_launch, "_launching", {})
+        monkeypatch.setattr(services_launch, "_start_errors", {})
     # What the seed picker learnt of each server, when a test has loaded it:
     # a server one test could not reach is not asked again for a minute.
     view_labels = sys.modules.get("cellmap_flow.dashboard.routes.finetune.view_labels")
