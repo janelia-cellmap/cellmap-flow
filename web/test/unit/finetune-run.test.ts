@@ -54,7 +54,7 @@ const VOLUME: PaintVolume = {
   dataset_shape_voxels: [1, 12, 12], dtype: "uint8", input_norm: [], postprocess: [], created_at: "2026-10-15T00:00:00Z",
 };
 const CHAIN: Chain = { input_norm: [], postprocess: [] };
-const DATASET: DatasetInfo = { url: "mem://raw", dtype: "uint8", channels: 1, axes: [], levels: [{ shape: [1, 12, 12], voxel: [8, 8, 8], origin: [0, 0, 0] }] };
+const DATASET: DatasetInfo = { url: "mem://raw", dtype: "uint8", channels: 1, channelLabels: null, axes: [], levels: [{ shape: [1, 12, 12], voxel: [8, 8, 8], origin: [0, 0, 0] }] };
 
 /** A chunk whose labels come from `label(v)`: 0 unpainted, 1 background, 2 object. */
 function chunk(index: number[], label: (v: number) => number): PaintedChunk {

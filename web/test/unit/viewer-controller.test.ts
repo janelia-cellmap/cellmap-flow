@@ -104,6 +104,7 @@ const LIVER: DatasetInfo = {
   url: "https://example.org/liver.zarr",
   dtype: "uint8",
   channels: 1,
+  channelLabels: null,
   axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
   levels: [
     { shape: [8932, 12728, 12747], voxel: [8, 8, 8], origin: [0, 0, 0] },

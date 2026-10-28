@@ -51,6 +51,7 @@ import type * as TF from "@tensorflow/tfjs-core";
 import type { DatasetInfo, ModelEntry, ModelVariant } from "../../contracts";
 import { FINETUNED_REPO } from "../../contracts";
 import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape, ratio, sameVoxelSize } from "../../infer/geometry";
+import { selectedChannel } from "../../infer/norms";
 import { mulberry32, shuffle, SLICE_MS, yieldEvery } from "../head-trainer";
 import { count, epochSummary, plural } from "../log-words";
 import { learningRateAt, scheduleWords } from "../schedule";
@@ -253,7 +254,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
     if (holds) report.log(channelWords(entry, options.selectChannel!, "tile"));
     if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);
-    const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype);
+    const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype), channel = selectedChannel(norm);
     // A tile turns where its plane's two voxel sizes are the same, in the raw and the model.
     const turnable = (depth: number) => {
       const [u, v] = planeAxes(depth as 0 | 1 | 2);
@@ -271,7 +272,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       const labels = tileLabels(tile, output, chunks, volume);
       const t = await tileTargets(labels, output, transform);
       if (!t.masked) continue;  // paint the loss cannot count here (an affinity needs a painted pair)
-      const { raw, inside } = await tileRaw(tile, side, output, run.infer, dataset, geo.rawLevel);
+      const { raw, inside } = await tileRaw(tile, side, output, run.infer, dataset, geo.rawLevel, channel);
       samples.push(options.augment
         ? { tile, input: new Float32Array(0), target: t.target, mask: t.mask, masked: t.masked, raw, inside, labels }
         : { tile, input: normalizeTile(raw, inside, norm, [1, side, side]), target: t.target, mask: t.mask, masked: t.masked });
@@ -443,7 +444,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
   if (holds) report.log(channelWords(entry, options.selectChannel!, "block"));
   if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);
-  const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype);
+  const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype), channel = selectedChannel(norm);
   // A block turns in y–x where y's and x's voxel sizes are the same, in the raw and the model.
   const turnable = [geo.g.input_voxel_size, geo.raw.voxel].every((size) => sameVoxelSize([size[1]], [size[2]]));
   report.log(options.augment
@@ -459,7 +460,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     const labels = blockLabels(block, output, chunks, volume);
     const t = await blockTargets(labels, cube, transform);
     if (!t.masked) continue;  // paint the loss cannot count here (an affinity needs a painted pair)
-    const { raw, inside } = await blockRaw(block, side, output, run.infer, dataset, geo.rawLevel);
+    const { raw, inside } = await blockRaw(block, side, output, run.infer, dataset, geo.rawLevel, channel);
     samples.push(options.augment
       ? { block, input: new Float32Array(0), target: t.target, mask: t.mask, masked: t.masked, raw, inside, labels }
       : { block, input: normalizeTile(raw, inside, norm, [side, side, side]), target: t.target, mask: t.mask, masked: t.masked });

@@ -36,7 +36,7 @@ import { emptyLabels } from "../../ai-annotate/fill";
 import type { DepthAxis } from "../../ai-annotate/types";
 import type { DatasetInfo, Inference, PaintStore, PaintVolume, Step } from "../../contracts";
 import { copyBox, edgePadded } from "../../infer/stages";
-import { applyNormalizers } from "../../infer/norms";
+import { applyNormalizers, selectedChannel } from "../../infer/norms";
 import { padded } from "../../../chunkmirage/web/src/stages";
 import type { PaintedChunk, TargetTransform } from "../types";
 import { chunkKey, paintedChunkIndices, readPaintedChunk } from "../volume";
@@ -286,21 +286,22 @@ function boxLabels(box: Box, chunks: Map<string, PaintedChunk>, volume: Pick<Pai
 }
 
 /** The raw slice around `tile`'s output box (`side` × `side`, the box grown
- * by half the context each way) on raw level `level`, as stored, and which
- * of its voxels are inside the level (1) or past it (0, where the value is
- * 0). The raw level's voxels are the volume's (a ratio of 1). */
-export function tileRaw(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
-  return boxRaw(tileBox(tile, output, (side - output) / 2), infer, dataset, level);
+ * by half the context each way) on channel `channel` of raw level `level`,
+ * as stored, and which of its voxels are inside the level (1) or past it (0,
+ * where the value is 0). The raw level's voxels are the volume's (a ratio
+ * of 1). */
+export function tileRaw(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, channel: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
+  return boxRaw(tileBox(tile, output, (side - output) / 2), infer, dataset, level, channel);
 }
 
 /** The raw block around `block`'s output cube (`side`³, the cube grown by
  * half the context each way, C order), as tileRaw reads a tile's. */
-export function blockRaw(block: Block, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
-  return boxRaw(blockBox(block, output, (side - output) / 2), infer, dataset, level);
+export function blockRaw(block: Block, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, channel: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
+  return boxRaw(blockBox(block, output, (side - output) / 2), infer, dataset, level, channel);
 }
 
-/** The raw in `box` on raw level `level`, C order, and which of it is inside the level. */
-async function boxRaw(box: Box, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
+/** The raw in `box` on channel `channel` of raw level `level`, C order, and which of it is inside the level. */
+async function boxRaw(box: Box, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, channel: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
   const { lo, hi } = box;
   const shape = hi.map((h, a) => h - lo[a]);
   const raw = new Float32Array(sizeOf(box)), inside = new Uint8Array(raw.length);
@@ -308,7 +309,7 @@ async function boxRaw(box: Box, infer: Pick<Inference, "readRaw">, dataset: Data
   const readLo = lo.map((o) => Math.max(o, 0)), readHi = hi.map((h, a) => Math.min(h, rawShape[a]));
   const span = readHi.map((h, a) => h - readLo[a]);
   if (span.some((n) => n <= 0)) return { raw, inside };
-  const read = padded(await infer.readRaw(level, readLo, readHi), dataset.dtype, 1, readLo, readHi, readLo, readHi, "zero");
+  const read = padded(await infer.readRaw(level, readLo, readHi, channel), dataset.dtype, 1, readLo, readHi, readLo, readHi, "zero");
   // What was read, copied into the box where it lies in it.
   const at = readLo.map((o, a) => o - lo[a]);
   copyBox(raw, shape, at, Float32Array.from(read.data as ArrayLike<number>), span, [0, 0, 0], span);
@@ -339,9 +340,9 @@ export function normalizeTile(raw: Float32Array, inside: Uint8Array, norm: Step[
   return edgePadded(applyNormalizers(values, norm), hi.map((h, a) => h - lo[a]), lo, shape);
 }
 
-/** The network's input for `tile`: tileRaw normalized (normalizeTile). */
+/** The network's input for `tile`: tileRaw on the channel `norm` picks, normalized (normalizeTile). */
 export async function tileInput(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, norm: Step[]): Promise<Float32Array> {
-  const { raw, inside } = await tileRaw(tile, side, output, infer, dataset, level);
+  const { raw, inside } = await tileRaw(tile, side, output, infer, dataset, level, selectedChannel(norm));
   return normalizeTile(raw, inside, norm, [1, side, side]);
 }
 

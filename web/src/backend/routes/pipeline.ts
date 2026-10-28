@@ -4,17 +4,19 @@
 // The body is {input_norm: [step], postprocess: [step]}, each step
 // {name, ...parameters} with the parameters as the form sends them
 // (strings). Every step must be one the browser runs (src/infer/norms.ts and
-// post.ts say which); a step it does not is a 400 {success: false, error}
-// that changes nothing, as a step Python's registry does not know is. The
-// answer is {success: true, pipeline: {input_norm, postprocess}, digest,
-// layers}: the chain as kept, its digest (which names the layers' source),
-// and the prediction layers drawn. Without a dataset the chain is kept and
-// nothing is drawn (layers: []), as the Python route does without a viewer.
+// post.ts say which), and a ChannelSelector must pick one of the raw's
+// channels; a step it does not run, or a channel the raw has not got, is a
+// 400 {success: false, error} that changes nothing, as a step Python's
+// registry does not know is. The answer is {success: true, pipeline:
+// {input_norm, postprocess}, digest, layers}: the chain as kept, its digest
+// (which names the layers' source), and the prediction layers drawn. Without
+// a dataset the chain is kept and nothing is drawn (layers: []), as the
+// Python route does without a viewer.
 import type { Chain, Step } from "../../contracts";
-import { SUPPORTED_NORMALIZERS } from "../../infer/norms";
+import { missingChannel, selectedChannel, SUPPORTED_NORMALIZERS } from "../../infer/norms";
 import { SUPPORTED_POSTPROCESSORS } from "../../infer/post";
 import type { Router } from "../router";
-import { badRequest, json, objectBody } from "../router";
+import { badRequest, json, message, objectBody } from "../router";
 import { blobFor, setChain } from "../serving";
 
 /** A chain from a request body, or the reason it is not one. The steps are
@@ -40,6 +42,11 @@ export function readChain(body: Record<string, unknown>): { chain: Chain } | { e
     }
     chains[key] = steps as Step[];
   }
+  try {
+    selectedChannel(chains.input_norm!);
+  } catch (e) {
+    return { error: message(e) };
+  }
   return { chain: { input_norm: chains.input_norm!, postprocess: chains.postprocess! } };
 }
 
@@ -50,6 +57,9 @@ export function pipelineRoutes(router: Router): void {
     const read = readChain(body);
     if ("error" in read) return badRequest(read.error);
     const chain = read.chain;
+    const dataset = ctx.infer.dataset();
+    const missing = dataset && missingChannel(selectedChannel(chain.input_norm), dataset.channels);
+    if (missing) return badRequest(missing);
     const [served, { digest }] = await Promise.all([setChain(ctx, chain), blobFor(chain)]);
     return json(200, { success: true, pipeline: { input_norm: chain.input_norm, postprocess: chain.postprocess }, digest, layers: (served ?? []).map((s) => s.entry.name) });
   });

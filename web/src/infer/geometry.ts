@@ -13,6 +13,7 @@
 import type { DatasetInfo, ModelEntry } from "../contracts";
 import type { SourceInfo } from "../../chunkmirage/web/src/types";
 import { PYTHON } from "../generated/python-data";
+import type { RawChannels } from "./channels";
 
 /** What a model reads and writes, in nm (models/geometry.py: ModelGeometry). */
 export interface BlockGeometry {
@@ -189,13 +190,15 @@ export const NM_PER_UNIT: Readonly<Record<string, number>> = { "": 1, ...PYTHON.
 /** The dataset's levels in nm, from the engine's SourceInfo for its "raw"
  * view: voxel sizes and origins converted by each axis's unit, and the axes
  * then declared in nanometers. An axis in a unit that is not a length (time,
- * degrees) is left as it is, with its unit. */
-export function datasetInfoFrom(url: string, src: SourceInfo): DatasetInfo {
+ * degrees) is left as it is, with its unit. Its channels are `channels`'s
+ * (channels.ts rawChannels: a zarr image's SourceInfo says one). */
+export function datasetInfoFrom(url: string, src: SourceInfo, channels: Pick<RawChannels, "count" | "labels">): DatasetInfo {
   const factors = src.axes.map((a) => NM_PER_UNIT[a.unit.trim().toLowerCase()] ?? NM_PER_UNIT[a.unit] ?? null);
   return {
     url,
     dtype: src.dtype,
-    channels: src.channels,
+    channels: channels.count,
+    channelLabels: channels.labels,
     axes: src.axes.map((a, i) => ({ name: a.name, unit: factors[i] === null ? a.unit : "nanometer" })),
     levels: src.levels.map((l) => ({
       shape: [...l.shape],

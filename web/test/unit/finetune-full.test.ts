@@ -105,7 +105,7 @@ describe("a 3D model's training blocks", () => {
     const blocks = planBlocks(paintedVoxels(chunks), output);
     expect(blocks).toEqual([{ corner: [8, 8, 8] }]);
     const labels = blockLabels(blocks[0], output, chunks, volume);
-    const { raw, inside } = await blockRaw(blocks[0], side, output, infer, dataset, 0);
+    const { raw, inside } = await blockRaw(blocks[0], side, output, infer, dataset, 0, 0);
     expect(inside.every((v) => v === 1)).toBe(true);
     // The mark on the output's corner voxel is at the input's corner + context/2.
     expect(raw.indexOf(1)).toBe((halo * side + halo) * side + halo);
@@ -134,7 +134,7 @@ describe("a 3D model's training blocks", () => {
         return out.buffer;
       },
     };
-    const { raw, inside } = await blockRaw({ corner: [0, 0, 0] }, side, output, infer, dataset, 0);
+    const { raw, inside } = await blockRaw({ corner: [0, 0, 0] }, side, output, infer, dataset, 0, 0);
     const input = normalizeTile(raw, inside, [{ name: "LambdaNormalizer", expression: "x/1000" }], [side, side, side]);
     const near = (i: number) => Math.min(Math.max(i - 2, 0), n - 1);
     for (const [z, y, x] of [[0, 0, 0], [1, 3, 5], [2, 2, 2], [5, 0, 4]]) {

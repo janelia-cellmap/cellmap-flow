@@ -81,6 +81,16 @@ the site-information panel beside the address bar (or at
 ``chrome://settings/content/localNetworkAccess``). Running the app locally
 on ``http://localhost`` (below) is not gated.
 
+**A volume of several channels.** Light-microscopy volumes often have more
+than one channel: an OME-Zarr's ``c`` axis, or a precomputed volume's
+channels. The Processing tab then shows a *Channel*, its channels named by
+the volume's ``omero`` labels when it has them, and everything reads the
+channel picked: the models, the raw layer in the viewer, painting and
+training, AI annotation and the ranking. The pick is the input
+normalization's first step, ``ChannelSelector``, as in the server mode;
+without one the first channel is read. A volume painted on one channel trains
+on that channel.
+
 Running the models over a region
 --------------------------------
 

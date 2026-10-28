@@ -56,6 +56,18 @@ and normalization is in the model stage for the reasons the file gives. The raw
 volume is opened as the engine view `"raw"` and shown in the viewer straight
 from its own URL (`zarr://https://...`).
 
+A raw volume of several channels is read on the one the input chain's
+ChannelSelector picks (channel 0 without one), as the server reads it
+(`io/raw.py channel_select`). `src/infer/channels.ts` says how many there are
+and how chunkmirage's reader reads one: a precomputed volume's come together in
+every block, and the model stage takes its own (`stages.ts modelInput`); an
+OME-Zarr's channel axis is pinned where the source is opened, so each channel
+past the first is an engine view of its own over the same source
+(`engine.ts rawView`, its `select`). `Inference.readRaw` reads one channel for
+the finetune's samples, the AI annotation's plane and the ranking's raw window;
+the raw layer shows the channel picked (`viewer/layers.ts rawChannelShown`); and
+`GET /api/raw/channels` tells the dashboard's Channel how many there are.
+
 ## Who provides what
 
 chunkmirage (`web/chunkmirage/`, the clone at `chunkmirage.lock`'s commit) is

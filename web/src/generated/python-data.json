@@ -20,7 +20,7 @@
     "input_norm": [
       {
         "name": "ChannelSelector",
-        "browser": false,
+        "browser": true,
         "params": {
           "channel": 0
         }
@@ -536,5 +536,12 @@
       "kilometre": 1000000000000.0,
       "km": 1000000000000.0
     }
+  },
+  "channels": {
+    "axis_names": [
+      "c",
+      "c^",
+      "channel"
+    ]
   }
 }

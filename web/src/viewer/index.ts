@@ -28,6 +28,7 @@
 // a new page of Neuroglancer and so a new `viewer` object, which forgets
 // its bindings: they are kept here and put on each viewer as it appears.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
+import { selectedChannel } from "../infer/norms";
 import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
@@ -460,7 +461,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (awaiting === null || awaiting !== url) return;
       awaiting = null;
       if (info) {
-        openState(initialState(info, { [RAW_LAYER_NAME]: rawLayer(url, info) }));
+        openState(initialState(info, { [RAW_LAYER_NAME]: rawLayer(url, info, selectedChannel(session.state.chain.input_norm)) }));
         log(`viewer restored on ${url}`);
       } else {
         // The engine could not open it: Neuroglancer tries on its own, and

@@ -15,6 +15,7 @@ import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, Model
 import { hasAffinityChannels } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
 import { compileExpression } from "../../infer/expression";
+import { withoutChannelPick } from "../../infer/norms";
 import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
@@ -484,7 +485,9 @@ function postprocessReview(served: ServedModel, names: string[], threshold: numb
  * which Use this model, Fit to Paint and Use these settings set, stretched
  * to the raw under the paint, say) matches as it is, while it is the
  * chain's (input_norm_fitted): suggested the declared ones back, a second
- * Apply undid the ranking. */
+ * Apply undid the ranking. The chain's channel pick is the raw's, no
+ * model's, and is left out of the steps compared with the declared ones (the
+ * ranking's steps hold it: rank.on_channel). */
 export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const manifest = served.entry.manifest;
   const declared: Record<string, Record<string, unknown>> = {};
@@ -493,9 +496,10 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
     declared[name] = params;
   }
   const order = Object.keys(declared);
-  const configuredNorm = stepNames(chain.input_norm);
+  const inputNorm = withoutChannelPick(chain.input_norm);
+  const configuredNorm = stepNames(inputNorm);
   const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
-  const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
+  const differences = fitted ? [] : inputNormDifferences(inputNorm, declared);
   const { output_class, output_class_from, output_op } = served.info;
   const configuredPost = stepNames(chain.postprocess);
   return {

@@ -9,9 +9,23 @@
 // (viewer.restore), not mounted before it, which showed the volume twice
 // with the reload between. A body without a path is the 400 parse() gives;
 // a URL that cannot be opened is a 500 {error}, as the Python route answers
-// (connect.js shows either's error).
+// (connect.js shows either's error). A channel the session's chain picked on
+// another volume that this one has not got is dropped from the chain, so the
+// models read this one's first rather than fail.
+//
+// GET /api/raw/channels (routes/pipeline.py's get_raw_channels): the raw's
+// channels, for the Processing tab's Channel, which the dashboard asks for
+// once, on load, shows for a volume of more than one, and which sets the
+// chain's ChannelSelector through PUT /api/pipeline. The answer is
+// {success: true, channels, labels, selected}: how many (1 for a volume of
+// one, and with no volume), what the metadata calls them (OME-Zarr's omero
+// labels) or null, and the channel the session's chain reads (its
+// ChannelSelector's, else 0). The page loads as the session's volume is
+// opened again (backend restoreSession), so the answer waits for that open;
+// a volume that cannot be opened is a 400 {success: false, error}.
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
+import { selectedChannel, withoutChannelPick } from "../../infer/norms";
 import { rawLayer } from "../../viewer/layers";
 
 const DATASET_URL = /^(precomputed:\/\/)?(https?|s3|gs):\/\/\S+$/i;
@@ -49,6 +63,22 @@ export function explainOpenError(url: string, e: unknown, pageHost = typeof loca
 }
 
 export function dataRoutes(router: Router): void {
+  router.get("/api/raw/channels", async (_req, _params, ctx) => {
+    const url = ctx.session.state.datasetUrl;
+    let dataset = ctx.infer.dataset();
+    try {
+      if (!dataset && url) dataset = await ctx.infer.openDataset(url);
+    } catch (e) {
+      return json(400, { success: false, error: `Could not read the raw's channels: ${message(e)}` });
+    }
+    return json(200, {
+      success: true,
+      channels: dataset?.channels ?? 1,
+      labels: dataset?.channelLabels ?? null,
+      selected: selectedChannel(ctx.session.state.chain.input_norm),
+    });
+  });
+
   router.post("/api/set-data", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -62,9 +92,11 @@ export function dataRoutes(router: Router): void {
     }
     try {
       const info = await ctx.infer.openDataset(url);
+      let { chain } = ctx.session.state;
+      if (selectedChannel(chain.input_norm) >= info.channels) chain = { ...chain, input_norm: withoutChannelPick(chain.input_norm) };
       // The info too: the viewer takes its dimensions and starting position from the volume.
-      const viewerUrl = ctx.viewer.prepareDataset(url, rawLayer(url, info), info);
-      await ctx.session.update({ datasetUrl: url });
+      const viewerUrl = ctx.viewer.prepareDataset(url, rawLayer(url, info, selectedChannel(chain.input_norm)), info);
+      await ctx.session.update({ datasetUrl: url, chain });
       ctx.log(`Opened ${url} (${info.dtype}, ${info.levels.length} level${info.levels.length === 1 ? "" : "s"})`);
       return json(200, { success: true, neuroglancer_url: viewerUrl });
     } catch (e) {

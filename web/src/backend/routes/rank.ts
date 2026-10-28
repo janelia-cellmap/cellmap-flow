@@ -21,14 +21,16 @@
 // computed; any other read is served for the score alone, with those
 // normalizers and no layer, and released after, so a ranking leaves
 // the Models tab and the GPU as they were (its download stays in the
-// catalog's byte cache, and Show serves it at once). Where the raw under the
-// paint is narrow, a model is scored a second time through the kept
-// normalization stretched to the raw's window, served for that alone
-// (portable/rank.py says when that is kept). The answer is the ranking's
-// row, as the Python builds it (score_row: the score kept, its threshold,
-// the raw's range it read and the normalizer steps it was read through,
-// input_norm, with where they came from; and why those: what each channel
-// of a binary model matched, channel_matches, and what the other
+// catalog's byte cache, and Show serves it at once). Every try reads the raw
+// channel the session's chain picks: norm_tries puts its ChannelSelector
+// first in each (rank.on_channel), and the raw's window below is read on it.
+// Where the raw under the paint is narrow, a model is scored a second time
+// through the kept normalization stretched to the raw's window, served for
+// that alone (portable/rank.py says when that is kept). The answer is the
+// ranking's row, as the Python builds it (score_row: the score kept, its
+// threshold, the raw's range it read and the normalizer steps it was read
+// through, input_norm, with where they came from; and why those: what each
+// channel of a binary model matched, channel_matches, and what the other
 // normalizations tried matched, input_norm_others), with the
 // postprocessing its layer needs to show a good prediction
 // (rank.needed_postprocess: the sigmoid its output needs, a second one
@@ -73,6 +75,7 @@ import { targetTransformFor } from "../../finetune/target-call";
 import { hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
+import { selectedChannel } from "../../infer/norms";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
 import { HF_REPO, type ListFacts, listFacts } from "../../models";
@@ -463,10 +466,10 @@ async function logitsOf(ctx: AppContext, out: { data: Float32Array; shape: numbe
 
 /** The window of the raw under the output blocks `blocks` of `entry`'s
  * level (scorePaint's read): the 1st and 99th percentiles of the raw it reads
- * there (every few voxels, at most RAW_SAMPLE), or null when nothing was
- * read or the raw has more than one channel. */
+ * there (every few voxels, at most RAW_SAMPLE) on the channel the session's
+ * chain picks, which the model read, or null when nothing was read. */
 async function rawWindow(ctx: AppContext, dataset: DatasetInfo, entry: ModelEntry, blocks: { lo: number[]; hi: number[] }[]): Promise<[number, number] | null> {
-  if (dataset.channels !== 1) return null;
+  const channel = selectedChannel(ctx.session.state.chain.input_norm);
   const g = geometryOf(entry), level = chooseRawLevel(dataset.levels, g.input_voxel_size), shape = dataset.levels[level].shape;
   const r = ratio(g), Typed = TYPED[dataset.dtype] ?? Float32Array;
   const parts: ArrayLike<number | bigint>[] = [];
@@ -474,7 +477,7 @@ async function rawWindow(ctx: AppContext, dataset: DatasetInfo, entry: ModelEntr
     const box = inputBox(lo, hi, r, r.map(() => 0));
     const readLo = box.lo.map((v) => Math.max(v, 0)), readHi = box.hi.map((v, a) => Math.min(v, shape[a]));
     if (readHi.some((h, a) => h <= readLo[a])) continue;
-    parts.push(new Typed(await ctx.infer.readRaw(level, readLo, readHi)));
+    parts.push(new Typed(await ctx.infer.readRaw(level, readLo, readHi, channel)));
   }
   const total = parts.reduce((n, p) => n + p.length, 0);
   if (!total) return null;
