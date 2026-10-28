@@ -34,7 +34,7 @@ h1, h2, h3, h4, h5, h6 {
 h3 { font-size: 20px; }
 h5 { font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
 
-small, .text-muted {
+small, .text-muted, .form-text {
   color: var(--text-muted) !important;
   font-size: 15px;
 }
@@ -1015,7 +1015,7 @@ details.more > summary {
   cursor: pointer;
   list-style: none;
   vertical-align: 0.1em;
-  opacity: 0.7;
+  opacity: 0.85;
   user-select: none;
 }
 details.more > summary::-webkit-details-marker {
@@ -1028,4 +1028,13 @@ details.more[open] > summary {
 details.more > .more-body {
   display: block;
   margin-top: 0.3em;
+}
+
+/* The dashboard's tabs stay at the top of its column as it scrolls, so
+   another tab is a click away from anywhere in a long one. */
+#myTab {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-base);
 }
