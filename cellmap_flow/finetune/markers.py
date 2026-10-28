@@ -25,10 +25,12 @@ __all__ = [
     "RESTARTING_TRAINING",
     "WAITING_FOR_RESTART",
     "RESTART_STATUS",
+    "NETWORK_PARAMETERS",
     "EPOCH_START_RE",
     "EPOCH_SUMMARY_RE",
     "ITERATION_COMPLETE_RE",
     "MODEL_YAML_RE",
+    "NETWORK_PARAMETERS_RE",
     "STATUS_MARKER_RE",
     "SERVER_URL_RE",
     "emit",
@@ -43,6 +45,10 @@ INFERENCE_SERVER_FAILED = "INFERENCE_SERVER_FAILED:"  # why
 # it (job-card.js shows it as the job's progress); the job manager needs
 # nothing between RESTARTING_TRAINING and the epochs.
 RESTART_STATUS = "RESTART_STATUS:"
+# How many parameters the network has before any adapter: what the finetuned
+# model's weights are once its finetune is folded in, so what a published
+# copy of them costs (the Publish panel says it; 4 bytes each in float32).
+NETWORK_PARAMETERS = "NETWORK_PARAMETERS:"
 # FINETUNED_MODEL_YAML, the iteration's serving YAML, is defined with the
 # templates that write it and printed just before TRAINING_ITERATION_COMPLETE.
 
@@ -55,6 +61,7 @@ EPOCH_START_RE = re.compile(r"Starting\s+epoch\s+(\d+)\s+of\s+(\d+)", re.IGNOREC
 EPOCH_SUMMARY_RE = re.compile(r"Epoch\s+(\d+)/(\d+)\s*-\s*Loss:\s*([\d.]+)", re.IGNORECASE)
 ITERATION_COMPLETE_RE = re.compile(r"TRAINING_ITERATION_COMPLETE:\s+(\S+)")
 MODEL_YAML_RE = re.compile(r"^.*?FINETUNED_MODEL_YAML:\s*(.+?)\s*$", re.MULTILINE)
+NETWORK_PARAMETERS_RE = re.compile(r"NETWORK_PARAMETERS:\s+(\d+)")
 # Status markers, in the order they matter: the last one in a chunk of log
 # decides.
 STATUS_MARKER_RE = re.compile(r"TRAINING_DIVERGED|RESTARTING_TRAINING|WAITING_FOR_RESTART")

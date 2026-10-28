@@ -1,13 +1,14 @@
 // Shared by the models-*.test.ts files: the real manifests and tree listings
 // saved from cellmap/onnx-web-models on 2026-10-14 and -15 (fixtures/onnx-web-models),
-// a stand-in for fetch that answers as the Hub does, so the catalog can be
-// exercised without a network, and a tiny in-memory IndexedDB for the models
-// database.
+// a stand-in for fetch that answers as the Hub does (other repos too, from
+// the manifests a test gives), so the catalog can be exercised without a
+// network, and a tiny in-memory IndexedDB for the models database.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { GpuLimits, ModelEntry } from "../../src/contracts";
+import { finetunedEntry } from "../../src/models/finetuned";
 import type { FetchLike } from "../../src/models/hf";
 import { entryFor, parseManifest } from "../../src/models/manifest";
 import { chooseVariant } from "../../src/models/variant";
@@ -42,6 +43,27 @@ export function entryFixture(folder = "setup_54", limits?: GpuLimits): ModelEntr
   return entryFor(folder, manifest, fp32[Math.floor((fp32.length - 1) / 2)]!);
 }
 
+/** The manifest a model finetuned from `base` as `name` is published with
+ * (the spec's layout): its entry's manifest, one variant `<name>.onnx`
+ * whose source is the base's file, and a published block; as JSON, as the
+ * Hub serves it. */
+export function publishedManifest(base: ModelEntry, name: string): unknown {
+  const { manifest } = finetunedEntry(base, name);
+  const published = { name, finetuned_from: base.id, finetune_mode: "head", epochs: 20, final_loss: 0.031, published_at: "2026-10-26T12:00:00.000Z" };
+  return JSON.parse(JSON.stringify({ ...manifest, published }));
+}
+
+/** Another repo than cellmap/onnx-web-models as the fake Hub serves it: a
+ * folder per manifest, `dirs` more folders without one, a README and
+ * `files` more files at its root; or `status` for every request of it
+ * (401: there is none, or it is private). */
+export interface FakeRepo {
+  manifests?: Record<string, unknown>;
+  dirs?: string[];
+  files?: string[];
+  status?: number;
+}
+
 export function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
@@ -72,6 +94,8 @@ export interface HubOptions {
   noGetEtag?: boolean;
   /** Every HEAD fails as fetch does offline (a TypeError); GETs are unaffected. */
   headFails?: boolean;
+  /** Other repos, by id; their .onnx files are `onnx`'s, by name, like the built-in repo's. */
+  repos?: Record<string, FakeRepo>;
 }
 
 export interface FakeHub {
@@ -89,6 +113,15 @@ export function fakeHub(options: HubOptions = {}): FakeHub {
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push(method === "GET" ? url : `${method} ${url}`);
     if (method === "HEAD" && options.headFails) throw new TypeError("Failed to fetch");
+    const repo = options.repos?.[/^https:\/\/huggingface\.co\/(?:api\/models\/)?([^/]+\/[^/]+)\//.exec(url)?.[1] ?? ""];
+    if (repo?.status) return statusResponse(repo.status);
+    if (repo && url.endsWith("/tree/main")) {
+      const folders = [...Object.keys(repo.manifests ?? {}), ...(repo.dirs ?? [])];
+      const files = ["README.md", ...(repo.files ?? [])];
+      return jsonResponse([...folders.map((path) => ({ type: "directory", path })), ...files.map((path) => ({ type: "file", path, size: 900 }))]);
+    }
+    const repoManifest = repo && /\/raw\/main\/([^/]+)\/manifest\.json$/.exec(url);
+    if (repoManifest) return repoManifest[1]! in (repo.manifests ?? {}) ? jsonResponse(repo.manifests![repoManifest[1]!]) : statusResponse(404, "Entry not found");
     if (/\/api\/models\/[^/]+\/[^/]+\/tree\/main$/.test(url)) {
       return options.treeStatus && options.treeStatus !== 200 ? statusResponse(options.treeStatus) : jsonResponse(treeListing());
     }

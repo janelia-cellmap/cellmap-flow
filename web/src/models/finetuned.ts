@@ -48,7 +48,8 @@ export function isFinetuned(entry: ModelEntry): boolean {
  * The variant keeps none of the base's fidelity numbers (max_abs and the
  * rest measure the base export against its PyTorch model), and the manifest
  * says in `checkpoint` where the weights came from, since the base's
- * checkpoint name no longer describes them. */
+ * checkpoint name no longer describes them; a published base's `published`
+ * block is not this model's and is left out. */
 export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number): ModelEntry {
   const variant: ModelVariant = {
     variant: base.variant.variant,
@@ -60,8 +61,9 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
     // bytes keep: what the manifest's finetune block names (modes.ts).
     source: sourceOf(base),
   };
+  const { published: _published, ...inherited } = base.manifest;
   const manifest: ModelManifest = {
-    ...base.manifest,
+    ...inherited,
     model: name,
     checkpoint: `finetuned in the browser from ${base.manifest.checkpoint || base.name}`,
     variants: [variant],

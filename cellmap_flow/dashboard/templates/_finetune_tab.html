@@ -1029,6 +1029,141 @@
       Download finetuned model
     </a>
     {% endif %}
+    {# Publish to Hugging Face, in both modes, shown for the model a status
+       answer says is served (finetune/publish.js): the model, its manifest
+       and a model card uploaded to a repository of the user's own Hugging
+       Face account, with the links that open it. The browser's model is
+       uploaded from the page; the server's is exported by a cluster job
+       first (TorchScript for servers, and ONNX for the browser where the
+       model fits one), then uploaded from the server. The user signs in (in a
+       popup in the browser; with a code entered at huggingface.co on a
+       server) or pastes an access token with write access. The browser
+       keeps either in the page's memory only; the server in its memory,
+       unless the token is remembered there, and a server signed in with
+       `hf auth login` uses that. The token field is masked by CSS and kept
+       from password managers as the AI panel's are (see there). #}
+    <button type="button" class="btn btn-outline-secondary btn-sm mt-3{% if mode == "browser" %} ms-2{% endif %}" id="publishFinetunedBtn" style="display: none;"
+            aria-expanded="false" aria-controls="publishPanel"
+            title="Upload the finetuned model to a repository of your own Hugging Face account, and get the links that open it in cellmap-flow">
+      Publish to Hugging Face
+    </button>
+    <div class="mt-2" id="publishPanel" hidden>
+      <div class="d-flex align-items-baseline gap-2 flex-wrap">
+        <span class="text-muted" style="font-size: 0.85rem;" id="hfAccount">Not signed in to Hugging Face</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="hfSignInBtn" hidden
+                {% if mode == "browser" %}title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state."{% else %}title="Gives a code to enter at huggingface.co, in any browser; the dashboard is signed in once you have."{% endif %}>Sign in with Hugging Face</button>
+        <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
+                title="Forgets the Hugging Face token signed in here.">Sign out</button>
+      </div>
+      {# What Sign in and a pasted token came to, where they were clicked
+         and pasted: a sign-in that could not start, or a token refused. #}
+      <div class="small mt-1" id="hfSignInStatus" role="status" hidden></div>
+      {# A sign-in with a code (the server's): the code, and where to enter it. #}
+      <div class="small mt-1" id="hfDevice" hidden>
+        Enter <code id="hfDeviceCode"></code> at <a id="hfDeviceLink" target="_blank" rel="noopener"></a>
+      </div>
+      <div class="patch-tools-fields publish-fields" id="hfTokenFields">
+        <label for="hfToken">Access token</label>
+        <input type="text" class="form-control form-control-sm credential-secret" id="hfToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore
+               placeholder="hf_… with write access"
+               {% if mode == "browser" %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in this page only: paste it again after a reload."{% else %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in the dashboard's memory only (paste it again after a restart) unless you tick Remember on this server first."{% endif %}>
+      </div>
+      {# Shown when the credentials answer says a token can be saved where
+         it is used (can_remember: the server's, in huggingface_hub's own
+         file). Ticked before the token is pasted, as it is sent at once. #}
+      <div class="form-check mt-1" id="hfRememberField" hidden
+           title="Saves the token where hf auth login saves it, in your home directory: the dashboard is signed in after a restart, and other Hugging Face tools you run use it too. hf auth logout removes it.">
+        <input class="form-check-input" type="checkbox" id="hfRemember" autocomplete="off">
+        <label class="form-check-label small" for="hfRemember">Remember on this server</label>
+      </div>
+      <div class="text-muted small mt-1" id="hfTokenHint">
+        {% if mode == "browser" %}Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.{% else %}Make one at huggingface.co/settings/tokens (a Write token). It is sent only to Hugging Face.{% endif %}
+      </div>
+      <div class="patch-tools-fields publish-fields">
+        <label for="publishRepo">Repository</label>
+        <input type="text" class="form-control form-control-sm" id="publishRepo" autocomplete="off" spellcheck="false" maxlength="200"
+               placeholder="you/model-name"
+               title="owner/name: your account or one of your organizations, and the repository's name. One that exists already gets the files as a new commit.">
+      </div>
+      <div class="form-check mt-1">
+        <input class="form-check-input" type="checkbox" id="publishPrivate" autocomplete="off">
+        <label class="form-check-label small" for="publishPrivate">Private (its links will not open it: the app reads public repositories only)</label>
+      </div>
+      <div class="form-check" title="The model card is public with the repository, and a dataset's URL can be an internal one (a cluster path, a private bucket), so it is left out unless you ask for it.">
+        <input class="form-check-input" type="checkbox" id="publishIncludeDataset" autocomplete="off">
+        <label class="form-check-label small" for="publishIncludeDataset">Add an <em>Open on this dataset</em> link to the model card</label>
+      </div>
+      {# Server mode only: a server's publish uploads the network as
+         cellmap's own repositories hold one, and model.pt2 in it is what a
+         LoRA finetune of the published model attaches to (TorchScript takes
+         none). It is the weights again, 4 bytes a parameter, so it is a
+         choice with its cost said. #}
+      {% if mode != "browser" %}
+      <div class="form-check" title="model.pt2 is the network as torch.export saves it, which a LoRA finetune attaches to. Without it the published model still runs anywhere, and can still be finetuned whole.">
+        <input class="form-check-input" type="checkbox" id="publishLoraCopy" autocomplete="off" checked>
+        <label class="form-check-label small" for="publishLoraCopy">Also upload <code>model.pt2</code>, so it can be LoRA-finetuned on a server</label>
+        <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
+      </div>
+      {# A smaller copy for the browser (finetune.distill): a funlib UNet with
+         a tenth of the model's parameters or fewer, trained on a cluster GPU
+         to reproduce its output, and added to the repository when it is
+         done. The model is published without waiting for it. #}
+      <div class="form-check" title="Worth it for a model too big for the browser (the 800M-parameter UNets) or slow in it. The small copy is a funlib UNet trained to reproduce this model's output on the data it was finetuned on; the card says how close it came.">
+        <input class="form-check-input" type="checkbox" id="publishSmallCopy" autocomplete="off">
+        <label class="form-check-label small" for="publishSmallCopy">Also publish a smaller copy for the browser</label>
+        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU, for up to 3 hours when the model is a funlib UNet (it starts from the model's own channels) and 8 otherwise (from scratch), then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
+      </div>
+      {% endif %}
+      <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+        <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
+        <small class="text-muted" id="publishStatus"></small>
+      </div>
+    </div>
+    {# The publish of this page's model, outside the panel so that it
+       shows with the panel closed: where it has got (the export's cluster
+       job, each file's upload, the smaller copy's training), why it failed,
+       and once done its links. Hide closes it until the panel is opened or
+       another publish starts (publish.js). #}
+    <div class="publish-progress mt-2" id="publishProgress" role="status" hidden>
+      <div class="publish-result-head"><strong id="publishProgressRepo"></strong><button type="button" class="btn btn-link btn-sm" id="publishProgressClose" title="Hide this until the panel is opened again">Hide</button></div>
+      <div class="small" id="publishStage"></div>
+      <div class="small mt-1" id="publishSmallStage" hidden></div>
+      {# One row per link, its name and Copy above the link itself, which
+         wraps: the panel is as narrow as the sidebar. A row the answer
+         gives nothing for is hidden (publish.js): the server ref is a
+         server's publish's, and the folder's ref and the app's links are
+         a browser form's. #}
+      <div class="publish-result mt-2" id="publishResult" hidden>
+        <div>
+          <div class="publish-result-head"><span>Hugging Face</span><button type="button" class="btn btn-link btn-sm" data-copy="publishUrl">Copy</button></div>
+          <a id="publishUrl" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>On a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishServerRef">Copy</button></div>
+          <code id="publishServerRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>In the browser or on a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishRef">Copy</button></div>
+          <code id="publishRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try it in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishTryLink">Copy</button></div>
+          <a id="publishTryLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Open on this dataset</span><button type="button" class="btn btn-link btn-sm" data-copy="publishDatasetLink">Copy</button></div>
+          <a id="publishDatasetLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>The smaller copy, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallRef">Copy</button></div>
+          <code id="publishSmallRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try the smaller copy in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallTryLink">Copy</button></div>
+          <a id="publishSmallTryLink" target="_blank" rel="noopener"></a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

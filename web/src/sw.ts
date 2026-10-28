@@ -95,8 +95,13 @@ sw.addEventListener("fetch", (event) => {
   // it. The metadata is the first thing read of any volume, so the page's
   // request for it is the one Chrome can ask on, if it asks at all, and the
   // chunks that follow, read here, pass once it has. A handful of small
-  // files per volume, read once: nothing lost to the cache.
-  if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || metadata(url)) return;
+  // files per volume, read once: nothing lost to the cache. And a request
+  // that carries the user's credentials (an Authorization header: Hugging
+  // Face's who-am-I and an upload's short-lived write token, for a publish,
+  // src/publish) is the caller's own: the store keys by URL alone, so it
+  // would answer one token's request with another's answer, or with a
+  // write token that has expired.
+  if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || metadata(url) || req.headers.has("authorization")) return;
   event.respondWith(fromStore(req));
 });
 

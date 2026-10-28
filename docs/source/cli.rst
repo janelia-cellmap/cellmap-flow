@@ -58,7 +58,7 @@ Commands
    * - ``serve --model ENTRY -d DATA``
      - Serve one model's predictions. The launchers (``infer``, ``yaml``, the
        dashboard) run it on a GPU node for you; see `Starting a server`_.
-   * - ``finetune train``, ``export-merged``, ``build-corrections``
+   * - ``finetune train``, ``export-merged``, ``export-web``, ``distill``, ``build-corrections``
      - The finetune tools (``docs/finetuning.md`` in the repository). The
        dashboard's finetune tab runs ``train`` for you; each takes the flags of
        ``python -m cellmap_flow.finetune.<module>``, which ``--help`` lists.

@@ -67,6 +67,9 @@ class FinetuneJob:
     latest_loss_epoch: Optional[int] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
+    # The network's parameters before any adapter (markers.NETWORK_PARAMETERS):
+    # the size of a published copy of its weights, which the Publish panel says.
+    network_parameters: Optional[int] = None
     # The corrections directory the job trains on. The restart route reads it
     # to refresh the manifest; it was never set, so a restart silently kept
     # the old patches_per_epoch, rehearsal fraction, input norm and

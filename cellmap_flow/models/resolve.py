@@ -28,7 +28,8 @@ stat, a file name, a regex, or (only when ``online``) one request.
    - an ``.onnx`` file: ``onnx``. One the browser finetuned carries its
      manifest, which says its geometry; any other needs its voxel size.
 
-2. A prefix, to say outright what a reference is: ``hf:org/repo[@revision]``,
+2. A prefix, to say outright what a reference is: ``hf:org/repo[@revision]``
+   (``hf:org/repo/folder``: that folder's ONNX web export),
    ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
    ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``,
    ``onnx:<path, folder or org/repo/folder>``. The type's own name works as
@@ -51,7 +52,9 @@ stat, a file name, a regex, or (only when ``online``) one request.
    Online, its file list is read: with ``metadata.json`` and ``model.ts`` it
    is a cellmap-models export, ``huggingface``; a repo of web exports is
    refused with its folders, one of which to add; anything else is refused
-   with what to do instead. Offline, or when the Hub cannot be reached,
+   with what to do instead. A model a server published has both: the
+   export at the root, which ``org/repo`` serves (only the root's files are
+   downloaded), and its web export in a folder, ``org/repo/folder``. Offline, or when the Hub cannot be reached,
    either is taken to be what it looks like, with a note.
 
 6. A BioImage Model Zoo id or nickname (``affable-shark``,
@@ -522,6 +525,12 @@ def _existing(value: str, prefix: str) -> str:
 
 
 def _hf_prefixed(value: str, request: _Request) -> Resolved:
+    # A folder of a repo can only be an ONNX web export: the browser names a
+    # model of any repo so (hf:<owner>/<repo>/<folder>, as a published model's
+    # link does), and either mode takes the other's refs.
+    match = _ONNX_REF.match(value)
+    if match is not None:
+        return _onnx_folder(match[1], match[2], match[3], request)
     repo, _, revision = value.partition("@")
     return _huggingface(repo, revision or None, "a cellmap-models export on Hugging Face", request)
 

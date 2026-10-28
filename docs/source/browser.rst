@@ -15,8 +15,11 @@ shared::
 
     https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
 
-A model is named as the Models tab lists it (``setup_53``) or by its
-repository path (``cellmap/onnx-web-models/setup_53``). *Share* in the header
+A model is named as the Models tab lists it (``setup_53``), by its
+repository path (``cellmap/onnx-web-models/setup_53``), or, for a model of
+another Hugging Face repo, as ``<owner>/<repo>/<folder>``. A link may name
+models and no volume (``?model=<owner>/<repo>/<folder>``): they run on the
+first volume you open. *Share* in the header
 copies such a link to what you have open, with the view (position, zoom,
 each layer as shown) and the Processing tab's steps the models run with, for
 someone else to open. The address bar itself stays bare, so a new
@@ -32,6 +35,17 @@ predictions to Neuroglancer as a zarr array through a service worker, chunk by
 chunk, as the viewer asks for them. The models are ONNX exports of cellmap's
 networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-models>`_
 on Hugging Face, cached in the browser after the first download.
+
+Other models come in two ways, from the Models tab's *Add a model*. A
+public Hugging Face model repo laid out as cellmap/onnx-web-models is (a
+folder per model, holding its ``manifest.json`` and the ``.onnx`` files it
+names; a model published from the app is one) is added by its ref,
+``<owner>/<repo>/<folder>``, or ``<owner>/<repo>`` when it holds one model,
+or its huggingface.co URL. Its models are then listed under Hugging Face
+after cellmap's, on later visits too. A model sent as a file is opened with
+*Open an .onnx file…*: an ``.onnx`` the app downloaded carries its manifest,
+any other is picked with its ``manifest.json``. It is kept in the browser
+like a finetuned model (below), and nothing is uploaded.
 
 It is the same dashboard as the server's: the same Models and Processing
 tabs, the same normalizers and postprocessing steps, a Finetune
@@ -430,13 +444,51 @@ beside a finetuned model under *Loaded models* (see *Usage* on the
 *Download paint* saves the volume as a zarr (zipped, the server's layout, so a server
 session can train on it) and *Download finetuned model* the ``.onnx``, with
 its manifest (voxel sizes, block, channels, input normalization) written into
-the file's metadata, so that the server mode serves the file as it is.
-Nothing leaves your machine unless you download and share it.
+the file's metadata, so that the server mode serves the file as it is and
+another browser opens it with *Open an .onnx file…*.
+Nothing leaves your machine unless you download and share it. *Share* puts a
+finetuned model in its link as its last layer's numbers, rebuilt from its
+base where the link opens; one whose whole network was trained, or that was
+opened from a file, goes in a link only once it has been published to
+Hugging Face, where the link then names it.
 
 To run the same models on the cluster, *Export Config* (in the header) saves
 a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
 finetuned model's ``.onnx``, from *Download finetuned model*, goes beside it.
 See :ref:`onnx` for what the YAML holds and what to add for the cluster.
+
+Publishing a finetuned model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*Publish to Hugging Face*, beside *Download finetuned model*, puts the model
+(its last layer or its whole network finetuned) in a repository of your own
+Hugging Face account, uploaded from the page when you click *Publish*, where
+anyone can run it: in this app, in the server
+dashboard, or from the files. Sign in with Hugging Face, in a popup that
+closes itself (the page keeps everything it has open), or paste an access
+token with write access: at
+`huggingface.co/settings/tokens <https://huggingface.co/settings/tokens>`__,
+*Create new token* of type *Write* (or a fine-grained one that may write to
+your repositories). Either is kept in the page's memory only and sent only to
+Hugging Face; a reload asks again.
+
+The repository is ``<you>/<model name>`` unless you type another, yours or one
+of your organizations'. A new repository is **public** unless you tick
+*Private*; one that exists already gets the files as a new commit, its
+visibility as it was, so publishing a model again updates it. The upload is
+the model card (``README.md``: what the model predicts, at what voxel sizes,
+what it was finetuned from and how, and how to open it), the model's manifest
+(``<model>/manifest.json``, as cellmap-flow reads a model's geometry, channels
+and input normalization) and its ``.onnx``. The model card names the dataset
+it was trained on only when you tick *Name the dataset's URL in the model
+card*: a dataset's URL can be internal.
+
+When it is done the panel shows the model's Hugging Face page, its ref
+(``<you>/<repo>/<model>``, which *Add a model* takes in this app and on the
+server) and two links, each with *Copy*: *Try it in the browser* opens the
+app with the model chosen, for whatever volume one opens, and *Open on this
+dataset* opens it on the dataset you have open. The model card carries the
+first always, and the second only with the dataset named.
 
 Browsers and devices
 --------------------

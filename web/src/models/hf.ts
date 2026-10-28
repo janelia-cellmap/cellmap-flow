@@ -1,7 +1,8 @@
-// Hugging Face, as the catalog reads it: the repo's file tree (the Hub API),
+// Hugging Face, as the catalog reads it: a repo's file tree (the Hub API),
 // its small text files (raw/) and the .onnx binaries (resolve/, which answers
-// with a redirect to the LFS CDN that fetch follows by itself). Nothing here
-// knows about manifests or variants; models/index.ts does.
+// with a redirect to the LFS CDN that fetch follows by itself), and the refs
+// that name a repo or one of its folders (hubRef). Nothing here knows about
+// manifests or variants; models/index.ts does.
 //
 // Anonymous requests are rate-limited: after a burst of downloads from one
 // address the Hub answers HTTP 429. Every fetch here turns a 429 into a
@@ -26,6 +27,118 @@ export class RateLimitError extends Error {
   constructor(what: string) {
     super(`Hugging Face rate-limited the anonymous download of ${what} (HTTP 429). Please retry in a minute.`);
     this.name = "RateLimitError";
+  }
+}
+
+/** Any other answer from the Hub that is not OK, with its status: a caller
+ * tells "there is no such repo or file" (401 and 404: the Hub answers an
+ * anonymous request for a repo that does not exist, or is private, with
+ * 401; checked 2026-10-26) from a server that failed. */
+export class HubStatusError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HubStatusError";
+  }
+}
+
+/** A repo, or a folder of one, that holds no copy of its model for the
+ * browser, with a message that says why and what to open instead: a model
+ * a cellmap-flow server published for servers, or a smaller copy its
+ * publish has not added yet (models/index.ts resolve). */
+export class NoBrowserCopyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoBrowserCopyError";
+  }
+}
+
+/** Whether `error` is the Hub saying there is nothing there to read anonymously (HTTP 401 or 404). */
+export function isMissing(error: unknown): error is HubStatusError {
+  return error instanceof HubStatusError && (error.status === 401 || error.status === 404);
+}
+
+// ---------------------------------------------------------------------------
+// Refs: what names a repo, or a folder of one
+// ---------------------------------------------------------------------------
+
+/** A Hugging Face model repo (`<owner>/<repo>`), and one of its folders when the ref names one. */
+export interface HubRef {
+  repo: string;
+  folder: string | null;
+}
+
+// The server's patterns (cellmap_flow/models/resolve.py _HF_REPO, _ONNX_REF,
+// _DOI, _looks_like_path), so that a ref one mode adds the other adds too: a
+// repo is two segments, a folder a third, a revision may follow an "@"; a
+// zoo DOI (10.5281/zenodo.5764892) is repo-shaped and is not one, nor is a
+// relative path to a file.
+const SEGMENT = "[A-Za-z0-9][\\w.-]*";
+const REPO_REF = new RegExp(`^(${SEGMENT}/${SEGMENT})(?:/(${SEGMENT}))?(?:@([\\w./-]+))?$`);
+const DOI = /^10\.\d{4,9}\//;
+const FILE_LIKE = /\.(?:onnx|py|ts|pt|zip|ya?ml)$/i;
+/** The prefixes that say a ref is a Hugging Face model's: `hf:` and its
+ * long spelling, as on the server, and `onnx:`, the server's for an ONNX
+ * export (`onnx:<owner>/<repo>/<folder>`); none is needed. */
+const PREFIX = /^(?:hf|huggingface|onnx):(?!\/\/)/i;
+const HUB_HOSTS = ["huggingface.co", "www.huggingface.co", "hf.co"];
+/** The first segments of huggingface.co pages that are not a model repo's. */
+const NOT_A_MODEL = ["datasets", "spaces", "models", "docs", "collections"];
+
+/** `ref` as the catalog matches it: trimmed, its prefix (PREFIX) and trailing slashes dropped. */
+export function bareRef(ref: string): string {
+  return ref.trim().replace(PREFIX, "").trim().replace(/\/+$/, "");
+}
+
+/** The repo, and the folder, that `ref` names: `<owner>/<repo>`,
+ * `<owner>/<repo>/<folder>`, either with `@main` after it or a prefix before
+ * it, or a huggingface.co URL (`/<owner>/<repo>`, `/tree/main/<folder>`, or a
+ * file in the folder, whose folder it names: the variant run is chosen for
+ * the GPU). Null for a ref that names no Hugging Face repo: one word (a
+ * folder of HF_REPO, or a model's name, which the catalog looks up itself), a
+ * path, a zoo DOI, another site's URL. Throws for a revision other than
+ * HF_REVISION, which the browser does not read (its entries and caches are of
+ * one revision), and for a huggingface.co URL that is not a model repo's. */
+export function hubRef(ref: string): HubRef | null {
+  const key = bareRef(ref);
+  if (/^https?:\/\//i.test(key)) return hubUrlRef(key);
+  const match = REPO_REF.exec(key);
+  if (!match || DOI.test(key) || FILE_LIKE.test(key)) return null;
+  checkRevision(match[3], key);
+  return { repo: match[1], folder: match[2] ?? null };
+}
+
+function hubUrlRef(url: string): HubRef | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!HUB_HOSTS.includes(parsed.hostname.toLowerCase())) return null;
+  const parts = parsed.pathname.split("/").filter(Boolean).map(decodedSegment);
+  if (parts.length < 2 || NOT_A_MODEL.includes(parts[0])) throw new Error(`${url} is not a Hugging Face model repo's page (huggingface.co/<owner>/<repo>)`);
+  const repo = `${parts[0]}/${parts[1]}`;
+  if (parts.length > 3 && ["tree", "blob", "resolve"].includes(parts[2])) {
+    checkRevision(parts[3], url);
+    return { repo, folder: parts[4] ?? null };
+  }
+  return { repo, folder: null };
+}
+
+function decodedSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function checkRevision(revision: string | undefined, ref: string): void {
+  if (revision !== undefined && revision !== HF_REVISION) {
+    throw new Error(`${ref} names the revision ${revision}: the browser reads a Hugging Face repo at its ${HF_REVISION} revision only`);
   }
 }
 
@@ -64,10 +177,17 @@ export async function fetchJson(fetchImpl: FetchLike, url: string, what: string)
   return response.json();
 }
 
-/** The folders and files at `path` in the repo. */
-export async function fetchTree(fetchImpl: FetchLike, path = ""): Promise<TreeEntry[]> {
-  const listing = await fetchJson(fetchImpl, treeUrl(path), `the file list of ${HF_REPO}`);
-  if (!Array.isArray(listing)) throw new Error(`The file list of ${HF_REPO} is not a JSON array`);
+/** The folders and files at `path` in `repo`. A repo the Hub does not let
+ * this page read (HTTP 401 or 404) is a HubStatusError that says so. */
+export async function fetchTree(fetchImpl: FetchLike, repo: string, path = ""): Promise<TreeEntry[]> {
+  let listing: unknown;
+  try {
+    listing = await fetchJson(fetchImpl, treeUrl(path, repo), `the file list of ${repo}`);
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+    throw new HubStatusError(error.status, `There is no public Hugging Face model repo ${repo} (HTTP ${error.status}): it does not exist, or it is private or gated, and the browser reads public repos only`);
+  }
+  if (!Array.isArray(listing)) throw new Error(`The file list of ${repo} is not a JSON array`);
   const entries: TreeEntry[] = [];
   for (const item of listing) {
     if (item && typeof item === "object" && typeof item.path === "string" && (item.type === "file" || item.type === "directory")) {
@@ -77,9 +197,9 @@ export async function fetchTree(fetchImpl: FetchLike, path = ""): Promise<TreeEn
   return entries;
 }
 
-/** The repo's `<folder>/manifest.json`, parsed but not yet checked (models/manifest.ts does that). */
-export function fetchManifest(fetchImpl: FetchLike, folder: string): Promise<unknown> {
-  return fetchJson(fetchImpl, rawUrl(`${folder}/manifest.json`), `${folder}/manifest.json`);
+/** `repo`'s `<folder>/manifest.json`, parsed but not yet checked (models/manifest.ts does that). */
+export function fetchManifest(fetchImpl: FetchLike, repo: string, folder: string): Promise<unknown> {
+  return fetchJson(fetchImpl, rawUrl(`${folder}/manifest.json`, repo), `${folder}/manifest.json`);
 }
 
 /** The identity of the file at `url`, from a HEAD request: the final
@@ -179,7 +299,7 @@ export async function fetchFile(
 
 function throwForStatus(response: Response, what: string): void {
   if (response.status === 429) throw new RateLimitError(what);
-  if (!response.ok) throw new Error(`Could not fetch ${what}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`);
+  if (!response.ok) throw new HubStatusError(response.status, `Could not fetch ${what}: HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`);
 }
 
 function contentLength(response: Response): number | null {

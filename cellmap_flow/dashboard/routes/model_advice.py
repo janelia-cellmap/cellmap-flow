@@ -60,7 +60,9 @@ def _declared_input_norm(model_config, data_range):
     among the session's.
 
     An onnx model's manifest declares the steps the browser feeds it through,
-    and a cellmap-models export's metadata.json the range the model reads.
+    a model a server published to Hugging Face its metadata.json the steps
+    it was trained with, and a cellmap-models export's metadata.json the
+    range the model reads; no other model declares any.
     """
     if model_config is None:
         return None

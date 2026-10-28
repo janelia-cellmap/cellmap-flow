@@ -17,7 +17,8 @@
 // - job-monitor.js: submit, the status poll, Restart (and Shift+R, which
 //   restarts from the viewer), Stop Early, Cancel, and the job restored
 //   after a reload, with job-card.js (the Training Status card),
-//   log-stream.js (the Training Logs text) and loss-plot.js (the loss plot);
+//   log-stream.js (the Training Logs text), loss-plot.js (the loss plot)
+//   and publish.js (Publish to Hugging Face);
 // - rank.js: Which model to start from, the models ranked by how well each
 //   one already matches the paint.
 // They start in this order, which is the order of the tab's first requests:
@@ -30,10 +31,10 @@
 // page: the template hides what needs a server (server-only), and each module
 // asks lib/page-data's isBrowserMode where it must behave differently (no
 // output path to insist on, the paint's download and delete, the finetuned
-// model's download, the AI annotation's credentials, the head's batch). The
-// patch tools, Label it, AI-assisted annotation and Good regions, all run
-// there, their routes answered in the page (web/src/backend/routes/
-// view-labels.ts, ai-annotate.ts, good-regions.ts and rank.ts).
+// model's download, the AI annotation's credentials, the head's batch). The patch tools, Label it, AI-assisted annotation and Good
+// regions, all run there, their routes answered in the page
+// (web/src/backend/routes/view-labels.ts, ai-annotate.ts, good-regions.ts
+// and rank.ts).
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";

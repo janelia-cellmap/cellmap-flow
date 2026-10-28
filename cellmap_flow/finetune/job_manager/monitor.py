@@ -129,7 +129,8 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
 
 def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
     """
-    Parse log content for training progress (epoch, loss).
+    Parse log content for training progress (epoch, loss), and the
+    network's size.
 
     Args:
         finetune_job: Job to update
@@ -144,6 +145,10 @@ def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
     #
     # "Starting epoch N of M" is read too, so the epoch counter advances
     # as soon as an epoch begins rather than when it ends.
+    parameters = markers.NETWORK_PARAMETERS_RE.findall(log_content)
+    if parameters:
+        finetune_job.network_parameters = int(parameters[-1])
+
     for cur, total in markers.EPOCH_START_RE.findall(log_content):
         finetune_job.current_epoch = int(cur)
         finetune_job.total_epochs = int(total)

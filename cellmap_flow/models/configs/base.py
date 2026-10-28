@@ -268,10 +268,11 @@ class ModelConfig:
         steps (``[{"name": ..., **params}]``), or None when it declares none.
 
         Asked on every dashboard poll, so it must be cheap and must not
-        raise. An onnx model's manifest declares its steps; a cellmap-models
-        export's metadata.json declares the range the model reads
-        (``probe.metadata_input_norm``), which needs ``data_range``, the raw
-        data's (lo, hi), to say what to scale from.
+        raise. An onnx model's manifest declares its steps, and so does the
+        metadata.json of a model a server published to Hugging Face; a
+        cellmap-models export's metadata.json declares the range the model
+        reads (``probe.metadata_input_norm``), which needs ``data_range``, the
+        raw data's (lo, hi), to say what to scale from.
         """
         return None
 

@@ -67,9 +67,9 @@ def _cellmap_model_for(model_config):
     """The CellmapModel behind a TorchScript model config, if there is one."""
     repo = getattr(model_config, "repo", None)
     if getattr(type(model_config), "cli_name", None) == "huggingface" and repo:
-        from cellmap_models.model_export.cellmap_model import get_huggingface_model
+        from cellmap_flow.models.configs.huggingface import download_export
 
-        return get_huggingface_model(repo, getattr(model_config, "revision", None))
+        return download_export(repo, getattr(model_config, "revision", None))
     return getattr(model_config, "cellmap_model", None)
 
 

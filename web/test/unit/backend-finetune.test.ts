@@ -14,12 +14,12 @@ import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, ModelEntry } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
 import { parseTrainGraph } from "../../src/finetune/full/graph";
+import { readMetadata } from "../../src/finetune/onnx-proto";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey, planVolume, readVolume } from "../../src/finetune/volume";
 import { entryFor, parseManifest } from "../../src/models/manifest";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
-import { readMetadata } from "./onnx-metadata";
 import { portablePython } from "./pyodide";
 
 // A volume's plan and a region's rules are the portable Python's, here in

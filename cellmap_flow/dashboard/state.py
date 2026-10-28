@@ -35,8 +35,9 @@ rather than being stored beside the real one:
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
   ``annotation_volumes``, ``output_sessions``; its AI annotation's
   ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
-  ``restart_key`` that restarts one from the viewer; the Review tab's
-  ``review``.
+  ``restart_key`` that restarts one from the viewer; the Hugging Face
+  sign-in and publishes of its finetuned models, ``huggingface``; the Review
+  tab's ``review``.
 - The log panel's ``log_buffer``, ``log_ids`` and ``log_clients``; the box
   tool's ``bbx_generator_state``.
 
@@ -73,8 +74,8 @@ class Session:
                  "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_ids",
-                 "log_clients", "bbx_generator_state")
+                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "huggingface", "log_buffer",
+                 "log_ids", "log_clients", "bbx_generator_state")
 
     def __init__(self):
         # The data and the viewer
@@ -158,6 +159,24 @@ class Session:
             "settings": None,
             "acknowledged": {},
             "job": None,
+            "lock": threading.Lock(),
+        }
+        # Publishing a finetuned model to Hugging Face
+        # (routes/finetune/publish.py): the token signed in in the Publish
+        # panel (pasted, or a sign-in with a code) and who it is, None until
+        # there is one; huggingface_hub's own token (get_token) and who it
+        # was found to be, so that it is checked once; the sign-in with a
+        # code that is waiting for the user, or that failed, or None; each
+        # model's publish, by its name; and the lock the routes and the
+        # threads that follow a sign-in or a publish change these under.
+        # A token is in this process's memory only: never logged, answered
+        # or written (but by Remember on this server, to huggingface_hub's
+        # own file).
+        self.huggingface = {
+            "signed_in": None,
+            "saved": None,
+            "device": None,
+            "publishes": {},
             "lock": threading.Lock(),
         }
         self._finetune_job_manager = None

@@ -4,7 +4,8 @@
 //
 // In the browser mode (lib/page-data isBrowserMode) the job runs in the page
 // (web/src/finetune) and answers the same routes: no corrections path is
-// asked for, and the finetuned model a status names can be downloaded.
+// asked for, and the finetuned model a status names can be downloaded. In
+// both modes it can be published to Hugging Face (publish.js).
 //
 // Shift+R restarts the card's job as Restart does, without its confirm
 // (restartFromKey). It arrives three ways: pressed over the viewer in server
@@ -20,6 +21,7 @@ import { poll } from "../../lib/poll.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
+import { initPublish } from "./publish.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
@@ -92,6 +94,7 @@ function showNotification(title, message) {
 export function initJobMonitor({ picker, form, log }) {
   let statusPoller = null;
   const browser = isBrowserMode();
+  const publish = initPublish();
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
   const card = createJobCard(lossPlot);
@@ -126,18 +129,20 @@ export function initJobMonitor({ picker, form, log }) {
     return seen !== undefined && count > seen;
   }
 
-  // Browser mode: the Training Status card's Download finetuned model link
-  // (the template's browser-only anchor), pointed at the model a job's status
-  // says is served (inference_server_ready with finetuned_model_name) and
-  // shown then; hidden on any other status, and for a job just submitted or
+  // The Training Status card's Publish to Hugging Face, for the model a
+  // job's status says is served (inference_server_ready with
+  // finetuned_model_name), and in browser mode its Download finetuned model
+  // link (the template's browser-only anchor), pointed at the same model;
+  // both hidden on any other status, and for a job just submitted or
   // restarted, whose model is not made yet. The page fetches the link on a
   // click (web/src/rebase.ts), like the Export Config link, and the service
-  // worker relays the GET to the in-page backend. Nothing on the Flask page:
-  // it has no such anchor.
-  function showFinetunedDownload(job) {
+  // worker relays the GET to the in-page backend. The Flask page has no such
+  // anchor: a server's model is exported by its publish.
+  function showFinetunedModel(job) {
+    const name = job && job.inference_server_ready && job.finetuned_model_name;
+    publish.showFor(name || null);
     if (!browser) return;
     const link = document.getElementById("downloadFinetunedBtn");
-    const name = job && job.inference_server_ready && job.finetuned_model_name;
     if (name) {
       link.href = `/api/finetune/model/${encodeURIComponent(name)}/download`;
       link.style.display = "inline-block";
@@ -212,7 +217,7 @@ export function initJobMonitor({ picker, form, log }) {
       if (result.success) {
         keyPresses.set(result.job_id, 0);  // a new job: no presses yet
         card.submitted(result.job_id, params.model_name, result.output_type || "binary");
-        showFinetunedDownload(null);
+        showFinetunedModel(null);
         jobLog.clear();
         // The answer names the job's output directory, not its log file:
         // the job manager writes that there as training_log.txt, and the
@@ -282,7 +287,7 @@ export function initJobMonitor({ picker, form, log }) {
           return;
         }
         card.polled(data);
-        showFinetunedDownload(data);
+        showFinetunedModel(data);
         noteServed(data);
         if (data.log_file) jobLog.setLogFile(data.log_file);
         // Server mode's Shift+R over the viewer: the card has just taken
@@ -397,7 +402,7 @@ export function initJobMonitor({ picker, form, log }) {
         jobLog.clear();
         appendLog('Restart request sent - training will restart on same GPU...\n');
         card.restarted();
-        showFinetunedDownload(null);
+        showFinetunedModel(null);
         // A card restored after a reload has no poller running, so start
         // one (this replaces the poller if one is already running).
         startStatusPolling(jobId);
@@ -473,7 +478,7 @@ export function initJobMonitor({ picker, form, log }) {
       const jobId = activeJob.job_id;
       keyPressed(jobId, activeJob.restart_requests);  // where its count starts
       card.restored(activeJob);
-      showFinetunedDownload(activeJob);
+      showFinetunedModel(activeJob);
       noteServed(activeJob);
       jobLog.setLogFile(activeJob.log_file || null);
 

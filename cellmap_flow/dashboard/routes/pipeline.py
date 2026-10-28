@@ -308,10 +308,10 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 def _declared_steps(model_config, data_range) -> list:
     """The input normalization ``model_config`` declares itself
     (``ModelConfig.declared_input_norm``: an onnx model's manifest, a
-    cellmap-models export's metadata.json, for raw data spanning
-    ``data_range``), as chain steps, each a copied ``{"name", **params}``
-    dict; ``[]`` for a model that declares none, and for anything that is
-    not a step."""
+    published model's metadata.json, a cellmap-models export's
+    metadata.json, for raw data spanning ``data_range``), as chain steps,
+    each a copied ``{"name", **params}`` dict; ``[]`` for a model that
+    declares none, and for anything that is not a step."""
     declared = getattr(model_config, "declared_input_norm", None)
     steps = declared(data_range=data_range) if callable(declared) else None
     return [dict(step) for step in steps or [] if isinstance(step, dict) and step.get("name")]

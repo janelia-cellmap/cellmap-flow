@@ -604,6 +604,53 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* The Publish to Hugging Face panel's fields, the label beside its field. */
+.publish-fields {
+  grid-template-columns: auto 1fr;
+}
+
+/* A publish's progress and links, on the Training Status card whether its
+   panel is open or not. Its repository's name and its lines, which name
+   files, wrap anywhere, and a failed job's log keeps its lines. */
+.publish-progress {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.publish-progress .publish-result-head strong,
+.publish-progress > .small {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* A publish's links, each under its name and Copy, wrapping anywhere. */
+.publish-result {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.publish-result a,
+.publish-result code {
+  overflow-wrap: anywhere;
+}
+
+.publish-result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  color: var(--text-muted);
+}
+
+.publish-result-head .btn {
+  margin-left: auto;
+  padding: 0;
+  font-size: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* The AI panel's API key and access token: text fields shown as dots, so a
    browser's password manager does not offer to save them as it does a
    password field's (_finetune_tab.html says why). */

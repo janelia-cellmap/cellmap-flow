@@ -22,6 +22,9 @@ message is pydantic's, after the field's name.
 - ``AIAnnotateSettings``, ``AIAnnotateRun``, ``AIAnnotateResend`` and
   ``AIAnnotateDecision``: POST /api/finetune/ai-annotate/{settings,run,resend},
   and accept and reject
+- ``FinetunePublish``: POST /api/finetune/model/<name>/publish, and
+  ``HuggingFaceCredentials``: POST /api/huggingface/credentials (both modes
+  answer them: routes/finetune/publish.py, web/src/backend/routes/publish.ts)
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
@@ -423,6 +426,41 @@ class AIAnnotateDecision(BaseModel):
 
     annotate_id: Annotated[_ANNOTATE_ID, _required("annotate_id")] = Field(None, validate_default=True)
     overwrite: bool = False
+
+
+class FinetunePublish(BaseModel):
+    """Where to publish a finetuned model on Hugging Face: ``repo`` as
+    ``owner/name`` (blank: the signed-in user's, named after the model),
+    whether a repository made for it is ``private`` (a model repository is
+    public otherwise), whether its manifest and model card name the
+    dataset it was trained on (``include_dataset``: off unless asked, since a
+    dataset's URL can be internal), and, for a server's publish, whether its
+    copy of the network includes ``model.pt2`` (``lora_copy``): the program a
+    LoRA finetune of the published model attaches to, as cellmap's own
+    repositories ship it, at the cost of uploading the weights a second time;
+    and whether a smaller copy for the browser is trained (finetune.distill,
+    a cluster job of hours) and added to the repository once it is done
+    (``small_copy``, off unless asked). A browser's publish has neither."""
+
+    repo: Optional[str] = Field(None, max_length=200)
+    private: bool = False
+    include_dataset: bool = False
+    lora_copy: bool = True
+    small_copy: bool = False
+
+
+class HuggingFaceCredentials(BaseModel):
+    """A Hugging Face access token to publish with (``token``, hf_...),
+    which the server also saves when asked to ``remember`` it (where ``hf
+    auth login`` saves one; the browser keeps a token in the page only);
+    ``device``: a sign-in with a code the user enters at huggingface.co, the
+    server's Sign in (the browser's is a popup); or ``forget`` the one in
+    use: signing out."""
+
+    token: Optional[str] = Field(None, max_length=4096)
+    remember: bool = False
+    device: bool = False
+    forget: bool = False
 
 
 # --- The pipeline builder's blockwise steps -----------------------------------------

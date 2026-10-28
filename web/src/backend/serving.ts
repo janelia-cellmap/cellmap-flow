@@ -14,7 +14,7 @@
 import { ARGS_KEY } from "../contracts";
 import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
 import { SUPPORTED_NORMALIZERS } from "../infer/norms";
-import { entryFor } from "../models";
+import { withVariant } from "../models";
 import { chainDigest, encodeArgs } from "../shared/args";
 import { shaderColor } from "../viewer/display";
 import { PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
@@ -168,7 +168,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
     if (previous) tuned = previous.entry;
     else {
       limits ??= await ctx.infer.gpuLimits();
-      tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
+      tuned = withVariant(entry, ctx.catalog.chooseVariant(entry.manifest, limits));
     }
     ctx.log(`Serving ${tuned.name} (${tuned.variant.variant}, ${sizeLabel(tuned.variant.input_size)} voxels, ${tuned.variant.file_mb} MB)`);
     result.push(await ctx.infer.serve(tuned, chain, blob, () => ctx.catalog.modelBytes(tuned)));

@@ -76,14 +76,18 @@ def load_eager_base(folder_path):
     return model.eval()
 
 
-def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
+def apply_finetune(trainable, lora_adapter_path=None, weights_path=None):
     """Return a plain nn.Module with the finetune folded in.
 
-    Both finetune flavours were trained on ``BatchLoopWrapper(export)``, whose
-    child is named ``model``, so adapter target names and full-finetune state
-    dict keys carry a ``model.`` prefix. Wrapping the eager module the same
-    way reproduces those names exactly (checked: 38/38 adapter tensors
-    identical, 0.0 output difference at 178^3).
+    ``trainable`` is the module tree the finetune was trained on, as
+    ``model_loading.load_trainable_model`` builds it: the adapter's target
+    names and a full finetune's state dict keys are that tree's, and load
+    onto no other. A TorchScript base's tree is ``BatchLoopWrapper(export)``,
+    whose child is named ``model``, so its names carry a ``model.`` prefix;
+    the wrapper only loops over the batch, and the folded module comes back
+    without it. A base's eager ``model.pt`` wrapped the same way reproduces
+    those names exactly (checked: 38/38 adapter tensors identical, 0.0 output
+    difference at 178^3), which is how ``main`` uses it.
 
     The adapter is folded in by ``LoraStrategy.merge``, the merge training
     uses to continue from a finetuned model: every adapted layer, Conv3d,
@@ -94,17 +98,19 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
 
     if bool(lora_adapter_path) == bool(weights_path):
         raise ValueError("pass exactly one of lora_adapter_path / weights_path")
-    wrapped = BatchLoopWrapper(eager).eval()
+    trainable = trainable.eval()
     if lora_adapter_path:
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 
-        peft = load_lora_adapter(wrapped, lora_adapter_path, is_trainable=False).eval()
-        merged = LoraStrategy.merge(peft).model   # merge gives back the BatchLoopWrapper
+        peft = load_lora_adapter(trainable, lora_adapter_path, is_trainable=False).eval()
+        merged = LoraStrategy.merge(peft)  # the tree the adapter was loaded onto
     else:
         state = torch.load(weights_path, map_location="cpu", weights_only=True)
-        missing, unexpected = wrapped.load_state_dict(state, strict=True)
+        trainable.load_state_dict(state, strict=True)
         logger.info(f"Loaded full-finetune weights: {len(state)} tensors")
-        merged = wrapped.model
+        merged = trainable
+    if isinstance(merged, BatchLoopWrapper):
+        merged = merged.model
     return merged.eval()
 
 
@@ -140,41 +146,52 @@ def check_equivalence(module, reference, tile, seed=0):
     return d_ref, r_ref, scale, d_tile, r_tile, tuple(yb.shape[2:])
 
 
-def export_folder(module, base_folder, output, tile, out_shape, provenance, name_suffix):
-    """Write model.pt2 + model.ts + metadata.json (+ README) for ``module`` at ``tile``."""
+def export_folder(module, output, input_shape, output_shape, metadata, provenance):
+    """Write ``module`` into ``output`` as cellmap-models exports a model, the
+    files ``type: cellmap`` serves from a folder and ``type: huggingface``
+    from the root of a repository (what cellmap's own model repositories
+    hold, but the eager ``model.pt``, which only the training package can
+    unpickle). Returns the names of the files written, of these:
+
+    - ``model.ts``: the TorchScript that is served, traced at an input of
+      ``input_shape`` voxels, which it is locked to;
+    - ``model.pt2``: the torch.export program a LoRA finetune of the export
+      unflattens and trains (CellmapModel.train), at the same input. A
+      module torch.export cannot export (TorchScript itself, or one whose
+      forward branches on its data) has none, and the export then trains in
+      full only, as TorchScript does;
+    - ``metadata.json``: ``metadata`` with the shapes made the export's,
+      which it must be for the TorchScript to be fed the input it was
+      traced at (models.configs.cellmap's runs_at);
+    - ``export_record.json``: ``provenance``, how the export was made.
+    """
     os.makedirs(output, exist_ok=True)
-    example = torch.rand(1, 1, tile, tile, tile)
+    shape = "x".join(map(str, input_shape))
+    example = torch.rand(1, metadata.get("in_channels") or 1, *input_shape)
+    written = []
     t0 = time.time()
-    ep = torch.export.export(module, (example,))
-    torch.export.save(ep, os.path.join(output, "model.pt2"))
-    logger.info(f"model.pt2 exported at {tile}^3 in {time.time() - t0:.0f}s")
+    try:
+        ep = torch.export.export(module, (example,))
+    except Exception as e:
+        logger.warning(f"No model.pt2: torch.export could not export the network ({type(e).__name__}: {e}); "
+                       "the export trains in full only")
+    else:
+        torch.export.save(ep, os.path.join(output, "model.pt2"))
+        written.append("model.pt2")
+        logger.info(f"model.pt2 exported at {shape} in {time.time() - t0:.0f}s")
     t0 = time.time()
     with torch.no_grad():
         ts = torch.jit.trace(module, example)
     ts.save(os.path.join(output, "model.ts"))
-    logger.info(f"model.ts traced at {tile}^3 in {time.time() - t0:.0f}s")
+    logger.info(f"model.ts traced at {shape} in {time.time() - t0:.0f}s")
 
-    meta = json.load(open(os.path.join(base_folder, "metadata.json")))
-    meta.update({
-        "model_name": f"{meta.get('model_name', 'model')}_{name_suffix}",
-        "input_shape": [tile] * 3,
-        "output_shape": list(out_shape),
-        "inference_input_shape": [tile] * 3,
-        "inference_output_shape": list(out_shape),
-        "description": (meta.get("description", "") + f" | Finetune folded into the weights and "
-                        f"re-exported at {tile}^3 -> {out_shape[0]}^3 by cellmap_flow.finetune.export_merged "
-                        f"on {datetime.now():%Y-%m-%d}. See export_record.json.").strip(" |"),
-    })
+    shapes = {"input_shape": list(input_shape), "output_shape": list(output_shape)}
+    meta = {**metadata, **shapes, **{f"inference_{key}": value for key, value in shapes.items()}}
     with open(os.path.join(output, "metadata.json"), "w") as f:
         json.dump(meta, f, indent=2)
     with open(os.path.join(output, "export_record.json"), "w") as f:
         json.dump(provenance, f, indent=2)
-    with open(os.path.join(output, "README.md"), "w") as f:
-        f.write(f"# {meta['model_name']}\n\nFinetuned cellmap model, adapter folded into the weights, exported at "
-                f"{tile}^3 -> {out_shape[0]}^3 (both model.pt2 and model.ts are locked to that tile).\n"
-                f"Serve with `type: cellmap`, `folder_path: {os.path.abspath(output)}`.\n\n"
-                f"Provenance: export_record.json. Base: {provenance.get('base_repo') or base_folder}.\n")
-    return output
+    return ["metadata.json", "model.ts", *written, "export_record.json"]
 
 
 def main(argv=None):
@@ -205,8 +222,12 @@ def main(argv=None):
         base_folder = cm.folder_path
     else:
         base_folder = args.base_folder
+    from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
+
+    # Both finetune flavours of these models were trained on
+    # BatchLoopWrapper(export), so the eager module is wrapped as they were.
     eager = load_eager_base(base_folder)
-    merged = apply_finetune(eager, args.lora_adapter_path, args.weights_path)
+    merged = apply_finetune(BatchLoopWrapper(eager), args.lora_adapter_path, args.weights_path)
 
     d_ref = r_ref = scale = d_tile = r_tile = None
     if not args.skip_check:
@@ -233,6 +254,14 @@ def main(argv=None):
             out_shape = tuple(merged(torch.rand(1, 1, args.tile, args.tile, args.tile)).shape[2:])
 
     suffix = args.name_suffix or f"tile{args.tile}"
+    with open(os.path.join(base_folder, "metadata.json")) as f:
+        meta = json.load(f)
+    meta.update({
+        "model_name": f"{meta.get('model_name', 'model')}_{suffix}",
+        "description": (meta.get("description", "") + f" | Finetune folded into the weights and "
+                        f"re-exported at {args.tile}^3 -> {out_shape[0]}^3 by cellmap_flow.finetune.export_merged "
+                        f"on {datetime.now():%Y-%m-%d}. See export_record.json.").strip(" |"),
+    })
     prov = {
         "exported_at": datetime.now().isoformat(timespec="seconds"),
         "base_repo": args.repo, "base_folder": base_folder,
@@ -243,7 +272,12 @@ def main(argv=None):
         "tile_phase_check": d_tile, "tile_phase_check_relative": r_tile,
         "torch": torch.__version__,
     }
-    export_folder(merged, base_folder, args.output, args.tile, out_shape, prov, suffix)
+    export_folder(merged, args.output, [args.tile] * 3, out_shape, meta, prov)
+    with open(os.path.join(args.output, "README.md"), "w") as f:
+        f.write(f"# {meta['model_name']}\n\nFinetuned cellmap model, adapter folded into the weights, exported at "
+                f"{args.tile}^3 -> {out_shape[0]}^3 (its model files are locked to that tile).\n"
+                f"Serve with `type: cellmap`, `folder_path: {os.path.abspath(args.output)}`.\n\n"
+                f"Provenance: export_record.json. Base: {args.repo or base_folder}.\n")
     print(json.dumps({"output": os.path.abspath(args.output), "tile": args.tile, "output_shape": list(out_shape)}, indent=2))
     return 0
 

@@ -20,6 +20,7 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@huggingface/hub": "2.17.6",
     "@tensorflow/tfjs-backend-cpu": "4.22.0",
     "@tensorflow/tfjs-backend-webgpu": "4.22.0",
     "@tensorflow/tfjs-core": "4.22.0",
