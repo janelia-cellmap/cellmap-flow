@@ -6,6 +6,7 @@ arguments, the arrays as bytes. The routes around it are
 ``web/test/unit/backend-view-labels.test.ts``."""
 
 import json
+import math
 import subprocess
 import sys
 import warnings
@@ -157,3 +158,55 @@ def test_the_calls_answer_a_refusal_where_the_server_answers_400():
     region = np.zeros((1, 1, 1, 1), np.float32)
     args = {**label_it.seed_options({}), "output_class": None, "channels": [3, 4], "offsets": None, "indices": [[0]] * 3, "shape": [1, 1, 1, 1]}
     assert "error" in _call("seed", args, [region])
+    view = {"viewer_px": [800, 600], "state": {"layout": "3d"}, "pixel_nm": 8, "depth_axis": 0,
+            "display_dimensions": ["x", "y", "z"], "voxel_size": [8] * 3}
+    assert "error" in _call("field_of_view", view)
+
+
+# ---------------------------------------------------------------------------
+# The field of view
+# ---------------------------------------------------------------------------
+
+# cellmap-flow's viewers show x, y, z (viewer.VIEWER_AXES).
+XYZ = ("x", "y", "z")
+TOP = label_it.NEUROGLANCER_TOP_ROW_PX
+
+
+@pytest.mark.parametrize("layout, size_voxels", [
+    pytest.param("xy", (1, 400, 600), id="xy-x-across-y-down"),
+    pytest.param("xz", (400, 1, 600), id="xz-x-across-z-down"),
+    pytest.param("yz", (600, 400, 1), id="yz-z-across-y-down"),
+    pytest.param("4panel", (1, 200, 300), id="4panel-its-top-left-xy-panel"),
+    pytest.param({"type": "xz-3d"}, (400, 1, 300), id="beside-a-3d-view"),
+])
+def test_the_field_of_view_is_what_the_panel_shows_at_the_slice_on_screen(layout, size_voxels):
+    """A frame 600 x 400 pixels below Neuroglancer's top row, at one 8 nm
+    voxel a pixel: the panel's plane is the AI annotation's for the layout,
+    the panel's width along the axis it draws across, one voxel deep."""
+    from cellmap_flow.ai_annotate.geometry import depth_axis_from_layout
+
+    depth_axis = depth_axis_from_layout(layout, XYZ)
+    size = label_it.field_of_view_nm((600, 400 + TOP), {"layout": layout}, 8.0, depth_axis, XYZ, (8, 8, 8))
+    assert [s / 8 for s in size] == list(size_voxels)
+
+
+def test_the_field_of_view_leaves_out_the_side_panels_shown_and_is_as_deep_as_the_box():
+    """The layer panel (open on the Draw tab while painting) and the selection
+    share the right-hand column, 300 pixels at its default; the statistics,
+    resized, are below; the help panel is closed."""
+    state = {"layout": "xy", "selectedLayer": {"layer": "paint", "visible": True}, "selection": {"visible": True},
+             "statistics": {"visible": True, "size": 50}, "helpPanel": {"side": "left"}}
+    size = label_it.field_of_view_nm((900, 400 + TOP + 50), state, 16.0, 0, XYZ, (16, 16, 16), depth_nm=48)
+    assert size == [48.0, 400 * 16.0, 600 * 16.0]
+
+
+def test_a_view_over_the_cap_is_refused_and_one_at_it_is_not():
+    side = math.isqrt(label_it.FIELD_OF_VIEW_MAX_VOXELS)
+    view = ({"layout": "xy"}, 8.0, 0, XYZ, (8, 8, 8))
+    assert label_it.field_of_view_nm((side, side + TOP), *view) == [8.0, side * 8.0, side * 8.0]
+    with pytest.raises(ValueError):
+        label_it.field_of_view_nm((side + 1, side + TOP), *view)
+    with pytest.raises(ValueError):  # the box's depth counts too
+        label_it.field_of_view_nm((side, side + TOP), *view, depth_nm=16)
+    with pytest.raises(ValueError):  # no slice panel
+        label_it.field_of_view_nm((side, side + TOP), {"layout": "3d"}, *view[1:])
