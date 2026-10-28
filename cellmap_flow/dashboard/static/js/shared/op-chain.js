@@ -16,8 +16,11 @@
 // pressed.
 import { makeSortable } from "../lib/sortable.js";
 
+// `held`: the op whose step apply() keeps, first, whatever it is given: the
+// input list's ChannelSelector, the raw's channel (js/dashboard/raw-channel.js),
+// which a model's suggested normalization says nothing about.
 const KINDS = {
-  input: { item: ".normalizer-item", checkbox: ".inputNormCheckbox" },
+  input: { item: ".normalizer-item", checkbox: ".inputNormCheckbox", held: "ChannelSelector" },
   postprocess: { item: ".postprocessor-item", checkbox: ".postProcessCheckbox" },
 };
 
@@ -57,7 +60,7 @@ export function chainChanges(from, to) {
 }
 
 export function mountOpChain(listEl, { kind }) {
-  const { item: itemSelector, checkbox: checkboxSelector } = KINDS[kind];
+  const { item: itemSelector, checkbox: checkboxSelector, held } = KINDS[kind];
   const rows = () => Array.from(listEl.querySelectorAll(itemSelector));
   const editListeners = [];
   const edited = () => editListeners.forEach((listener) => listener());
@@ -140,9 +143,12 @@ export function mountOpChain(listEl, { kind }) {
     show,
 
     // Make the chain exactly `names`, in that order, each step's parameters
-    // from paramsByName[name] (show, with one set of values per op name).
+    // from paramsByName[name] (show, with one set of values per op name),
+    // after the list's `held` step, if it has one.
     apply(names, paramsByName) {
-      show(names.map((name) => ({ ...((paramsByName || {})[name] || {}), name })));
+      const kept = getChain().filter((step) => step.name === held).slice(0, 1);
+      show([...kept, ...names.filter((name) => name !== held)
+        .map((name) => ({ ...((paramsByName || {})[name] || {}), name }))]);
     },
 
     // Record `chain` (by default the list as it is now) as the one the

@@ -109,14 +109,21 @@ DECLARED = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
             {"name": "LambdaNormalizer", "expression": "2*x-1"}]
 
 
-@pytest.mark.parametrize("chain", [[], [{"name": "LambdaNormalizer", "expression": "x/255"}]],
-                         ids=["no input normalization", "the user's"])
+CHANNEL = [{"name": "ChannelSelector", "channel": 1}]
+
+
+@pytest.mark.parametrize("chain, expected", [
+    pytest.param([], DECLARED, id="no input normalization"),
+    pytest.param(CHANNEL, CHANNEL + DECLARED, id="a channel picked"),
+    pytest.param([{"name": "LambdaNormalizer", "expression": "x/255"}], None, id="the user's"),
+])
 def test_a_model_started_without_input_normalization_sets_the_one_it_declares(dashboard, monkeypatch, tmp_path,
-                                                                              chain):
+                                                                              chain, expected):
     """Its start sets them, as the chain's setter sets a chain, before its
     layer is drawn, so the layer is drawn through them; the postprocessing
     stays. A chain that has input normalizers is the user's, and is left as
-    it is. The page reads the chain back, and whose declaration it is, from
+    it is; a raw channel picked is no normalization, and is kept in front of
+    them. The page reads the chain back, and whose declaration it is, from
     the Loaded models list."""
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
@@ -132,13 +139,13 @@ def test_a_model_started_without_input_normalization_sets_the_one_it_declares(da
     session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", [model]
 
     assert dashboard.post("/api/models", json={"selected_models": ["mine"]}).status_code == 200
-    expected = chain or DECLARED
+    expected = expected or chain
     assert session.pipeline_spec == PipelineSpec(expected, postprocess)
     assert drawn_through == [PipelineSpec(expected, postprocess)]
     session.jobs = [_Job("mine")]
     loaded = dashboard.get("/api/models/loaded").get_json()
     assert loaded["pipeline"] == {"input_norm": expected, "postprocess": postprocess}
-    assert loaded["input_norm_from"] == (None if chain else "mine")
+    assert loaded["input_norm_from"] == (None if expected == chain else "mine")
 
 
 def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(dashboard, monkeypatch, tmp_path):

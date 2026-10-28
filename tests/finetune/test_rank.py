@@ -117,6 +117,10 @@ def test_a_model_is_tried_through_its_own_normalization_and_the_sessions():
     # An assumption comes after the session's, so it loses a tie to it.
     assert [t["from"] for t in norm_tries(own, "assumed", own[:1])] == ["session", "assumed"]
     assert norm_tries([], "convention", []) == [{"input_norm": [], "from": "none"}]
+    # Each is read on the raw channel the session's chain picks (it read
+    # channel 0), and that pick alone is no normalization of the session's.
+    channel = [{"name": "ChannelSelector", "channel": "1"}]
+    assert norm_tries(own, "declared", channel) == [{"input_norm": channel + own, "from": "declared"}]
     # The better is kept, the model's own among equals.
     assert best_try([{"matches": 0.5}, {"matches": 0.9}]) == 1
     assert best_try([{"matches": 0.7}, {"matches": 0.7}]) == 0

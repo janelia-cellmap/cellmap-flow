@@ -12,6 +12,7 @@ import { initConnect } from "./connect.js";
 import { initFinetuneTab } from "./finetune/index.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 import { initModelsTab } from "./models/index.js";
+import { initRawChannel } from "./raw-channel.js";
 import { initReviewTab } from "./review/index.js";
 
 // The header's "Toggle Dashboard" button: the dashboard column the other way
@@ -283,6 +284,7 @@ const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind
 const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });
 const applyBar = initApply(inputChain, postChain);
 initModelAdvice({ input: inputChain, postprocess: postChain, apply: applyBar.apply });
+initRawChannel({ input: inputChain, apply: applyBar.apply });
 document.addEventListener("keydown", (event) => applyOnEnter(event, applyBar.apply));
 initServerConfigModal();
 initReviewTab();

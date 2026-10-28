@@ -92,6 +92,9 @@ def test_a_declared_value_edited_is_not_a_match(verdict, declaring_model):
     # The same map written another way is the declared one.
     rewritten = verdict(declaring_model, [as_form[0], {"name": "LambdaNormalizer", "expression": "x*2 - 1"}])
     assert rewritten["input_norm_matches"] is True and rewritten["input_norm_differences"] == []
+    # The raw's channel picked in front of them is not the model's to declare.
+    picked = verdict(declaring_model, [{"name": "ChannelSelector", "channel": "1"}, *as_form])
+    assert picked["input_norm_matches"] is True and picked["input_norm_differences"] == []
 
     edited = verdict(declaring_model, [as_form[0], {"name": "LambdaNormalizer", "expression": "2*x"}])
     assert edited["input_norm_matches"] is False

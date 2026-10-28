@@ -30,7 +30,7 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.portable.rank import same_steps
+from cellmap_flow.portable.rank import normalizers, same_steps
 from cellmap_flow.serving.probe import activation_evidence, input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
@@ -82,7 +82,8 @@ def _declared_input_norm(model_config, data_range):
 
 
 # Reading the dataset costs a metadata fetch (and, for float data, a sample),
-# and it cannot change while the dashboard runs.
+# and it cannot change while the dashboard runs; each channel of it is
+# sampled on its own.
 _raw_range_cache = {}
 
 
@@ -91,13 +92,17 @@ def raw_dtype_and_range(dataset_path):
 
     Integer data has an exact range from its dtype. Float data does not -- the
     dtype permits anything -- so sample percentiles instead, the same way the
-    raw layer's auto-contrast does. Returns (dtype_name, (lo, hi)); either part
-    may be None when it could not be determined.
+    raw layer's auto-contrast does, on the channel the chain picks. Returns
+    (dtype_name, (lo, hi)); either part may be None when it could not be
+    determined.
     """
+    from cellmap_flow.io.raw import selected_channel
+
     if not dataset_path:
         return None, None
-    if dataset_path in _raw_range_cache:
-        return _raw_range_cache[dataset_path]
+    key = (dataset_path, selected_channel(get_session().input_norms))
+    if key in _raw_range_cache:
+        return _raw_range_cache[key]
 
     dtype_name, value_range = None, None
     try:
@@ -116,7 +121,7 @@ def raw_dtype_and_range(dataset_path):
     except Exception as e:
         logger.debug(f"Could not read raw dtype/range for {dataset_path}: {e}")
 
-    _raw_range_cache[dataset_path] = (dtype_name, value_range)
+    _raw_range_cache[key] = (dtype_name, value_range)
     return dtype_name, value_range
 
 
@@ -172,9 +177,11 @@ def model_advice():
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
     ]
-    configured_steps = [
+    # The channel picked (a ChannelSelector) is the raw's, not the model's
+    # normalization: the steps compared with the model's are the rest.
+    configured_steps = normalizers([
         n.to_dict() for n in (session.input_norms or []) if hasattr(n, "to_dict")
-    ]
+    ])
     configured_norm = [step.get("name") for step in configured_steps]
 
     raw_dtype, raw_range = raw_dtype_and_range(session.dataset_path)
