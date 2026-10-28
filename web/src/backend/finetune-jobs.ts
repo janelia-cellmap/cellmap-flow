@@ -29,7 +29,7 @@ import type { AppContext, ModelEntry, PaintVolume } from "../contracts";
 import { trainingEntry } from "../finetune/full/run-full";
 import { loadGoodRegions } from "../finetune/good-regions";
 import { MODE_NOUN, MODE_WORDS } from "../finetune/modes";
-import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
+import type { Finetuned, FinetuneOptions, RunFinetune, RunReporter } from "../finetune/types";
 import { PYTHON, pyRegExp } from "../generated/python-data";
 import { finetunedRecord, nextFinetunedName } from "../models/finetuned";
 import { stamp } from "../shared/format";
@@ -127,8 +127,6 @@ export class FinetuneJob {
    * definition), and what GET …/logs answers as `offset`. */
   readonly lines: string[] = [];
   readonly offsets: number[] = [];
-  /** What the last run made: a restart continues from its head, or from its bytes after a whole-network run. */
-  last: Finetuned | null = null;
   /** The finetuned entry the session serves for this job, which the next run's replaces. */
   servedEntryId: string | null = null;
   cancelRequested = false;
@@ -350,8 +348,10 @@ export class FinetuneJobs {
   }
 
   /** manager.restart_finetuning_job: run again under the same job id, from
-   * the last run's trained head, with the form's `options` and `params`
-   * (over the job's). Only a job that canRestart takes one (a 409 as the
+   * the model's own weights on the paint as it is now, as the server's
+   * restart starts from the model the job started from, with the form's
+   * `options` and `params` (over the job's): a run's result never depends
+   * on the runs before it. Only a job that canRestart takes one (a 409 as the
    * Python route answers, in its words). */
   restart(id: string, options: FinetuneOptions, params: Record<string, unknown>): { ok: true; job: FinetuneJob } | Refusal {
     const job = this.jobs.get(id);
@@ -382,15 +382,12 @@ export class FinetuneJobs {
       };
     }
     job.args = { ...job.args, options, params: { ...job.params, ...params } };
-    // Where the new run starts: the last run's head, or its whole model.
-    const last = job.last;
-    const from: StartFrom = !last ? {} : mode === "full" ? { initialBytes: last.bytes } : last.weight && last.bias ? { initialHead: { weight: last.weight, bias: last.bias } } : {};
     // The marker first (job-card.js resets the card and the loss plot on
     // it), then the progress from zero, so the first status poll after it
     // already shows the new run.
-    job.log(`${RESTARTING_MARKER}: a new run from the trained ${MODE_NOUN[mode]}, ${options.epochs} epoch(s) with the form's parameters`);
+    job.log(`${RESTARTING_MARKER}: a new run from ${job.modelName}'s own ${MODE_NOUN[mode]} on the paint as it is now, ${options.epochs} epoch(s) with the form's parameters`);
     job.startIteration(options.epochs);
-    job.start(this.run(job, from));
+    job.start(this.run(job));
     return { ok: true, job };
   }
 
@@ -401,7 +398,7 @@ export class FinetuneJobs {
    * the job CANCELLED and the result unkept; any failure is logged into
    * the job and makes it FAILED, never thrown (a job's end is read from its
    * status, as a cluster job's is). */
-  private async run(job: FinetuneJob, from: StartFrom = {}): Promise<void> {
+  private async run(job: FinetuneJob): Promise<void> {
     const { ctx, entry: served, volume, options } = job.args;
     // The file it trains from and into: a 3D model's of the run's block,
     // which may not be the one served (run-full.ts trainingEntry).
@@ -426,7 +423,6 @@ export class FinetuneJobs {
         paint: ctx.paint,
         options,
         report: job.reporter(),
-        ...from,
         ...(goodRegions.length ? { goodRegions } : {}),
       });
     } catch (e) {
@@ -442,7 +438,6 @@ export class FinetuneJobs {
       job.log("The run stopped; nothing of it is kept.");
       return;
     }
-    job.last = result;
     if (job.stopAfterEpoch !== null) job.log(`Stopped early after epoch ${result.epochs}: ${trained(job)} so far is kept.`);
     try {
       await this.keep(job, result, entry);
@@ -515,13 +510,10 @@ export class FinetuneJobs {
         job.log(`${was} could not be removed from this browser (${message(error)}); it stays on the Models tab, beside ${name}.`);
       }
     }
-    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this ${MODE_NOUN[job.args.options.mode]}.`);
+    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again, from ${job.modelName}'s own ${MODE_NOUN[job.args.options.mode]}, on all of it.`);
     job.setStatus("WAITING_FOR_RESTART");
   }
 }
-
-/** Where a run starts besides the base: a restart's last head, or its last whole model. */
-type StartFrom = Pick<FinetuneRun, "initialHead" | "initialBytes">;
 
 /** What a job's run trains, in a log line's words: "the head trained", "the network trained". */
 function trained(job: FinetuneJob): string {

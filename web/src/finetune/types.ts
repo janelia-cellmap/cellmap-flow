@@ -233,10 +233,10 @@ export interface GoodRegion {
 
 /** One finetune of `entry` on the paint of `volume`: the samples read through
  * `infer` and `paint`, the features computed with the model's own bytes,
- * the head trained from `initialHead` (the model's own when absent; the
- * last run's for a restart) and written into a copy of the bytes. The
- * distillation teacher is always the head in `baseBytes`, the weights the
- * job started from, whichever head the run starts from (run.ts). The good
+ * the head trained from the model's own and written into a copy of the
+ * bytes. A restart is such a run too, from `baseBytes` again on the paint as
+ * it is then, as the server's restart starts from the model the job started
+ * from: one run's result never depends on the runs before it. The good
  * regions are the entries of the volume's good_regions.json as they are
  * when the run starts (good-regions.ts loadGoodRegions); one that is not a
  * region is skipped with a line in the log, as the server skips it. */
@@ -251,10 +251,6 @@ export interface FinetuneRun {
   paint: PaintStore;
   options: FinetuneOptions;
   report: RunReporter;
-  initialHead?: { weight: Float32Array; bias: Float32Array };
-  /** A whole-network run's start: the last run's model, for a restart
-   * (`baseBytes` otherwise). */
-  initialBytes?: ArrayBuffer;
   goodRegions?: readonly unknown[];
 }
 

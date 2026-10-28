@@ -255,8 +255,7 @@ function teacherLogits(held: DistillationSet, teacher: { weight: Float32Array; b
  * it did before there was any. */
 const DISTILLATION_STREAM = 0x9e3779b9;
 
-/** The head fitted to `pixels` from `initial`'s weights (the head's own
- * when absent): `options.epochs` passes over the rows in a seeded shuffle,
+/** The head fitted to `pixels` from its own weights: `options.epochs` passes over the rows in a seeded shuffle,
  * `options.batchPixels` rows per Adam step (lr `options.learningRate`,
  * betas 0.9 and 0.999, eps 1e-8, PyTorch's defaults), the loss of
  * `batchLoss`.
@@ -267,10 +266,8 @@ const DISTILLATION_STREAM = 0x9e3779b9;
  * out over the epoch's steps in equal slices, so every row is seen once an
  * epoch whatever the batch, as the server's patches bring their unlabeled
  * voxels along with their painted ones. The teacher is `head`, the weights
- * the job started from (FinetuneRun), not `initial`: the server's teacher
- * is the model before any iteration of the job changed it
- * (adaptation.py's teacher), so a restart does not distil toward what an
- * earlier run already moved.
+ * the job started from, as the server's teacher is the model before any
+ * iteration of the job changed it (adaptation.py's teacher).
  *
  * After each epoch one line to `report`, in the words the dashboard's job
  * card and loss plot parse: `Epoch i/N - Loss: 0.012345`, with distillation
@@ -284,7 +281,7 @@ const DISTILLATION_STREAM = 0x9e3779b9;
  * so far come back, with the losses of the epochs that completed: a cancel
  * right after an epoch's line (the job's Stop Early) returns that epoch's
  * head exactly. */
-export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneOptions, report: RunReporter, initial?: { weight: Float32Array; bias: Float32Array }, distillation?: DistillationSet | null): Promise<TrainedHead> {
+export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneOptions, report: RunReporter, distillation?: DistillationSet | null): Promise<TrainedHead> {
   const { count, inChannels: cin, outChannels: cout } = pixels;
   if (count === 0) throw new Error("no painted voxels to train on");
   if (!(options.epochs >= 1) || !Number.isInteger(options.epochs)) throw new Error(`epochs must be a whole number of 1 or more, not ${options.epochs}`);
@@ -294,14 +291,13 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
   if (!HEAD_LOSSES.includes(options.lossType)) throw new Error(`the head trains with the ${HEAD_LOSSES.join(", ")} losses, not ${options.lossType}`);
   if (!(options.margin >= 0 && options.margin <= 0.5)) throw new Error(`the margin is from 0 to 0.5, not ${options.margin}`);
   if (!(options.distillationLambda >= 0 && Number.isFinite(options.distillationLambda))) throw new Error(`the distillation weight is a number of 0 or more, not ${options.distillationLambda}`);
-  const start = initial ?? head;
-  if (start.weight.length !== cout * cin || start.bias.length !== cout) throw new Error(`initial weights of ${start.weight.length} and ${start.bias.length} values for a ${cout} × ${cin} head`);
+  if (head.weight.length !== cout * cin || head.bias.length !== cout) throw new Error(`a head of ${head.weight.length} and ${head.bias.length} values for ${cout} × ${cin} channels`);
   const lambda = options.distillationLambda;
   const held = distillation && distillation.count > 0 && lambda > 0 ? distillation : null;
   if (held && (held.inChannels !== cin || held.outChannels !== cout)) throw new Error(`a distillation set of ${held.inChannels} → ${held.outChannels} channels for a ${cin} → ${cout} head`);
 
   // The parameters and Adam's moments, doubles; the weights go back to float32 at the end.
-  const w = Float64Array.from(start.weight), b = Float64Array.from(start.bias);
+  const w = Float64Array.from(head.weight), b = Float64Array.from(head.bias);
   const mw = new Float64Array(w.length), vw = new Float64Array(w.length), mb = new Float64Array(b.length), vb = new Float64Array(b.length);
   const gw = new Float64Array(w.length), gb = new Float64Array(b.length);
   const beta1 = 0.9, beta2 = 0.999, eps = 1e-8, lr = options.learningRate;

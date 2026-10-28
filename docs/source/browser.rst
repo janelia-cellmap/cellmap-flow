@@ -132,8 +132,10 @@ On the tab's Training panel,
 convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
-is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer, with the form's values as they are then). Once the
+is trained. Paint where it is still wrong and train again (*Restart* trains
+again from the model's own weights on all the paint as it is then, with the
+form's values as they are then, as the server's does: a round never builds on
+the one before). Once the
 job waits for a restart, ``Shift+R`` over the viewer does the same without
 asking first, so painting and training again need not leave the viewer; it
 says in the tab's logs what it did, or why there was nothing to restart. A
@@ -272,7 +274,7 @@ network*: every weight of the model trains on your paint, with
 `TensorFlow.js <https://www.tensorflow.org/js>`_ on this machine's GPU
 (WebGPU), from a training graph Marwan Zouinkhi exported beside each model.
 The weights trained are written back into the model's ``.onnx``, which is
-then served, kept, downloaded and restarted from as a last-layer finetune
+then served, kept, downloaded and restarted as a last-layer finetune
 is; switching between the two needs a new *Start Finetuning*. A model served
 from an int8 file offers neither (its weights are quantized and cannot be
 written): serve its fp32 or fp16 file to finetune it.

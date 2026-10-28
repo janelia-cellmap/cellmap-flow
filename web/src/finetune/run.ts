@@ -65,15 +65,13 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     if (declared && (declared.weight !== head.weightName || (declared.bias ?? null) !== head.biasName || declared.features !== head.featureTensor)) {
       throw new Error(`${run.entry.name}'s manifest declares its head as ${declared.weight} on ${declared.features}, and its graph ends in ${head.weightName} on ${head.featureTensor}: the two disagree, so nothing is written`);
     }
-    // What trains: the head, or for one channel its row (headRow), from
-    // the run's start (the last run's head on a restart, the model's own
-    // otherwise), whose other rows are written back as they are.
+    // What trains: the head, or for one channel its row (headRow), from the
+    // model's own, whose other rows are written back as they are.
     const channel = options.selectChannel;
     const trainee = channel === null ? head : headRow(head, channel);
-    const start = run.initialHead ?? head;
     report.log(`Finetuning ${run.entry.name}'s head on volume ${volume.id}: ${count(chunks)} painted chunk${chunks === 1 ? "" : "s"} of ${volume.chunk_size.join("×")} voxels`);
     report.log(`The head: a 1×1 convolution, ${head.inChannels} → ${head.outChannels} channels (${head.weightName}${head.biasName ? `, ${head.biasName}` : ", no bias"}, ${head.dtype}); ${options.epochs} epochs of ${count(options.batchPixels)} voxels per step at learning rate ${options.learningRate}, ${lossWords(options)}${options.balanceClasses ? ", classes balanced" : ""}${options.labelSmoothing > 0 && options.lossType !== "margin" ? `, labels smoothed by ${options.labelSmoothing}` : ""}`);
-    if (channel !== null && head.outChannels > 1) report.log(`Training channel ${channel} (${run.entry.manifest.channels[channel] ?? "unnamed"}) alone, its row of the head; the other ${plural(head.outChannels - 1, "row")} ${head.outChannels === 2 ? "is" : "are"} kept as ${run.initialHead ? "the last run left them" : "the model has them"}, and with them those channels' prediction`);
+    if (channel !== null && head.outChannels > 1) report.log(`Training channel ${channel} (${run.entry.manifest.channels[channel] ?? "unnamed"}) alone, its row of the head; the other ${plural(head.outChannels - 1, "row")} ${head.outChannels === 2 ? "is" : "are"} kept as the model has them, and with them those channels' prediction`);
 
     // Where the distillation term applies (lora_trainer.py's scope): the
     // good regions' unpainted voxels when the volume has any, whatever the
@@ -136,10 +134,9 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
       if (pick && !held) report.log(`Distillation has no voxel to hold (${pick === "anchor" ? "every voxel of the good regions is painted" : "every voxel of the painted chunks is painted"}); training on the paint alone`);
       const pixels = concatPixels(sets, trainee);
       const heldSet = held ? concatDistillation(heldSets, trainee) : null;
-      // The teacher is the head in the base's bytes, the weights the job
-      // started from, also when a restart starts from the last run's head.
-      const trained = await trainHead(pixels, trainee, options, report, channel === null ? run.initialHead : rowOf(start, head.inChannels, channel), heldSet);
-      const { weight, bias } = channel === null ? trained : withRow(start, head.inChannels, channel, trained);
+      // The teacher is the head in the base's bytes, the one it starts from.
+      const trained = await trainHead(pixels, trainee, options, report, heldSet);
+      const { weight, bias } = channel === null ? trained : withRow(head, head.inChannels, channel, trained);
       const bytes = withHead(run.baseBytes, head, weight, bias);
       const finalLoss = trained.losses.length ? trained.losses[trained.losses.length - 1] : null;
       const finalSupervised = trained.supervised.length ? trained.supervised[trained.supervised.length - 1] : null;

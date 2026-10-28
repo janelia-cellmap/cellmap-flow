@@ -74,15 +74,14 @@ async function letRun(baton: Baton, job: { settled(): Promise<void> }): Promise<
 }
 
 /** A run that logs one summary line per epoch (loss 0.5/epoch), stops where
- * the reporter says, and makes a head one more than the one it started from
- * (so a restart's initialHead shows in its result). */
+ * the reporter says, and makes a head one more than the model's. */
 function fakeRun(baton?: Baton): { run: RunFinetune; calls: FinetuneRun[]; results: Finetuned[] } {
   const calls: FinetuneRun[] = [];
   const results: Finetuned[] = [];
   const run: RunFinetune = async (r) => {
     calls.push(r);
     const n = r.options.epochs;
-    const from = r.initialHead ?? { weight: new Float32Array([1, 2, 3]), bias: new Float32Array([0]) };
+    const from = { weight: new Float32Array([1, 2, 3]), bias: new Float32Array([0]) };
     const weight = from.weight.map((w) => w + 1);
     const bias = from.bias.map((b) => b + 1);
     const losses: number[] = [];
@@ -568,7 +567,7 @@ describe.skipIf(!python)("cancel, stop early, restart", () => {
     expect((await h.handle(request("POST", `/api/finetune/job/${job_id}/stop-early`))).status).toBe(400);
   });
 
-  it("restarts from the trained head with the form's parameters, under the same job id, replacing the served model", async () => {
+  it("restarts from the model's own weights with the form's parameters, under the same job id, replacing the served model", async () => {
     const baton = new Baton();
     const { ctx, h, calls, results } = await ready({ baton });
     const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody())));
@@ -583,9 +582,11 @@ describe.skipIf(!python)("cancel, stop early, restart", () => {
     expect(job.lines.some((line) => line.startsWith("RESTARTING_TRAINING"))).toBe(true);
     await letRun(baton, job);
     expect(calls).toHaveLength(2);
-    expect(calls[1].initialHead).toEqual({ weight: results[0].weight, bias: results[0].bias });
+    // From the model's own head again, as the server's restart starts from
+    // the model the job started from: the first run's head is not built on.
+    expect(Array.from(results[1].weight!)).toEqual(Array.from(results[0].weight!));
     expect(calls[1].options).toMatchObject({ epochs: 2, learningRate: 0.001 });
-    expect(calls[1].entry.name).toBe(NAME_54); // the base again, with the trained head
+    expect(calls[1].entry.name).toBe(NAME_54);
     const s = await status(h, job_id);
     expect(s).toMatchObject({ status: "WAITING_FOR_RESTART", current_epoch: 2, total_epochs: 2, finetuned_model_name: `${NAME_54}-ft2`, inference_server_ready: true });
     // ft2 took ft1's place beside the base, which stays served

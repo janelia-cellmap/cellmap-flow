@@ -11,7 +11,7 @@
 // constants). The loss is the head's (loss.ts): the form's supervised loss
 // on the painted voxels, smoothed and class-balanced as it says, plus λ ×
 // the distance of the logits from the starting network's (the base's
-// weights, also on a restart) over the voxels its scope picks. Good regions
+// weights) over the voxels its scope picks. Good regions
 // are not used. The epochs and the learning rate are the form's. A run of
 // one channel of several (selectChannel) trains that channel so, and holds
 // the others to the starting network over every voxel of each tile or
@@ -213,12 +213,11 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     const offsets = files.initializers[source.file];
     if (!offsets) throw new Error(`finetune/initializers.json has no offsets for ${source.file}`);
     const names = Object.keys(graph.params);
-    const start = new Uint8Array(run.initialBytes ?? run.baseBytes);
+    const start = new Uint8Array(run.baseBytes);
     checkOffsets(start, offsets, names, source.file);
-    // The teacher is the base's weights, the model the job started from, also
-    // when a restart starts from the last run's (as the head's is), for the
-    // distillation term and for the hold on the channels a run of one does
-    // not train.
+    // The teacher is the base's weights, the model the job started from, for
+    // the distillation term and for the hold on the channels a run of one
+    // does not train.
     const lambda = options.distillationLambda, holds = holdsOtherChannels(options, entry.manifest.channels.length);
     const base = lambda > 0 || holds ? new Uint8Array(run.baseBytes) : null;
     if (base) checkOffsets(base, offsets, names, source.file);
@@ -414,7 +413,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   // params that train), checked where they lie in the bytes.
   const written = Object.keys(weightMap).filter((name) => trainable.has(weightMap[name].torch));
   const names = [...new Set([...initializersRead(torchParams), ...written])];
-  const start = new Uint8Array(run.initialBytes ?? run.baseBytes);
+  const start = new Uint8Array(run.baseBytes);
   checkOffsets(start, offsets, names, source.file);
   const lambda = options.distillationLambda, holds = holdsOtherChannels(options, entry.manifest.channels.length);
   const base = lambda > 0 || holds ? new Uint8Array(run.baseBytes) : null;

@@ -559,7 +559,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // POST /api/finetune/job/:id/restart: the form's parameters again (the
-  // same body as submit, less the model), a new run from the trained head.
+  // same body as submit, less the model), a new run from the model's own
+  // weights on the paint as it is now, as the server's restart is.
   // The job's channel when the body picks none (Shift+R, or an older tab):
   // a restart trains what the job trains, as the server's keeps
   // select_channel; another channel picked trains that one from there.
@@ -577,7 +578,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       success: true,
       job_id: params.id,
       annotations_synced: 0,
-      message: `Restart request sent. Training restarts from the trained ${MODE_NOUN[training.options.mode]} in this browser, on the paint as it is now.`,
+      message: `Restart request sent. Training starts again from ${job?.modelName ?? "the model"}'s own ${MODE_NOUN[training.options.mode]}, on the paint as it is now.`,
     });
   });
 
