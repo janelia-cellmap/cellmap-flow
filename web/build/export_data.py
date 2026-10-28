@@ -5,7 +5,8 @@ The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
 their parameters, the chain a fresh session starts with, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
-ranking's constants, the finetune log's patterns and the unit table. This
+ranking's constants, the learning rate's floor, the finetune log's patterns
+and the unit table. This
 script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
@@ -92,6 +93,7 @@ def python_data():
     from cellmap_flow.dashboard.routes.finetune import ai_annotate as ai_routes
     from cellmap_flow.dashboard.routes.finetune import view_labels
     from cellmap_flow.finetune import markers
+    from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
     from cellmap_flow.portable import rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import metadata
@@ -135,6 +137,8 @@ def python_data():
             "narrow_window": rank.NARROW_WINDOW,
             "window_margin": rank.WINDOW_MARGIN,
             "cutoffs": rank.CUTOFFS.tolist(),
+            # The share of the form's rate every run eases down to (options.py).
+            "learning_rate_floor": LEARNING_RATE_FLOOR,
             "job_statuses": [status.value for status in JobStatus],
             "terminal_statuses": sorted(status.value for status in TERMINAL_STATUSES),
             "epoch_start": regex(markers.EPOCH_START_RE),

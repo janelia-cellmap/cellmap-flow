@@ -497,7 +497,10 @@ class TrainingSession:
             )
             options = options.replaced(output_class=args.output_class)
 
-        # Re-created each iteration, for a fresh optimizer and scheduler.
+        # Re-created each iteration: a fresh AdamW, and with it a fresh
+        # schedule, from this iteration's learning rate (a restart's, when
+        # one changed it) down to LEARNING_RATE_FLOOR of it over this
+        # iteration's steps (Finetuner._optimizer).
         if self.iteration > 1:
             markers.emit(markers.RESTART_STATUS, "Preparing trainer...")
         logger.info("Creating trainer...")

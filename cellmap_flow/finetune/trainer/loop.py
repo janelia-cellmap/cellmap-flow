@@ -5,7 +5,9 @@ a ``TrainingOptions``: a LoRA adapter, or every weight (which of the two the
 model decides, see adaptation.strategy_for). An epoch is: fetch a batch,
 make its target, forward, the supervised term (supervised.SupervisedLoss),
 the distillation term and, when one channel trains (select_channel), the
-hold on the others (distillation.Distillation), step, record. Around it:
+hold on the others (distillation.Distillation), step, record. The learning
+rate eases from the form's down to LEARNING_RATE_FLOOR of it over the run's
+steps (learning_rate_factor). Around it:
 
 - recovery from an OOM (halve the batch, then drop distillation and the
   hold) and from a NaN under mixed precision (restart in fp32): recovery.py;
@@ -26,11 +28,12 @@ import torch
 import torch.nn as nn
 from torch.amp import autocast
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.adaptation import strategy_for
-from cellmap_flow.finetune.options import TrainingOptions
+from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR, TrainingOptions
 from cellmap_flow.finetune.trainer.diagnostics import GradientFlow, describe_first_batch, warn_if_single_class
 from cellmap_flow.finetune.trainer.distillation import OTHER_CHANNELS_WEIGHT, Distillation
 from cellmap_flow.finetune.trainer.recovery import Precision, probe_precision, survive_oom
@@ -39,6 +42,38 @@ from cellmap_flow.finetune.trainer.tensorboard import TensorBoard
 from cellmap_flow.utils.device import best_device
 
 logger = logging.getLogger(__name__)
+
+
+def learning_rate_factor(step: int, steps: int) -> float:
+    """The share of the run's learning rate that optimizer step ``step``
+    (0 to ``steps`` - 1) of a run of ``steps`` takes: 1 at the first,
+    LEARNING_RATE_FLOOR at the last, along half a cosine between them, so
+    a run takes big steps while the model is far from the paint and small
+    ones once it is close. A run of one step takes the rate itself.
+
+    A step past the last stays at the floor rather than going back up the
+    cosine: an OOM that halves the batch mid-run gives the epochs left more
+    steps than the run counted at its start. The browser's trainers compute
+    the same rate (web/src/finetune/schedule.ts learningRateAt).
+    """
+    if steps <= 1:
+        return 1.0
+    k = min(step, steps - 1)
+    return LEARNING_RATE_FLOOR + (1 - LEARNING_RATE_FLOOR) * (1 + math.cos(math.pi * k / (steps - 1))) / 2
+
+
+def rate_words(rate: float) -> str:
+    """A learning rate as the form's presets write it: 1e-4, 3e-5, 1.5e-3."""
+    mantissa, exponent = f"{rate:.2e}".split("e")
+    return f"{float(mantissa):g}e{int(exponent)}"
+
+
+def schedule_words(rate: float, steps: int) -> str:
+    """What a run's learning rate does, for its start line: "1e-4, cosine to
+    1e-5 over 40 steps" (web/src/finetune/schedule.ts scheduleWords)."""
+    if steps <= 1:
+        return rate_words(rate)
+    return f"{rate_words(rate)}, cosine to {rate_words(rate * LEARNING_RATE_FLOOR)} over {steps} steps"
 
 
 class Finetuner:
@@ -51,6 +86,8 @@ class Finetuner:
     - Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a
       GradScaler; it falls back to fp32 when the model NaNs under either
     - Gradient accumulation to simulate larger batch sizes
+    - The learning rate eased from the form's down to LEARNING_RATE_FLOOR
+      of it over the run (learning_rate_factor)
     - Partial annotation support (mask unannotated regions)
     - Distillation toward the starting model, on unlabeled voxels, on all
       voxels, or on the good regions' rehearsal patches
@@ -136,12 +173,7 @@ class Finetuner:
             initial_state if initial_state is not None else self.strategy.initial_state(self.model)
         )
 
-        # Optimizer, over the parameters that train: the adapter's, or every
-        # weight in a full finetune.
-        self.optimizer = AdamW(
-            filter(lambda p: p.requires_grad, self.model.parameters()),
-            lr=options.learning_rate,
-        )
+        self.optimizer, self.scheduler = self._optimizer()
 
         self.precision = Precision(self.device, options.mixed_precision)
         self.supervised = SupervisedLoss(options, target_transform)
@@ -207,6 +239,32 @@ class Finetuner:
         """Close the TensorBoard writer; the CLI calls this when an iteration is done."""
         self.tb.close()
 
+    @property
+    def schedule_steps(self) -> int:
+        """The optimizer steps the run takes, which the learning rate eases
+        over: an epoch's batches over the gradient accumulation, its last
+        partial accumulation a step of its own (see _train_epoch), times the
+        epochs."""
+        return self.num_epochs * math.ceil(len(self.dataloader) / self.gradient_accumulation_steps)
+
+    def _optimizer(self):
+        """AdamW over the parameters that train (the adapter's, or every
+        weight in a full finetune), at the form's learning rate, and its
+        schedule: the rate eased to LEARNING_RATE_FLOOR of it over the run's
+        steps (learning_rate_factor), the scheduler stepped after each
+        optimizer step (_step).
+
+        Counted once, here: an OOM that halves the batch later gives the
+        epochs left more steps, and those stay at the floor. A new trainer,
+        which a restart builds, or a reset after a NaN, starts it again.
+        """
+        optimizer = AdamW(
+            filter(lambda p: p.requires_grad, self.model.parameters()),
+            lr=self.options.learning_rate,
+        )
+        steps = self.schedule_steps
+        return optimizer, LambdaLR(optimizer, lambda step: learning_rate_factor(step, steps))
+
     def _config_rows(self):
         trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in self.model.parameters())
@@ -214,7 +272,7 @@ class Finetuner:
             ("epochs", self.num_epochs),
             ("batch size", getattr(self.dataloader, "batch_size", "?")),
             ("gradient accumulation", self.gradient_accumulation_steps),
-            ("learning rate", self.options.learning_rate),
+            ("learning rate", schedule_words(self.options.learning_rate, self.schedule_steps)),
             ("mixed precision", self.precision.describe()),
             ("loss", self.supervised.loss_type),
             ("margin", self.supervised.margin),
@@ -229,12 +287,9 @@ class Finetuner:
         ]
 
     def _reset_training_state(self):
-        """Reset the weights (in place), optimizer, and training counters for a fresh start."""
+        """Reset the weights (in place), optimizer and its schedule, and training counters for a fresh start."""
         self.model = self.strategy.reset(self.model, self.initial_state)
-        self.optimizer = AdamW(
-            filter(lambda p: p.requires_grad, self.model.parameters()),
-            lr=self.optimizer.defaults['lr'],
-        )
+        self.optimizer, self.scheduler = self._optimizer()
         self.current_epoch = 0
         self._start_epoch = 0
         self.global_step = 0
@@ -289,6 +344,7 @@ class Finetuner:
         log(f"Batches per epoch: {len(self.dataloader)}")
         log(f"Gradient accumulation: {self.gradient_accumulation_steps}")
         log(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
+        log(f"Learning rate: {schedule_words(self.options.learning_rate, self.schedule_steps)}")
         log(f"Mixed precision: {self.precision.describe()}")
         log(f"Mask unannotated regions: {self.supervised.mask_unannotated}")
         if self.select_channel is not None:
@@ -480,12 +536,16 @@ class Finetuner:
         self.last_others_loss = float('nan')
         return float('nan')
 
-    def _step(self):
-        """One optimizer step over the accumulated gradients."""
+    def _step(self) -> float:
+        """One optimizer step over the accumulated gradients, at the
+        schedule's rate, which it then moves on; returns the rate it took."""
+        lr = self.optimizer.param_groups[0]["lr"]
         self.precision.scaler.step(self.optimizer)
         self.precision.scaler.update()
         self.optimizer.zero_grad()
+        self.scheduler.step()
         self.global_step += 1
+        return lr
 
     def _train_epoch(self) -> float:
         """Train for one epoch and return average loss."""
@@ -603,7 +663,7 @@ class Finetuner:
                     return self._abort_epoch(
                         f"NaN/Inf gradient at epoch {self.current_epoch+1}, batch {batch_idx+1}"
                     )
-                self._step()
+                lr = self._step()
                 if self.tb.on:
                     self.tb.log_step(
                         loss=loss.item() * accumulate, supervised=supervised_loss.item(),
@@ -611,7 +671,7 @@ class Finetuner:
                         other_channels=others_loss.item() if self.distillation.holds_others else None,
                         bce_metrics=self.supervised.step_bce_metrics,
                         interval_terms=self.supervised.step_interval_terms,
-                        lr=self.optimizer.param_groups[0]["lr"],
+                        lr=lr,
                         step_s=time.time() - t_after_fetch, data_wait_s=t_after_fetch - t_fetch,
                     )
 
@@ -735,6 +795,11 @@ class Finetuner:
         self.current_epoch = checkpoint['epoch']
         self._start_epoch = checkpoint['epoch'] + 1
         self.global_step = checkpoint['global_step']
+        # The schedule carries on from the checkpoint's step, as the epochs
+        # do: the rate of the step it is at, from the form's.
+        self.scheduler.last_epoch = self.global_step
+        for group, rate in zip(self.optimizer.param_groups, self.scheduler.base_lrs):
+            group["lr"] = rate * learning_rate_factor(self.global_step, self.schedule_steps)
         self.best_loss = checkpoint['best_loss']
         # It had a best epoch, whose best_checkpoint.pth this run carries on.
         self._has_best_checkpoint = math.isfinite(self.best_loss)

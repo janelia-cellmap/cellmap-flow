@@ -1528,7 +1528,7 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "Learning rate (AdamW).",
+          "description": "The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
         },
@@ -1782,7 +1782,7 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "Learning rate (AdamW).",
+          "description": "The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
         },

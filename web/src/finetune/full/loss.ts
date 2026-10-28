@@ -26,6 +26,7 @@
 import type * as TF from "@tensorflow/tfjs-core";
 
 import type { FinetuneOptions } from "../types";
+import type { Adam } from "./adam";
 import type { Tf, TrainNet } from "./cellmap-tfjs-train";
 
 export type FullLossOptions = Pick<FinetuneOptions, "lossType" | "margin" | "labelSmoothing" | "balanceClasses" | "distillationLambda" | "distillationScope"> & Partial<Pick<FinetuneOptions, "selectChannel">>;
@@ -124,9 +125,10 @@ export function lossTerms(tf: Tf, z: TF.Tensor, y: TF.Tensor, m: TF.Tensor, teac
   return { total: (total === supervised ? tf.clone(supervised) : total) as TF.Scalar, supervised, distillation, otherChannels };
 }
 
-/** One Adam step of `net` on the batch: lossTerms on its logits. The
- * terms as they were before the step; the caller disposes them. */
-export function fullTrainStep(tf: Tf, net: TrainNet, opt: TF.Optimizer, x: TF.Tensor4D, y: TF.Tensor4D, m: TF.Tensor4D, teacher: TF.Tensor4D | null, o: FullLossOptions): LossTerms {
+/** One Adam step of `net` on the batch at `learningRate` (the schedule's
+ * for the step, ../schedule.ts): lossTerms on its logits. The terms as they
+ * were before the step; the caller disposes them. */
+export function fullTrainStep(tf: Tf, net: TrainNet, opt: Adam, x: TF.Tensor4D, y: TF.Tensor4D, m: TF.Tensor4D, teacher: TF.Tensor4D | null, o: FullLossOptions, learningRate: number): LossTerms {
   let supervised: TF.Scalar | null = null, distillation: TF.Scalar | null = null, otherChannels: TF.Scalar | null = null;
   const total = opt.minimize(() => {
     const terms = lossTerms(tf, net.forward(x), y, m, teacher, o);
@@ -134,7 +136,7 @@ export function fullTrainStep(tf: Tf, net: TrainNet, opt: TF.Optimizer, x: TF.Te
     distillation = terms.distillation && tf.keep(terms.distillation);
     otherChannels = terms.otherChannels && tf.keep(terms.otherChannels);
     return terms.total;
-  }, true, net.vars);
-  if (!total || !supervised) throw new Error("the optimizer returned no loss");
+  }, net.vars, learningRate);
+  if (!supervised) throw new Error("the optimizer returned no loss");
   return { total, supervised, distillation, otherChannels };
 }
