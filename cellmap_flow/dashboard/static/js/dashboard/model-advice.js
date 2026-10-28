@@ -104,6 +104,14 @@ function showAdvice(box, wanted, key, build, says = "") {
   box.appendChild(shown.div);  // (re)appending keeps the box in poll order
 }
 
+// The rest of a piece of advice, as markup for its innerHTML: under an "i"
+// beside its one line, as dom.js hint() builds it (css/dark.css
+// details.more). Nothing when there is no rest.
+function more(html) {
+  return html ? ' <details class="more"><summary aria-label="More">i</summary><span class="more-body">'
+    + html + "</span></details>" : "";
+}
+
 function adviceButton(className, text, onclick) {
   const btn = document.createElement("button");
   btn.className = className;
@@ -158,7 +166,7 @@ function renderInputNormAdvice(m, box, wanted) {
       div.innerHTML = "<small><strong>Input normalization "
                     + (assumed ? "matches the assumed range" : "looks right")
                     + "</strong> for <code>" + esc(m.model || "model") + "</code>: "
-                    + esc(names.join(" → ")) + ". " + esc(sug.reason || "") + "</small>";
+                    + esc(names.join(" → ")) + ".</small>" + more(sug.reason && "<small>" + esc(sug.reason) + "</small>");
       setTimeout(function () { hideAdvice(key); }, CONFIRM_BANNER_MS);
       return div;
     });
@@ -175,21 +183,21 @@ function renderInputNormAdvice(m, box, wanted) {
     if (differences.length) {
       // The same steps, so naming them would say nothing: say the values.
       div.innerHTML = "<strong>Input normalization differs from what <code>"
-                    + esc(m.model || "model") + "</code> declares</strong><br>"
-                    + differences.map(function (d) {
+                    + esc(m.model || "model") + "</code> declares</strong>"
+                    + more(differences.map(function (d) {
                         return esc(d.step) + " " + esc(d.param) + " is " + esc(String(d.configured))
                              + ", declared " + esc(String(d.declared));
                       }).join("<br>")
-                    + "<br><small>" + esc(sug.reason || "") + "</small>";
+                    + "<br><small>" + esc(sug.reason || "") + "</small>");
     } else {
       div.innerHTML = "<strong>"
                     + (assumed ? "Assumed input normalization" : "Suggested input normalization")
-                    + "</strong> for <code>" + esc(m.model || "model") + "</code><br>"
-                    + esc(sug.reason || "")
+                    + "</strong> for <code>" + esc(m.model || "model") + "</code>"
+                    + more(esc(sug.reason || "")
                     + "<br><small>confidence: " + esc(sug.confidence || "unknown")
                     + "; currently set: "
                     + esc((m.configured_input_norm || []).join(" → ") || "none")
-                    + "</small>";
+                    + "</small>");
     }
     div.appendChild(document.createElement("br"));
     div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
@@ -212,7 +220,7 @@ function renderOptionalPostprocess(m, rev, box, wanted) {
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "small text-muted mb-2";
-    div.innerHTML = "Optional for <code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.innerHTML = "Optional for <code>" + esc(m.model || "model") + "</code>:" + more(esc(rev.message)) + " ";
     div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline me-2", "Apply: " + suggest.join(" → "),
       function () { applySuggestion(processing.postprocess, suggest, rev.params); hideAdvice(key); }));
     div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
@@ -229,7 +237,8 @@ function renderUnknownOutput(m, rev, box, wanted) {
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "small text-muted mb-2";
-    div.innerHTML = "<code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.innerHTML = "<code>" + esc(m.model || "model") + "</code>: set its postprocessing yourself."
+                  + more(esc(rev.message)) + " ";
     div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
@@ -259,19 +268,18 @@ function renderPostprocessAdvice(m, box, wanted) {
     div.className = "alert " + (warn ? "alert-warning" : "alert-info");
     // The message says what the output is and what says so: the network's
     // last op, or the range its output on noise had (a guess).
-    let html = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
-             + "</strong> for <code>" + esc(m.model || "model") + "</code><br>";
-    html += esc(rev.message);
+    let why = esc(rev.message);
     const tuned = Object.keys(rev.params || {});
     if (tuned.length) {
-      html += "<br><small>with " + tuned.map(function (name) {
+      why += "<br><small>with " + tuned.map(function (name) {
         const v = rev.params[name];
         return "<code>" + esc(name) + "</code> " + Object.keys(v).map(function (k) {
           return esc(k) + "=" + esc(v[k]);
         }).join(", ");
       }).join("; ") + "</small>";
     }
-    div.innerHTML = html;
+    div.innerHTML = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
+                  + "</strong> for <code>" + esc(m.model || "model") + "</code>" + more(why);
     if ((rev.suggest || []).length) {
       div.appendChild(document.createElement("br"));
       div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
@@ -302,10 +310,11 @@ function renderVoxelSizeAdvice(m, box, wanted) {
     const model = "<code>" + esc(m.model || "model") + "</code>";
     if (relabelled) {
       div.className = "alert alert-warning";
-      div.innerHTML = "<strong>Wrong scale</strong>: " + model + " expects "
-                    + esc(nm(m.input_voxel_size)) + " data, but the dataset has no such level, so it reads "
-                    + esc(nm(relabelled)) + " data as if it were " + esc(nm(m.input_voxel_size))
-                    + ". Tick <em>Resample if no scale matches the model</em> in the Models tab and submit it again.";
+      div.innerHTML = "<strong>Wrong scale</strong> for " + model
+                    + ": tick <em>Resample if no scale matches the model</em> in the Models tab and submit it again."
+                    + more(model + " expects " + esc(nm(m.input_voxel_size))
+                      + " data, but the dataset has no such level, so it reads "
+                      + esc(nm(relabelled)) + " data as if it were " + esc(nm(m.input_voxel_size)) + ".");
       div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
         function () { hideAdvice(key); }));
     } else {
