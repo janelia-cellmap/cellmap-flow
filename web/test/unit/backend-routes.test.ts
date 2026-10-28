@@ -365,34 +365,45 @@ describe("GET /api/model_advice", () => {
     expect(m.input_norm_differences).toEqual([{ step: "LambdaNormalizer", param: "expression", configured: "2*x", declared: "2*x-1" }]);
   });
 
-  it("offers an affinity model its chain into a segmentation, which finds a 2D model's objects on one slice, and warns of a threshold ahead of it", async () => {
+  it("offers an affinity model its chain into a segmentation cut where its ranking fitted the paint, which finds a 2D model's objects on one slice, and warns of a threshold ahead of it", async () => {
     // A 2D model's three channels (z, y, x) on the one slice it is run on,
     // which has no neighbour along z: the z channel is the model's guess at
-    // one, here "apart" everywhere. Two 4×4 squares, a logit of 2 (0.88)
-    // along y and x inside each, -4 everywhere else.
+    // one, here "apart" everywhere. Two 4×4 squares whose neighbours'
+    // affinities are faint, a logit of -2 (0.12) along y and x inside each
+    // and -6 (0.0025) everywhere else, which a ranking fits at 0.076.
     const square = (y: number, x: number) => (y >= 1 && y < 5 && x >= 1 && x < 5 ? 1 : y >= 6 && y < 10 && x >= 6 && x < 10 ? 2 : 0);
-    const logits = new Float32Array(3 * 12 * 12).fill(-4);
+    const logits = new Float32Array(3 * 12 * 12).fill(-6);
     for (let y = 0; y < 12; y++) {
       for (let x = 0; x < 12; x++) {
         const here = square(y, x);
-        if (here && square(y + 1, x) === here) logits[144 + y * 12 + x] = 2;
-        if (here && square(y, x + 1) === here) logits[288 + y * 12 + x] = 2;
+        if (here && square(y + 1, x) === here) logits[144 + y * 12 + x] = -2;
+        if (here && square(y, x + 1) === here) logits[288 + y * 12 + x] = -2;
       }
     }
     const objects = (steps: Step[]) => new Set(Array.from(applyPostprocessors({ data: logits, shape: [3, 1, 12, 12] }, steps).data as BigUint64Array)).size - 1;
     const applied = (review: any): Step[] => review.suggest.map((name: string) => ({ name, ...review.params[name] }));
     const review = async () => body(await backend.handle(request("GET", "/api/model_advice"))).models[0].postprocess_review;
 
-    // The ranking's sigmoid on its logits: the chain into a segmentation is offered.
-    const backend = createBackend(fakeContext({ state: { chain: { input_norm: [], postprocess: [{ name: "SigmoidPostprocessor" }] } } }));
+    // The row the ranking set, the sigmoid and that threshold: the chain into
+    // a segmentation is offered in its place, joining neighbours above the
+    // same cut-off, where it finds the squares; at the 0.5 it is offered at
+    // without a fit, none.
+    const ranked: Step[] = [{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: 0.076 }];
+    const fits = { [NAME_54]: { input_norm: [], postprocess: ranked, threshold: 0.076 } };
+    const ctx = fakeContext({ state: { chain: { input_norm: [], postprocess: ranked }, rankFits: fits } });
+    const backend = createBackend(ctx);
     await backend.handle(submit([HF54]));
     const offered = await review();
     expect(offered).toMatchObject({ level: "optional", suggest: ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"] });
+    expect(offered.params.AffinityPostprocessor.bias).toBe(0.076);
     expect(objects(applied(offered))).toBe(2);
+    await ctx.session.update({ rankFits: {} });
+    expect(objects(applied(await review()))).toBe(0);
 
-    // The threshold the ranking set ahead of the watershed left it 0s and 1s,
-    // and no objects: the advice says to take it out.
-    const thresholded = [{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: 0.5 }, { name: "AffinityPostprocessor" }];
+    // The threshold ahead of the watershed left it 0s and 1s, and no
+    // objects: the advice says to take it out.
+    await ctx.session.update({ rankFits: fits });
+    const thresholded = [...ranked, { name: "AffinityPostprocessor" }];
     expect(objects(thresholded)).toBe(0);
     await backend.handle(request("PUT", "/api/pipeline", { input_norm: [], postprocess: thresholded }));
     const warned = await review();

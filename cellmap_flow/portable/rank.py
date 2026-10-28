@@ -275,10 +275,10 @@ def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
     one as it is: what a model's start sets on a chain with none (no
     ``threshold``), and what Use this model, Fit to Paint and Use these
     settings set beside the input normalization (the ranking row's
-    ``threshold``; none for an affinity model, whose watershed needs its
-    affinities graded, not 0 or 1). ``output_class`` is the model's output
-    activation (portable/label_it.py, as its server's probe answers it);
-    with None, not known, nothing changes.
+    ``threshold``, an affinity model's too: the cut-off its painted pairs
+    were scored at). ``output_class`` is the model's output activation
+    (portable/label_it.py, as its server's probe answers it); with None,
+    not known, nothing changes.
 
     Two steps are this rule's, on a chain of nothing else:
 
@@ -289,7 +289,8 @@ def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
       probabilities there instead, everything object at 0. An affinity
       model's logits need it as much as any model's: the chain into a
       segmentation (serving/probe.py suggest_affinity_chain) stays the
-      model advice's optional offer.
+      model advice's optional offer, which replaces the threshold and
+      cuts the objects at it.
     - ``threshold``, a probability as the ranking's row gives it (0.5 at
       the model's own boundary): a ThresholdPostprocessor at it, in place of
       one the chain has, in the units of the output after the activation:

@@ -59,12 +59,15 @@ export function completeState(stored: unknown): SessionState {
 }
 
 /** A stored `rankFits` made whole: the entries that are a fit (steps a
- * list, the postprocessing a list or null); {} for anything else, which
- * only forgets what the ranking fitted until the next score. */
+ * list, the postprocessing a list or null), each threshold a number or
+ * null; {} for anything else, which only forgets what the ranking fitted
+ * until the next score. */
 function rankFitsOf(stored: unknown): Record<string, RankFit> {
   if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
-  return Object.fromEntries(Object.entries(stored as Record<string, Partial<RankFit> | null>).filter(
-    ([, f]) => f && Array.isArray(f.input_norm) && (f.postprocess === null || Array.isArray(f.postprocess)))) as Record<string, RankFit>;
+  return Object.fromEntries(Object.entries(stored as Record<string, Partial<RankFit> | null>).flatMap(([name, f]) =>
+    f && Array.isArray(f.input_norm) && (f.postprocess === null || Array.isArray(f.postprocess))
+      ? [[name, { input_norm: f.input_norm, postprocess: f.postprocess, threshold: typeof f.threshold === "number" ? f.threshold : null }]]
+      : []));
 }
 
 /** A stored `startPostprocess` made whole, or null when it is not one. */

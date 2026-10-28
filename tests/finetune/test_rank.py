@@ -222,24 +222,42 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
 
-def test_an_affinity_models_row_gives_its_layer_the_sigmoid_alone(dashboard, painted, monkeypatch):
-    """The watershed that makes an affinity model's objects needs its
-    affinities graded: the threshold its row set ahead of it left 0s and 1s
-    and no objects. The threshold fitted to the paint is still the row's,
-    Seed from Prediction's."""
+def test_an_affinity_models_row_shows_what_was_scored_and_the_advice_cuts_its_objects_there(dashboard, painted, monkeypatch):
+    """An affinity model's row gives its layer the sigmoid and the threshold
+    fitted to the paint, as a binary model's does: its score called a
+    painted pair joined above that cut-off. Its objects stay one click away:
+    over the row, the model advice offers the chain into a segmentation
+    without the threshold (which left the watershed 0s and 1s, and no
+    objects), joining neighbours above the same cut-off."""
+    from cellmap_flow.dashboard.routes import model_advice
+
     session = get_session()
-    session.models_config = [_model("model")]
+    config = _model("model")
+    config.to_dict = lambda: {"channels_names": ["aff_z", "aff_y", "aff_x"]}
+    session.models_config = [config]
     session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     monkeypatch.setattr(rank_routes, "fetch_model_info", lambda host: {"channels": ["aff_z", "aff_y", "aff_x"], "output_class": UNBOUNDED})
     monkeypatch.setattr(rank_routes, "autodetect_output_type",
                         lambda config, output_type, offsets: ("affinities", "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"))
-    painted.logits = np.repeat(painted.logits, 3, axis=0)
+    # The painted pairs joined at -1 over the rest at -4: a cut-off under
+    # the model's own fits them.
+    painted.logits = np.repeat(np.where(painted.logits > 0, -1.0, -4.0).astype("f4"), 3, axis=0)
 
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
 
     assert body["success"], body
-    assert body["channel"] is None and 0 < body["threshold"] < 1
-    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}]
+    assert body["channel"] is None and 0 < body["threshold"] < 0.5
+    ranked = [{"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": body["threshold"]}]
+    assert body["postprocess"] == ranked
+
+    session.set_pipeline(PipelineSpec((), ranked))
+    monkeypatch.setattr(model_advice, "_fetch_probe", lambda host: {"available": True, "output_class": UNBOUNDED, "output_channels": 3})
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    (advice,) = dashboard.get("/api/model_advice").get_json()["models"]
+    review = advice["postprocess_review"]
+    assert review["level"] == "optional"
+    assert review["suggest"] == ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"]
+    assert review["params"]["AffinityPostprocessor"]["bias"] == body["threshold"]
 
 
 def test_a_model_is_read_through_its_own_input_normalization_when_the_session_has_none(dashboard, painted, monkeypatch):
