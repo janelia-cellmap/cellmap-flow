@@ -441,7 +441,8 @@ A chunk served to Neuroglancer
    bioimage.io) reads through the same. A chunk the data ends in is computed
    whole and cropped.
 #. The model's output is cached (``CELLMAP_FLOW_PREDICTION_CACHE_BYTES``,
-   16 GiB by default, 0 for none): panning back, or changing only the
+   16 GiB by default, 0 for none; ``CELLMAP_FLOW_RAW_CACHE_BYTES``, 1 GiB,
+   bounds the raw data kept): panning back, or changing only the
    postprocessing, does not run the model again. Its cache key includes the
    model's weights version, which the finetune loop bumps after each
    iteration (``ChunkmirageServer.weights_changed``). A postprocessor that
