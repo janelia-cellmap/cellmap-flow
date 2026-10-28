@@ -5,7 +5,8 @@ model's output with the target where it is annotated. ``output_class_of``
 says what the output is -- a sigmoid baked in, a tanh, or logits -- when
 nothing declared it, in the classes the model's server reports
 (``serving.probe``) and as the server finds it, off the network's graph
-first, so that training, ranking and seeding read one model the same way. The browser's twin is web/src/finetune/full/loss.ts.
+first, so that training, ranking and seeding read one model the same way.
+The browser's twin is web/src/finetune/full/loss.ts.
 """
 
 import logging
@@ -38,8 +39,9 @@ def output_class_of(model_config, model, example, select_channel=None) -> str:
     The graph is the model the job was built from; an adapter or new
     weights change neither the op its network ends in nor the channel read.
 
-    jrc_mus-livers' peroxisome model, a convolution at its end, answered the
-    probe with one value inside [-1, 1] and was read as a tanh's output.
+    The graph first, as the probe can mislead: a network that ends in a
+    convolution can answer it with values inside [-1, 1] (one value
+    everywhere, even), which read as a tanh's output.
     """
     from cellmap_flow.portable.activation import output_activation
 
