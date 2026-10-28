@@ -77,7 +77,10 @@ class PatchReader:
     The raw is normalized here, with the session's own chain: the dashboard
     normalizes raw through its ``process_chain()`` before inference, but the
     trainer is a separate process whose chain is empty, so without this it
-    would train on raw uint8 while inference sees normalized [-1, 1].
+    would train on raw uint8 while inference sees normalized [-1, 1]. The
+    channel of a multi-channel raw is the one that chain picks (its
+    ChannelSelector) for the same reason: read through the empty chain it
+    was channel 0, whichever one inference read.
 
     The arrays are opened on first read. In training that is in a loader
     worker, after the dataset was pickled to it: no open tensorstore handle
@@ -172,8 +175,9 @@ class PatchReader:
         """The ``input_size`` raw patch centred on the annotation patch, as stored.
 
         Cut across ``depth_axis`` and turned as the annotation patch is.
-        Read with ``normalize=False``, so no process-wide norms apply;
-        ``normalize`` applies the session's own afterwards.
+        Read on the channel the session's chain picks, with
+        ``normalize=False``, so no process-wide norms apply; ``normalize``
+        applies the session's own afterwards.
 
         The patch is a box of raw voxels: ``input_size`` of them, from the
         one the patch's lower edge falls in. It used to go through a whole-nm
@@ -190,7 +194,8 @@ class PatchReader:
             # was made to (no level at it); past the array its edge is
             # repeated, as the served model's input is (BlockInput).
             self._raw = RawInput(
-                open_raw(self.raw_dataset_path, self.input_voxel_size, resample=self.resample), normalize=False
+                open_raw(self.raw_dataset_path, self.input_voxel_size, resample=self.resample),
+                self.normalizers, normalize=False,
             )
         raw_voxel_size = np.asarray(self._raw.array.voxel_size, dtype=float)
         raw_corner_nm = np.asarray(self._raw.array.corner, dtype=float)

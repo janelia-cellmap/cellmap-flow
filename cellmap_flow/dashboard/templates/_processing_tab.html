@@ -112,6 +112,14 @@
 <div class="tab-content" id="processingTabContent">
   <div class="tab-pane fade show active" id="inputNormPane" role="tabpanel">
     {{ notice("inputNormNotice", "info", "mb-2") }}
+    {# The raw channel every model reads, for a raw of several: the list's
+       ChannelSelector, which a pick puts first and applies
+       (js/dashboard/raw-channel.js). Shown with the `hidden` attribute. #}
+    <div class="mb-3" id="rawChannelRow" hidden>
+      <label class="form-label mb-1" for="rawChannel">Channel</label>
+      <select class="form-select form-select-sm" id="rawChannel"></select>
+      <div class="form-text">The raw channel every model reads.</div>
+    </div>
     {{ op_list("inputNormForm", "inputNormList", "inputNorm", "normalizer-item", "inputNormCheckbox", input_norm_items) }}
   </div>
   <div class="tab-pane fade" id="postProcessPane" role="tabpanel">
