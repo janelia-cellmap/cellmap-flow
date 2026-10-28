@@ -83,10 +83,13 @@ def test_fill_holes_fills_what_a_blob_encloses(shape):
     pytest.param("unbounded", ["AffinityPostprocessor"], {"model_name": "aff"}, "warn", id="logits"),
     pytest.param("unbounded", ["AffinityPostprocessor"], {"channels_names": "affinities"}, "warn",
                  id="logits-from-a-model-whose-one-channel-name-is-a-string"),
-    # The sigmoid (and threshold) a start or the ranking set shows them; the
-    # segmentation is the user's choice, not a fault.
+    # The sigmoid a start or the ranking set shows them, a threshold of the
+    # user's too; the segmentation is the user's choice, not a fault.
     pytest.param("unbounded", ["SigmoidPostprocessor", "ThresholdPostprocessor"], {"model_name": "aff"}, "optional",
                  id="a-segmentation-is-optional"),
+    # The threshold leaves the watershed 0s and 1s, and no objects.
+    pytest.param("unbounded", ["SigmoidPostprocessor", "ThresholdPostprocessor", "AffinityPostprocessor"],
+                 {"model_name": "aff"}, "warn", id="a-threshold-ahead-of-the-watershed"),
 ])
 def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain, names, level):
     from cellmap_flow.serving import probe
