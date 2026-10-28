@@ -26,14 +26,14 @@ The mask covers one plane, one annotation voxel thick, `crop_size_px` annotation
 
 ### Choosing the plane
 
-The plane is the one the viewer's single panel is showing. cellmap-flow's viewer orders its axes z, y, x, and neuroglancer names its layouts after display slots rather than data axes, so the layout names do not match the planes:
+The plane is the one the viewer's single panel is showing. cellmap-flow's viewer orders its display axes x, y, z (`VIEWER_AXES`), so each layout shows the plane it is named after:
 
 | Viewer layout | Plane sent |
 |---|---|
-| **yz** (single panel) | XY, at the hovered z |
+| **xy** (single panel) | XY, at the hovered z |
 | **xz** (single panel) | XZ, at the hovered y |
-| **xy** (single panel) | YZ, at the hovered x |
-| **4panel**, **3d** or anything else | the top-left panel's plane (YZ) |
+| **yz** (single panel) | YZ, at the hovered x |
+| **4panel**, **3d** or anything else | the top-left panel's plane (XY) |
 
 Neuroglancer keeps one layout for the whole viewer, so in the 4-panel layout the server cannot tell which panel the mouse is over: switch to a single-panel layout to choose the plane. The panel's status line names the plane that was sent (XY, XZ or YZ), so check it before accepting.
 

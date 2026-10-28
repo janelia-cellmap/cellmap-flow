@@ -87,12 +87,12 @@ test.describe("AI-assisted annotation in the browser", () => {
       expect(ready.status).toBe("ready");
       expect(ready.provider).toBe("fake");
       expect(ready.model).toBe("fake-threshold");
-      // The viewer opens on Neuroglancer's "xy" panel, which with z, y, x
-      // dimensions is the YZ plane (docs/ai_annotate.md, "Choosing the plane").
-      expect(ready.plane).toBe("YZ");
+      // The viewer opens on Neuroglancer's "xy" panel, which with x, y, z
+      // display dimensions is the XY plane (docs/ai_annotate.md, "Choosing the plane").
+      expect(ready.plane).toBe("XY");
       expect(ready.write_box).not.toBeNull();
       expect(ready.mask_fraction).toBeGreaterThan(0);
-      await expect(page.locator("#aiAnnotateReviewSummary")).toHaveText(/YZ plane, mitochondria/);
+      await expect(page.locator("#aiAnnotateReviewSummary")).toHaveText(/XY plane, mitochondria/);
 
       // Accept: the plane's objects get ids, the rest background; the chunk
       // at the box's centre, where the fake provider paints (a disc around
@@ -154,7 +154,7 @@ test.describe("AI-assisted annotation in the browser", () => {
       await expect(page.locator("#aiAnnotateStatus")).toHaveText(/^Ready/, { timeout: SLOW_MS });
       const fromKey = await api<Status>(page, "/api/finetune/ai-annotate/status");
       expect(fromKey.annotate_id).not.toBe(ready.annotate_id);
-      expect(fromKey.plane).toBe("YZ");
+      expect(fromKey.plane).toBe("XY");
 
       // The review closed with its result unanswered: Annotate is not held by
       // it (it was greyed out, with no word of why), and sets it aside first.
