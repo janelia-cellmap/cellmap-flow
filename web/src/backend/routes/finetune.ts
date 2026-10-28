@@ -1,7 +1,8 @@
 // The Finetune tab's routes (dashboard/routes/finetune/annotation_core.py,
 // annotation_sessions.py, overlay.py, training.py), answered in the page:
 // the models to annotate for, a new annotation volume and its paint layer,
-// earlier volumes resumed, the training jobs (finetune-jobs.ts) with their
+// the boxes over its painted chunks (the annotated regions), earlier
+// volumes resumed, the training jobs (finetune-jobs.ts) with their
 // status, log and log stream, and what the server has no need of: the
 // volume downloaded as a zarr (zip) and the finetuned model as .onnx, since
 // here they exist only in this browser's IndexedDB, and a volume deleted.
@@ -68,9 +69,9 @@ import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { CHUNK_DIR, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
+import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
-import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
+import { ANNOTATED_REGIONS_LAYER, boxesLayer, dimensionsOf, PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, text } from "../router";
@@ -416,13 +417,18 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // The paint is already where training reads it (the store), so a sync
   // has nothing to move: it reports the painted chunks, which is what the
-  // server's count is of. The annotated-regions boxes are not drawn here
-  // (no annotation layer in the viewer contract); the count is answered.
+  // server's count is of. The server's sync draws the annotated-regions
+  // boxes again too; here their button alone does (below).
   router.post("/api/finetune/sync-annotations", async (_req, _params, ctx) => {
     const n = await paintedCount(ctx);
     return json(200, { success: true, message: `Synced ${n} annotations`, synced_count: n });
   });
-  router.post("/api/finetune/refresh-annotated-regions", async (_req, _params, ctx) => json(200, { success: true, count: await paintedCount(ctx) }));
+
+  // POST /api/finetune/refresh-annotated-regions: the tab's Redraw
+  // Annotated Regions. Draws the boxes over the session volume's painted
+  // chunks (showAnnotatedRegions) and answers how many, which the tab shows
+  // beside the button.
+  router.post("/api/finetune/refresh-annotated-regions", async (_req, _params, ctx) => json(200, { success: true, count: await showAnnotatedRegions(ctx) }));
 
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
@@ -665,6 +671,35 @@ export function sameDataset(a: string, b: string): boolean {
 async function paintedCount(ctx: AppContext): Promise<number> {
   const id = ctx.session.state.paintVolume;
   return id ? (await paintedChunkIndices(ctx.paint, id)).length : 0;
+}
+
+/** Draw a box over each painted chunk of the session's volume as the
+ * annotated_regions layer, and answer how many (overlay.py's
+ * refresh_annotated_regions_layer). The volume is the one the session
+ * trains on, as the server draws its manifest's volume alone; Load Crops
+ * needs a server, so a browser volume has no imported crops and every box
+ * is a painted chunk's (chunkBoxes). The axes are the viewer's, as the good
+ * regions' are. A new layer is added hidden, as the server adds it: the
+ * boxes are an orientation aid, not to be drawn over the data unasked;
+ * drawn again, the layer keeps what the user set on it, shown or hidden
+ * included (setLayers, carriedLayer), and with nothing painted it is taken
+ * away. Only the button calls this: a layer set rebuilds the viewer's whole
+ * state (applyState's restoreState), which drops the draw tool selected and
+ * can lose a stroke being painted, the reason the button's note gives for
+ * the boxes not being drawn on their own. */
+async function showAnnotatedRegions(ctx: AppContext): Promise<number> {
+  const id = ctx.session.state.paintVolume;
+  const volume = id ? await readVolume(ctx.paint, id) : null;
+  const boxes = volume ? chunkBoxes(volume, await paintedChunkIndices(ctx.paint, volume.id)) : [];
+  const shown = ctx.viewer.layer(ANNOTATED_REGIONS_LAYER);
+  if (!boxes.length) {
+    if (shown) ctx.viewer.removeLayer(ANNOTATED_REGIONS_LAYER);
+    return 0;
+  }
+  const info = ctx.infer.dataset();
+  const layer = boxesLayer(boxes, info ? Object.keys(dimensionsOf(info)) : undefined);
+  ctx.viewer.setLayers({ [ANNOTATED_REGIONS_LAYER]: shown ? layer : { ...layer, visible: false } });
+  return boxes.length;
 }
 
 /** Why a loss the form sent cannot be trained with here, or null for one
