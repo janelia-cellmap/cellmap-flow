@@ -293,11 +293,12 @@
           {% endif %}
           <div class="no-data-title">No Viewer Connected</div>
           {# In the browser mode (mode == "browser", set by web/build/render.py) the
-             data is read from a URL, not a path on a file system. Flask passes no
+             data is read from a URL, not a path on a file system, the line's
+             rest under an "i" (css/dark.css details.more). Flask passes no
              mode, so it keeps the wording below. #}
           <div class="no-data-desc">
             {% if mode == "browser" %}
-            No volume open. Enter the URL of an OME-Zarr volume below to open it in the viewer.
+            Enter the URL of an OME-Zarr volume below to open it in the viewer. <details class="more"><summary aria-label="More">i</summary><span class="more-body">No volume is open. The URL must be that of a public OME-Zarr volume, one served with CORS, such as an OpenOrganelle dataset; or pick a folder on this machine. The models run in this browser.</span></details>
             {% else %}
             No Neuroglancer URL configured. Enter a dataset path below to connect the viewer.
             {% endif %}

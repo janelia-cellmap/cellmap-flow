@@ -38,6 +38,7 @@ import { finetunedRecord, isFinetuned, nextFinetunedName, publishedRef } from ".
 import { NoBrowserCopyError } from "./models/hf";
 import { hubName, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
+import type { Hint } from "./shared/hint";
 import { paintVolumeOf } from "./viewer/layers";
 import { decodeState, encodeState } from "./viewer/share";
 import { layersOf, type NgLayer, type NgState, sourceUrl } from "./viewer/state";
@@ -450,20 +451,27 @@ export async function linkedHash(
   return { hash: view.state === state ? hash : encodeState(view.state), dropped: view.dropped };
 }
 
-/** What the page says when a link did not open whole: a sentence for each
- * model left out, each model renamed and each layer left out of the view;
- * none when it opened as it was made. */
-export function linkNotes(models: Pick<LinkedModels, "renamed" | "leftOut">, dropped: readonly DroppedLayer[]): string[] {
-  const notes = models.leftOut.map(({ name, why }) => `The link's model ${name} is left out: ${why}.`);
+/** What the page says when a link did not open whole: a line for each
+ * model left out, each model renamed and each layer left out of the view,
+ * the why under an "i"; none when it opened as it was made. */
+export function linkNotes(models: Pick<LinkedModels, "renamed" | "leftOut">, dropped: readonly DroppedLayer[]): Hint[] {
+  const notes: Hint[] = models.leftOut.map(({ name, why }) => ({ short: `The link's model ${name} is left out.`, more: `Why: ${why}.` }));
   for (const [from, to] of Object.entries(models.renamed)) {
-    notes.push(`The link's ${from} is served here as ${to}: this browser has a model named ${from} already, with other weights, and keeps it.`);
+    notes.push({ short: `The link's ${from} is served here as ${to}.`, more: `This browser has a model named ${from} already, with other weights, and keeps it.` });
   }
-  for (const layer of dropped) notes.push(layerNote(layer));
+  for (const layer of dropped) {
+    notes.push(layer.why === "paint" ? { short: `Layer ${layer.name} is left out of the view.`, more: `Why: ${paintKept(layer)}.` } : { short: layerNote(layer) });
+  }
   return notes;
 }
 
+/** Why a layer of a link's view is left out, as a line for the log. */
 function layerNote(layer: DroppedLayer): string {
   return layer.why === "paint"
-    ? `Layer ${layer.name} is left out of the view: its paint (${layer.volume}) is kept in the browser the link was made in, and this browser has no copy of it.`
+    ? `Layer ${layer.name} is left out of the view: ${paintKept(layer)}.`
     : `Layer ${layer.name} is left out of the view: its model is not served here.`;
+}
+
+function paintKept(layer: DroppedLayer): string {
+  return `its paint (${layer.volume}) is kept in the browser the link was made in, and this browser has no copy of it`;
 }

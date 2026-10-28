@@ -9,6 +9,7 @@
 // The dashboard's own connect.js owns the Connect button and the status line
 // and is not changed: this fills the dataset field and clicks Connect, and
 // writes the status line the way connect.js does (its colours too).
+import { setHint } from "../shared/hint";
 import { message } from "../shared/message";
 import { forgetState, withHash } from "../viewer/share";
 import type { PickedDirectory } from "./index";
@@ -143,9 +144,13 @@ export function connectPanel(): LocalPanel {
         box.className = "local-permission";
         const text = document.createElement("div");
         text.className = "local-permission-text";
-        text.textContent = refused
-          ? `Chrome did not grant access to ${folderName}. Try again (if it does not ask, allow file access for this site in the site settings behind the icon left of the address bar), or open another volume.`
-          : `The open volume is the folder ${folderName} on this machine. The browser needs your permission to read it again.`;
+        if (refused) {
+          setHint(text, `Chrome did not grant access to ${folderName}. Try again, or open another volume.`,
+            "If it does not ask, allow file access for this site in the site settings behind the icon left of the address bar.");
+        } else {
+          setHint(text, `The browser needs your permission to read ${folderName} again.`,
+            `The open volume is the folder ${folderName} on this machine.`);
+        }
         const actions = document.createElement("div");
         actions.className = "local-permission-actions";
         const allow = button("btn btn-primary", `Allow access to ${folderName}`);
