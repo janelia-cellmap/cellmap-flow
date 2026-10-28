@@ -3,7 +3,8 @@
 // modes run: a suggestion turned down stays down when the chain changes, as
 // it does after every Apply, and advice about something new still shows; a
 // suggestion's Apply applies the chain, through the Apply bar's apply; and
-// the advice is asked for until every model's probe has answered.
+// the advice is asked for until every model's probe has answered, and again
+// when the backend changes the chain itself.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -32,6 +33,7 @@ class FakeElement {
 }
 
 const MODEL_ADVICE = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/dashboard/model-advice.js", import.meta.url));
+const EVENTS = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/lib/events.js", import.meta.url));
 
 interface Advice {
   initModelAdvice: (processing: unknown) => void;
@@ -46,11 +48,14 @@ interface Advice {
 async function setUp(processing: Record<string, unknown> = { input: {}, postprocess: {}, apply: () => {} }) {
   const box = new FakeElement();
   const page = { models: [] as Record<string, unknown>[], failing: false, requests: 0 };
+  // The page's events (lib/events.js announces them on document).
+  const events = new EventTarget();
   vi.stubGlobal("document", {
     getElementById: () => box,
     createElement: () => new FakeElement(),
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
   });
   vi.stubGlobal("fetch", async () => {
     page.requests += 1;
@@ -166,4 +171,20 @@ it("asks for the advice until every model's probe has answered", async () => {
   const answered = page.requests;
   await vi.advanceTimersByTimeAsync(10 * 60_000);
   expect(page.requests).toBe(answered);
+});
+
+it("asks again when the backend changes the chain itself, as Fit to Paint does", async () => {
+  // Every probe has answered, so the poll has stopped; Fit to Paint then
+  // sets an affinity model's chain, whose chain into a segmentation is now
+  // offered cut at the threshold the ranking fitted.
+  vi.useFakeTimers();
+  const { page, advice } = await setUp();
+  const { announce, CHAIN_CHANGED_EVENT } = await import(/* @vite-ignore */ EVENTS);
+  page.models = [advised({ model: "fitted" })];
+  advice.refreshModelAdvice();
+  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  const asked = page.requests;
+  announce(CHAIN_CHANGED_EVENT);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(page.requests).toBe(asked + 1);
 });
