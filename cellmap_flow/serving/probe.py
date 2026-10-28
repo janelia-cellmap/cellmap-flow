@@ -230,9 +230,9 @@ def review_postprocess(
     unconventional. ``"optional"`` offers a chain the model's output shows
     right without: an affinity model's into a segmentation, once its
     affinities show as probabilities. The page shows it as a quiet line
-    with its Apply: as a suggestion's banner, over the sigmoid a model's
-    start or the ranking set (portable/rank.py needed_postprocess, an
-    affinity model's logits' too), it read as though that were wrong. A
+    with its Apply, not a suggestion's banner, which over the sigmoid a
+    model's start or the ranking set (portable/rank.py needed_postprocess,
+    an affinity model's logits' too) reads as though that were wrong. A
     threshold is no fault either: the ranking sets one at the probability
     the paint is fitted best at, an affinity model's too, so its layer shows
     the painted pairs' decision the score read. Ahead of an
