@@ -264,12 +264,12 @@ export function headSteps(count: number, options: Pick<FinetuneOptions, "epochs"
   return options.epochs * Math.ceil(count / Math.min(options.batchPixels, count));
 }
 
-/** The head fitted to `pixels` from its own weights: `options.epochs` passes over the rows in a seeded shuffle,
- * `options.batchPixels` rows per Adam step (betas 0.9 and 0.999, eps 1e-8,
- * PyTorch's defaults), from `options.learningRate`, eased down to
- * LEARNING_RATE_FLOOR of it by the last step or kept, as
- * `options.learningRateSchedule` says (schedule.ts learningRateAt, over
- * headSteps), the loss of `batchLoss`.
+/** The head fitted to `pixels` from its own weights: `options.epochs`
+ * passes over the rows in a seeded shuffle, `options.batchPixels` rows per
+ * Adam step (betas 0.9 and 0.999, eps 1e-8, PyTorch's defaults), from
+ * `options.learningRate`, eased down to LEARNING_RATE_FLOOR of it by the
+ * last step or kept, as `options.learningRateSchedule` says (schedule.ts
+ * learningRateAt, over headSteps), the loss of `batchLoss`.
  *
  * With `distillation` and λ (`options.distillationLambda`) above 0, each
  * step's loss adds λ × distillationTerm on a share of the distillation

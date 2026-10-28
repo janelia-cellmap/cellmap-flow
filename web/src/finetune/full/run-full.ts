@@ -11,14 +11,14 @@
 // constants). The loss is the head's (loss.ts): the form's supervised loss
 // on the painted voxels, smoothed and class-balanced as it says, plus λ ×
 // the distance of the logits from the starting network's (the base's
-// weights) over the voxels its scope picks. Good regions
-// are not used. The epochs are the form's, and the learning rate starts at
-// the form's and eases down over the run or stays, as its schedule says
-// (../schedule.ts), each step's rate given to an Adam of our own: TF.js's
-// keeps one rate (adam.ts). A run of one channel of several (selectChannel)
-// trains that channel so, and holds the others to the starting network over
-// every voxel of each tile or block (loss.ts lossTerms), so the starting
-// network is built for it even at λ 0.
+// weights) over the voxels its scope picks. Good regions are not used. The
+// epochs are the form's, and the learning rate starts at the form's and
+// eases down over the run or stays, as its schedule says (../schedule.ts),
+// each step's rate given to an Adam of our own: TF.js's keeps one rate
+// (adam.ts). A run of one channel of several (selectChannel) trains that
+// channel so, and holds the others to the starting network over every voxel
+// of each tile or block (loss.ts lossTerms), so the starting network is
+// built for it even at λ 0.
 //
 // A 2D model (createRunFull) is built by Marwan Zouinkhi's runtime
 // (cellmap-tfjs-train.ts buildNet) from weights named as the initializers;

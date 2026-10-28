@@ -113,10 +113,10 @@ export interface SessionState {
   /** The channel each model's layer shows, by model name, as POST
    * /api/finetune/channel sets it (the training form's Channel) and Use this
    * model does (the row's channel, before the model is served): the
-   * channel's index into the model's output channels. A
-   * layer built for the model later opens on it, and so does one for a
-   * model finetuned from it (serving.ts shownChannel). The server's
-   * `shown_channels` on its dashboard session. */
+   * channel's index into the model's output channels. A layer built for the
+   * model later opens on it, and so does one for a model finetuned from it
+   * (serving.ts shownChannel). The server's `shown_channels` on its
+   * dashboard session. */
   shownChannels: Record<string, number>;
   /** The models added to Which model to start from's list by hand (POST
    * /api/finetune/rank/add): their catalog ids, in the order added, so
