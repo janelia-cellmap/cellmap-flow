@@ -20,7 +20,7 @@
 import type { AppContext, PaintVolume } from "../../contracts";
 import { loadGoodRegions, markRegion, regionBoxes, saveGoodRegions } from "../../finetune/good-regions";
 import { readVolume } from "../../finetune/volume";
-import { dimensionsOf, GOOD_REGIONS_LAYER, goodRegionsLayer, type RegionBox } from "../../viewer/layers";
+import { boxesLayer, dimensionsOf, GOOD_REGIONS_LAYER, type RegionBox } from "../../viewer/layers";
 import type { Router } from "../router";
 import { json, objectBody } from "../router";
 
@@ -90,5 +90,5 @@ async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {
 function showGoodRegions(ctx: AppContext, boxes: readonly (RegionBox | null)[]): void {
   const info = ctx.infer.dataset();
   const axes = info ? Object.keys(dimensionsOf(info)) : undefined;
-  ctx.viewer.setLayers({ [GOOD_REGIONS_LAYER]: goodRegionsLayer(boxes, axes) });
+  ctx.viewer.setLayers({ [GOOD_REGIONS_LAYER]: boxesLayer(boxes, axes) });
 }

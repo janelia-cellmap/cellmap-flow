@@ -154,7 +154,7 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/load-existing-volume": "both",
     "GET /api/finetune/load-existing-volume-progress": "stub",
     "POST /api/finetune/sync-annotations": "stub",
-    "POST /api/finetune/refresh-annotated-regions": "stub",
+    "POST /api/finetune/refresh-annotated-regions": "both",
     "GET /api/finetune/session-volume": "browser",
     "GET /api/finetune/volume/<volume_id>/download": "browser",
     "POST /api/finetune/delete-volume": "browser",
