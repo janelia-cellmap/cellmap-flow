@@ -162,7 +162,19 @@ def test_the_learning_rate_eases_from_the_forms_down_to_its_floor(make_trainer):
     assert rates[0] == pytest.approx(1e-2)
     assert rates[-1] == pytest.approx(1e-2 * LEARNING_RATE_FLOOR)
     assert rates == sorted(rates, reverse=True)
-    assert learning_rate_factor(9, 6) == pytest.approx(LEARNING_RATE_FLOOR)
+    assert learning_rate_factor(9, 6, "cosine") == pytest.approx(LEARNING_RATE_FLOOR)
+
+
+def test_a_constant_schedule_steps_at_the_forms_rate_to_the_last_step(make_trainer):
+    """The form's Ease down unticked: every step takes the form's rate, as
+    every step did before the schedule, the last one too."""
+    ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, learning_rate=1e-2,
+                           learning_rate_schedule="constant", target_transform=BinaryTargetTransform())
+    rates = []
+    trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
+    assert not trainer.train().get("diverged")
+    assert rates == pytest.approx([1e-2] * 9)
 
 
 class _OutOfMemory(nn.Module):

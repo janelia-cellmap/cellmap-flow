@@ -687,10 +687,12 @@ function refuseLoss(loss: unknown): string | null {
  * trainer takes, checked, as run.ts's options and as the job's params (the
  * card shows the loss, margin and distillation from them). finetune_mode
  * says what trains, "head" when absent. Both modes take the loss fields
- * (readLoss) and select_channel, the channel picked (a whole number, or
- * absent for none; whether the model has it is refuseChannel's to say,
- * with the model). For the head, batch_pixels is the browser's own: voxels per
- * Adam step, where the server's batch_size counts patches. The fields only
+ * (readLoss), learning_rate_schedule (cosine, the default, or constant:
+ * the form's Ease down box) and select_channel, the channel picked (a
+ * whole number, or absent for none; whether the model has it is
+ * refuseChannel's to say, with the model). For the head, batch_pixels is
+ * the browser's own: voxels per Adam step, where the server's batch_size
+ * counts patches. The fields only
  * a cluster job uses (lora_r, patches_per_epoch, rehearsal_fraction, queue,
  * checkpoint_path, and for the head batch_size and augment) are left out
  * of both. For the whole network (readFullTraining) the batch is
@@ -703,6 +705,8 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!Number.isInteger(epochs) || epochs < 1) return { error: "num_epochs: expected a whole number of epochs, 1 or more" };
   const learningRate = numberOr(body.learning_rate, mode === "full" ? FULL_LEARNING_RATE : DEFAULT_OPTIONS.learningRate);
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
+  const learningRateSchedule = blank(body.learning_rate_schedule) ? DEFAULT_OPTIONS.learningRateSchedule : body.learning_rate_schedule;
+  if (learningRateSchedule !== "cosine" && learningRateSchedule !== "constant") return { error: "learning_rate_schedule: expected cosine or constant" };
   const loss = readLoss(body);
   if ("error" in loss) return loss;
   const pick = readSelectChannel(body.select_channel);
@@ -711,8 +715,8 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   const training = mode === "full" ? readFullTraining(body, epochs, learningRate, loss) : readHeadTraining(body, epochs, learningRate, loss);
   if ("error" in training) return training;
   return {
-    options: { ...training.options, selectChannel },
-    params: { ...training.params, ...(selectChannel === null ? {} : { select_channel: selectChannel }) },
+    options: { ...training.options, learningRateSchedule, selectChannel },
+    params: { ...training.params, learning_rate_schedule: learningRateSchedule, ...(selectChannel === null ? {} : { select_channel: selectChannel }) },
   };
 }
 

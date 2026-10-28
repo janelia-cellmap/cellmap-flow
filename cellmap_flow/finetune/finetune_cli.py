@@ -75,7 +75,7 @@ def main():
         )
     logger.info(f"Batch size: {options.batch_size}")
     logger.info(f"Epochs: {options.num_epochs}")
-    logger.info(f"Learning rate: {options.learning_rate}")
+    logger.info(f"Learning rate: {options.learning_rate} ({options.learning_rate_schedule})")
     logger.info("")
 
     # === Load model (once) ===
