@@ -23,7 +23,7 @@
 // region's geometry is region.ts's, the run run.ts's, the folder and the
 // zip output.ts's.
 import { directoryStore, memoryStore } from "../../chunkmirage/web/src/materialize";
-import { pageBase } from "../backend/serving";
+import { pageBase, shownChannel } from "../backend/serving";
 import type { AppContext, LayerSpec, ServedModel } from "../contracts";
 import { type HandleStore, indexedDbHandles, localKeyFor, localUrl, pickDirectory, supportsLocalFolders } from "../local-folder";
 import { dropDirectory, type DropWording } from "../local-folder/panel";
@@ -538,7 +538,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
       const keep = ctx.viewer.layerShader(p.name) ?? undefined;
       const place = served.findIndex((s) => s.entry.name === p.name);
       const color = shaderColor(keep?.shader) ?? PREDICTION_COLORS[(place >= 0 ? place : i) % PREDICTION_COLORS.length];
-      layers[savedLayerName(p.name)] = savedLayer(p.served, p.chain, url, color, keep);
+      layers[savedLayerName(p.name)] = savedLayer(p.served, p.chain, url, color, keep, shownChannel(ctx.session.state.shownChannels, p.name)?.channel ?? null);
     });
     ctx.viewer.setLayers(layers);
     log(`in the viewer: ${Object.keys(layers).join(", ")}, read from ${written.name} at ${url}`);

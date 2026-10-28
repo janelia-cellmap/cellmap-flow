@@ -1,6 +1,6 @@
 """Finetuner on the CPU: what it distils toward, how it reads the model's
-output, how a run survives a NaN or an OOM, and what its single-class
-warning goes by."""
+output, the learning rate it steps at, how a run survives a NaN or an OOM,
+and what its single-class warning goes by."""
 
 import logging
 
@@ -124,6 +124,59 @@ def test_a_full_finetune_distils_toward_a_frozen_copy_of_its_starting_weights(ma
     assert any(not torch.equal(v, start[k]) for k, v in model.state_dict().items()), "the student moved"
 
 
+def test_training_one_channel_holds_the_others_where_they_were(make_trainer):
+    """With select_channel the prediction was sliced to that channel, so the
+    others were in no loss at all and drifted with the network they share
+    (here by 0.36 and 0.07, the trained one by 0.54). They are held to the
+    starting model on every voxel now, with no distillation asked for too."""
+    torch.manual_seed(0)
+    model = nn.Sequential(nn.Conv3d(1, 4, 3, padding=1), nn.ReLU(), nn.Conv3d(4, 3, 1))
+    raw = torch.rand(4, 1, 6, 6, 6)
+    with torch.no_grad():
+        start = model(raw)
+    ann = _annotation(1, n=4, size=6, fg=(2, np.s_[:, :, :3]))
+    trainer = make_trainer(model, (raw, ann), batch_size=2, num_epochs=20, learning_rate=1e-2, select_channel=1,
+                           distillation_lambda=0.0, target_transform=BinaryTargetTransform())
+    assert not trainer.train().get("diverged")
+    with torch.no_grad():
+        moved = (model(raw) - start).abs().mean(dim=(0, 2, 3, 4))
+    assert moved[1] > 5 * max(moved[0], moved[2])
+
+
+def test_the_learning_rate_eases_from_the_forms_down_to_its_floor(make_trainer):
+    """Every step trained at the form's rate. The first takes it now and the
+    last LEARNING_RATE_FLOOR of it, the steps counted as gradient
+    accumulation makes them (three batches two at a time: two steps an epoch,
+    the second a partial accumulation); a step past the count, which an OOM's
+    halved batch makes, stays at the floor."""
+    from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
+    from cellmap_flow.finetune.trainer.loop import learning_rate_factor
+
+    ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, gradient_accumulation_steps=2,
+                           learning_rate=1e-2, target_transform=BinaryTargetTransform())
+    rates = []
+    trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
+    assert not trainer.train().get("diverged")
+    assert len(rates) == 6
+    assert rates[0] == pytest.approx(1e-2)
+    assert rates[-1] == pytest.approx(1e-2 * LEARNING_RATE_FLOOR)
+    assert rates == sorted(rates, reverse=True)
+    assert learning_rate_factor(9, 6, "cosine") == pytest.approx(LEARNING_RATE_FLOOR)
+
+
+def test_a_constant_schedule_steps_at_the_forms_rate_to_the_last_step(make_trainer):
+    """The form's Ease down unticked: every step takes the form's rate, as
+    every step did before the schedule, the last one too."""
+    ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, learning_rate=1e-2,
+                           learning_rate_schedule="constant", target_transform=BinaryTargetTransform())
+    rates = []
+    trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
+    assert not trainer.train().get("diverged")
+    assert rates == pytest.approx([1e-2] * 9)
+
+
 class _OutOfMemory(nn.Module):
     """Runs out of memory on a batch larger than ``fits``."""
 
@@ -166,3 +219,15 @@ def test_the_single_class_warning_goes_by_what_is_annotated(make_trainer, caplog
     with caplog.at_level(logging.WARNING, logger=diagnostics):
         trainer.train()
     assert any(r.name == diagnostics and r.levelno == logging.WARNING for r in caplog.records) == warned
+
+
+def test_a_torchscript_model_gets_a_frozen_teacher():
+    """fly_organelles' /nrs copies are TorchScript only: trained in full on
+    one channel, whose other channels the teacher holds, setup failed with
+    "you can only change requires_grad flags of leaf variables"."""
+    model = torch.jit.script(nn.Sequential(nn.Conv3d(1, 2, 3), nn.Sigmoid()))
+    teacher = frozen_teacher_copy(model)
+    x = torch.rand(1, 1, 5, 5, 5)
+    assert torch.allclose(teacher(x), model(x))
+    assert not any(p.requires_grad for p in teacher.parameters())
+    assert all(p.requires_grad for p in model.parameters())

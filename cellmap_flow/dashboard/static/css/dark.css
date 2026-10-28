@@ -964,3 +964,32 @@ textarea.form-control[readonly] {
 .chain-notice[hidden] {
   display: none;
 }
+
+/* The GPU queue pickers (shared/gpu-queues.js): a dropdown of checkboxes.
+   The button looks like the selects beside it; its text, the queues
+   ticked, is cut short rather than wrapped. The list is as wide as its
+   longest "label — what LSF says" line. */
+.gpu-queue-picker > .form-select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpu-queue-picker .dropdown-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.gpu-queue-picker .dropdown-item {
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.gpu-queue-picker .dropdown-item:hover,
+.gpu-queue-picker .dropdown-item:focus {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}

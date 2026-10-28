@@ -96,7 +96,7 @@ def run_multiple(
     models: List["ModelConfig"],
     dataset_path: str,
     charge_group: str,
-    queue: str,
+    queue: List[str],
     wrap_raw: bool = True,
     resample: bool = True,
 ) -> None:
@@ -108,7 +108,7 @@ def run_multiple(
             ``serving.launch.launch`` (which applies its ``scale``)
         dataset_path: Base path to the dataset
         charge_group: Billing/chargeback group
-        queue: Job queue name
+        queue: The GPU queues each job may run on (a list)
         resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
     """
     def _submit_model(model):
@@ -163,12 +163,16 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     \b
     data_path: /path/to/data
     charge_group: my_group # on the cluster; not needed without bsub
-    queue: gpu_h100        # optional, defaults to gpu_h100
+    queue: gpu_h100        # optional; one GPU queue, or a list of them
+                           # ([gpu_h100, gpu_h200]): each job goes to the one
+                           # with the most free GPUs, and moves to the next
+                           # if it has not started in 3 minutes. Defaults to
+                           # the saved queues, else every GPU queue.
     walltime: "08:00"      # optional; LSF run limit, "HH:MM" or minutes.
                            # Without it the queue's own default applies,
                            # which is 2 hours on the Janelia GPU queues.
-    cycle_gpu_queues: true # optional; false pins the job to `queue` above
-                           # instead of falling back to a queue with capacity.
+    cycle_gpu_queues: true # optional; false pins each job to the first of
+                           # `queue` above instead of moving it on.
     wrap_raw: true         # optional; false serves raw straight from the file
     resample: true         # optional, the default: resample the data to each
                            # model's input voxel size when it has no level at
@@ -271,7 +275,7 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     # site's default_walltime (jobs/site.py). Accepts "08:00" or plain minutes.
     walltime = config.get("walltime")
     # Optional; None means "leave whatever the dashboard setting is". Only an
-    # explicit false pins submissions to `queue`.
+    # explicit false pins submissions to the first of `queue`.
     cycle_gpu_queues = config.get("cycle_gpu_queues")
 
     # The launcher settings; they are saved below, once this is a real run
@@ -286,9 +290,9 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
 
     logger.info(f"Data path: {data_path}")
     logger.info(f"Charge group: {charge_group}")
-    logger.info(f"Queue: {queue}")
+    logger.info(f"Queues: {', '.join(queue)}")
     if not settings.cycle_gpu_queues:
-        logger.info("GPU queue cycling: off (jobs wait for the queue above)")
+        logger.info(f"GPU queue cycling: off (jobs wait for {queue[0]})")
 
     # Build model configuration objects dynamically
     logger.info("Building model configurations...")
@@ -318,7 +322,7 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
         click.echo("\n✓ Configuration is valid!")
         click.echo(f"  - Models: {len(session.models_config)}")
         click.echo(f"  - Data path: {data_path}")
-        click.echo(f"  - Queue: {queue}")
+        click.echo(f"  - Queues: {', '.join(queue)}")
         if extra_layers:
             click.echo(f"  - Extra layers: {len(extra_layers)}")
         return

@@ -19,6 +19,7 @@ import type { ApiRequest, ApiResponse, ModelEntry, PaintVolume } from "../../src
 import type { RunFinetune } from "../../src/finetune/types";
 import { readVolume } from "../../src/finetune/volume";
 import { paintLayerName } from "../../src/viewer/layers";
+import { encodeState } from "../../src/viewer/share";
 import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { portablePython } from "./pyodide";
 
@@ -201,6 +202,14 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/seed", () => {
     expect((await histogram(ctx, volume)).get(0)).toBe(60 ** 3);
   });
 
+  it("reads the session's channel only from the volume's model: another model seeds as it would without it", async () => {
+    // A volume for setup_56 (one channel, nuc), whose channel 3 setup_54's
+    // three affinities do not have either: refused above for setup_56 itself.
+    const { h } = await ready(NAME_56);
+    const seeded = body(await h.handle(request("POST", `${BASE}/seed`, { model: NAME_54, select_channel: 3 })));
+    expect(seeded).toMatchObject({ success: true, model: NAME_54 });
+  });
+
   it("asks before labelling a large box, and labels it once confirmed", async () => {
     const { ctx, h } = await ready();
     ctx.viewer.positionNm = [...MIDDLE];
@@ -258,6 +267,30 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/split", () => {
     // Per slice: each slice's two halves are objects of their own.
     const perSlice = body(await h.handle(request("POST", `${BASE}/split`, { per_slice: true })));
     expect(perSlice).toMatchObject({ objects: 8, split: 6, merged: 0 });
+  });
+
+  it("covers the field of view: what the viewer's panel shows, at the slice on screen", async () => {
+    // An xy panel of 6 x 4 screen pixels at one 8 nm voxel each, around
+    // CENTRE (voxel 29.5): x 27..32 and y 28..31 at z 29 alone. The frame is
+    // that and Neuroglancer's top row (label_it.NEUROGLANCER_TOP_ROW_PX, 27).
+    const { ctx, h, volume } = await ready();
+    const state = { dimensions: { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] }, position: [29.5, 29.5, 29.5], layout: "xy", crossSectionScale: 1 };
+    ctx.viewer.viewerUrl = () => `http://localhost/ng/${encodeState(state)}`;
+    // One object with a wall at x = 30 in slice z = 29 only.
+    const object = new Uint16Array(20 ** 3).fill(5);
+    for (let y = 0; y < 20; y++) object[(9 * 20 + y) * 20 + 10] = 1;
+    await writeBox(ctx.paint, volume, [20, 20, 20], [40, 40, 40], object);
+    const res = body(await h.handle(request("POST", `${BASE}/split`, { field_of_view: true, viewer_px: [6, 4 + 27] })));
+    expect(res).toMatchObject({ success: true, offset_voxels: [29, 28, 27], shape_voxels: [1, 4, 6], split: 1 });
+    // The smaller side, in the box, has a new id; the larger, and the object
+    // outside the box, the slices below and above among it, keep theirs.
+    const fresh = await labelAt(ctx, volume, [29, 28, 31]);
+    expect(fresh).toBeGreaterThan(1);
+    expect(fresh).not.toBe(5);
+    expect(await labelAt(ctx, volume, [29, 31, 32])).toBe(fresh);
+    for (const voxel of [[29, 28, 27], [28, 28, 31], [30, 28, 31], [29, 27, 31], [29, 28, 33]]) {
+      expect(await labelAt(ctx, volume, voxel)).toBe(5);
+    }
   });
 });
 

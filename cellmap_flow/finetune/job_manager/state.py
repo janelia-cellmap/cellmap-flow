@@ -78,6 +78,10 @@ class FinetuneJob:
     # Set by cancel_job before it kills the job, so the monitor reports the
     # exit that follows as CANCELLED rather than FAILED.
     cancel_requested: bool = False
+    # The queues a job still waiting for a GPU moves on to
+    # (submit.QueueFallback), from its submission; None for a job found
+    # again by a dashboard started later, which waits where it is.
+    fallback: Optional[Any] = None
     _processed_iteration_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:

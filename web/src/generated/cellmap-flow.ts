@@ -36,6 +36,7 @@ export interface RequestBodies {
   "POST /api/finetune/job/<job_id>/restart"?: FinetuneRestart;
   "POST /api/huggingface/credentials"?: HuggingFaceCredentials;
   "POST /api/finetune/model/<name>/publish"?: FinetunePublish;
+  "POST /api/finetune/rank/add"?: ResolveModel;
   "POST /api/finetune/ai-annotate/settings"?: AIAnnotateSettings;
   "POST /api/finetune/ai-annotate/run"?: AIAnnotateRun;
   "POST /api/finetune/ai-annotate/resend"?: AIAnnotateResend;
@@ -163,10 +164,12 @@ export interface Equivalences {
 }
 /**
  * Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
- * sent change. The counts must be whole numbers; the rest are kept as sent,
- * and keys that are not settings are ignored.
+ * sent change. The counts must be whole numbers and the queue a list of at
+ * least one queue; the rest are kept as sent, and keys that are not
+ * settings are ignored.
  */
 export interface ServerConfigUpdate {
+  queue?: string[];
   nb_cores_master?: number;
   nb_cores_worker?: number;
   nb_workers?: number;
@@ -177,7 +180,7 @@ export interface ServerConfigUpdate {
  * required, as whole numbers; a missing one is reported as None.
  */
 export interface BlockwiseSettings {
-  queue?: unknown;
+  queue?: string[];
   charge_group?: unknown;
   nb_cores_master?: number;
   nb_cores_worker?: number;
@@ -368,13 +371,16 @@ export interface CreateVolume {
   output_path?: unknown;
 }
 /**
- * Crops imported into the session's annotation volume for ``model_name``:
- * ``yaml`` is the YAML's text or its path, ``output_path`` as for
- * CreateVolume, and ``load_id`` names the import's progress.
+ * Crops imported into the session's annotation volume: ``yaml`` is the
+ * YAML's text or its path, ``output_path`` as for CreateVolume, and
+ * ``load_id`` names the import's progress. ``model_name``, the model
+ * picked, is only asked for when the session has no volume yet, to lay a
+ * new one on its grid; without one the new volume is painted before any
+ * model, as New Volume makes one.
  */
 export interface LoadCrops {
   yaml?: string;
-  model_name?: string;
+  model_name?: string | null;
   output_path?: unknown;
   load_id?: unknown;
 }
@@ -418,9 +424,13 @@ export interface FinetuneSubmit {
    */
   batch_size?: number;
   /**
-   * Learning rate (AdamW).
+   * The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.
    */
   learning_rate?: number;
+  /**
+   * What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.
+   */
+  learning_rate_schedule?: "cosine" | "constant";
   /**
    * Batches to accumulate gradients over before each optimizer step.
    */
@@ -482,7 +492,7 @@ export interface FinetuneSubmit {
    */
   distance_sigma?: number;
   /**
-   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   * The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target.
    */
   select_channel?: number | null;
   /**
@@ -505,7 +515,7 @@ export interface FinetuneSubmit {
   corrections_path?: string;
   checkpoint_path?: string | null;
   auto_serve?: boolean;
-  queue?: string | null;
+  queue?: string[];
   charge_group?: string | null;
   [k: string]: unknown;
 }
@@ -545,9 +555,13 @@ export interface FinetuneRestart {
    */
   batch_size?: number;
   /**
-   * Learning rate (AdamW).
+   * The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.
    */
   learning_rate?: number;
+  /**
+   * What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.
+   */
+  learning_rate_schedule?: "cosine" | "constant";
   /**
    * Batches to accumulate gradients over before each optimizer step.
    */
@@ -609,7 +623,7 @@ export interface FinetuneRestart {
    */
   distance_sigma?: number;
   /**
-   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   * The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target.
    */
   select_channel?: number | null;
   /**
@@ -755,7 +769,7 @@ export const PROMPT_MAX_CHARS = 4000;
 /** The longest provider or model id and target name the AI-annotation routes take (requests.py). */
 export const LABEL_MAX_CHARS = 100;
 /** The Finetune tab's form at its defaults: what a blank field trains with (finetune/options.py TrainingOptions). */
-export const FINETUNE_DEFAULTS = { lora_r: 64, num_epochs: 20, batch_size: 8, learning_rate: 0.0001, loss_type: "margin", margin: 0.3, label_smoothing: 0.1, distillation_lambda: 0.01, distillation_scope: "unlabeled", balance_classes: true, augment: false } as const;
+export const FINETUNE_DEFAULTS = { lora_r: 64, num_epochs: 20, batch_size: 8, learning_rate: 0.0001, learning_rate_schedule: "cosine", loss_type: "margin", margin: 0.3, label_smoothing: 0.1, distillation_lambda: 0.01, distillation_scope: "unlabeled", balance_classes: true, augment: false } as const;
 
 export type Availability = Route["availability"];
 /** Every route of the dashboard and where it is answered (schema.py AVAILABILITY). */
@@ -819,7 +833,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/load-existing-volume", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/load-existing-volume-progress", availability: "stub", request: null },
   { method: "POST", path: "/api/finetune/sync-annotations", availability: "stub", request: null },
-  { method: "POST", path: "/api/finetune/refresh-annotated-regions", availability: "stub", request: null },
+  { method: "POST", path: "/api/finetune/refresh-annotated-regions", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/session-volume", availability: "browser", request: null },
   { method: "GET", path: "/api/finetune/volume/<volume_id>/download", availability: "browser", request: null },
   { method: "POST", path: "/api/finetune/delete-volume", availability: "browser", request: null },
@@ -843,9 +857,11 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/good-regions/mark-view", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/delete", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/rank/candidates", availability: "both", request: null },
+  { method: "POST", path: "/api/finetune/rank/add", availability: "both", request: "ResolveModel" },
   { method: "POST", path: "/api/finetune/rank/score", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/rank/use", availability: "both", request: null },
-  { method: "POST", path: "/api/finetune/rank/window", availability: "both", request: null },
+  { method: "POST", path: "/api/finetune/rank/input-norm", availability: "both", request: null },
+  { method: "POST", path: "/api/finetune/channel", availability: "both", request: null },
   { method: "GET", path: "/api/finetune/view-labels/sources", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/view-labels/seed", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/view-labels/background", availability: "both", request: null },

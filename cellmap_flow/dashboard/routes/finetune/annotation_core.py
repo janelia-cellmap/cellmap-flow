@@ -3,13 +3,20 @@
 Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
 and GET and POST ``/api/finetune/user-prefs``.
 
+A model's entry says, with its geometry, whether it trains one channel at a
+time (``channel_choice``, common.channel_choice): training's submit refuses
+such a model without the channel the paint is for (``channel_pick_refusal``).
+
 A volume is made for a model, on the grid its prediction is served on, or
 before any model (a "paint-first" volume, ``make_paint_volume``) on the
 raw's grid at a voxel size of the user's, the raw level the viewer shows by
 default: the models answer lists the raw's levels for New Volume to offer.
 A paint-first volume is not trained on (``paint_first_refusal``, which
 training's submit asks): Which model to start from's Use this model carries
-its paint onto a model's grid (rank_routes).
+its paint onto a model's grid (rank_routes, through ``carry_onto_model``).
+So does training's submit for a model whose grid is not the session
+volume's (``grid_change`` says whether it is, and refuses a model whose
+grid is not known yet).
 """
 
 import functools
@@ -18,11 +25,16 @@ import os
 
 from flask import jsonify, request
 
-from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.finetune_utils import (
+    ensure_minio_serving,
+    retire_annotation_volume,
+    sync_annotation_volume_from_minio,
+)
 from cellmap_flow.dashboard.requests import CreateVolume, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     annotation_dtype_for,
+    channel_choice,
     current_chain,
     ensure_corrections_storage,
     find_model_config,
@@ -30,22 +42,25 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     rewrite_minio_url_for_proxy,
     save_user_prefs,
     session_store,
+    trains_one_channel,
     write_volume_manifest,
 )
-from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer, refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import (
+    carry_paint,
     create_volume_zarr,
     new_volume_id,
     plan_paint_volume,
     plan_volume,
     raw_voxel_sizes,
 )
-from cellmap_flow.models.geometry_cache import resolve_model_geometry
+from cellmap_flow.models.geometry_cache import known_geometry, resolve_model_geometry
 from cellmap_flow.portable import volume as portable_volume
 from cellmap_flow.serving.client import (
     fetch_model_info,
     model_geometry,
+    output_channel_names,
     running_job_host,
 )
 
@@ -95,7 +110,9 @@ def make_paint_volume(voxel_size, corrections_dir):
     ``voxel_size`` (nm, z, y, x; None: the level the viewer shows,
     ``shown_voxel_size``): written, served and registered as the session's,
     as make_volume's, and returned as it returns one. It gets no training
-    manifest, as it is not trained on (``paint_first_refusal``)."""
+    manifest, as it is not trained on (``paint_first_refusal``), and the
+    session's manifest is removed (common.write_volume_manifest), so that
+    it, not a volume before it, is the session's."""
     session = get_session()
     size = list(voxel_size) if voxel_size is not None else shown_voxel_size()
     geometry = plan_paint_volume(session.dataset_path, size, resample=session.resample)
@@ -105,7 +122,8 @@ def make_paint_volume(voxel_size, corrections_dir):
 def _made(geometry, model_name, annotation_dtype, corrections_dir):
     """make_volume's and make_paint_volume's volume of ``geometry``, for
     ``model_name`` (None: for no model), written, served and registered as
-    the session's; a model's also in the session's training manifest."""
+    the session's; a model's also in the session's training manifest, which
+    a volume for no model removes."""
     session = get_session()
     volume_id, zarr_path, minio_url = serve_new_volume(
         geometry, corrections_dir, session.dataset_path, model_name, annotation_dtype
@@ -119,9 +137,10 @@ def _made(geometry, model_name, annotation_dtype, corrections_dir):
             corrections_dir=corrections_dir,
         ),
     )
-    if model_name is not None:
-        # The trainer finds the volume only through this manifest.
-        write_volume_manifest(session.annotation_volumes[volume_id])
+    # The trainer finds the volume only through this manifest, and every
+    # route the session's volume (session_store's session_volume): a volume
+    # for no model gets none, and takes away one naming another volume.
+    write_volume_manifest(session.annotation_volumes[volume_id])
     refresh_annotated_regions_layer()
     return volume_id, zarr_path, minio_url, geometry
 
@@ -195,13 +214,17 @@ def _geometry_from_server(name):
 
 
 def _geometry_from_saved_pipeline(name):
+    """The geometry the pipeline builder saved with ``name``'s entry, and the
+    channel names the entry gives (a fly model's ``channels``); None without one."""
     cfg = get_session().builder_model_configs.get(name)
     if not cfg:
         return None
+    output_channels = cfg.get("output_channels", 1)
     return {
         "write_shape": cfg.get("write_shape", []),
         "output_voxel_size": cfg.get("output_voxel_size", []),
-        "output_channels": cfg.get("output_channels", 1),
+        "output_channels": output_channels,
+        "channels": output_channel_names(cfg, output_channels),
     }
 
 
@@ -210,6 +233,129 @@ def _declared_geometry(model_config):
     (``ModelConfig.declared_geometry``), or None."""
     declared = getattr(model_config, "declared_geometry", None)
     return model_geometry(declared()) if callable(declared) else None
+
+
+def listed_geometry(name, model_config):
+    """``name``'s geometry as the models list has it: its server's, as it
+    serves the model; else what the pipeline builder saved; else what the
+    model declares (``model_config`` its config, None for a model a job
+    serves without one). None when none of them knows it. Never the model
+    built here (see get_finetune_models)."""
+    return (
+        _geometry_from_server(name)
+        or _geometry_from_saved_pipeline(name)
+        or _declared_geometry(model_config)
+    )
+
+
+def channel_pick_refusal(model_name, model_config, output_type, select_channel):
+    """Training's submit refused for a model that trains one channel at a time
+    when no channel is picked: ``(response, 400)``, with the sentence the
+    browser's submit says too.
+
+    Such a model is one with more than one output channel, trained on a
+    target that is not one per channel (common.trains_one_channel, of the
+    ``output_type`` submit resolved): the models list says
+    ``channel_choice`` for it, and the training form then asks for the
+    channel. Without one the job trained every channel on the paint. None
+    when a channel is picked, or the model trains every channel at once, or
+    the list has no geometry for it (the form shows no pick then, and the
+    job trains as the command line does).
+    """
+    if select_channel is not None:
+        return None
+    geometry = listed_geometry(model_name, model_config)
+    if not geometry or not trains_one_channel(output_type, geometry["output_channels"]):
+        return None
+    return jsonify({"success": False, "error": (
+        f"{model_name} has {geometry['output_channels']} output channels and trains one at a time: "
+        "pick the channel your paint is for (Channel, in the training form)."
+    )}), 400
+
+
+def volume_grid(volume) -> dict:
+    """A volume record's grid (portable/volume.py GRID_FIELDS, the record's
+    own keys), or None when the record lacks one of them."""
+    grid = {key: volume.get(key) for key in portable_volume.GRID_FIELDS}
+    return grid if all(grid.values()) else None
+
+
+def grid_change(model_name, model_config, corrections_dir):
+    """Whether training ``model_name`` on the session volume of
+    ``corrections_dir`` takes its paint carried onto the model's grid first:
+    ``(carry, refusal)``, with nothing changed either way.
+
+    ``carry`` is None when the model trains on the volume as it is: the
+    volume is the model's own, or its grid is the model's too
+    (portable/volume.py same_grid: a finetune of its model, any model of the
+    same sizes), or there is no volume with a grid to compare (one a
+    dashboard before this one registered, which trains as it did). Else it
+    is what ``carry_onto_model`` takes after the model's name and config,
+    ``(geometry, from_id, from_volume)``. The
+    model's grid is the volume a Create Volume for it would plan now, on the
+    session's dataset; its sizes are its server's or the geometry cache's
+    (geometry_cache.known_geometry), never the model built here (see
+    rank_routes._served_geometry). ``refusal`` is ``(response, 400)`` when
+    neither knows them yet: its server has not answered."""
+    from_id, volume = session_store().session_volume(str(corrections_dir))
+    from_grid = volume and volume_grid(volume)
+    if not from_grid or volume.get("model_name") == model_name:
+        return None, None
+    geometry = known_geometry(model_name, model_config)
+    if geometry is None:
+        return None, (jsonify({"success": False, "error": (
+            f"Your paint is on {volume.get('model_name')}'s grid, and {model_name}'s is not known yet: its server "
+            f"has not answered with its sizes. Wait until {model_name} is running (the Models tab), then press "
+            "Train again, which carries the paint onto its grid."
+        )}), 400)
+    session = get_session()
+    planned = plan_volume(session.dataset_path, geometry, resample=session.resample)
+    to_grid = {"input_size": planned.input_size, "output_size": planned.chunk_size,
+               "input_voxel_size": planned.input_voxel_size, "output_voxel_size": planned.output_voxel_size}
+    if portable_volume.same_grid(from_grid, to_grid):
+        return None, None
+    return (geometry, from_id, volume), None
+
+
+def carry_onto_model(model_name, model_config, geometry, from_id, from_volume):
+    """The paint of the session's volume ``from_id`` (``from_volume`` its
+    record) carried onto ``model_name``'s grid, ``geometry`` its sizes
+    (resolve_model_geometry's): a volume made for the model (make_volume)
+    beside it in its corrections dir, the old one's last strokes pulled from
+    MinIO first, the paint carried onto the new one (session/volume.py
+    carry_paint) and mirrored to MinIO, and its paint layer in the viewer in
+    the old one's place. The old volume is retired (finetune_utils
+    retire_annotation_volume: out of the session, kept on disk in its
+    corrections dir's ``superseded/``), so the session has the one volume,
+    the new one, which its manifest (make_volume wrote it) trains on.
+
+    Which model to start from's Use this model (rank_routes) and training's
+    submit for a model on another grid (grid_change) both carry through
+    here; neither the chain nor the channel shown changes here (Use this
+    model sets those itself, submit leaves them as the user set them).
+    Returns ``{"volume_id", "volume" (its record), "layer_name", "painted",
+    "source", "conflicts", "chunks", "superseded"}``: carry_paint's counts,
+    and where the old volume went."""
+    session = get_session()
+    corrections_dir = from_volume["corrections_dir"]
+    sync_annotation_volume_from_minio(from_id)
+    to_id, zarr_path, minio_url, _ = make_volume(model_name, model_config, geometry, corrections_dir)
+    to_volume = session.annotation_volumes[to_id]
+    carried = carry_paint(from_volume, to_volume)
+    ensure_minio_serving(zarr_path, to_id, output_base_dir=corrections_dir)
+    layer = f"annotation_{to_id}"
+    if session.viewer is not None:
+        with session.viewer.txn() as s:
+            old = f"annotation_{from_id}"
+            if old in s.layers:
+                del s.layers[old]
+        add_annotation_layer(session.viewer, layer, f"{minio_url}/annotation")
+    superseded = retire_annotation_volume(from_id)
+    refresh_annotated_regions_layer()
+    logger.info(f"Carried {from_id}'s paint to {to_id} for {model_name}: {carried['painted']} voxels from {carried['source']}"
+                + (f"; {carried['conflicts']} left unpainted where object and background met in one voxel" if carried["conflicts"] else "")
+                + (f"; {from_id} kept in {superseded}" if superseded else ""))
+    return {"volume_id": to_id, "volume": to_volume, "layer_name": layer, **carried, "superseded": superseded}
 
 
 def _waiting(name):
@@ -239,8 +385,11 @@ def get_finetune_models():
     "selected_model", "raw_voxel_sizes"}``.
 
     Each model is ``{"name", "write_shape" (nm), "output_voxel_size",
-    "output_channels", "finetune_modes"}``; one whose geometry nothing knows
-    yet is ``{"name", "status", "finetune_modes"}`` instead, its ``status``
+    "output_channels", "channels", "channel_choice", "finetune_modes"}``:
+    ``channels`` the output channels' names (None when nothing names them),
+    ``channel_choice`` whether training takes one of them at a time
+    (common.channel_choice). One whose geometry nothing knows yet is
+    ``{"name", "status", "finetune_modes"}`` instead, its ``status``
     "waiting for its server" or, stopped on the Models tab, "not running".
     """
     try:
@@ -271,15 +420,15 @@ def get_finetune_models():
             # forward on the dashboard's CPU (25 s for a 3 GB TorchScript). A
             # model none of them knows is listed with why it has no geometry
             # yet, its ``status``, until its server answers.
-            geometry = (
-                _geometry_from_server(name)
-                or _geometry_from_saved_pipeline(name)
-                or _declared_geometry(configs_by_name.get(name))
-                or {"status": _waiting(name)}
-            )
+            config = configs_by_name.get(name)
+            geometry = listed_geometry(name, config)
+            if geometry is None:
+                geometry = {"status": _waiting(name)}
+            else:
+                # By the same rule, so without building it either.
+                geometry["channel_choice"] = channel_choice(config, geometry["output_channels"], geometry["channels"])
             seen.add(name)
-            models.append({"name": name, **geometry,
-                           "finetune_modes": _finetune_modes(configs_by_name.get(name))})
+            models.append({"name": name, **geometry, "finetune_modes": _finetune_modes(config)})
 
         selected = models[0]["name"] if len(models) == 1 else None
         # The raw's levels, which New Volume offers as the voxel size of a

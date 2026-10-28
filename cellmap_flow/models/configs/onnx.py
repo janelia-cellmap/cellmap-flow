@@ -528,7 +528,7 @@ class OnnxModelConfig(ModelConfig):
         except (TypeError, ValueError):
             return None
         return {"write_shape": list(geometry.write_shape), "output_voxel_size": list(geometry.output_voxel_size),
-                "output_channels": geometry.output_channels}
+                "output_channels": geometry.output_channels, "channels": list(geometry.channels)}
 
     def _variant(self, manifest) -> Optional[dict]:
         """The manifest's variant this model serves: the folder's chosen by

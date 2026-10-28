@@ -154,7 +154,7 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/load-existing-volume": "both",
     "GET /api/finetune/load-existing-volume-progress": "stub",
     "POST /api/finetune/sync-annotations": "stub",
-    "POST /api/finetune/refresh-annotated-regions": "stub",
+    "POST /api/finetune/refresh-annotated-regions": "both",
     "GET /api/finetune/session-volume": "browser",
     "GET /api/finetune/volume/<volume_id>/download": "browser",
     "POST /api/finetune/delete-volume": "browser",
@@ -183,9 +183,11 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/finetune/good-regions/delete": "both",
     # Which model to start from
     "GET /api/finetune/rank/candidates": "both",
+    "POST /api/finetune/rank/add": "both",
     "POST /api/finetune/rank/score": "both",
     "POST /api/finetune/rank/use": "both",
-    "POST /api/finetune/rank/window": "both",
+    "POST /api/finetune/rank/input-norm": "both",
+    "POST /api/finetune/channel": "both",
     # Label it
     "GET /api/finetune/view-labels/sources": "both",
     "POST /api/finetune/view-labels/seed": "both",
@@ -211,6 +213,7 @@ REQUEST_MODELS: dict[str, str] = {
     "POST /api/models/remove": "RemoveModel",
     "POST /api/models/resolve": "ResolveModel",
     "POST /api/models/add": "AddModel",
+    "POST /api/finetune/rank/add": "ResolveModel",
     "PUT /api/pipeline": "PipelineUpdate",
     "POST /update/equivalences": "Equivalences",
     "POST /api/server-config": "ServerConfigUpdate",
@@ -239,8 +242,8 @@ REQUEST_MODELS: dict[str, str] = {
 # browser's DEFAULT_OPTIONS (web/src/finetune/types.ts) takes where it has
 # no reason of its own.
 FINETUNE_FORM_FIELDS = (
-    "lora_r", "num_epochs", "batch_size", "learning_rate", "loss_type", "margin",
-    "label_smoothing", "distillation_lambda", "distillation_scope", "balance_classes", "augment",
+    "lora_r", "num_epochs", "batch_size", "learning_rate", "learning_rate_schedule", "loss_type",
+    "margin", "label_smoothing", "distillation_lambda", "distillation_scope", "balance_classes", "augment",
 )
 
 # What each shared constant is, for the generated TypeScript's comments.

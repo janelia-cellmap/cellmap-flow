@@ -1,4 +1,4 @@
-"""The launcher's settings: which queue, who is billed, how long a job may run.
+"""The launcher's settings: which queues, who is billed, how long a job may run.
 
 One ``LauncherSettings`` per process, from ``launcher_settings()``. It holds
 one attribute per key of ``SERVER_CONFIG_DEFAULTS``, the one place a key is
@@ -27,26 +27,31 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.site import current_site
 
 SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
 
-# The dashboard's job settings until the user saves their own. The queue,
+# The dashboard's job settings until the user saves their own. The queues,
 # run limit and core counts are the site's (jobs/site.py says why each is
 # what it is); no charge group is assumed, so a YAML without one is refused
 # rather than billed to someone.
 _SITE = current_site()
 SERVER_CONFIG_DEFAULTS = {
-    "queue": _SITE.default_queue,
+    # The GPU queues a job may run on, a list (queues.queue_list): by
+    # default every one offered, and a job goes to the one with the most
+    # free GPUs (queues.candidates).
+    "queue": _SITE.default_queues,
     "charge_group": "",
     # LSF's own default on the GPU queues is 120 minutes, which killed
     # inference servers two hours into a session. See default_walltime in
     # jobs/site.py for why this matches the Fileglancer app's own 8 hours.
     "walltime": _SITE.default_walltime,
-    # Try other GPU queues when the requested one is busy or closed. On by
-    # default because a job that starts elsewhere beats one that never
-    # starts; turn it off when the queue itself matters (a benchmark pinned
-    # to one GPU model, a charge group valid on only one queue).
+    # Move a job that has not started on one of its queues to the next one.
+    # On by default because a job that starts elsewhere beats one that
+    # never starts; off, a job waits on the first of its queues, for when
+    # the queue itself matters (a benchmark pinned to one GPU model, a
+    # charge group valid on only one queue).
     "cycle_gpu_queues": True,
     "nb_cores_master": _SITE.server_cpus,
     "nb_cores_worker": _SITE.worker_cpus,
@@ -84,10 +89,14 @@ class LauncherSettings:
     __slots__ = (*SERVER_CONFIG_KEYS, "cached")
 
     def __init__(self, values: Optional[Dict[str, Any]] = None, cached: bool = False):
-        """``values`` over the defaults, key by key; other keys are ignored."""
+        """``values`` over the defaults, key by key; other keys are ignored.
+        The queue is read as a list (queues.queue_list): a file that names
+        one queue, as one written by hand or before the dashboard ticked
+        several does, names a list of one."""
         values = values or {}
         for key, default in SERVER_CONFIG_DEFAULTS.items():
             setattr(self, key, values.get(key, default))
+        self.queue = queue_list(self.queue) or list(SERVER_CONFIG_DEFAULTS["queue"])
         self.cached = cached
 
     @classmethod

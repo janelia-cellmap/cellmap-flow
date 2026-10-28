@@ -30,6 +30,7 @@ __all__ = [
     "MODES",
     "OUTPUT_CLASSES",
     "MANIFEST_FIELDS",
+    "LEARNING_RATE_FLOOR",
 ]
 
 # What --loss-type, --output-type, --mode and --output-class take, here once.
@@ -43,12 +44,26 @@ OutputType = Literal["binary", "binary_broadcast", "affinities", "distance", "fl
 Mode = Literal["lora", "full", "head"]
 OutputClass = Literal["unit", "signed_unit", "unbounded"]
 DistillationScope = Literal["unlabeled", "all"]
+LearningRateSchedule = Literal["cosine", "constant"]
 
 # The settings a run writes into its session's manifest rather than onto the
 # trainer's command line: the dataset reads them from there (data/dataset.py),
 # so the CLI has no flag for them and a restart changes them through the
 # manifest (the dashboard's restart route writes it).
 MANIFEST_FIELDS = ("patches_per_epoch", "rehearsal_fraction")
+
+# The share of learning_rate a run ends at. A run starts at the form's rate
+# and, under the cosine schedule (learning_rate_schedule, the default),
+# eases down to this share of it by its last optimizer step, along half a
+# cosine: big steps while the model is far from the paint, small ones once
+# it is close (trainer/loop.py learning_rate_factor). Every run used to
+# train at one rate throughout; a LICONN head trained at 1e-2 and then
+# restarted at a smaller rate, a schedule made by hand, looked great. The
+# constant schedule (the form's "Ease down" unticked) keeps that one rate,
+# for a run the user steers by hand. The browser's three trainers read it
+# from web/src/generated/python-data.json (web/build/export_data.py;
+# web/src/finetune/schedule.ts).
+LEARNING_RATE_FLOOR = 0.1
 
 
 def _is_offset(offset):
@@ -65,10 +80,10 @@ class TrainingOptions(BaseModel):
 
     The defaults are the server form's (``_finetune_tab.html``, checked by
     tests/web/test_schema.py): a LoRA adapter of rank 64, 20 epochs of
-    batches of 8 at 1e-4, the margin loss with class balance and a light
-    distillation (0.01) on the unlabeled voxels, no augmentation. The
-    browser's form overrides a few for the last layer
-    (web/src/finetune/types.ts DEFAULT_OPTIONS).
+    batches of 8 from 1e-4 eased down to a tenth of it, the margin loss
+    with class balance and a light distillation (0.01) on the unlabeled
+    voxels, no augmentation. The browser's form overrides a few for the
+    last layer (web/src/finetune/types.ts DEFAULT_OPTIONS).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -95,7 +110,16 @@ class TrainingOptions(BaseModel):
     ))
     num_epochs: int = Field(20, ge=1, description="Number of training epochs.")
     batch_size: int = Field(8, ge=1, description="Patches per batch.")
-    learning_rate: float = Field(1e-4, gt=0, description="Learning rate (AdamW).")
+    learning_rate: float = Field(1e-4, gt=0, description=(
+        "The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or "
+        "keeps; a restart starts at it again."
+    ))
+    learning_rate_schedule: LearningRateSchedule = Field("cosine", description=(
+        "What the learning rate does over a run: 'cosine' eases it down along half a cosine to "
+        f"{LEARNING_RATE_FLOOR:g} times it at the run's last step (LEARNING_RATE_FLOOR), big steps "
+        "while the model is far from the paint and small ones once it is close; 'constant' keeps "
+        "it for every step, as every run did before the schedule."
+    ))
     gradient_accumulation_steps: int = Field(1, ge=1, description=(
         "Batches to accumulate gradients over before each optimizer step."
     ))
@@ -166,7 +190,10 @@ class TrainingOptions(BaseModel):
         "trained with 6."
     ))
     select_channel: Optional[int] = Field(None, ge=0, description=(
-        "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+        "The one channel of a multi-channel model to train on the paint (not with output_type "
+        "affinities or flows, whose targets have a channel for each of the model's); every other "
+        "channel is held to the starting model's prediction on every voxel, so it stays as it was. "
+        "Blank trains every channel on the one target."
     ))
     offsets: Optional[str] = Field(None, description=(
         "JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. "

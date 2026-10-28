@@ -18,11 +18,13 @@ import { setBusy } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT, RESTART_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
+import { sessionVolumeChanged } from "./crops.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
 import { initPublish } from "./publish.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
+import { channelLabel, channelUnpicked, fillChannel } from "./training-form.js";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
 // ("shift+keyr": the key, whatever the keyboard layout types with it):
@@ -43,7 +45,7 @@ function isRestartKey(event) {
 const RESTART_SUMMARY_ROWS = {
   server: [
     ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["lora_r", "lora_r"],
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
@@ -56,14 +58,14 @@ const RESTART_SUMMARY_ROWS = {
   ],
   head: [
     ["loss", "loss_type"],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["epochs", "num_epochs"],
     ["label_smoothing", "label_smoothing"],
     ["balance_classes", "balance_classes"],
   ],
   full: [
     ["training", () => "whole network"],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
     ["tile_size", "tile_size", "default"],
@@ -180,6 +182,22 @@ export function initJobMonitor({ picker, form, log }) {
       return;
     }
 
+    // A model of several channels trains the one the paint is for. With none
+    // picked, the one that matches the paint best, as Rank scores it (the
+    // score's channel_index); a score that fails leaves it unpicked, and the
+    // submit route's refusal says to pick one.
+    if (channelUnpicked(selectedModel.name)) {
+      setBusy(startFinetuningBtn, true, "Finding the channel your paint is for...");
+      const scored = await postAnswer("/api/finetune/rank/score", { name: selectedModel.name })
+        .catch((error) => ({ success: false, error: error.message || String(error) }));
+      setBusy(startFinetuningBtn, false);
+      if (scored.success && Number.isInteger(scored.channel_index) && fillChannel(selectedModel.name, scored.channel_index)) {
+        appendLog(`Channel: ${channelLabel(scored.channel, scored.channel_index)}, the one that matches your paint best (${Math.round(scored.matches * 100)}% match). Pick another in the training form to train that one instead.`);
+      } else if (!scored.success) {
+        appendLog(`Could not find the channel your paint is for: ${scored.error}`);
+      }
+    }
+
     let training;
     try {
       training = form.trainingParams();
@@ -192,8 +210,12 @@ export function initJobMonitor({ picker, form, log }) {
       corrections_path: correctionsPath,
       ...training,
       auto_serve: document.getElementById("autoServeCheck").checked,
-      queue: document.getElementById("gpuQueue").value,
     };
+    // The queues ticked. None: nothing is chosen and LSF has not listed the
+    // queues yet, so the picker would show every one ticked, which is the
+    // server's default too.
+    const queues = form.gpuQueues();
+    if (queues.length) params.queue = queues;
     // Add optional checkpoint path override if provided
     const checkpointPath = document.getElementById("checkpointPath").value.trim();
     if (checkpointPath) {
@@ -233,6 +255,13 @@ export function initJobMonitor({ picker, form, log }) {
         if (result.tensorboard_command) appendLog(`TensorBoard: ${result.tensorboard_command}`);
         if (result.note) {
           appendLog(`Note: ${result.note}`);
+        }
+        // The paint was on another model's grid and is carried onto this
+        // one's, into a new volume (the note says so): the volume buttons
+        // act on it, and the model lists' "(painted for)" follows it.
+        if (result.carried) {
+          sessionVolumeChanged(result.carried.volume_id);
+          announce(MODELS_CHANGED_EVENT);
         }
         appendLog(`\nWaiting for training to start...\n`);
 

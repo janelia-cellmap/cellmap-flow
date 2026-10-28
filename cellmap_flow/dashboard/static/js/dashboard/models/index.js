@@ -3,7 +3,10 @@
 // catalog (catalog.js), Hugging Face (huggingface.js), the BioImage Model
 // Zoo (zoo.js) and Cellpose (cellpose.js); Add a model (add-model.js); the
 // LSF server config and GPU queue picker (server-config.js); and the
-// inference jobs' own output (job-logs.js).
+// inference jobs' own output (job-logs.js). The catalog's, Hugging Face's
+// and the zoo's sections, their rows and Add a model are made of the pieces
+// every model list is (shared/model-list.js), the Finetune tab's ranking's
+// too.
 //
 // Each list exports payload(), its part of POST /api/models, and
 // untick(model), which unticks a loaded model's row in it: Submit is the
@@ -33,6 +36,7 @@ export function initModelsTab() {
   const resampleCheckbox = document.getElementById("resampleCheckbox");
   resampleCheckbox.checked = !!pageData().resample;
 
+  catalog.init();
   huggingface.init();
   zoo.init();
   cellpose.init();

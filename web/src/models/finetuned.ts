@@ -100,6 +100,23 @@ export function nextFinetunedName(base: ModelEntry, existing: FinetunedRecord[],
   return `${series}-ft${highest + 1}`;
 }
 
+/** Whether `name` is a model finetuned in this browser from `base`, or a
+ * later one of its series (nextFinetunedName: `x-ft1`, then `x-ft2` from
+ * either), and how late: its number, or null. Such a model's channels are
+ * `base`'s: a Seed from Prediction reads it with the base's channel pick
+ * (routes/view-labels.ts), and its layer opens on the channel shown for the
+ * base (backend/serving.ts shownChannel). */
+export function finetuneNumber(name: string, base: string): number | null {
+  const series = base.replace(/-ft\d+$/, "");
+  const after = /-ft(\d+)$/.exec(base);
+  const baseNumber = after ? Number(after[1]) : 0;
+  if (!name.startsWith(`${series}-ft`)) return null;
+  const rest = name.slice(series.length + 3);
+  if (!/^\d+$/.test(rest)) return null;
+  const n = Number(rest);
+  return n > baseNumber ? n : null;
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

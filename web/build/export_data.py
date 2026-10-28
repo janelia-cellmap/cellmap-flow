@@ -3,11 +3,13 @@
 
 The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
-their parameters, the chain a fresh session starts with, the organelle
+their parameters, the chain a fresh session starts with, the offsets the
+model advice's affinity chain gives the mutex watershed, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
-ranking's constants, the finetune log's patterns, the unit table, the
-version a model published from the browser names, the query parameters of
-the app's links and the Hugging Face sign-in's client id and scopes. This
+ranking's constants, the learning rate's floor, the finetune log's patterns,
+the unit table, the version a model published from the browser names, the
+query parameters of the app's links and the Hugging Face sign-in's client id
+and scopes. This
 script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
@@ -95,11 +97,13 @@ def python_data():
     from cellmap_flow.dashboard.routes.finetune import ai_annotate as ai_routes
     from cellmap_flow.dashboard.routes.finetune import view_labels
     from cellmap_flow.finetune import markers
+    from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
     from cellmap_flow.portable import publish, rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.post.postprocessors import get_postprocessors_list
+    from cellmap_flow.serving import probe
     from cellmap_flow.viewer import layers, raw
 
     return {
@@ -127,6 +131,10 @@ def python_data():
             "postprocess": ops(get_postprocessors_list()),
         },
         "default_chain": DEFAULT_CHAIN,
+        # The model advice's (serving/probe.py): the mutex watershed's
+        # offsets, cut to an affinity model's channels in the chain into a
+        # segmentation it offers.
+        "advice": {"neighborhood_offsets": probe.NEIGHBORHOOD_OFFSETS},
         "ai_annotate": {
             "organelles": [asdict(profile) for profile in organelles.ORGANELLES.values()],
             "aliases": organelles._ALIASES,
@@ -157,6 +165,8 @@ def python_data():
             "narrow_window": rank.NARROW_WINDOW,
             "window_margin": rank.WINDOW_MARGIN,
             "cutoffs": rank.CUTOFFS.tolist(),
+            # The share of the form's rate every run eases down to (options.py).
+            "learning_rate_floor": LEARNING_RATE_FLOOR,
             "job_statuses": [status.value for status in JobStatus],
             "terminal_statuses": sorted(status.value for status in TERMINAL_STATUSES),
             "epoch_start": regex(markers.EPOCH_START_RE),

@@ -36,14 +36,15 @@
 //     decides. Ties are a coincidence with float affinities too, and the
 //     parity fixtures are chosen without any.
 // Then, as segment.mutex_watershed does: a fragment whose mean of the
-// per-voxel mean affinity (over the channels, of the affinities before the
-// bias is subtracted) is below the bias is background too, since every voxel
-// ends up in some fragment and this is where the model sees no object; the
-// rest are numbered 1..n in order of first appearance in C order
-// (fastremap.renumber); and remove_small drops fragments under min_size
-// (the postprocessor passes none). Finally the ids are offset by the chunk's
-// Morton increment (morton.ts), so they are unique across chunks, and
-// returned as one uint64 channel.
+// per-voxel mean affinity (over the channels whose offset pairs voxels in
+// the block, of the affinities before the bias is subtracted) is below the
+// bias is background too, since every voxel ends up in some fragment and
+// this is where the model sees no object; the rest are numbered 1..n in
+// order of first appearance in C order (fastremap.renumber); and
+// remove_small drops fragments under min_size (the postprocessor passes
+// none). Finally the ids are offset by the chunk's Morton increment
+// (morton.ts), so they are unique across chunks, and returned as one uint64
+// channel.
 import type { Step } from "../contracts";
 import { mortonIncrement } from "./morton";
 import { asNumber } from "./norms";
@@ -448,16 +449,27 @@ export function mutexWatershed(nd: NdArray, offsets: number[][], bias: number, m
   const aff = asFloat64(nd.data);
   const labels = agglom(aff, spatial, offsets.slice(0, C), bias);
 
-  // Each voxel's mean affinity over every channel (np.mean over axis 0: the
-  // channels added in order, then divided), and from it each fragment's mean
-  // (ndimage.mean: the voxels summed in C order, then divided). A fragment
-  // whose mean is below the bias is background.
+  // A channel whose offset is as long as the block along an axis, or
+  // longer, pairs no voxel in it (a 2D model's z channel on the one slice it
+  // serves): agglom builds it no edge, and it is left out of the mean too,
+  // as segment.mutex_watershed leaves it out. Its values are the model's
+  // guess at a neighbour the block does not have, and they pulled a slice's
+  // objects a third of the way to background. Every channel is kept when
+  // none pairs a voxel.
+  const unpaired = offsets.slice(0, C).map((offset) => offset.some((o, a) => Math.abs(o) >= spatial[a]!));
+  const kept = Array.from({ length: C }, (_, c) => c).filter((c) => !unpaired[c]);
+  const channels = kept.length ? kept : Array.from({ length: C }, (_, c) => c);
+
+  // Each voxel's mean affinity over those channels (np.mean over axis 0:
+  // the channels added in order, then divided), and from it each fragment's
+  // mean (ndimage.mean: the voxels summed in C order, then divided). A
+  // fragment whose mean is below the bias is background.
   const voxelMean = new Float64Array(N);
-  for (let c = 0; c < C; c++) {
+  for (const c of channels) {
     const plane = c * N;
     for (let i = 0; i < N; i++) voxelMean[i] += aff[plane + i]!;
   }
-  for (let i = 0; i < N; i++) voxelMean[i] /= C;
+  for (let i = 0; i < N; i++) voxelMean[i] /= channels.length;
   const sum = new Float64Array(N + 1), count = new Uint32Array(N + 1);  // the ids are at most N
   for (let i = 0; i < N; i++) {
     const id = labels[i]!;

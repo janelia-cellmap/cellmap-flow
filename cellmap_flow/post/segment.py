@@ -53,11 +53,19 @@ def mutex_watershed(affinities, offsets, bias=0.0, min_size=0):
     ``mwatershed.agglom`` joins voxels along edges whose affinity is above
     ``bias`` and keeps them apart along those below it, strongest edges
     first. Every voxel ends up in some fragment, background included, so a
-    fragment whose mean affinity (over all the channels) is below ``bias``
+    fragment whose mean affinity (over the channels) is below ``bias``
     is background: it is where the model sees no object. ``offsets``: the
     voxel offset each channel compares, as the model was trained with; a
     list longer than the channels is cut to them. ``min_size``: as for
     ``connected_components``.
+
+    A channel whose offset is as long as the block along an axis, or
+    longer, pairs no voxel in it (a 2D model's z channel on the one slice
+    it serves): it joins nothing and keeps nothing apart, so it is left out
+    of both, the agglomeration (mwatershed panics on an offset longer than
+    its axis) and the mean. In that mean its values, the model's guess at a
+    neighbour the block does not have, pulled a slice's objects a third of
+    the way to background, and a 4x4 square at 0.88 came out as none.
     """
     import fastremap
     import mwatershed as mws
@@ -65,6 +73,11 @@ def mutex_watershed(affinities, offsets, bias=0.0, min_size=0):
 
     affinities = np.asarray(affinities, dtype=np.float64)
     offsets = [list(offset) for offset in offsets][: affinities.shape[0]]
+    # Every channel is kept when none pairs a voxel.
+    unpaired = {c for c, offset in enumerate(offsets) if any(abs(o) >= n for o, n in zip(offset, affinities.shape[1:]))}
+    kept = [c for c in range(affinities.shape[0]) if c not in unpaired]
+    if unpaired and kept:
+        affinities, offsets = affinities[kept], [offsets[c] for c in kept if c < len(offsets)]
     segmentation = mws.agglom(affinities - float(bias), offsets)
 
     mean_affinity = np.mean(affinities, axis=0)

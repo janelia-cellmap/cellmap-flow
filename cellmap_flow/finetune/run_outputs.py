@@ -182,8 +182,8 @@ def write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_d
     # which picks the level of a multiscale group, and the server picks the
     # same one the same way. Naming a level could only disagree with it.
     #
-    # The job's own queue and charge group, when the job manager passed them;
-    # the template's defaults otherwise.
+    # The job's own queues and charge group, when the job manager passed
+    # them; the template's defaults otherwise.
     scheduler = {
         key: getattr(args, key) for key in ("queue", "charge_group") if getattr(args, key, None)
     }

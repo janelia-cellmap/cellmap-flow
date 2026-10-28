@@ -110,6 +110,42 @@ export interface SessionState {
    * id in the paint store (a PaintVolume), or null. Tab-scoped like the
    * models; the store's listing is the durable one. */
   paintVolume: string | null;
+  /** The channel each model's layer shows, by model name, as POST
+   * /api/finetune/channel sets it (the training form's Channel) and Use this
+   * model does (the row's channel, before the model is served): the
+   * channel's index into the model's output channels. A
+   * layer built for the model later opens on it, and so does one for a
+   * model finetuned from it (serving.ts shownChannel). The server's
+   * `shown_channels` on its dashboard session. */
+  shownChannels: Record<string, number>;
+  /** The models added to Which model to start from's list by hand (POST
+   * /api/finetune/rank/add): their catalog ids, in the order added, so
+   * every listing after lists them under Added. The server's `rank_added`
+   * on its dashboard session. */
+  rankAdded: string[];
+  /** What the ranking's last score of each model fitted to the paint, by
+   * the model's name: its row's input normalization and the postprocessing
+   * its layer needs (null when the chain needed none), which Use this
+   * model, Fit to Paint and Use these settings set from (rank.ts's score),
+   * and its row's threshold. The model advice does not suggest another
+   * input normalization over them, and cuts an affinity model's chain into
+   * a segmentation at the threshold; GET /api/models/loaded says the
+   * chain's postprocessing was fitted to the paint while it is theirs. The
+   * server's `rank_fits` on its dashboard session. */
+  rankFits: Record<string, RankFit>;
+  /** The postprocessing a model's start set on a chain with none, and the
+   * model (serving.ts setNeededPostprocess), which GET /api/models/loaded
+   * says the chain's came from while it is still that; null until a start
+   * sets any. The server's `start_postprocess`. */
+  startPostprocess: { model: string; postprocess: Step[] } | null;
+}
+
+/** What a model's score fitted to the paint (SessionState.rankFits). */
+export interface RankFit {
+  input_norm: Step[];
+  postprocess: Step[] | null;
+  /** The row's threshold, a probability; null in a fit stored before it was kept. */
+  threshold: number | null;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that
@@ -679,4 +715,8 @@ export interface PaintVolume {
   postprocess: Step[];
   created_at: string;
   resample?: boolean;
+  /** The volume that took this one's place (the browser's own field): Use
+   * this model carried this volume's paint to it, and this one is kept but
+   * no longer the session's (supersedeVolume). Absent on a current volume. */
+  superseded_by?: string;
 }

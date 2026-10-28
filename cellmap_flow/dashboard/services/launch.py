@@ -17,6 +17,9 @@
   models* list, every model running or starting with where it came from,
   and its ✕: stop that one model and take its layer away, whatever else is
   ticked on the tab and not submitted.
+- ``launching()`` / ``start_error()``: whether a model's start is still
+  going, and why its last one failed, which the Finetune tab's Use this
+  model waits on (routes/finetune/rank_routes.py _served_geometry).
 """
 
 from cellmap_flow.config.yaml import ConfigError
@@ -49,9 +52,10 @@ def _sanitize_job_name(name: str) -> str:
     return re.sub(r"[\s\-]+", "_", name)
 
 
-def _start(config):
-    """``serving.launch.launch`` for ``config`` on the session's data, or None
-    after logging why the job did not start.
+def _start(config, queue=None):
+    """``serving.launch.launch`` for ``config`` on the session's data, on
+    ``queue`` (the Models tab's queues when None), or None after logging why
+    the job did not start.
 
     These run in the dashboard's launch threads: an uncaught JobStartError
     (including a bsub timeout) only reached stderr, never the log panel.
@@ -65,7 +69,7 @@ def _start(config):
     name = config.name
     try:
         job = launch_server(
-            config, session.dataset_path, queue=session.queue, charge_group=session.charge_group,
+            config, session.dataset_path, queue=queue or session.queue, charge_group=session.charge_group,
             resample=session.resample,
         )
     except JobStartError as e:
@@ -73,6 +77,8 @@ def _start(config):
             logger.info(f"Stopped '{name}' while it was starting: it was removed from the loaded models")
             return None
         logger.error(f"Could not start model '{name}': {e}")
+        with _launching_lock:
+            _start_errors[name] = str(e)
         return None
     if _withdrawn():
         logger.info(f"Stopping '{name}', which was removed from the loaded models while it was starting")
@@ -94,7 +100,7 @@ def _show(job, st_data):
     layer = prediction_layer(
         job.model_name, job.host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
         shader=session.shaders.get(job.model_name), shader_controls=session.shader_controls.get(job.model_name),
-        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
+        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], channel=session.shown_channel(job.model_name),
     )
     with session.viewer.txn() as s:
         # A model started again keeps what the user set on its layer.
@@ -115,12 +121,20 @@ def _reported(launch):
 
 
 @_reported
-def run_model(config, st_data):
+def run_model(config, st_data, queue=None):
     """Start ``config``'s inference server, in its environment, and add its
     layer with ``st_data``, the session's layer blob. The one launcher behind
-    Submit, Add a model and the Training tab's Use this model."""
-    job = _start(config)
-    if job is not None:
+    Submit, Add a model and the Training tab's Use this model, which gives
+    the Training tab's GPU queues as ``queue`` (the Models tab's otherwise).
+
+    A chain with no postprocessing takes what the model's output needs (a
+    sigmoid for logits) once its server's probe says what that is
+    (routes.pipeline.set_needed_postprocess); the redraw that sets it draws
+    this model's layer too."""
+    from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
+
+    job = _start(config, queue)
+    if job is not None and not set_needed_postprocess(job):
         _show(job, st_data)
 
 
@@ -138,32 +152,52 @@ def bioimage_job_name(key: str) -> str:
     return re.sub(r"\W+", "_", key).strip("_")
 
 
+def bioimage_model_entry(model, voxel_size=None, *, online: bool = True):
+    """``(entry, choice, refusal)``: the model entry the Models tab's Submit
+    starts for a zoo model at ``voxel_size`` (what its row says; None when
+    blank), how its voxel size was decided, and why its server would refuse
+    it, or None.
+
+    ``model`` is its row of the cached list, or the id a row was ticked by,
+    which is looked up in it: the listed id may be a DOI, and the model is
+    loaded by its nickname when the list has one, and named
+    ``bioimage_job_name`` of that. Its voxel size is decided as its server
+    decides it (``bioimage_catalog.entry_voxel_size``, ``choice``); a model
+    that declares none, and that cellmap-flow does not know the training
+    voxel size of, would be refused by its server after its job started,
+    where nothing on the page shows it, so ``refusal`` says so in a sentence
+    (unless it is running already), and the caller refuses it. ``online``
+    False decides from the cached list alone, as the Finetune tab's ranking
+    lists every zoo model (routes/finetune/rank_routes.py) without a fetch
+    for each.
+    """
+    found = model if isinstance(model, dict) else bioimage_catalog.find_bioimage_model(model)
+    key = found["key"] if found else model
+    name = bioimage_job_name(key)
+    choice = bioimage_catalog.entry_voxel_size(key, voxel_size, listed=found, online=online)
+    refusal = None
+    if choice.source in ("none", "unread") and name not in running_names():
+        how = "does not say" if choice.source == "none" else "could not be read, so it is not known whether it says"
+        refusal = f"{found['name']} ({key}) {how} what voxel size it was trained at"
+    return bioimage_catalog.bioimage_entry(key, choice.voxel_size, name), choice, refusal
+
+
 def _bioimage_configs(selections) -> list:
-    """A BioModelConfig for each ticked zoo model ({"id", "voxel_size"}).
+    """A BioModelConfig for each ticked zoo model ({"id", "voxel_size"}), of
+    the entry ``bioimage_model_entry`` gives it.
 
     Built before anything is stopped or started, so a model whose voxel size
     is missing refuses the whole Submit (ValueError) rather than half of it.
-    The listed id may be a DOI; the model is loaded by its nickname when the
-    cached list has one. Its voxel size is decided as its server decides it
-    (``bioimage_catalog.entry_voxel_size``); a model that declares none, and
-    that cellmap-flow does not know the training voxel size of, is refused
-    here: its server would refuse it after its job started, where nothing
-    on the page shows it.
     """
     configs = []
     for selection in selections:
-        found = bioimage_catalog.find_bioimage_model(selection["id"])
-        key = found["key"] if found else selection["id"]
-        name = bioimage_job_name(key)
-        choice = bioimage_catalog.entry_voxel_size(key, selection.get("voxel_size"), listed=found)
+        entry, choice, refusal = bioimage_model_entry(selection["id"], selection.get("voxel_size"))
+        if refusal:
+            raise ValueError(f"{refusal}: enter one (nm) in its row")
         if choice.source == "trained":
-            logger.info(f"{key}: at {choice.voxel_size} nm, the voxel size it was trained at "
+            logger.info(f"{entry['model']}: at {choice.voxel_size} nm, the voxel size it was trained at "
                         f"({choice.trained['trained_on']})")
-        elif choice.source in ("none", "unread") and name not in running_names():
-            how = ("does not say" if choice.source == "none"
-                   else "could not be read, so it is not known whether it says")
-            raise ValueError(f"{found['name']} ({key}) {how} what voxel size it was trained at: enter one (nm) in its row")
-        configs.append(_built(bioimage_catalog.bioimage_entry(key, choice.voxel_size, name), f"{key}"))
+        configs.append(_built(entry, entry["model"]))
     return configs
 
 
@@ -275,6 +309,12 @@ class _Launch:
 # The launch the current thread runs, for _start to ask whether it was withdrawn.
 _this_launch = threading.local()
 
+# Why each model's last start failed (its JobStartError's message: no queue
+# took the job, it died loading), by name, until it is started again: the
+# Finetune tab's Use this model, which waits for the start, says why it
+# gave up (start_error).
+_start_errors: dict = {}
+
 
 def _withdrawn() -> bool:
     """Whether the launch this thread runs has been withdrawn (``remove_model``)."""
@@ -289,6 +329,7 @@ def _launch(name, target, *args, daemon=False):
     launch = _Launch(name)
     with _launching_lock:
         _launching[name] = launch
+        _start_errors.pop(name, None)
 
     def run():
         _this_launch.current = launch
@@ -311,6 +352,21 @@ def running_names() -> set:
     with _launching_lock:
         launching = set(_launching)
     return {job.model_name for job in get_session().jobs} | launching
+
+
+def launching(name) -> bool:
+    """Whether ``name``'s start is still going: its launch thread waits for
+    its job's host (jobs/launch.py start_hosts: the job pending on a GPU
+    queue, falling back to the next, or its server loading the model)."""
+    with _launching_lock:
+        return name in _launching
+
+
+def start_error(name):
+    """Why ``name``'s last start failed, or None: it has not failed, or was
+    started again since."""
+    with _launching_lock:
+        return _start_errors.get(name)
 
 
 def _owned_by_finetune(job) -> bool:

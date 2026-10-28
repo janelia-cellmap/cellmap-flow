@@ -146,8 +146,10 @@ On the tab's Training panel,
 convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
-is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer, with the form's values as they are then). Once the
+is trained. Paint where it is still wrong and train again (*Restart* trains
+again from the model's own weights on all the paint as it is then, with the
+form's values as they are then, as the server's does: a round never builds on
+the one before). Once the
 job waits for a restart, ``Shift+R`` over the viewer does the same without
 asking first, so painting and training again need not leave the viewer; it
 says in the tab's logs what it did, or why there was nothing to restart. A
@@ -169,9 +171,13 @@ model*: that copies the paint onto the chosen model's grid, and you train on
 the new volume.
 
 The training panel's controls are the server's where they mean something for
-one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
-margin; Dice scores whole patches and needs the server), label smoothing,
-class balance, and *Distillation Weight* and *Scope*, which keep the layer
+one layer: the epochs, the learning rate (1e-2 by default; type any number
+above 0 or pick a preset; with *Ease down to a tenth over the run* ticked,
+the default, each run eases it down along half a cosine to a tenth of it by
+its last step, as on the server, and unticked every step takes it), the loss
+(BCE by default, MSE or margin; Dice scores whole patches and needs the
+server), label smoothing, class balance, and *Distillation Weight* and
+*Scope*, which keep the layer
 close to the model's own output where you painted nothing: the loss adds the
 weight times the mean squared distance of the layer's logits from the
 original's, on the unpainted voxels of the painted chunks (or all of their
@@ -240,19 +246,29 @@ With paint on one object, scores a few points apart are as good as tied, and
 the list says so; a little paint in two or three places ranks them more
 clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
 voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
-model, which sees none of the dataset's nuclei, matched 50%. The box above
-the list filters it (``nuc``, ``16 nm``, ``affinities``, ``2d``), and only
-the ticked models it shows are ranked.
+model, which sees none of the dataset's nuclei, matched 50%. The models are
+listed as the Models tab lists them, in sections: the ones served, cellmap's
+(with that tab's search bar and Refresh: ``nuc``, ``16 nm``, ``2d``), those
+added by hand (*Add a model* under the sections) and your finetunes. The
+ticks are the ranking's own, and every ticked model is ranked: a ticked one
+stays in view whatever the search, and a section's header says how many it
+has ticked.
 
 *Use this model* makes a ranked model the one to finetune without painting
 again: it is loaded with its layer and picked under *Select Model*, a volume
 is made for it, the paint and the good regions are copied into that volume
-on the model's own grid, and its paint layer takes the old one's place (the
-old volume stays, under *Resume Existing Volume*). What its score chose comes
-with it: a stretched raw becomes the session's input normalization (the raw
-is the dataset's, so every model reads it so), and its cut-off becomes *Seed
-from Prediction*'s threshold, marked *set by ranking* beside the field until
-you change it; a line under *Label it*'s buttons says what was set. On the
+on the model's own grid, and its paint layer takes the old one's place. The
+old volume is kept in the browser but retired: *Resume Existing Volume* lists
+only the new one, and an old entry still on screen resumes the new one. What
+its score chose comes with it: the best channel of a model of several is the
+one its layer opens on, a stretched raw becomes the session's input
+normalization (the raw is the dataset's, so every model reads it so), its
+layer shows what was scored (the sigmoid its logits need, and a threshold at
+its cut-off: for an affinity model on each channel, whose objects the
+Processing tab then offers as an *Optional* chain into a segmentation that
+joins neighbours above the same cut-off), and its cut-off becomes *Seed from
+Prediction*'s threshold, marked *set by ranking* beside the field until you
+change it; a line under *Label it*'s buttons says what was set. On the
 same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted
@@ -279,7 +295,7 @@ network*: every weight of the model trains on your paint, with
 `TensorFlow.js <https://www.tensorflow.org/js>`_ on this machine's GPU
 (WebGPU), from a training graph Marwan Zouinkhi exported beside each model.
 The weights trained are written back into the model's ``.onnx``, which is
-then served, kept, downloaded and restarted from as a last-layer finetune
+then served, kept, downloaded and restarted as a last-layer finetune
 is; switching between the two needs a new *Start Finetuning*. A model served
 from an int8 file offers neither (its weights are quantized and cannot be
 written): serve its fp32 or fp16 file to finetune it.
@@ -288,8 +304,10 @@ A 2D model's whole network trains on square tiles cut from the painted
 slices, in the plane you painted in (x–y, or z–y and z–x where the raw data's
 voxels are cubes, as the server's 2D training does), with Adam; a 3D model's
 on cubes around the paint (below). Its controls are the
-epochs, its own learning rates (1e-4 by default, a hundredth of the last
-layer's), the server's *Batch Size*, in tiles per step (1 by default), *Tile
+epochs, its own learning rate (1e-4 by default, a hundredth of the last
+layer's) and *Ease down* box, which eases it down to a tenth of it over the
+run, or not, as the last layer's does,
+the server's *Batch Size*, in tiles per step (1 by default), *Tile
 Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
 balance fields, which it reads as the last layer does. Distillation holds the
 model to the starting network's output on the voxels its scope picks in each
@@ -406,8 +424,8 @@ lines' loss reads
 against two marks: 0.69 for the default class-balanced BCE is guessing, and
 about 0.20 with label smoothing of 0.1 is the paint fitted exactly.
 
-The *Patch on screen* tools label the box centred where the viewer looks, as
-on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
+The *Patch on screen* tools label the box centred where the viewer looks, or
+with *Field of view* what the viewer's panel shows, as on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
 *Seed from Prediction* copies a model's
 prediction into the unpainted voxels, an id per object and background 1, for
 you to fix with the brush; *All Background* labels them background; *Split
@@ -437,8 +455,9 @@ the page, for trying the panel without a key. The server's guide,
 has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
-Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. The ✕
+Existing Volume* lists the volumes painted here, newest first (one per
+session: a volume *Use this model* has taken the place of is not listed), and
+the Models tab lists the finetuned models under the Hugging Face ones. The ✕
 beside a finetuned model under *Loaded models* (see *Usage* on the
 :doc:`front page <index>`) stops serving it and keeps it, to tick again.
 *Download paint* saves the volume as a zarr (zipped, the server's layout, so a server

@@ -3,7 +3,8 @@
 // same JSON, so the tab's label-it.js drives both. They act on the box on
 // screen: one model output patch (one chunk of the volume) centred where
 // the viewer looks, or `box_voxels` annotation voxels when the request
-// gives them.
+// gives them, or with `field_of_view` what the viewer's panel shows (the
+// Python's label_it.field_of_view_nm, as the server's routes have it).
 //
 // - POST .../seed: the chosen model's prediction there, segmented into
 //   objects (threshold and connected components, or the mutex watershed
@@ -67,12 +68,14 @@
 import { pushUndo, readBox, writeBox } from "../../ai-annotate/fill";
 import type { Labels, UndoEntry } from "../../ai-annotate/types";
 import type { AppContext, ModelEntry, PaintVolume, ServedModel } from "../../contracts";
-import { hasAffinityChannels, readVolume } from "../../finetune/volume";
+import { hasAffinityChannels, readVolume, viewPixelNm } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
 import { asConnectivity, asBoolLike } from "../../infer/label";
 import { type Placement, placementArgs, readRegion, servedLevel } from "../../label-it/prediction";
 import { type Block, bufferOf, LABEL_IT, mutexObjects } from "../../label-it/segment";
+import { finetuneNumber } from "../../models/finetuned";
 import { paintLayerName } from "../../viewer/layers";
+import { decodeState } from "../../viewer/share";
 import type { Router } from "../router";
 import { json, message, objectBody } from "../router";
 
@@ -121,21 +124,25 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
 
   /** The session's volume and the box's voxels in it (_target_box): the
    * voxels whose centres lie in the box on screen, by the Python's
-   * fill.box_voxels. */
+   * fill.box_voxels. The box is centred where the viewer looks: size_nm, or
+   * box_voxels, or one output patch; with field_of_view, what the viewer's
+   * panel shows, box_voxels saying only its depth. */
   async function targetBox(ctx: AppContext, body: Record<string, unknown>): Promise<{ volume: PaintVolume; lo: number[]; hi: number[] }> {
     const volume = await sessionVolume(ctx);
     if (!volume) throw new Refused("No annotation volume to label. Create or resume one first.", 409, { needs_volume: true });
     let sizeNm = body.size_nm;
-    if (body.box_voxels !== undefined && body.box_voxels !== null) sizeNm = boxNm(body.box_voxels, volume);
+    const box = body.box_voxels !== undefined && body.box_voxels !== null ? boxNm(body.box_voxels, volume) : null;
+    if (body.field_of_view) sizeNm = await fieldOfViewNm(ctx, body.viewer_px, volume, box);
+    else if (box) sizeNm = box;
     const { centre, size } = viewBoxNm(ctx, sizeNm, volume);
-    const box = await ctx.infer.python<{ lo: number[]; hi: number[] } | null>(`${FILL}:box`, {
+    const voxels = await ctx.infer.python<{ lo: number[]; hi: number[] } | null>(`${FILL}:box`, {
       volume: { output_voxel_size: volume.output_voxel_size, dataset_offset_nm: volume.dataset_offset_nm ?? null },
       offset_nm: centre.map((c, a) => c - size[a] / 2),
       shape_nm: size,
       volume_shape: volume.dataset_shape_voxels,
     });
-    if (!box) throw new Refused("The view is outside the annotation volume.", 400);
-    return { volume, lo: box.lo, hi: box.hi };
+    if (!voxels) throw new Refused("The view is outside the annotation volume.", 400);
+    return { volume, lo: voxels.lo, hi: voxels.hi };
   }
 
   /** Fill the box's unannotated voxels by fill_calls.py's `call` (seed or
@@ -193,8 +200,11 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
 
   // POST .../seed: fill the unannotated voxels of the box on screen from a
   // model's prediction. JSON body, all optional: size_nm or box_voxels
-  // (the box), confirm (label a large box), select_channel (the one channel
-  // to threshold), model (a name from sources; the default when absent),
+  // (the box), field_of_view with viewer_px (the box is what the viewer's
+  // panel shows, box_voxels its depth), confirm (label a large box),
+  // select_channel (the one channel to threshold, the session's: an index
+  // into the volume's model's channels, so read only from that model or one
+  // of its finetunes), model (a name from sources; the default when absent),
   // method (one the model offers; components when absent), threshold (a
   // probability, 0 to 1; the model's own boundary, 0.5, when absent),
   // min_size (objects of fewer voxels are background), connectivity (1
@@ -229,12 +239,17 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
         throw new Refused(`The annotation volume was painted on ${volume.dataset_path}, but the viewer shows ${dataset.url}: open that dataset again, or make a new volume on this one.`);
       }
       const name = served.entry.name;
+      // The session's channel (the training form's Channel) numbers the
+      // volume's model's channels, so only that model and its finetunes read
+      // it (view_labels._model_read_as); any other seeds as it would without
+      // it (a one-channel model is not asked for the volume model's channel 2).
+      const selectChannel = readAsVolumeModel(name, base) ? body.select_channel ?? null : null;
       // What the seed reads of the model (label_it.seed_channels, the
       // offsets by its channel names) and where the box lies on its level
       // (label_it.placement), by the Python.
       const plan = refusedOr(await ctx.infer.python<SeedPlan | Refusal>(`${LABEL_IT}:seed_plan`, {
         channel_names: served.entry.manifest.channels,
-        select_channel: body.select_channel ?? null,
+        select_channel: selectChannel,
         ...placementArgs(volume, lo, hi, servedLevel(dataset, served.entry)),
       }));
       const outputType = outputTypeOf(served.entry);
@@ -255,7 +270,7 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       // channel trains as a binary target. Ids counting up need room: the
       // Python gives them to an instance target on a uint16 volume, and a
       // uint8 volume reuses free ids (fill.counts_up).
-      const instanceTarget = outputType === "affinities" && (body.select_channel === undefined || body.select_channel === null);
+      const instanceTarget = outputType === "affinities" && selectChannel === null;
       const answer = await fill(ctx, volume, placement.lo, placement.hi, "seed", { instance_target: instanceTarget }, [bytesOf(objects)]);
       return json(200, { ...answer, model: name, threshold: body.threshold ?? null, method });
     } catch (e) {
@@ -264,8 +279,8 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   });
 
   // POST .../background: label every unannotated voxel of the box on
-  // screen background (1). JSON body, all optional: size_nm or box_voxels,
-  // and confirm, as for seed.
+  // screen background (1). JSON body, all optional: the box (size_nm,
+  // box_voxels, field_of_view) and confirm, as for seed.
   router.post(`${BASE}/background`, async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
     try {
@@ -283,10 +298,11 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   // component (fill.relabel_objects). For a merge the model made: paint
   // a background wall through the object, in every slice it spans, and
   // click; the two sides get ids of their own. A stroke joining two objects
-  // merges them. JSON body, all optional: size_nm or box_voxels, and
-  // confirm, as for seed; connectivity and per_slice, as for a seed's
-  // components (with per_slice, a wall in one slice is enough, and each
-  // slice of an object gets an id of its own).
+  // merges them. JSON body, all optional: the box (size_nm, box_voxels,
+  // field_of_view) and confirm, as for seed; connectivity and per_slice, as
+  // for a seed's components (with per_slice, a wall in one slice is enough,
+  // and each slice of an object gets an id of its own). A field of view one
+  // slice deep is that slice alone, so a wall there splits the object in it.
   router.post(`${BASE}/split`, async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
     try {
@@ -523,6 +539,28 @@ function viewBoxNm(ctx: AppContext, sizeNm: unknown, volume: PaintVolume): { cen
   return { centre, size: three };
 }
 
+/** The size in nm of what the viewer's panel shows (_field_of_view_nm):
+ * the Python's label_it.field_of_view_nm, as the server's routes have it, of
+ * the viewer's state (its URL's, whose zoom viewPixelNm reads as the
+ * server's view_of does) and `viewerPx`, the size of the page's frame of
+ * it. The panel's plane is the AI annotation's (viewDepthAxis); `boxSizeNm`,
+ * the request's box when it gives one, says the depth along it, else one
+ * voxel. A view the Python refuses is a 400. */
+async function fieldOfViewNm(ctx: AppContext, viewerPx: unknown, volume: PaintVolume, boxSizeNm: number[] | null): Promise<number[]> {
+  const url = ctx.viewer.viewerUrl();
+  const depthAxis = ctx.viewer.viewDepthAxis();
+  const answer = await ctx.infer.python<{ size_nm: number[] } | Refusal>(`${LABEL_IT}:field_of_view`, {
+    viewer_px: viewerPx ?? null,
+    state: decodeState(url ? url.replace(/^[^#]*/, "") : "") ?? {},
+    pixel_nm: viewPixelNm(url),
+    depth_axis: depthAxis,
+    display_dimensions: ctx.viewer.viewDisplayDimensions(),
+    voxel_size: volume.output_voxel_size,
+    depth_nm: boxSizeNm ? boxSizeNm[depthAxis] : null,
+  });
+  return refusedOr(answer).size_nm;
+}
+
 /** The 409 asking the page to confirm a large box, or null (_confirmation_needed). */
 function confirmationNeeded(body: Record<string, unknown>, lo: number[], hi: number[]) {
   const voxels = hi.reduce((n, h, a) => n * (h - lo[a]), 1);
@@ -530,18 +568,12 @@ function confirmationNeeded(body: Record<string, unknown>, lo: number[], hi: num
   return json(409, { success: false, error: `The box is ${voxels.toLocaleString("en-US")} voxels. Label it all?`, needs_confirmation: true, voxels });
 }
 
-/** Whether `name` is a model finetuned in this browser from `base`, or a
- * later one of its series (models/finetuned.ts nextFinetunedName: `x-ft1`,
- * then `x-ft2` from either), and how late: its number, or null. */
-function finetuneNumber(name: string, base: string): number | null {
-  const series = base.replace(/-ft\d+$/, "");
-  const after = /-ft(\d+)$/.exec(base);
-  const baseNumber = after ? Number(after[1]) : 0;
-  if (!name.startsWith(`${series}-ft`)) return null;
-  const rest = name.slice(series.length + 3);
-  if (!/^\d+$/.test(rest)) return null;
-  const n = Number(rest);
-  return n > baseNumber ? n : null;
+/** Whether model `name` is read as `base`, the volume's model
+ * (view_labels._model_read_as): it, or one of its finetunes, whose channels
+ * are its own. */
+function readAsVolumeModel(name: string, base: string | null): boolean {
+  if (!base) return false;
+  return name === base || finetuneNumber(name, base) !== null;
 }
 
 /** The served model a seed reads when none is chosen (_prediction_server's

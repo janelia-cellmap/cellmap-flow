@@ -11,8 +11,14 @@
 // constants). The loss is the head's (loss.ts): the form's supervised loss
 // on the painted voxels, smoothed and class-balanced as it says, plus λ ×
 // the distance of the logits from the starting network's (the base's
-// weights, also on a restart) over the voxels its scope picks. Good regions
-// are not used. The epochs and the learning rate are the form's.
+// weights) over the voxels its scope picks. Good regions
+// are not used. The epochs are the form's, and the learning rate starts at
+// the form's and eases down over the run or stays, as its schedule says
+// (../schedule.ts), each step's rate given to an Adam of our own: TF.js's
+// keeps one rate (adam.ts). A run of one channel of several (selectChannel)
+// trains that channel so, and holds the others to the starting network over
+// every voxel of each tile or block (loss.ts lossTerms), so the starting
+// network is built for it even at λ 0.
 //
 // A 2D model (createRunFull) is built by Marwan Zouinkhi's runtime
 // (cellmap-tfjs-train.ts buildNet) from weights named as the initializers;
@@ -47,6 +53,7 @@ import { FINETUNED_REPO } from "../../contracts";
 import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape, ratio, sameVoxelSize } from "../../infer/geometry";
 import { mulberry32, shuffle, SLICE_MS, yieldEvery } from "../head-trainer";
 import { count, epochSummary, plural } from "../log-words";
+import { learningRateAt, scheduleWords } from "../schedule";
 import { AugmentTally, augmentIntensity, drawAugmentation, intensityRange, transformBlock } from "../augment";
 import { withVariant } from "../../models/manifest";
 import { readsOneSlice, refuseMode, sourceOf } from "../modes";
@@ -54,10 +61,11 @@ import { readGraph, readModel } from "../onnx-proto";
 import { targetTransformFor } from "../target-call";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune } from "../types";
 import { buildNet, type InitializerOffsets, readOnnxWeights, readTorchParams, toOnnxWeights, writeOnnxWeights } from "./cellmap-tfjs-train";
+import { type Adam, createAdam } from "./adam";
 import { type FetchFullFiles, fetchFullFiles, type TorchParams } from "./files";
 import { defaultTile, describeSides, is3d, outputSide, tileChoices, tileSides, type TrainGraph } from "./graph";
-import { fullTrainStep, lossTerms } from "./loss";
-import { buildNet3d, GpuMemoryError, type Net3d } from "./net3d";
+import { fullTrainStep, holdsOtherChannels, lossTerms, OTHER_CHANNELS_WEIGHT } from "./loss";
+import { buildNet3d, GpuMemoryError, type Net3d, type StepTerms } from "./net3d";
 import { type LoadedTf, loadTf } from "./tfjs";
 import { type BlockSample, blockLabels, blockRaw, blockTargets, normalizeTile, paintDepthAxes, paintedVoxels, planBlocks, planeAxes, planTiles, PLANE_NAMES, readPaint, type TileSample, tileLabels, tileRaw, tileTargets } from "./tiles";
 
@@ -209,12 +217,13 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     const offsets = files.initializers[source.file];
     if (!offsets) throw new Error(`finetune/initializers.json has no offsets for ${source.file}`);
     const names = Object.keys(graph.params);
-    const start = new Uint8Array(run.initialBytes ?? run.baseBytes);
+    const start = new Uint8Array(run.baseBytes);
     checkOffsets(start, offsets, names, source.file);
-    // The teacher is the base's weights, the model the job started from, also
-    // when a restart starts from the last run's (as the head's is).
-    const lambda = options.distillationLambda;
-    const base = lambda > 0 ? new Uint8Array(run.baseBytes) : null;
+    // The teacher is the base's weights, the model the job started from, for
+    // the distillation term and for the hold on the channels a run of one
+    // does not train.
+    const lambda = options.distillationLambda, holds = holdsOtherChannels(options, entry.manifest.channels.length);
+    const base = lambda > 0 || holds ? new Uint8Array(run.baseBytes) : null;
     if (base) checkOffsets(base, offsets, names, source.file);
     const side = checkTileSide(graph, options.tileSize, entry.name);
     const output = side - graph.context;
@@ -238,10 +247,11 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     const tiles = planTiles(voxels, depth, output);
     const inPlanes = planes.map((n, d) => (n ? `${count(n)} in ${PLANE_NAMES[d]} slices` : "")).filter(Boolean).join(", ");
     report.log(`Finetuning ${entry.name}'s whole network on volume ${volume.id}: ${count(painted)} painted voxels (${inPlanes}) in ${plural(tiles.length, "tile")} of ${side}² (output ${output}²)`);
-    report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of ${plural(Math.min(options.batchPatches, tiles.length), "tile")} per step at learning rate ${options.learningRate}, ${lossWords(options)}, Adam`);
+    report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of ${plural(Math.min(options.batchPatches, tiles.length), "tile")} per step, ${lossWords(options)}, Adam`);
     report.log(lambda > 0
       ? `Distillation, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each tile's output`
-      : "Distillation off (λ 0): trained on the paint alone");
+      : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
+    if (holds) report.log(channelWords(entry, options.selectChannel!, "tile"));
     if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);
     const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype);
     // A tile turns where its plane's two voxel sizes are the same, in the raw and the model.
@@ -250,10 +260,10 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       return [geo.g.input_voxel_size, geo.raw.voxel].every((size) => sameVoxelSize([size[u]], [size[v]]));
     };
     report.log(options.augment
-      ? `Augmentation on: each step's tiles get a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each tile's largest value"} on the raw before it is normalized, then random flips and quarter turns of the raw and the paint alike, with the targets${lambda > 0 ? " and the starting network's logits" : ""} made after`
+      ? `Augmentation on: each step's tiles get a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each tile's largest value"} on the raw before it is normalized, then random flips and quarter turns of the raw and the paint alike, with the targets${base ? " and the starting network's logits" : ""} made after`
       : "Augmentation off");
 
-    const transform = deps.targetTransformFor(entry, run.infer);
+    const transform = deps.targetTransformFor(entry, run.infer, options.selectChannel);
     const samples: TileSample[] = [];
     let distilled = 0;
     for (const tile of tiles) {
@@ -270,6 +280,9 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     if (!samples.length) throw new Error("the paint gives the loss nothing to count: an affinity is between two painted neighbours, so paint strokes, not single voxels");
     if (samples.length < tiles.length) report.log(`${plural(tiles.length - samples.length, "tile")} of lone painted voxels give the loss nothing to count (an affinity needs two painted neighbours) and ${tiles.length - samples.length === 1 ? "is" : "are"} left out`);
     const channels = samples[0].target.length / (output * output);
+    const batch = Math.max(1, Math.min(options.batchPatches, samples.length));
+    const stepsPerEpoch = Math.ceil(samples.length / batch), runSteps = options.epochs * stepsPerEpoch;
+    report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps, options.learningRateSchedule)}`);
 
     const { tf, backend, fallback, release } = await deps.loadTf();
     // The routes refuse the run without a GPU (tfjs.ts webgpuMissing): on
@@ -280,24 +293,22 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     // Augmentation's draws: a stream of its own, so a run without it shuffles as before.
     const augmentRandom = mulberry32((options.seed ^ 0x9e3779b9) >>> 0);
     const tally = new AugmentTally();
-    let net: ReturnType<typeof buildNet> | null = null, teacher: ReturnType<typeof buildNet> | null = null, opt: ReturnType<typeof tf.train.adam> | null = null;
+    let net: ReturnType<typeof buildNet> | null = null, teacher: ReturnType<typeof buildNet> | null = null, opt: Adam | null = null;
     try {
       net = buildNet(tf, graph, readOnnxWeights(start, offsets, names), { trainable });
       if (base) teacher = buildNet(tf, graph, readOnnxWeights(base, offsets, names), { trainable: new Set() });
-      opt = tf.train.adam(options.learningRate);
-      const batch = Math.max(1, Math.min(options.batchPatches, samples.length));
+      opt = createAdam(tf);
       const order = new Uint32Array(samples.length).map((_, i) => i);
       const random = mulberry32(options.seed);
       const breathe = yieldEvery(SLICE_MS);
       const losses: number[] = [], supervisedLosses: number[] = [];
       const x = new Float32Array(batch * side * side), t = new Float32Array(batch * output * output * channels), m = new Float32Array(t.length);
       let steps = 0, firstStepMs = 0;
-      const stepsPerEpoch = Math.ceil(samples.length / batch);
       training: for (let epoch = 1; epoch <= options.epochs; epoch++) {
         if (report.cancelled()) break;
         report.log(`Starting epoch ${epoch} of ${options.epochs}`);
         shuffle(order, random);
-        let sum = 0, sumSupervised = 0, sumDistillation = 0, weight = 0;
+        let sum = 0, sumSupervised = 0, sumDistillation = 0, sumOthers = 0, weight = 0;
         for (let from = 0; from < samples.length; from += batch) {
           const rows = Math.min(batch, samples.length - from);
           let masked = 0;
@@ -313,15 +324,16 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
           const ts = tf.tensor4d(t.slice(0, rows * output * output * channels), [rows, output, output, channels]);
           const ms = tf.tensor4d(m.slice(0, rows * output * output * channels), [rows, output, output, channels]);
           const t0 = performance.now();
-          let value: number, supervised: number, distillation = 0;
+          let value: number, supervised: number, distillation = 0, others = 0;
           let zs: TF.Tensor4D | null = null;
           try {
             if (teacher) zs = tf.tidy(() => teacher!.forward(xs));
-            const step = fullTrainStep(tf, net, opt, xs, ts, ms, zs, options);
+            const step = fullTrainStep(tf, net, opt, xs, ts, ms, zs, options, learningRateAt(options.learningRate, steps, runSteps, options.learningRateSchedule));
             value = (await step.total.data())[0];
             supervised = (await step.supervised.data())[0];
             if (step.distillation) distillation = (await step.distillation.data())[0];
-            step.total.dispose(); step.supervised.dispose(); step.distillation?.dispose();
+            if (step.otherChannels) others = (await step.otherChannels.data())[0];
+            step.total.dispose(); step.supervised.dispose(); step.distillation?.dispose(); step.otherChannels?.dispose();
           } finally {
             xs.dispose(); ts.dispose(); ms.dispose(); zs?.dispose();
           }
@@ -329,11 +341,12 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
           sum += value * masked;
           sumSupervised += supervised * masked;
           sumDistillation += distillation * masked;
+          sumOthers += others * masked;
           weight += masked;
           steps++;
           // The second step's time: the first compiles the GPU's shaders.
           if (steps === 1) firstStepMs = performance.now() - t0;
-          if (steps === 2 || (steps === 1 && stepsPerEpoch * options.epochs === 1)) {
+          if (steps === 2 || (steps === 1 && runSteps === 1)) {
             const stepMs = steps === 2 ? performance.now() - t0 : firstStepMs;
             report.log(`A step takes ${Math.round(stepMs)} ms on ${backend === "webgpu" ? "this GPU" : "the CPU"}: about ${seconds((stepMs * stepsPerEpoch) / 1000)} an epoch of ${plural(stepsPerEpoch, "step")}`);
           }
@@ -342,9 +355,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
         }
         losses.push(sum / weight);
         supervisedLosses.push(sumSupervised / weight);
-        report.log(teacher
-          ? `Epoch ${epoch}/${options.epochs} - Loss: ${(sum / weight).toFixed(6)} - Supervised: ${(sumSupervised / weight).toFixed(6)} - Distillation: ${(sumDistillation / weight).toFixed(6)}`
-          : `Epoch ${epoch}/${options.epochs} - Loss: ${(sum / weight).toFixed(6)}`);
+        report.log(epochLine(epoch, options.epochs, { total: sum / weight, supervised: sumSupervised / weight, distillation: lambda > 0 ? sumDistillation / weight : null, otherChannels: holds ? sumOthers / weight : null }));
       }
       if (options.augment) report.log(tally.describe([null, "rows", "columns"], samples.some((s) => turnable(s.tile.depth))));
       const bytes = writeOnnxWeights(start, offsets, net.exportWeights());
@@ -407,10 +418,10 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   // params that train), checked where they lie in the bytes.
   const written = Object.keys(weightMap).filter((name) => trainable.has(weightMap[name].torch));
   const names = [...new Set([...initializersRead(torchParams), ...written])];
-  const start = new Uint8Array(run.initialBytes ?? run.baseBytes);
+  const start = new Uint8Array(run.baseBytes);
   checkOffsets(start, offsets, names, source.file);
-  const lambda = options.distillationLambda;
-  const base = lambda > 0 ? new Uint8Array(run.baseBytes) : null;
+  const lambda = options.distillationLambda, holds = holdsOtherChannels(options, entry.manifest.channels.length);
+  const base = lambda > 0 || holds ? new Uint8Array(run.baseBytes) : null;
   if (base) checkOffsets(base, offsets, names, source.file);
   const side = checkTileSide(graph, options.tileSize, entry.name);
   if (options.batchPatches !== 1) throw new Error(`${entry.name} is a 3D model, whose whole network trains one block a step (a block of ${side}³ is a batch's memory already): set Batch Size to 1`);
@@ -426,19 +437,20 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   const kept = blocks.length * side ** 3 * (options.augment ? 5 : 4);
   if (kept > MAX_KEPT_BYTES) throw new Error(`the paint lies in ${plural(blocks.length, "block")} of ${side}³, ${(kept / 2 ** 30).toFixed(1)} GB of raw to keep in the page: paint in fewer places at once`);
   report.log(`Finetuning ${entry.name}'s whole network on volume ${volume.id}: ${count(painted)} painted voxels in ${plural(blocks.length, "block")} of ${side}³ (output ${output}³)`);
-  report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of one block per step at learning rate ${options.learningRate}, ${lossWords(options)}, Adam`);
+  report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of one block per step, ${lossWords(options)}, Adam`);
   report.log(lambda > 0
     ? `Distillation, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each block's output`
-    : "Distillation off (λ 0): trained on the paint alone");
+    : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
+  if (holds) report.log(channelWords(entry, options.selectChannel!, "block"));
   if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);
   const norm = volume.input_norm, range = intensityRange(norm, dataset.dtype);
   // A block turns in y–x where y's and x's voxel sizes are the same, in the raw and the model.
   const turnable = [geo.g.input_voxel_size, geo.raw.voxel].every((size) => sameVoxelSize([size[1]], [size[2]]));
   report.log(options.augment
-    ? `Augmentation on: each step's block gets a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each block's largest value"} on the raw before it is normalized, then random flips along z, y and x${turnable ? " and quarter turns in y–x" : ""} of the raw and the paint alike, with the targets${lambda > 0 ? " and the starting network's logits" : ""} made after`
+    ? `Augmentation on: each step's block gets a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each block's largest value"} on the raw before it is normalized, then random flips along z, y and x${turnable ? " and quarter turns in y–x" : ""} of the raw and the paint alike, with the targets${base ? " and the starting network's logits" : ""} made after`
     : "Augmentation off");
 
-  const transform = deps.targetTransformFor(entry, run.infer);
+  const transform = deps.targetTransformFor(entry, run.infer, options.selectChannel);
   const cube = [output, output, output] as const;
   const samples: BlockSample[] = [];
   let distilled = 0;
@@ -456,6 +468,8 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   if (!samples.length) throw new Error("the paint gives the loss nothing to count: an affinity is between two painted neighbours, so paint strokes, not single voxels");
   if (samples.length < blocks.length) report.log(`${plural(blocks.length - samples.length, "block")} of lone painted voxels give the loss nothing to count (an affinity needs two painted neighbours) and ${blocks.length - samples.length === 1 ? "is" : "are"} left out`);
   const channels = samples[0].target.length / output ** 3;
+  const runSteps = options.epochs * samples.length;
+  report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps, options.learningRateSchedule)}`);
 
   const { tf, backend, fallback, release } = await deps.loadTf();
   const augmentRandom = mulberry32((options.seed ^ 0x9e3779b9) >>> 0);
@@ -467,8 +481,8 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     // hour of the page's own thread, so a 3D run stops here.
     if (backend !== "webgpu") throw new Error(`TF.js could not train on the GPU (${fallback ?? "its WebGPU backend did not start"}), and a 3D model's step on its CPU backend would take the better part of an hour; reload the page to try WebGPU again`);
     report.log("TF.js on WebGPU");
-    net = buildNet3d(tf, graph, readTorchParams(start, offsets, torchParams), { trainable, learningRate: options.learningRate });
-    if (base) teacher = buildNet3d(tf, graph, readTorchParams(base, offsets, torchParams), { trainable: new Set(), learningRate: 0 });
+    net = buildNet3d(tf, graph, readTorchParams(start, offsets, torchParams), { trainable });
+    if (base) teacher = buildNet3d(tf, graph, readTorchParams(base, offsets, torchParams), { trainable: new Set() });
     const order = new Uint32Array(samples.length).map((_, i) => i);
     const random = mulberry32(options.seed);
     const breathe = yieldEvery(SLICE_MS);
@@ -478,20 +492,20 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
       if (report.cancelled()) break;
       report.log(`Starting epoch ${epoch} of ${options.epochs}`);
       shuffle(order, random);
-      let sum = 0, sumSupervised = 0, sumDistillation = 0, weight = 0;
+      let sum = 0, sumSupervised = 0, sumDistillation = 0, sumOthers = 0, weight = 0;
       for (const i of order) {
         const s = await augmented(samples[i]);
         const xs = tf.tensor5d(s.input, [1, side, side, side, 1]);
         const ts = tf.tensor5d(Float32Array.from(s.target), [1, output, output, output, channels]);
         const ms = tf.tensor5d(Float32Array.from(s.mask), [1, output, output, output, channels]);
         const t0 = performance.now();
-        let terms: Awaited<ReturnType<Net3d["step"]>>;
+        let terms: StepTerms;
         let zs: TF.Tensor5D | null = null;
         try {
           // forwardAsync waits for the GPU to free what each segment made:
           // half forward's peak at 172³, and a GpuMemoryError, as a step's.
           if (teacher) zs = await teacher.forwardAsync(xs);
-          terms = await net.step(xs, (z) => lossTerms(tf, z, ts, ms, zs, options));
+          terms = await net.step(xs, (z) => lossTerms(tf, z, ts, ms, zs, options), learningRateAt(options.learningRate, steps, runSteps, options.learningRateSchedule));
         } catch (e) {
           throw e instanceof GpuMemoryError ? new Error(outOfMemory(entry.name, graph, side, costs, e)) : e;
         } finally {
@@ -501,11 +515,12 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
         sum += terms.total * s.masked;
         sumSupervised += terms.supervised * s.masked;
         sumDistillation += (terms.distillation ?? 0) * s.masked;
+        sumOthers += (terms.otherChannels ?? 0) * s.masked;
         weight += s.masked;
         steps++;
         // The second step's time: the first compiles the GPU's shaders.
         if (steps === 1) firstStepMs = performance.now() - t0;
-        if (steps === 2 || (steps === 1 && samples.length * options.epochs === 1)) {
+        if (steps === 2 || (steps === 1 && runSteps === 1)) {
           const stepMs = steps === 2 ? performance.now() - t0 : firstStepMs;
           report.log(`A step takes ${Math.round(stepMs)} ms on this GPU: about ${seconds((stepMs * samples.length) / 1000)} an epoch of ${plural(samples.length, "step")}`);
         }
@@ -514,9 +529,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
       }
       losses.push(sum / weight);
       supervisedLosses.push(sumSupervised / weight);
-      report.log(teacher
-        ? `Epoch ${epoch}/${options.epochs} - Loss: ${(sum / weight).toFixed(6)} - Supervised: ${(sumSupervised / weight).toFixed(6)} - Distillation: ${(sumDistillation / weight).toFixed(6)}`
-        : `Epoch ${epoch}/${options.epochs} - Loss: ${(sum / weight).toFixed(6)}`);
+      report.log(epochLine(epoch, options.epochs, { total: sum / weight, supervised: sumSupervised / weight, distillation: lambda > 0 ? sumDistillation / weight : null, otherChannels: holds ? sumOthers / weight : null }));
     }
     if (options.augment) report.log(tally.describe(["z", "y", "x"], turnable, "block"));
     const bytes = writeOnnxWeights(start, offsets, toOnnxWeights(weightMap, net.exportWeights(), offsets));
@@ -575,6 +588,24 @@ function unmaskedVoxels(mask: Uint8Array, channels: number): number {
     if (!all) n++;
   }
   return n;
+}
+
+/** The line saying a run of one channel holds the others, per `unit` (tile or block). */
+function channelWords(entry: ModelEntry, channel: number, unit: string): string {
+  const names = entry.manifest.channels, others = names.length - 1;
+  return `Training channel ${channel} (${names[channel] ?? "unnamed"}) on the paint; the other ${plural(others, "channel")} ${others === 1 ? "is" : "are"} held to the starting network on every voxel of each ${unit}'s output, at weight ${OTHER_CHANNELS_WEIGHT} (each epoch's "Other channels": how far they moved, the mean squared change of their logits)`;
+}
+
+/** An epoch's line in the words the job card and loss plot read ("Epoch
+ * 3/20 - Loss: 0.011371"), the epoch's means: with a teacher the supervised
+ * term after the loss, then the distillation term (λ > 0) and the hold on
+ * the other channels (a run of one channel), each where the run has it. */
+function epochLine(epoch: number, epochs: number, mean: StepTerms): string {
+  const terms = [`Loss: ${mean.total.toFixed(6)}`];
+  if (mean.distillation !== null || mean.otherChannels !== null) terms.push(`Supervised: ${mean.supervised.toFixed(6)}`);
+  if (mean.distillation !== null) terms.push(`Distillation: ${mean.distillation.toFixed(6)}`);
+  if (mean.otherChannels !== null) terms.push(`Other channels: ${mean.otherChannels.toFixed(6)}`);
+  return `Epoch ${epoch}/${epochs} - ${terms.join(" - ")}`;
 }
 
 /** The supervised loss as the log names it: "BCE on the logits, class-balanced, smoothed 0.1". */

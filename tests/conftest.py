@@ -87,8 +87,8 @@ def pytest_collection_modifyitems(config, items):
 def _fresh_process_state(monkeypatch):
     """Give every test the state a new process starts with: the launcher
     settings at their defaults (not the HOME file, so a test that saved them
-    cannot leak into later ones), an empty chain, no started, starting or
-    failed jobs and a new dashboard session.
+    cannot leak into later ones), no GPU queue availability cached, an empty
+    chain, no started, starting or failed jobs and a new dashboard session.
 
     The owners are swapped for new ones rather than copied back afterwards.
     That holds only because every reader asks for them when it needs them;
@@ -97,14 +97,25 @@ def _fresh_process_state(monkeypatch):
     """
     from cellmap_flow import process_chain
     from cellmap_flow.dashboard import state
-    from cellmap_flow.jobs import launch, settings
+    from cellmap_flow.jobs import launch, queues, settings
 
     monkeypatch.setattr(settings, "_current", settings.LauncherSettings())
+    # What LSF said of the GPU queues, kept a minute: one test's answer must
+    # not order another's queues.
+    monkeypatch.setattr(queues, "_cache", {"fetched_at": 0.0, "payload": None})
     monkeypatch.setattr(process_chain, "_current", process_chain.ProcessChain())
     monkeypatch.setattr(launch, "_started", [])
     monkeypatch.setattr(launch, "_starting", set())
     monkeypatch.setattr(launch, "_failed", {})
     monkeypatch.setattr(state, "_session", state.Session())
+    # The dashboard's launches on their way, and why each last failed: a
+    # launch thread one test left running (a model started for real, its job
+    # never answering) counted as running in a later test of the same worker,
+    # and its name came back in that test's list of models.
+    services_launch = sys.modules.get("cellmap_flow.dashboard.services.launch")
+    if services_launch is not None:
+        monkeypatch.setattr(services_launch, "_launching", {})
+        monkeypatch.setattr(services_launch, "_start_errors", {})
     # What the seed picker learnt of each server, when a test has loaded it:
     # a server one test could not reach is not asked again for a minute.
     view_labels = sys.modules.get("cellmap_flow.dashboard.routes.finetune.view_labels")

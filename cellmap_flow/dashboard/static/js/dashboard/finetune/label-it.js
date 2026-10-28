@@ -3,7 +3,10 @@
 // all background, or relabel its objects by connected component, and Undo
 // takes back the last of those or of an accepted AI annotation. How a seed
 // makes objects of the prediction (its method) is picked among those that
-// fit the chosen model's output.
+// fit the chosen model's output. The patch is a box centred where the
+// viewer looks, or with Field of view what the viewer's panel shows, which
+// the routes work out from the viewer's state and the size of its frame
+// here, the one thing about the view only the page knows.
 //
 // The same in both modes: in the browser (web/) the page answers the same
 // routes (web/src/backend/routes/view-labels.ts), its prediction the model
@@ -13,6 +16,7 @@ import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { pickedChannel } from "./training-form.js";
 
 // log: the Annotation Crops panel's log.
 export function initLabelIt({ log }) {
@@ -29,10 +33,10 @@ export function initLabelIt({ log }) {
   // answer that changed labels. A box too large to label without asking is
   // answered needs_confirmation, and sent again confirmed; the button stays
   // busy until that answer too.
-  // The seed settings (box, method, threshold, smallest object,
-  // connectivity, per slice), kept in this browser, and shown when one is
-  // set so a seed never silently uses an old one. Connectivity and per
-  // slice are Split Objects' too; the box is every label action's.
+  // The seed settings (box, field of view, method, threshold, smallest
+  // object, connectivity, per slice), kept in this browser, and shown when
+  // one is set so a seed never silently uses an old one. Connectivity and
+  // per slice are Split Objects' too; the box is every label action's.
   const seedSettings = document.getElementById("seedSettings");
   const seedMethod = document.getElementById("seedMethod");
   const seedMethodHint = document.getElementById("seedMethodHint");
@@ -41,6 +45,7 @@ export function initLabelIt({ log }) {
   const seedConnectivity = document.getElementById("seedConnectivity");
   const seedPerSlice = document.getElementById("seedPerSlice");
   const seedBox = document.getElementById("seedBox");
+  const seedFieldOfView = document.getElementById("seedFieldOfView");
   const SETTINGS_KEY = "cellmap_flow.seed_settings";
   // The seed methods (view_labels.SEED_METHODS): their name in the picker,
   // a line on what they do, and which settings they read.
@@ -75,15 +80,28 @@ export function initLabelIt({ log }) {
   if (saved.connectivity) seedConnectivity.value = saved.connectivity;
   seedPerSlice.checked = Boolean(saved.per_slice);
   if (saved.box) seedBox.value = saved.box;
+  seedFieldOfView.checked = Boolean(saved.field_of_view);
   // The method last picked by hand, used whenever the chosen model offers it.
   let chosenMethod = saved.method || "";
+  // One model output patch (z, y, x voxels), the box when none is typed, as
+  // the sources' answer gives it; null until it has.
+  let patchVoxels = null;
   // The box, in annotation voxels: "z, y, x" or one number. Blank: the
   // server's default, one output patch. Anything else is sent as typed, for
-  // the server to refuse with a reason.
+  // the server to refuse with a reason. With Field of view, the routes take
+  // the box from the viewer's panel and the typed box's depth along the axis
+  // it looks along (blank: the slice on screen), and need the size of the
+  // viewer's frame: its panels are in Neuroglancer's own page, which in
+  // server mode is of another origin and cannot be measured from here.
   function boxBody() {
     const text = seedBox.value.trim();
-    if (!text) return {};
-    return { box_voxels: text.split(/[\s,x×]+/).filter(Boolean).map(Number) };
+    const body = text ? { box_voxels: text.split(/[\s,x×]+/).filter(Boolean).map(Number) } : {};
+    if (seedFieldOfView.checked) {
+      body.field_of_view = true;
+      const frame = document.querySelector("#my_iframe");
+      if (frame) body.viewer_px = [frame.clientWidth, frame.clientHeight];
+    }
+    return body;
   }
   // The box and the connected-components settings, shared by a seed and Split Objects.
   function componentsBody() {
@@ -98,16 +116,22 @@ export function initLabelIt({ log }) {
     if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
     return body;
   }
+  // With the training form's Channel when it is shown and picked: a binary
+  // model of several channels then seeds from the channel the paint is for,
+  // not from every channel.
   function seedRequest() {
     const body = seedBody();
     if (seedModel.value) body.model = seedModel.value;
     if (seedMethod.value) body.method = seedMethod.value;
+    const channel = pickedChannel();
+    if (channel !== null) body.select_channel = channel;
     return body;
   }
   function rememberSeedSettings() {
     writeJSON(SETTINGS_KEY, {
       threshold: seedThreshold.value, min_size: seedMinSize.value, method: chosenMethod,
       connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked, box: seedBox.value.trim(),
+      field_of_view: seedFieldOfView.checked,
     });
   }
   // The method's line, and the settings it does not read greyed out (Split
@@ -123,7 +147,14 @@ export function initLabelIt({ log }) {
   seedMinSize.addEventListener("change", rememberSeedSettings);
   seedConnectivity.addEventListener("change", rememberSeedSettings);
   seedPerSlice.addEventListener("change", rememberSeedSettings);
-  seedBox.addEventListener("change", rememberSeedSettings);
+  seedBox.addEventListener("change", () => {
+    rememberSeedSettings();
+    showBox();
+  });
+  seedFieldOfView.addEventListener("change", () => {
+    rememberSeedSettings();
+    showBox();
+  });
   seedMethod.addEventListener("change", () => {
     chosenMethod = seedMethod.value;
     rememberSeedSettings();
@@ -175,7 +206,8 @@ export function initLabelIt({ log }) {
         if (d && d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         const names = (d && d.models) || [];
         methodsByModel = (d && d.methods) || {};
-        seedBox.placeholder = d && d.box_voxels ? `${d.box_voxels.join(", ")} (one patch)` : "one patch";
+        patchVoxels = (d && d.box_voxels) || null;
+        showBox();
         if (!names.length) {
           showOnly("no model running");
           return showMethods();
@@ -212,10 +244,10 @@ export function initLabelIt({ log }) {
           if (d.needs_volume) offerNewVolume(`Could not ${what}: ${d.error}`);
           else alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
-          log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
+          log.add(describe(d, body) + (d.layer_refreshed ? "" : "; reloading the viewer"));
           if (!d.layer_refreshed) reloadViewer();
         } else {
-          log.add(describe(d));
+          log.add(describe(d, body));
         }
         log.showEnd();
       })
@@ -223,22 +255,34 @@ export function initLabelIt({ log }) {
       .finally(() => setBusy(button, false));
   }
 
-  function describeFill(d) {
-    if (!d.reload_viewer) return "Nothing to label: every voxel of the view is labelled already.";
+  // The box an answer covered, for its log line: the field of view or the
+  // box, and its size (the routes' shape_voxels).
+  function boxCovered(d, body) {
+    const size = d.shape_voxels ? ` (${d.shape_voxels.join(" × ")} voxels, z × y × x)` : "";
+    return `${body.field_of_view ? "the field of view" : "the box"}${size}`;
+  }
+
+  function describeFill(d, body) {
+    if (!d.reload_viewer) return `Nothing to label: every voxel of ${boxCovered(d, body)} is labelled already.`;
     const from = d.model ? ` from ${d.model}` : "";
     const by = d.method && METHODS[d.method] ? ` by ${METHODS[d.method].label.toLowerCase()}` : "";
     const how = d.threshold !== undefined && d.threshold !== null ? ` at threshold ${d.threshold}` : "";
-    return `Labelled the view${from}${by}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
+    return `Labelled ${boxCovered(d, body)}${from}${by}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
   }
 
-  function describeSplit(d) {
+  // A box one voxel thick (a field of view at the slice on screen) is split
+  // in that slice alone, as each slice is with Per z slice: a wall there is
+  // enough.
+  function describeSplit(d, body) {
     const objects = `${d.objects} object${d.objects === 1 ? "" : "s"}`;
-    if (!d.reload_viewer && seedPerSlice.checked) return `Nothing to relabel: ${objects}, each already one id.`;
+    const where = boxCovered(d, body);
+    const oneSlice = seedPerSlice.checked || (d.shape_voxels || []).includes(1);
+    if (!d.reload_viewer && oneSlice) return `Nothing to relabel in ${where}: ${objects}, each already one id.`;
     if (!d.reload_viewer) {
-      return `Nothing to relabel: ${objects}, each already one id. A cut has to go through ` +
+      return `Nothing to relabel in ${where}: ${objects}, each already one id. A cut has to go through ` +
              "every slice the object spans: paint the wall in the slices above and below too.";
     }
-    return `Relabelled the view: ${objects}, ${d.split} split off, ${d.merged} merged`;
+    return `Relabelled ${where}: ${objects}, ${d.split} split off, ${d.merged} merged`;
   }
 
   const seedViewBtn = document.getElementById("seedViewBtn");
@@ -256,4 +300,29 @@ export function initLabelIt({ log }) {
   splitObjectsBtn.addEventListener("click", () =>
     labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit,
               false, componentsBody()));
+
+  // The box the three buttons cover, said where it shows: the Box field's
+  // placeholder (what blank means) and each button's title, the template's
+  // with a sentence saying the box, so hovering a button says what it will
+  // label.
+  const boxButtons = [seedViewBtn, backgroundViewBtn, splitObjectsBtn];
+  const boxButtonTitles = boxButtons.map((button) => button.title);
+  function showBox() {
+    const typed = seedBox.value.trim();
+    let covers;
+    if (seedFieldOfView.checked) {
+      seedBox.placeholder = "one slice";
+      const deep = typed ? "as deep as Box says along the axis it looks along" : "at the slice on screen";
+      covers = `the field of view: what the viewer's panel shows (the top-left one in the four-panel layout), ${deep}`;
+    } else {
+      seedBox.placeholder = patchVoxels ? `${patchVoxels.join(", ")} (one patch)` : "one patch";
+      const box = typed ? `${typed} voxels (z, y, x)`
+        : `one model output patch${patchVoxels ? ` (${patchVoxels.join(" × ")} voxels, z × y × x)` : ""}`;
+      covers = `${box}, centred where you look`;
+    }
+    boxButtons.forEach((button, i) => {
+      button.title = `${boxButtonTitles[i]} It covers ${covers}.`;
+    });
+  }
+  showBox();
 }

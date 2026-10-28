@@ -11,6 +11,7 @@ import os
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
+from cellmap_flow.models.geometry import channel_names_of
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,12 @@ def metadata_geometry(metadata):
         if _other_shapes(metadata) is not None:
             return None
         voxel_size = Coordinate(metadata.output_voxel_size)
+        names = channel_names_of(metadata)
         return {
             "write_shape": list(Coordinate(metadata.output_shape) * voxel_size),
             "output_voxel_size": list(voxel_size),
             "output_channels": int(metadata.out_channels),
+            "channels": list(names) if names else None,
         }
     except (AttributeError, TypeError, ValueError):
         return None
@@ -132,6 +135,20 @@ class CellMapModelConfig(ModelConfig):
 
         config.block_shape = [*output_shape, metadata.out_channels]
         return config
+
+    def finetune_modes(self):
+        """LoRA and full when its export has a ``model.pt2``, which
+        cellmap_models' ``train()`` unflattens into a module adapters attach
+        to; full only without one, as ``train()`` then hands the trainer the
+        TorchScript, a compiled network that takes no adapter. fly_organelles'
+        copies under /nrs/cellmap/models/saalfeldlab have model.pt and
+        model.ts but no model.pt2: offered LoRA, a job failed at its start
+        (their Hugging Face copies have one). Read from the folder's files,
+        without loading them: the model list asks on every poll."""
+        folder = getattr(self.cellmap_model, "folder_path", None)
+        if folder and os.path.isdir(folder) and not os.path.exists(os.path.join(folder, "model.pt2")):
+            return ("full",)
+        return ("lora", "full")
 
     def declared_geometry(self):
         """Its export's metadata.json's (``metadata_geometry``), read without the model."""

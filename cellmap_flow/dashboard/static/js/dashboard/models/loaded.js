@@ -8,7 +8,7 @@
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
-import { tag } from "./row.js";
+import { tag } from "../../shared/model-list.js";
 
 // The sources services/launch.SOURCES names, as the list labels them.
 const SOURCE_LABELS = {

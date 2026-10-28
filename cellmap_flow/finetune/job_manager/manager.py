@@ -16,6 +16,7 @@ modules together:
 - ``add_listener``, ``remove_listener`` (listener).
 """
 
+import functools
 import logging
 import threading
 from datetime import datetime
@@ -25,6 +26,9 @@ from typing import Dict, List, Optional, Any
 from cellmap_flow.finetune.job_manager import monitor, persistence, restart, submit
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
+from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
+from cellmap_flow.jobs.queues import queue_list
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.serving.restart_token import write_restart_token
 
@@ -70,7 +74,7 @@ class FinetuneJobManager:
         options: Optional[TrainingOptions] = None,
         *,
         output_base: Optional[Path] = None,
-        queue: Optional[str] = None,
+        queue: Optional[List[str]] = None,
         charge_group: Optional[str] = None,
         walltime: Optional[str] = None,
         checkpoint_path_override: Optional[Path] = None,
@@ -84,7 +88,11 @@ class FinetuneJobManager:
             corrections_path: Path to corrections.zarr directory
             options: The training settings (finetune/options.py); the defaults if None
             output_base: Base directory for outputs (default: output/finetuning)
-            queue: LSF queue name (default: the site's, gpu_h100 at Janelia)
+            queue: The LSF queues it may run on (default: every GPU queue
+                the site offers). It is submitted to the one with the most
+                free GPUs, and moved to the next while it has not started
+                (submit.QueueFallback); with the launcher settings'
+                cycle_gpu_queues off, it waits on the first.
             charge_group: LSF charge group (default: the site's, cellmap at Janelia)
             walltime: LSF run limit, "HH:MM" or minutes (default: the site's,
                 08:00 at Janelia)
@@ -105,7 +113,7 @@ class FinetuneJobManager:
         if not model_config:
             raise ValueError("Model config is required")
         site = current_site()
-        queue = site.default_queue if queue is None else queue
+        queue = queue_list(queue) or site.default_queues
         charge_group = site.default_charge_group if charge_group is None else charge_group
 
         # Get model type from the config class's cli_name (e.g., "fly",
@@ -206,8 +214,14 @@ class FinetuneJobManager:
 
         job_name = f"finetune_{model_basename}_{timestamp}"
 
-        lsf_job = submit.launch(job_name, cli_command, queue=queue, charge_group=charge_group,
-                                walltime=walltime)
+        # The queues in the order to try them: what LSF says is freest now
+        # first. A training job is followed rather than waited on, so it is
+        # its monitor that moves it on (FinetuneJob.fallback).
+        order = gpu_queue_candidates(queue, cycle=launcher_settings().cycle_gpu_queues)
+        logger.info(f"Queue order: {' -> '.join(order)}")
+        launch = functools.partial(submit.launch, job_name, cli_command, charge_group=charge_group,
+                                   walltime=walltime)
+        lsf_job = launch(order[0])
 
         # === Create FinetuneJob tracking object ===
 
@@ -224,6 +238,7 @@ class FinetuneJobManager:
             log_file=log_file,
             total_epochs=options.num_epochs,
             corrections_path=corrections_path,
+            fallback=submit.QueueFallback(order[1:], launch),
         )
 
         self.jobs[job_id] = finetune_job

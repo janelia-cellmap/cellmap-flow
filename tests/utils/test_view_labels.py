@@ -25,6 +25,7 @@ from cellmap_flow.dashboard.routes.finetune import view_labels
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill, minio
 from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.portable import label_it
 from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.probe import UNBOUNDED, UNIT
@@ -277,6 +278,35 @@ def test_split_relabels_the_views_objects_by_connected_component(dashboard, serv
     assert body["reload_viewer"] is bool(counts["split"])
 
 
+def test_split_in_the_field_of_view_covers_what_the_panel_shows_at_the_slice_on_screen(dashboard, served, viewer):
+    """An xy panel of 6 x 4 screen pixels at one 16 nm voxel each, at voxel
+    8's centre: x 5..10 and y 6..9 at z 8 alone. A wall painted in that
+    slice splits the object there; above and below it keeps its id."""
+    labels = served()
+    with viewer.txn() as s:
+        # As cellmap-flow's viewers are: x, y, z, the "xy" panel the XY plane.
+        s.dimensions = neuroglancer.CoordinateSpace(names=["x", "y", "z"], units="nm", scales=[16] * 3)
+        s.position = [8.5] * 3
+        s.layout = "xy"
+        s.cross_section_scale = 1
+    labels[:] = 2
+    labels[8, :, 8] = 1  # the wall, in slice z 8 only
+    before = labels[:]
+
+    body = dashboard.post(SPLIT, json={
+        "field_of_view": True, "viewer_px": [6, 4 + label_it.NEUROGLANCER_TOP_ROW_PX],
+    }).get_json()
+
+    assert body["success"] and (body["offset_voxels"], body["shape_voxels"]) == ([8, 6, 5], [1, 4, 6]), body
+    assert body["split"] == 1
+    after = labels[:]
+    new_id = after[8, 6, 9]
+    assert new_id not in (1, 2) and (after[8, 6:10, 9:11] == new_id).all()
+    outside = np.ones(after.shape, bool)
+    outside[8, 6:10, 9:11] = False
+    np.testing.assert_array_equal(after[outside], before[outside])
+
+
 def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, served, server, monkeypatch):
     served()
     get_session().jobs = [SimpleNamespace(model_name=name, host=server.host)
@@ -292,6 +322,23 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
     dashboard.post(SEED, json={"model": "other"})
     assert read == ["model_finetuned_2", "model", "other"]
     assert dashboard.post(SEED, json={"model": "gone"}).status_code == 409
+
+
+def test_the_sessions_channel_is_read_only_from_the_volumes_model_and_its_finetunes(dashboard, served, server):
+    """select_channel (the training form's Channel) numbers the volume's
+    model's channels: another model's seed reads as it would without it,
+    so a model of one channel is not asked for channel 2."""
+    labels = served()
+    foreground = np.zeros((16,) * 3, bool)
+    foreground[5:9, 5:9, 5:9] = True
+    server.serve(_predicting(foreground))
+    get_session().jobs = [SimpleNamespace(model_name=name, host=server.host)
+                          for name in ("model", "model_finetuned_1", "other")]
+    for model in ("model", "model_finetuned_1"):
+        assert dashboard.post(SEED, json={"model": model, "select_channel": 2}).status_code == 400
+    assert not labels[:].any()
+    body = dashboard.post(SEED, json={"model": "other", "select_channel": 2}).get_json()
+    assert body["success"] and (labels[6, 6, 6], labels[10, 10, 10]) == (2, 1), body
 
 
 def test_a_volume_painted_before_any_model_seeds_from_the_model_picked_or_the_only_one_served(

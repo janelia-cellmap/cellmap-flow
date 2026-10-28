@@ -18,7 +18,9 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
     catalog_before = {k: dict(v) for k, v in get_session().model_catalog.items()}
     get_session().jobs = [_job("mito_server")]
     html = dashboard.get("/").get_data(as_text=True)
-    assert 'value="mito_server"' in html, "the running model is listed on the Models tab"
+    catalog = _page_data(html, "model-catalog-data")
+    assert ["User", ["mito_server"]] in catalog["groups"] and catalog["ticked"] == ["mito_server"], \
+        "the running model is listed on the Models tab, ticked"
     assert get_session().model_catalog == catalog_before, "but not added to the catalog everything else reads"
 
 
@@ -114,8 +116,8 @@ def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, 
         assert sent.channels == [0, 2]
 
 
-def _page_data(html):
-    return json.loads(re.search(r'<script type="application/json" id="page-data">(.*?)</script>', html, re.S).group(1))
+def _page_data(html, island="page-data"):
+    return json.loads(re.search(rf'<script type="application/json" id="{island}">(.*?)</script>', html, re.S).group(1))
 
 
 def _builder_state(dashboard):
@@ -203,5 +205,5 @@ def test_the_lsf_settings_are_asked_for_only_where_jobs_go_to_lsf(dashboard, mon
     monkeypatch.setattr(index_page, "bsub_available", lambda: bsub)
     html = dashboard.get("/").get_data(as_text=True)
     assert ('id="serverConfigModal"' in html) is bsub
-    assert ('id="gpuQueueSelect"' in html) is bsub
+    assert ('id="gpuQueuePicker"' in html) is bsub
     assert ("No cluster here" in html) is not bsub

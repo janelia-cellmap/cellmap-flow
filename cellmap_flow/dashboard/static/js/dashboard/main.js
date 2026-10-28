@@ -5,6 +5,7 @@
 // page's elements are all there.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
 import { CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
+import { createQueuePicker, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { chainChanges, mountOpChain } from "../shared/op-chain.js";
 import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
@@ -50,6 +51,12 @@ function applyOnEnter(event, apply) {
   apply();
 }
 
+// Postprocessing steps in a few words: "Sigmoid → Threshold 0.076".
+function postText(steps) {
+  return steps.map((step) => step.name.replace(/Postprocessor$/, "")
+    + (step.name === "ThresholdPostprocessor" && step.threshold !== undefined ? ` ${step.threshold}` : "")).join(" → ");
+}
+
 // A notice of the Processing tab (templates/_processing_tab.html): `text`,
 // or nothing (null hides it).
 function say(notice, text) {
@@ -71,8 +78,11 @@ function say(notice, text) {
 // The backend can change its chain itself: a model's start sets the input
 // normalization the model declares, or its kind of model's convention, when
 // the chain had none (routes/pipeline.py set_declared_input_norm,
-// web/src/backend/serving.ts setDeclaredInputNorm), and Use this model
-// stretches the raw. So after every model change (MODELS_CHANGED_EVENT) the
+// web/src/backend/serving.ts setDeclaredInputNorm), and the postprocessing
+// its output needs, a sigmoid for logits (set_needed_postprocess: once its
+// server answers, which the model advice's poll sees as the chain's digest
+// moving, and says with CHAIN_CHANGED_EVENT); and Use this model sets what
+// the ranking fitted. So after every model change (MODELS_CHANGED_EVENT) the
 // chain is read again, from GET /api/models/loaded's `pipeline`, and a list
 // whose chain the backend changed shows the new one, as applied, with a
 // notice above it saying so.
@@ -153,10 +163,12 @@ function initApply(inputChain, postChain) {
   // model whose start set its input normalization (or null), and `declared`
   // whether that model declares it (false: the convention for its kind of
   // model, which the Flask dashboard sets for a CellMap model that declares
-  // none). A list whose chain changed shows the new one, as applied, and its
-  // notice says why; an edit in it not applied yet is replaced, while the
-  // other list keeps its edits.
-  function showLive(pipeline, setBy, declared) {
+  // none); `postBy` the model whose settings its postprocessing is (or
+  // null), and `fitted` whether the ranking fitted them to the paint (false:
+  // the model's start set the sigmoid its logits need). A list whose chain
+  // changed shows the new one, as applied, and its notice says why; an edit
+  // in it not applied yet is replaced, while the other list keeps its edits.
+  function showLive(pipeline, setBy, declared, postBy, fitted) {
     if (!pipeline) return;
     const before = live;
     live = pipeline;
@@ -173,6 +185,11 @@ function initApply(inputChain, postChain) {
           ? `Input normalization set from ${setBy}'s declaration when it started.`
           : `Input normalization set to the CellMap convention, [-1, 1], when ${setBy} started: the model does not declare one. Change it here if the model was trained on another range.`;
       }
+      if (part.key === "postprocess" && postBy) {
+        why = fitted
+          ? `Postprocessing fitted to your paint by the ranking for ${postBy}: ${postText(steps)}.`
+          : `Postprocessing set when ${postBy} started: its output is logits, so ${postText(steps)} turns it into probabilities.`;
+      }
       say(part.notice, why);
     });
   }
@@ -180,7 +197,8 @@ function initApply(inputChain, postChain) {
   function readLive() {
     return inOrder(() => getJSON("/api/models/loaded"))
       // The browser's backend answers no input_norm_declared: its models all declare theirs.
-      .then((data) => showLive(data.pipeline, data.input_norm_from, data.input_norm_declared !== false))
+      .then((data) => showLive(data.pipeline, data.input_norm_from, data.input_norm_declared !== false,
+        data.postprocess_from, data.postprocess_fitted === true))
       .catch((err) => console.warn("Could not read the chain the models run through:", err));
   }
 
@@ -216,6 +234,8 @@ function initServerConfigModal() {
   if (!modalEl) return;
   const modal = new bootstrap.Modal(modalEl);
   modal.show();
+  const queuePicker = createQueuePicker(document.getElementById("modal_queue"), { small: true });
+  const stopQueues = subscribeGpuQueues(queuePicker.render);
 
   document.getElementById("modalSaveConfigBtn").addEventListener("click", function () {
     const statusEl = document.getElementById("modalConfigStatus");
@@ -223,12 +243,13 @@ function initServerConfigModal() {
       statusEl.style.color = "#f87171";
       statusEl.textContent = message;
     }
-    // A blank count or queue is left out so the server keeps its default.
+    // A blank count, or no queues (LSF has not listed them yet), is left out
+    // so the server keeps its default.
     const payload = {
       charge_group: document.getElementById("modal_charge_group").value.trim(),
     };
-    const queue = document.getElementById("modal_queue").value.trim();
-    if (queue) payload.queue = queue;
+    const queues = queuePicker.value();
+    if (queues.length) payload.queue = queues;
     const counts = [
       ["modal_nb_cores_worker", "nb_cores_worker", "Cores per Worker"],
       ["modal_nb_workers", "nb_workers", "Number of Workers"],
@@ -246,6 +267,7 @@ function initServerConfigModal() {
       .then(function () {
         statusEl.style.color = "#4ade80";
         statusEl.textContent = "Saved!";
+        stopQueues();
         setTimeout(function () { modal.hide(); }, 500);
       })
       .catch(function (err) {

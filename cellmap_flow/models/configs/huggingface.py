@@ -56,6 +56,8 @@ class HuggingFaceModelConfig(ModelConfig):
         self.scale = scale
         self._metadata = None
         self._metadata_failed_at = None
+        self._files = None
+        self._files_failed_at = None
 
     def _load_metadata(self):
         """The repo's metadata.json, or {} when it cannot be had.
@@ -85,6 +87,30 @@ class HuggingFaceModelConfig(ModelConfig):
             )
             return {}
         return self._metadata
+
+    def finetune_modes(self):
+        """LoRA and full when the repo has a ``model.pt2``, full only without
+        one, as for an export's folder (CellMapModelConfig.finetune_modes):
+        cellmap_models' ``train()`` then hands the trainer the TorchScript,
+        which takes no adapter. cellmap/jrc_mus-livers_16nm_to_8nm_mito has
+        model.pt, model.ts and model.onnx: offered LoRA, its job failed at
+        its start. The repo's file list is asked for, not the model, once for
+        the life of this config; when the Hub cannot say, both are offered,
+        and the job says which it takes."""
+        if self._files is None and (
+            self._files_failed_at is None
+            or time.monotonic() - self._files_failed_at >= self.METADATA_RETRY_SECONDS
+        ):
+            from cellmap_flow.models.resolve import _hf_files
+
+            try:
+                self._files = _hf_files(self.repo, self.revision)
+            except Exception as e:
+                self._files_failed_at = time.monotonic()
+                logger.warning(f"Could not list the files of {self.repo} ({e}); offering LoRA and full")
+        if self._files is not None and "model.pt2" not in self._files:
+            return ("full",)
+        return ("lora", "full")
 
     def declared_geometry(self):
         """Its metadata.json's, as a cellmap export's (``metadata_geometry``):

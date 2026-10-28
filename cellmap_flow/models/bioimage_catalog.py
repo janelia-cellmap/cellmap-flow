@@ -9,7 +9,8 @@ October 2026), is the fallback when the server cannot be reached.
 ``list_bioimage_models`` answers from a cache file under
 ``~/.cellmap_flow/bioimage`` once there is one, so opening the Models tab
 does not download the zoo's index each time; ``refresh_bioimage_models``
-fetches it again. Both give ``{"fetched": <ISO time>, "models": [...]}``,
+fetches it again; ``cached_bioimage_models`` reads the cache alone, never
+fetching. They give ``{"fetched": <ISO time>, "models": [...]}``,
 the index's models in its order, each as ``normalise`` gives it. A failed
 fetch raises ``ZooIndexError``, whose message says why, and leaves the
 cache as it was.
@@ -310,15 +311,28 @@ def list_bioimage_models() -> dict:
     A cache in an older format is fetched again; when that fails it is
     still read, as a list that is older is better than none.
     """
+    current = cached_bioimage_models()
+    if current is not None:
+        return current
     cached = _read_cache()
-    if cached and cached.get("format") == CACHE_FORMAT:
-        return _annotated({**cached, "stale": _age_s(cached) > STALE_AFTER_S})
     try:
         return _annotated(_fetch_models())
     except ZooIndexError:
         if cached:
             return _annotated(cached)
         raise
+
+
+def cached_bioimage_models() -> Optional[dict]:
+    """``list_bioimage_models``'s answer from the cache alone: None when
+    nothing is cached in this format, rather than fetching the index. The
+    Finetune tab's ranking lists the zoo's models so
+    (routes/finetune/rank_routes.py): its list must not wait on bioimage.io,
+    and the Models tab's BioImage Zoo list, once opened, has cached them."""
+    cached = _read_cache()
+    if cached and cached.get("format") == CACHE_FORMAT:
+        return _annotated({**cached, "stale": _age_s(cached) > STALE_AFTER_S})
+    return None
 
 
 def refresh_bioimage_models() -> dict:

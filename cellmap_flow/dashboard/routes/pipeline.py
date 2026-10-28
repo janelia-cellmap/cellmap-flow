@@ -5,6 +5,9 @@
 - ``set_declared_input_norm()``: a model's start sets the input normalization
   it declares, or its kind of model's convention, when the chain has none
   (services.launch.update_run_models).
+- ``set_needed_postprocess()``: a model's start sets the postprocessing its
+  output needs, a sigmoid for logits, when the chain has none, once its
+  server's probe says (services.launch.run_model).
 - ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
   replaced, kept for one release as its deprecated aliases.
 - ``/api/blockwise-config``: the builder's blockwise settings.
@@ -14,6 +17,7 @@
 import functools
 import json
 import logging
+import threading
 from typing import Optional
 
 import numpy as np
@@ -25,6 +29,7 @@ from cellmap_flow.dashboard.routes import model_advice
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.portable import rank
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, view_of
 from cellmap_flow.serving.client import fetch_model_info
@@ -297,7 +302,7 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 model, host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
                 shader=session.shaders.get(model), shader_controls=session.shader_controls.get(model),
                 previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
-                info=fetch_model_info(host),
+                info=fetch_model_info(host), channel=session.shown_channel(model),
             ))
             drawn.append(model)
 
@@ -317,7 +322,7 @@ def _declared_steps(model_config, data_range) -> list:
     return [dict(step) for step in steps or [] if isinstance(step, dict) and step.get("name")]
 
 
-def _start_input_norm(model_config, raw_dtype, raw_range):
+def start_input_norm(model_config, raw_dtype, raw_range):
     """What ``model_config``'s start sets on a chain with no input
     normalization, for raw data of ``raw_dtype`` spanning ``raw_range``: (the
     chain steps, whether the model declares them). Its declaration
@@ -326,7 +331,9 @@ def _start_input_norm(model_config, raw_dtype, raw_range):
     confidence, model_advice.input_norm_suggestion). ``([], False)`` for a
     model nothing is known of, whose suggestion of the range assumed stays a
     suggestion, and without the raw data's range (no dataset open), where
-    the convention's MinMaxNormalizer would be a guess."""
+    the convention's MinMaxNormalizer would be a guess. The Finetune tab's
+    ranking reads a model through these steps too (finetune/rank_routes.py),
+    whatever the chain has."""
     steps = _declared_steps(model_config, raw_range)
     if steps or raw_range is None:
         return steps, bool(steps)
@@ -346,7 +353,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
     The Models tab's Submit (services.launch.update_run_models) calls this
     with the models it is about to start, in the tab's order, before their
     layers are drawn, so they are drawn through it. The first of them with
-    any steps to set (_start_input_norm: declared, or a CellMap or DaCapo
+    any steps to set (start_input_norm: declared, or a CellMap or DaCapo
     model's convention) gives them, and the postprocessing stays as it is;
     the chain is set through _set_chain_and_redraw, as PUT /api/pipeline
     sets it, so the layers of the models already running are redrawn
@@ -367,7 +374,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
         return None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
-        steps, declared = _start_input_norm(model_config, raw_dtype, raw_range)
+        steps, declared = start_input_norm(model_config, raw_dtype, raw_range)
         if not steps:
             continue
         name = getattr(model_config, "name", None)
@@ -392,7 +399,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
 
 def input_norm_set_by(model_configs):
     """The first of ``model_configs`` whose start sets the chain's input
-    part as it stands, step for step (_start_input_norm), as (its name,
+    part as it stands, step for step (start_input_norm), as (its name,
     whether the model declares the steps); ``(None, None)`` when none does,
     or the chain has no input normalizers.
 
@@ -406,9 +413,88 @@ def input_norm_set_by(model_configs):
         return None, None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
-        steps, declared = _start_input_norm(model_config, raw_dtype, raw_range)
+        steps, declared = start_input_norm(model_config, raw_dtype, raw_range)
         if steps == live:
             return getattr(model_config, "name", None), declared
+    return None, None
+
+
+# The models' starts run in launch threads of their own: one at a time
+# decides on an empty chain's postprocessing, so two models started together
+# do not both set it.
+_start_postprocess_lock = threading.Lock()
+
+
+def set_needed_postprocess(job) -> bool:
+    """Set the postprocessing ``job``'s model needs to show a good prediction
+    as the chain's, as part of starting it, when the chain has none: the
+    sigmoid its output needs when it is logits (portable/rank.py
+    needed_postprocess, with no threshold; an affinity model's too).
+    Returns whether it set any.
+
+    services.launch.run_model calls this once the model's server has its
+    host, before the model's layer is drawn: every start goes through it
+    (the Models tab's Submit, Add a model, the Finetune tab's Use this
+    model). Unlike the input normalization (set_declared_input_norm), which
+    a model's config says, its output is known only from its server's probe
+    (serving/client.fetch_model_info's ``output_class``), so this comes
+    after its job starts. The chain is set through _set_chain_and_redraw,
+    as PUT /api/pipeline sets it, so every layer is redrawn through it,
+    this model's among them; and so it is not set when it would show
+    another model being served wrong (a sigmoid on top of an output that
+    has one already). A chain with postprocessing (a YAML's, the user's
+    Apply, the ranking's) is left alone: the first model started into an
+    empty chain that needs any gives it, and after that only Apply changes
+    it. The session remembers which model's start it was
+    (Session.start_postprocess, which postprocess_set_by reads).
+
+    The browser's twin is web/src/backend/serving.ts, at serve, from the
+    manifest's declared output.
+    """
+    session = get_session()
+    name, host = getattr(job, "model_name", None), getattr(job, "host", None)
+    with _start_postprocess_lock:
+        if not host or session.pipeline_spec.postprocess:
+            return False
+        steps = rank.needed_postprocess(fetch_model_info(host).get("output_class"), [])
+        if not steps:
+            return False
+        named = " → ".join(step["name"] for step in steps)
+        wrong = [other.model_name for other in session.jobs if other is not job and other.host and rank.needed_postprocess(
+            fetch_model_info(other.host).get("output_class"), steps) is not None]
+        if wrong:
+            logger.info(f"{name}'s output is logits, but {named} is not set: it would show {', '.join(wrong)} wrong")
+            return False
+        _set_chain_and_redraw(PipelineSpec(session.pipeline_spec.input_norm, steps), None)
+        session.start_postprocess = {"model": name, "postprocess": steps}
+        logger.info(f"Postprocessing set for {name}, whose output is logits: {named}")
+        return True
+
+
+def postprocess_set_by(model_names):
+    """The model of ``model_names`` whose settings the chain's
+    postprocessing is, step for step, as (its name, whether the ranking
+    fitted them to the paint); ``(None, None)`` when it is none's, or the
+    chain has none.
+
+    The ranking's (Session.rank_fits: what Use this model, Fit to Paint and
+    Use these settings set, a sigmoid and the threshold the paint is fitted
+    best at), else a model's start's (Session.start_postprocess:
+    set_needed_postprocess, the sigmoid its logits need). GET
+    /api/models/loaded answers them beside the chain, as it answers where
+    the input normalization came from (input_norm_set_by).
+    """
+    session = get_session()
+    live = [dict(step) for step in session.pipeline_spec.postprocess]
+    if not live:
+        return None, None
+    for name in model_names:
+        fitted = (session.rank_fits.get(name) or {}).get("postprocess")
+        if fitted is not None and rank.same_steps(fitted, live):
+            return name, True
+    started = session.start_postprocess
+    if started and started["model"] in model_names and rank.same_steps(started["postprocess"], live):
+        return started["model"], False
     return None, None
 
 

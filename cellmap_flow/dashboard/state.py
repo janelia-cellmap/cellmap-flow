@@ -26,14 +26,18 @@ rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
   ``raw``, ``neuroglancer_url``, ``dashboard_url``, ``shaders``,
-  ``shader_controls``, ``extra_layers``; and ``layer_blob()``, the chain as
-  every prediction layer's URL carries it.
-- The models: ``models_config``, ``model_catalog``.
+  ``shader_controls``, ``extra_layers``, ``shown_channels``; and
+  ``layer_blob()``, the chain as every prediction layer's URL carries it,
+  and ``shown_channel()``, the channel a model's layer opens on.
+- The models: ``models_config``, ``model_catalog``, and
+  ``start_postprocess``, the postprocessing a model's start set.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
-  ``annotation_volumes``, ``output_sessions``; its AI annotation's
+  ``annotation_volumes``, ``output_sessions``; the models its ranking was
+  given by reference, ``rank_added``, and what it fitted each model's
+  settings to, ``rank_fits``; its AI annotation's
   ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
   ``restart_key`` that restarts one from the viewer; the Hugging Face
   sign-in and publishes of its finetuned models, ``huggingface``; the Review
@@ -71,11 +75,11 @@ class Session:
     # and finetune_job_manager properties serve: a slot and a property of one
     # name cannot coexist.
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
-                 "shader_controls", "extra_layers",
-                 "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
-                 "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "huggingface", "log_buffer",
-                 "log_ids", "log_clients", "bbx_generator_state")
+                 "shader_controls", "extra_layers", "shown_channels",
+                 "models_config", "model_catalog", "start_postprocess", "_builder_state", "builder_model_configs",
+                 "tmp_dir", "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added",
+                 "rank_fits", "review", "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate",
+                 "huggingface", "log_buffer", "log_ids", "log_clients", "bbx_generator_state")
 
     def __init__(self):
         # The data and the viewer
@@ -107,12 +111,23 @@ class Session:
         # data: a YAML's extra_layers, built by `cellmap_flow yaml`. The
         # viewer-layer routes drop or rename their entries.
         self.extra_layers = {}
+        # {model name: channel index}: the channel the Finetune tab picked to
+        # show of a model of several (POST /api/finetune/channel: Use this
+        # model's, the training form's Channel), which its layer, and its
+        # finetunes', open on (shown_channel).
+        self.shown_channels = {}
 
         # The models
         # The configured models (ModelConfig).
         self.models_config = []
         # {group: {model name: path}}, the Models tab's catalog.
         self.model_catalog = yaml.safe_load(files("cellmap_flow.models").joinpath("models.yaml").read_text()) or {}
+        # {"model", "postprocess"}: the postprocessing a model's start set on
+        # a chain with none, and the model (routes/pipeline.py
+        # set_needed_postprocess), which GET /api/models/loaded says the
+        # chain's came from while it is still that; None until a start sets
+        # any.
+        self.start_postprocess = None
 
         # The pipeline builder's last apply
         self._builder_state = {key: [] for key in _BUILDER_KEYS}
@@ -141,6 +156,22 @@ class Session:
         self.annotation_volumes = {}
         # {output base directory: its session directory}.
         self.output_sessions = {}
+        # {model name: its candidate's fields}: the models the Finetune tab's
+        # ranking was given by reference (POST /api/finetune/rank/add, Add a
+        # model's resolve), which every listing of its candidates includes
+        # after, until the dashboard stops; nothing is started for them.
+        self.rank_added = {}
+        # {model name: {"input_norm", "postprocess", "threshold"}}: the
+        # settings the ranking's last score of each model fitted to the paint
+        # (its row's input normalization, and the postprocessing its layer
+        # needs, None when the chain needed none), which Use this model, Fit
+        # to Paint and Use these settings set from, and its row's threshold.
+        # The model advice does not suggest another input normalization over
+        # them, and cuts an affinity model's chain into a segmentation at
+        # the threshold; GET /api/models/loaded says the chain's
+        # postprocessing was fitted to the paint while it is theirs
+        # (routes/model_advice.py, routes/pipeline.py postprocess_set_by).
+        self.rank_fits = {}
         # The Review tab's open index (review_routes.ReviewSession), or None
         # until /api/review/open.
         self.review = None
@@ -242,6 +273,19 @@ class Session:
         url = self.dashboard_url or dashboard_url
         extras = {"dashboard_url": url} if url else {}
         return spec.to_url_blob(**extras, digest=spec.digest())
+
+    def shown_channel(self, model_name):
+        """The channel ``model_name``'s layer opens on (viewer.layers
+        prediction_layer's ``channel``): the one picked for it
+        (``shown_channels``), else the one picked for the model it is a
+        finetune of, as finetune_layers names each iteration
+        (``<base>_finetuned...``), so a finetune of mito's channel shows mito
+        too; None when none was picked (the layer opens where its server
+        says)."""
+        if model_name in self.shown_channels:
+            return self.shown_channels[model_name]
+        bases = [base for base in self.shown_channels if (model_name or "").startswith(f"{base}_finetuned")]
+        return self.shown_channels[max(bases, key=len)] if bases else None
 
     # The models
     @property

@@ -75,7 +75,7 @@ NEIGHBORHOOD_OFFSETS = [
 _CLASS_RANGE = {UNIT: (0.0, 1.0), SIGNED_UNIT: (-1.0, 1.0)}
 
 
-def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
+def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None) -> dict:
     """Parameter values for a suggested chain, from the range flowing into each step.
 
     The default parameters assume each step sees the range its most common
@@ -87,8 +87,13 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
     edge) comes out at -0.002 instead of -0.5. The mutex watershed is left with
     essentially no repulsive edges and merges everything.
 
+    ``bias`` is the AffinityPostprocessor's: the cut-off the ranking fitted
+    to the paint for the model (its row's threshold, a probability), or
+    None for the midpoint, 0.5.
+
     Returns ``{postprocessor_name: {param: value}}``, containing only the steps
-    whose defaults are wrong for this chain.
+    whose defaults are wrong for this chain, and the AffinityPostprocessor's
+    bias and neighborhood always.
     """
     params = {}
     rng = _CLASS_RANGE.get(output_class)  # None while the range is unknown
@@ -114,9 +119,11 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
             rng = (0.0, 1.0)
         elif name == "AffinityPostprocessor":
             # It works in [0, 1] (integer 0-255 input is divided by 255); the
-            # mutex watershed needs the midpoint subtracted to get the signed
-            # affinities it is defined on.
-            affinity = {"bias": 0.5}
+            # mutex watershed needs a cut subtracted to get the signed
+            # affinities it is defined on: the midpoint, or the cut-off the
+            # ranking fitted, where its score called a painted pair joined,
+            # so the objects are cut where the score read the model.
+            affinity = {"bias": 0.5 if bias is None else float(bias)}
             if out_channels:
                 offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
                 affinity["neighborhood"] = str(offsets)
@@ -188,19 +195,41 @@ def review_postprocess(
     out_channels=None,
     model_name="",
     channels_names=None,
+    threshold=None,
 ) -> dict:
     """Compare an observed output class against the configured postprocessors.
 
-    Returns ``{"level", "message", "suggest"}`` where ``level`` is one of
-    "ok" / "suggest" / "warn", and ``suggest`` is a list of postprocessor names
-    to apply (empty when the current configuration is already sensible).
+    Returns ``{"level", "message", "suggest", "params"}`` where ``level`` is
+    one of "ok" / "optional" / "suggest" / "warn", ``suggest`` is a list of
+    postprocessor names to apply (empty when the current configuration is
+    already sensible), and ``params`` their values
+    (suggest_postprocess_params).
 
     ``level == "warn"`` means the current chain is actively wrong, not merely
-    unconventional.
+    unconventional. ``"optional"`` offers a chain the model's output shows
+    right without: an affinity model's into a segmentation, once its
+    affinities show as probabilities. The page shows it as a quiet line
+    with its Apply: as a suggestion's banner, over the sigmoid a model's
+    start or the ranking set (portable/rank.py needed_postprocess, an
+    affinity model's logits' too), it read as though that were wrong. A
+    threshold is no fault either: the ranking sets one at the probability
+    the paint is fitted best at, an affinity model's too, so its layer shows
+    the painted pairs' decision the score read. Ahead of an
+    AffinityPostprocessor it is a "warn": the watershed then has no
+    affinities to join objects by.
+
+    ``threshold`` is the one the ranking fitted to the paint for this model
+    (its row's, Session.rank_fits), or None when it was not ranked: an
+    affinity chain suggested cuts its objects there (the watershed's bias),
+    where the score called a painted pair joined, and says so; at 0.5
+    without one.
     """
     names = list(postprocess_names or [])
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
+    has_threshold = "ThresholdPostprocessor" in names
+    # The affinity the watershed joins neighbours above, as the messages say it.
+    cut = "0.5" if threshold is None else f"{threshold} (fitted to your paint)"
 
     def verdict(level, message, suggest):
         """Attach parameter values to whatever chain we are proposing."""
@@ -208,12 +237,34 @@ def review_postprocess(
             "level": level,
             "message": message,
             "suggest": suggest,
-            "params": suggest_postprocess_params(suggest, output_class, out_channels),
+            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold),
         }
 
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
-            if not (has_default or has_sigmoid or output_class == UNIT):
+            # Whether the affinities reach it in [0, 1], or the 0-255 of a
+            # DefaultPostprocessor.
+            scaled = has_default or has_sigmoid or output_class == UNIT
+            # The watershed joins neighbours by how far their affinity is
+            # above its bias: a threshold ahead of it leaves 0s and 1s, which
+            # it reads as DefaultPostprocessor's 0-255 and divides by 255, and
+            # no edge reaches the bias. The chain is suggested back without
+            # it, or as the whole affinity chain when nothing else ahead puts
+            # the affinities in [0, 1].
+            ahead = names.index("AffinityPostprocessor")
+            if "ThresholdPostprocessor" in names[:ahead]:
+                rest = [n for i, n in enumerate(names) if i > ahead or n != "ThresholdPostprocessor"]
+                return verdict(
+                    "warn",
+                    (
+                        "A ThresholdPostprocessor comes before the "
+                        "AffinityPostprocessor, so the watershed gets 0s and 1s "
+                        "instead of affinities and finds no objects: take the "
+                        f"threshold out, and neighbours join above {cut}."
+                    ),
+                    rest if scaled else suggest_affinity_chain(output_class),
+                )
+            if not scaled:
                 return verdict(
                     "warn",
                     (
@@ -226,15 +277,23 @@ def review_postprocess(
                     suggest_affinity_chain(output_class),
                 )
             return verdict("ok", "Affinity chain looks complete.", [])
-        return verdict(
-            "suggest",
-            (
-                f"This model has {out_channels} output channels and an affinity "
-                "name, so it probably predicts affinities. The chain below "
-                "converts them to a segmentation."
-            ),
-            suggest_affinity_chain(output_class),
-        )
+        # The chain into a segmentation, offered over whatever shows the
+        # affinities: the ranking's row among them, the sigmoid and the
+        # threshold fitted to the paint (only the threshold on a tanh's or a
+        # sigmoid's output). It replaces the threshold, which would leave the
+        # watershed 0s and 1s, and joins neighbours above the same cut-off.
+        # Unless the activation needs setting first, which the checks below
+        # suggest or warn of: the sigmoid logits with nothing set need, a
+        # second one taken away.
+        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, SIGNED_UNIT) and has_sigmoid)):
+            return verdict(
+                "optional",
+                (
+                    f"its {out_channels} channels look like affinities, which this "
+                    f"chain turns into a segmentation, joined above {cut}."
+                ),
+                suggest_affinity_chain(output_class),
+            )
 
     if output_class == UNIT:
         if has_sigmoid:
@@ -265,7 +324,7 @@ def review_postprocess(
                 ),
                 ["DefaultPostprocessor"],
             )
-        if not has_default:
+        if not (has_default or has_threshold):
             return verdict(
                 "suggest",
                 (
@@ -274,7 +333,8 @@ def review_postprocess(
                 ),
                 ["DefaultPostprocessor"],
             )
-        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output.", [])
+        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output." if has_default
+                       else "Model output is in [-1, 1]; the threshold is left as set.", [])
 
     # UNBOUNDED: logits and signed distances are indistinguishable here, so
     # suggest only when nothing at all is configured, and say why it's a guess.
@@ -283,9 +343,9 @@ def review_postprocess(
             "suggest",
             (
                 "Model output is unbounded, so it has no activation. If these "
-                "are logits, SigmoidPostprocessor converts them to "
-                "probabilities. If they are distances or affinities, leave this "
-                "alone -- the output range cannot tell the two apart."
+                "are logits (an affinity model's are), SigmoidPostprocessor "
+                "converts them to probabilities. If they are distances, leave "
+                "this alone -- the output range cannot tell the two apart."
             ),
             ["SigmoidPostprocessor"],
         )

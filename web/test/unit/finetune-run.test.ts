@@ -3,12 +3,14 @@
 // fixture's 1×6×6 output) and the real feature runner, head finder, trainer
 // and weight writer. The run trains the epochs asked with the dashboard's
 // epoch lines, and the Finetuned's bytes, the trained head in them, run in
-// onnxruntime; a volume with no paint is refused; the run starts from
-// initialHead when given; a cancel ends it early; the runner is released
+// onnxruntime; a volume with no paint is refused; a cancel ends it
+// early; the runner is released
 // however the run ends. Distillation, on by default, holds the painted
 // chunks' unpainted voxels; with good regions it holds their unpainted
 // voxels instead, running the model on a region's block nothing was painted
-// in, and skips what is not a region in the volume.
+// in, and skips what is not a region in the volume. A run of one channel
+// trains that channel's row of the head and leaves the other rows as it
+// started them, bit for bit.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
@@ -74,6 +76,15 @@ async function targets(c: PaintedChunk): Promise<Targets> {
   }
   return { channels: 2, target, mask };
 }
+
+/** The binary target of one channel, as target-call.ts makes it for a channel picked. */
+async function oneChannel(c: PaintedChunk): Promise<Targets> {
+  const both = await targets(c), n = 36;
+  return { channels: 1, target: both.target.slice(0, n), mask: both.mask.slice(0, n) };
+}
+
+/** A float32 array's bits, to compare weights exactly (not by value: -0 is 0 by value). */
+const bitsOf = (a: Float32Array) => Array.from(new Uint32Array(a.buffer, a.byteOffset, a.length));
 
 /** The samples and the paint store listing them, for `chunks`. */
 async function painted(chunks: PaintedChunk[]) {
@@ -150,15 +161,6 @@ describe("runFinetune", () => {
     expect(disposed.count).toBe(1);
   }, 60000);
 
-  it("starts from initialHead when given", async () => {
-    const { paint, collectSamples } = await painted(CHUNKS);
-    const initialHead = { weight: Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]), bias: Float32Array.from([-1, 1]) };
-    const finetuned = await createRunFinetune(deps(collectSamples, { count: 0 }))(run({ initialHead, options: { ...DEFAULT_OPTIONS, epochs: 1, learningRate: 1e-9, batchPixels: 64 } }, paint, reporter()));
-    expect(Array.from(finetuned.weight).map((w) => Math.round(w))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(Array.from(finetuned.bias).map((b) => Math.round(b))).toEqual([-1, 1]);
-    expect(Array.from(headOf(finetuned.bytes).weight).map((w) => Math.round(w))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-  }, 60000);
-
   it("stops early when cancelled, keeping what was trained", async () => {
     const { paint, collectSamples } = await painted(CHUNKS);
     const disposed = { count: 0 };
@@ -208,5 +210,30 @@ describe("runFinetune's distillation", () => {
     expect(report.lines.filter((l) => l.startsWith("chunk "))).toHaveLength(3);
     expect(finetuned).toMatchObject({ pixels: 41, chunks: 2, distilled: 67 });
     expect(report.lines.filter((l) => / - Supervised: .* - Distillation: /.test(l))).toHaveLength(3);
+  }, 60000);
+});
+
+describe("runFinetune of one channel", () => {
+  it("trains that channel's row of the head alone, the other row written back as the run started it, bit for bit", async () => {
+    const base = headOf(BASE), cin = base.inChannels;
+    const asked: (number | null)[] = [];
+    const oneChannelDeps = (collect: () => AsyncGenerator<Sample>): RunDeps => ({
+      ...deps(collect, { count: 0 }),
+      targetTransformFor: (_entry, _infer, channel = null) => {
+        asked.push(channel);
+        return oneChannel;
+      },
+    });
+    const { paint, collectSamples } = await painted(CHUNKS);
+    const options = { ...DEFAULT_OPTIONS, epochs: 8, learningRate: 0.05, batchPixels: 16, selectChannel: 1 };
+    const finetuned = await createRunFinetune(oneChannelDeps(collectSamples))(run({ options }, paint, reporter()));
+    expect(asked).toEqual([1]);
+    const written = headOf(finetuned.bytes);
+    expect(bitsOf(written.weight.subarray(0, cin))).toEqual(bitsOf(base.weight.subarray(0, cin)));
+    expect(bitsOf(written.bias.subarray(0, 1))).toEqual(bitsOf(base.bias.subarray(0, 1)));
+    expect(Array.from(written.weight.subarray(cin))).not.toEqual(Array.from(base.weight.subarray(cin)));
+    expect(written.bias[1]).not.toBe(base.bias[1]);
+    expect(finetuned.losses[7]).toBeLessThan(finetuned.losses[0]);
+
   }, 60000);
 });

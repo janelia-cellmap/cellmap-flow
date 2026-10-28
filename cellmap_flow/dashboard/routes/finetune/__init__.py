@@ -14,6 +14,7 @@ dashboard.app registers. Each module has its own:
 - ``good_regions``: marking the current view as a region the model gets right;
 - ``rank_routes``: which model to start from: the models ranked by how well
   each already matches the paint, and the paint carried to the one picked;
+- ``channel``: the channel of a model of several that its layer shows;
 - ``view_labels``: labelling the view from the model's prediction, or all
   background;
 - ``ai_annotate``: a hosted model's first guess at one plane, staged for
@@ -28,6 +29,7 @@ from cellmap_flow.dashboard.routes.finetune import (  # noqa: F401  (each adds i
     ai_annotate,
     annotation_core,
     annotation_sessions,
+    channel,
     good_regions,
     instance_correction,
     layers,

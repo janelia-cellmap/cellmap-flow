@@ -70,6 +70,22 @@ def seed_plan(args, arrays):
     }
 
 
+def field_of_view(args, arrays):
+    """The size in nm (z, y, x) of what the viewer's panel shows
+    (``label_it.field_of_view_nm``): ``args`` ``viewer_px`` (the page's
+    viewer frame, width and height), ``state`` (the viewer's state, its
+    JSON), ``pixel_nm``, ``depth_axis``, ``display_dimensions``,
+    ``voxel_size`` (the volume's) and ``depth_nm`` (null: one voxel).
+    Answers ``{"size_nm"}``, or the refusal."""
+    try:
+        return {"size_nm": label_it.field_of_view_nm(
+            args.get("viewer_px"), args.get("state") or {}, args.get("pixel_nm"), int(args["depth_axis"]),
+            args.get("display_dimensions"), args["voxel_size"], args.get("depth_nm"),
+        )}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
 def place(args, arrays):
     """Which served voxel lies under each voxel of the box (``_placed``):
     ``args`` ``lo``, ``hi``, ``volume`` and ``level``."""

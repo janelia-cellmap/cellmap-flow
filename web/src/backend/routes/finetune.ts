@@ -1,14 +1,17 @@
 // The Finetune tab's routes (dashboard/routes/finetune/annotation_core.py,
 // annotation_sessions.py, overlay.py, training.py), answered in the page:
 // the models to annotate for, a new annotation volume and its paint layer,
-// earlier volumes resumed, the training jobs (finetune-jobs.ts) with their
+// the boxes over its painted chunks (the annotated regions), earlier
+// volumes resumed, the training jobs (finetune-jobs.ts) with their
 // status, log and log stream, and what the server has no need of: the
 // volume downloaded as a zarr (zip) and the finetuned model as .onnx, since
 // here they exist only in this browser's IndexedDB, and a volume deleted.
 //
 // What stands in for the server's pieces: the paint store (ctx.paint,
 // served to the viewer by the service worker) for MinIO and the corrections
-// directory, so a "session" is a volume and its id is its path; the catalog
+// directory, so a "session" is a volume, the one it trains on now, and its
+// id is its path (a volume Use this model superseded is kept in the store
+// but neither listed nor resumed: volume.ts supersedeVolume); the catalog
 // for the models directory; a run in the tab (src/finetune/run.ts) for the
 // cluster job, so a submit needs no output path, queue or charge group, and
 // the server-only fields the form still sends (LoRA rank, patches per
@@ -21,7 +24,13 @@
 // or the whole network (finetune/full), with the server's Batch Size in
 // tiles (a 3D model's one block a step), a tile or block side of its own,
 // which the models route offers with what a step costs (fullTraining), and
-// augmentation. The good
+// augmentation. Both train one channel of a model whose several channels
+// are not affinities (target-call.ts channelChoice, which the models route
+// answers as channel_choice), the one the form's Channel picks
+// (select_channel), and submit refuses such a model without the pick
+// (refuseChannel); POST /api/finetune/channel shows the channel picked on
+// the model's layer, and on each layer built for it or its finetunes after
+// (the session's shownChannels). The good
 // regions' routes are routes/good-regions.ts, and the patch tools' Label it
 // and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
@@ -45,25 +54,28 @@
 // status answers carry no count. job-monitor.js decides from its card
 // whether the job can take the restart, and says why not in the tab's logs:
 // this Neuroglancer's status bar is not reachable from the page.
+import { volumeCornerNm } from "../../ai-annotate/fill";
 import type { AppContext, FinetunedRecord, LayerSpec, ModelEntry, PaintVolume } from "../../contracts";
 import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
 import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
 import { defaultTile, is3d, tileChoices } from "../../finetune/full/graph";
 import { BLOCK_COSTS, checkTileSide, writableBlocks } from "../../finetune/full/run-full";
 import { webgpuMissing } from "../../finetune/full/tfjs";
+import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { finetuneModes, MODE_NOUN, readsOneSlice, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
+import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { createVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
+import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
-import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
+import { ANNOTATED_REGIONS_LAYER, boxesLayer, dimensionsOf, PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, text } from "../router";
-import { pageBase } from "../serving";
+import { pageBase, showChannel } from "../serving";
 import { done, eventStream, requestedOffset, type SseEvent } from "../sse";
 
 /** The seams the routes run through, so they can be tested with a fake run
@@ -158,14 +170,15 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   }
 
   /** The form's training fields read (readTraining) and checked against
-   * `entry`; a 3D model's whole-network side is kept in the job's params as
-   * block_size, which the job card shows as a cube. */
+   * `entry`, its channel pick among them (refuseChannel); a 3D model's
+   * whole-network side is kept in the job's params as block_size, which the
+   * job card shows as a cube. */
   async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<ReturnType<typeof readTraining>> {
     const lossRefused = mode === "full" ? null : refuseLoss(body.loss_type);
     if (lossRefused) return { error: lossRefused };
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return training;
-    const refused = entry ? await refuseFull(entry, training.options) : null;
+    const refused = entry ? refuseChannel(entry, training.options.selectChannel) ?? (await refuseFull(entry, training.options)) : null;
     if (refused) return { error: refused };
     if (entry && training.options.mode === "full" && !readsOneSlice(entry) && "tile_size" in training.params) {
       const { tile_size: side, ...params } = training.params;
@@ -188,7 +201,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // GET /api/finetune/models: the served models, with the geometry the tab
   // shows (write_shape in nm, the voxel size, the channels), from the
-  // engine's model info as the Python asks each inference server, and the
+  // engine's model info as the Python asks each inference server, the
+  // channels' names (the manifest's) and whether the model trains one of
+  // them at a time (channel_choice: target-call.ts channelChoice), for the
+  // form's Channel, and the
   // ways each can be finetuned here, from its manifest (finetune/modes.ts:
   // "head", "full"), as the server answers finetune_modes; a model whose
   // manifest declares none has the head the graph is found to end in. A
@@ -205,12 +221,41 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
         write_shape: s.info.write_shape,
         output_voxel_size: s.info.output_voxel_size,
         output_channels: s.info.output_channels,
+        channels: s.entry.manifest.channels.length ? [...s.entry.manifest.channels] : null,
+        channel_choice: channelChoice(s.entry),
         finetune_modes: modes,
         ...(modes.includes("full") ? { full_training: await fullTraining(s.entry) } : {}),
       };
     }));
     const rawVoxelSizes = (ctx.infer.dataset()?.levels ?? []).map((level) => level.voxel.slice());
     return json(200, { models, selected_model: models.length === 1 ? models[0].name : null, raw_voxel_sizes: rawVoxelSizes });
+  });
+
+  // POST /api/finetune/channel {model_name, select_channel}: the channel
+  // the session shows for the model (select_channel, its index; null clears
+  // the pick), as the form's Channel picks it, so the layer shows what is
+  // trained (Use this model sends the row's channel with its own request,
+  // rank.ts, so that it is picked before the model is served). It is kept in
+  // the session (shownChannels) and shown now on the model's layer and on
+  // its finetunes' that follow its pick (pickShownChannel); a layer built
+  // for them later opens on it (showLayers). Answers whether a layer was
+  // there to change: none is for a model not served, an output with no
+  // channel axis or a chain that changes the channel count (displayChannel),
+  // and a pick cleared leaves the layers as they are. Refused (400) for a
+  // pick that is not a channel's index or is past the model's channels, and
+  // (404) for a model the browser does not have, which changes nothing.
+  router.post("/api/finetune/channel", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    if (!body) return badRequest("expected a JSON object");
+    const name = typeof body.model_name === "string" ? body.model_name.trim() : "";
+    if (!name) return badRequest("model_name is required");
+    const pick = readSelectChannel(body.select_channel);
+    if ("error" in pick) return badRequest(pick.error);
+    const entry = ctx.infer.served().find((s) => s.entry.name === name)?.entry ?? (await ctx.catalog.list()).find((e) => e.name === name);
+    if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
+    const past = pick.channel === null ? null : notAChannel(entry, pick.channel);
+    if (past) return badRequest(past);
+    return json(200, { success: true, shown: await pickShownChannel(ctx, name, pick.channel) });
   });
 
   // POST /api/finetune/create-volume {model_name} or {voxel_size}: a new
@@ -290,16 +335,20 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     return json(200, { success: true, message: "Layer added to viewer", layer_name: name });
   });
 
-  // POST /api/finetune/list-existing-sessions: every volume in the paint
-  // store, newest first, as a session of its own (the server's sessions
-  // are directories of volumes; here a volume is the unit), in the shape
-  // sessions.js lists: its id as session_id and session_path, its one
-  // volume, its painted chunks, the dataset it was painted on.
+  // POST /api/finetune/list-existing-sessions: the sessions in the paint
+  // store, newest first, each its one current volume: the server's sessions
+  // are directories of volumes, listed by the one their manifest trains on;
+  // here a volume is the unit, and one Use this model superseded
+  // (supersedeVolume) is not listed, since its paint is the current one's
+  // too. In the shape sessions.js lists: the volume's id as session_id and
+  // session_path, the volume, its painted chunks, the model it is for
+  // (model_name, null for one painted before any model), the dataset it was
+  // painted on.
   router.post("/api/finetune/list-existing-sessions", async (_req, _params, ctx) => {
     const sessions: Record<string, unknown>[] = [];
     for (const id of await ctx.paint.volumes()) {
       const volume = await readVolume(ctx.paint, id);
-      if (!volume) continue;
+      if (!volume || volume.superseded_by) continue;
       sessions.push({
         session_id: id,
         session_path: id,
@@ -315,19 +364,22 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // POST /api/finetune/load-existing-volume {source_session_path}: resume a
-  // volume: it becomes the session's. Nothing is copied (the server copies
-  // the source session into a new one, so the original stays as it was;
-  // here the store is the one place and the volume is edited in place), so
-  // the copy counts are zero and the progress route says done at once. A
-  // volume painted on another dataset is refused as the server refuses it:
-  // its voxels are positions in that dataset.
+  // session: its current volume becomes the session's, the one named or,
+  // for one Use this model superseded (named by a list shown before it
+  // ran), the volume that took its place (currentVolume), as the server
+  // resumes only a session's current volume. Nothing is copied (the server
+  // copies that volume into a new session, so the original stays as it
+  // was; here the store is the one place and the volume is edited in
+  // place), so the copy counts are zero and the progress route says done at
+  // once. A volume painted on another dataset is refused as the server
+  // refuses it: its voxels are positions in that dataset.
   router.post("/api/finetune/load-existing-volume", async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
-    const id = volumeIdOf(body.source_session_path);
-    if (!id) return badRequest("source_session_path required: a volume id (no slash)");
-    const volume = await readVolume(ctx.paint, id);
-    if (!volume) return json(404, { success: false, error: `No annotation volume found in ${id}` });
-    const open = ctx.session.state.datasetUrl;
+    const named = volumeIdOf(body.source_session_path);
+    if (!named) return badRequest("source_session_path required: a volume id (no slash)");
+    const volume = await currentVolume(ctx.paint, named);
+    if (!volume) return json(404, { success: false, error: `No annotation volume found in ${named}` });
+    const { id } = volume, open = ctx.session.state.datasetUrl;
     if (open && volume.dataset_path && !sameDataset(volume.dataset_path, open)) {
       return json(409, {
         success: false,
@@ -365,13 +417,18 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // The paint is already where training reads it (the store), so a sync
   // has nothing to move: it reports the painted chunks, which is what the
-  // server's count is of. The annotated-regions boxes are not drawn here
-  // (no annotation layer in the viewer contract); the count is answered.
+  // server's count is of. The server's sync draws the annotated-regions
+  // boxes again too; here their button alone does (below).
   router.post("/api/finetune/sync-annotations", async (_req, _params, ctx) => {
     const n = await paintedCount(ctx);
     return json(200, { success: true, message: `Synced ${n} annotations`, synced_count: n });
   });
-  router.post("/api/finetune/refresh-annotated-regions", async (_req, _params, ctx) => json(200, { success: true, count: await paintedCount(ctx) }));
+
+  // POST /api/finetune/refresh-annotated-regions: the tab's Redraw
+  // Annotated Regions. Draws the boxes over the session volume's painted
+  // chunks (showAnnotatedRegions) and answers how many, which the tab shows
+  // beside the button.
+  router.post("/api/finetune/refresh-annotated-regions", async (_req, _params, ctx) => json(200, { success: true, count: await showAnnotatedRegions(ctx) }));
 
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
@@ -379,8 +436,17 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // without a dataset, on a volume painted before any model (paint_first:
   // trainingRefusal's sentence, the server's, says to Use this model), with
   // a loss that needs a server (the head's: the whole network has its own),
-  // and for a mode the model's manifest does not offer, a tile or block side
-  // its graph does not take, or a 3D model's batch of more than one block.
+  // a model of several channels trained one at a time without the channel
+  // picked, or a pick it cannot take (refuseChannel), and for a mode the
+  // model's manifest does not offer, a tile or block side its graph does not
+  // take, or a 3D model's batch of more than one block. A model whose grid
+  // is not the volume's (another model's volume, whose blocks and voxel
+  // sizes are not this one's: the portable Python's carry_note says) has the
+  // paint carried onto its grid first, as Use this model carries it
+  // (carryOnto), after every refusal, so a refused submit changes nothing;
+  // the chain and the channel stay as the user set them. The answer then
+  // says so: `carried` {from_model, from_volume, volume_id, chunks}, and the
+  // note names both grids.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -397,7 +463,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }
     const model = ctx.infer.served().find((s) => s.entry.name === name);
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
-    if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
+    const dataset = ctx.infer.dataset();
+    if (!dataset) return badRequest(NO_DATASET);
     const paintFirst = await trainingRefusal(ctx.infer, volume);
     if (paintFirst) return json(400, { success: false, error: paintFirst, paint_first: true });
     // The mode the form asks for; a body without one (an older tab) the
@@ -407,17 +474,41 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if ("error" in training) return badRequest(training.error);
     const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
+    // The volume the model trains on: the session's, or, for a model on
+    // another grid, a new one with the paint carried onto it.
+    let trained = volume, chunks = painted, carried: Record<string, unknown> | null = null, carryNote: string | null = null;
+    if (volume.model_id !== model.entry.id) {
+      let to: PaintVolume;
+      try {
+        to = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
+      } catch (e) {
+        return badRequest(message(e));
+      }
+      const change = await ctx.infer.python<{ note?: string; error?: string }>(`${VOLUME_CALLS}:carry_note`, { from: volume, to, kept: "in this browser, marked superseded" });
+      if (change.error) return badRequest(change.error);
+      if (change.note) {
+        const moved = await carryOnto(ctx, volume, to, name);
+        [trained, chunks, carryNote] = [to, moved.chunks, change.note];
+        carried = { from_model: volume.model_name, from_volume: volume.id, volume_id: to.id, chunks: moved.chunks };
+      }
+    }
     const autoServe = body.auto_serve !== false;
     const outputType = hasAffinityChannels(model.entry) ? "affinities" : "binary";
     const job = jobs.submit({
       ctx,
       entry: model.entry,
-      volume,
+      volume: trained,
       options: training.options,
-      params: { model_name: name, corrections_path: volume.id, ...training.params, auto_serve: autoServe, output_type: outputType },
+      params: { model_name: name, corrections_path: trained.id, ...training.params, auto_serve: autoServe, output_type: outputType },
       autoServe,
     });
-    ctx.log(`Finetune job ${job.id}: ${name} on ${painted} painted chunk${painted === 1 ? "" : "s"} of ${volume.id}`);
+    const channel = training.options.selectChannel;
+    const channelWords = channel === null ? "" : `'s channel ${channel} (${model.entry.manifest.channels[channel]})`;
+    const chunkWords = `${chunks} painted chunk${chunks === 1 ? "" : "s"}`;
+    ctx.log(`Finetune job ${job.id}: ${name}${channelWords} on ${chunkWords} of ${trained.id}`);
+    const where = training.options.mode === "full"
+      ? `The model's whole network trains in this browser with TensorFlow.js on the paint of the ${chunkWords}; the finetuned model is kept in this browser and listed on the Models tab.`
+      : `The model's head (its last layer) trains in this browser on the ${chunkWords}; the finetuned model is kept in this browser and listed on the Models tab.`;
     return json(200, {
       success: true,
       job_id: job.id,
@@ -425,9 +516,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       output_dir: job.toDict().output_dir,
       output_type: outputType,
       message: "Finetuning job submitted successfully",
-      note: training.options.mode === "full"
-        ? `The model's whole network trains in this browser with TensorFlow.js on the paint of the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`
-        : `The model's head (its last layer) trains in this browser on the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`,
+      note: carryNote ? `${carryNote} ${where}` : where,
+      ...(carried ? { carried } : {}),
     });
   });
 
@@ -475,11 +565,16 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // POST /api/finetune/job/:id/restart: the form's parameters again (the
-  // same body as submit, less the model), a new run from the trained head.
+  // same body as submit, less the model), a new run from the model's own
+  // weights on the paint as it is now, as the server's restart is.
+  // The job's channel when the body picks none (Shift+R, or an older tab):
+  // a restart trains what the job trains, as the server's keeps
+  // select_channel; another channel picked trains that one from there.
   router.post("/api/finetune/job/:id/restart", async (req, params) => {
-    const body = objectBody(req) ?? {};
-    // The job's own mode unless the body names one (jobs.restart refuses a switch).
     const job = jobs.get(params.id);
+    const sent = objectBody(req) ?? {};
+    const body = blank(sent.select_channel) && job ? { ...sent, select_channel: job.args.options.selectChannel } : sent;
+    // The job's own mode unless the body names one (jobs.restart refuses a switch).
     const mode = body.finetune_mode ?? job?.args.options.mode ?? "head";
     const training = await checkedTraining(body, mode, job?.args.entry);
     if ("error" in training) return badRequest(training.error);
@@ -489,7 +584,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       success: true,
       job_id: params.id,
       annotations_synced: 0,
-      message: `Restart request sent. Training restarts from the trained ${MODE_NOUN[training.options.mode]} in this browser, on the paint as it is now.`,
+      message: `Restart request sent. Training starts again from ${job?.modelName ?? "the model"}'s own ${MODE_NOUN[training.options.mode]}, on the paint as it is now.`,
     });
   });
 
@@ -578,6 +673,35 @@ async function paintedCount(ctx: AppContext): Promise<number> {
   return id ? (await paintedChunkIndices(ctx.paint, id)).length : 0;
 }
 
+/** Draw a box over each painted chunk of the session's volume as the
+ * annotated_regions layer, and answer how many (overlay.py's
+ * refresh_annotated_regions_layer). The volume is the one the session
+ * trains on, as the server draws its manifest's volume alone; Load Crops
+ * needs a server, so a browser volume has no imported crops and every box
+ * is a painted chunk's (chunkBoxes). The axes are the viewer's, as the good
+ * regions' are. A new layer is added hidden, as the server adds it: the
+ * boxes are an orientation aid, not to be drawn over the data unasked;
+ * drawn again, the layer keeps what the user set on it, shown or hidden
+ * included (setLayers, carriedLayer), and with nothing painted it is taken
+ * away. Only the button calls this: a layer set rebuilds the viewer's whole
+ * state (applyState's restoreState), which drops the draw tool selected and
+ * can lose a stroke being painted, the reason the button's note gives for
+ * the boxes not being drawn on their own. */
+async function showAnnotatedRegions(ctx: AppContext): Promise<number> {
+  const id = ctx.session.state.paintVolume;
+  const volume = id ? await readVolume(ctx.paint, id) : null;
+  const boxes = volume ? chunkBoxes(volume, await paintedChunkIndices(ctx.paint, volume.id)) : [];
+  const shown = ctx.viewer.layer(ANNOTATED_REGIONS_LAYER);
+  if (!boxes.length) {
+    if (shown) ctx.viewer.removeLayer(ANNOTATED_REGIONS_LAYER);
+    return 0;
+  }
+  const info = ctx.infer.dataset();
+  const layer = boxesLayer(boxes, info ? Object.keys(dimensionsOf(info)) : undefined);
+  ctx.viewer.setLayers({ [ANNOTATED_REGIONS_LAYER]: shown ? layer : { ...layer, visible: false } });
+  return boxes.length;
+}
+
 /** Why a loss the form sent cannot be trained with here, or null for one
  * the head trains with (or none sent: BCE). The head's losses are the
  * server's per-voxel ones, which a batch of voxels from any chunks defines
@@ -598,8 +722,12 @@ function refuseLoss(loss: unknown): string | null {
  * trainer takes, checked, as run.ts's options and as the job's params (the
  * card shows the loss, margin and distillation from them). finetune_mode
  * says what trains, "head" when absent. Both modes take the loss fields
- * (readLoss). For the head, batch_pixels is the browser's own: voxels per
- * Adam step, where the server's batch_size counts patches. The fields only
+ * (readLoss), learning_rate_schedule (cosine, the default, or constant:
+ * the form's Ease down box) and select_channel, the channel picked (a
+ * whole number, or absent for none; whether the model has it is
+ * refuseChannel's to say, with the model). For the head, batch_pixels is
+ * the browser's own: voxels per Adam step, where the server's batch_size
+ * counts patches. The fields only
  * a cluster job uses (lora_r, patches_per_epoch, rehearsal_fraction, queue,
  * checkpoint_path, and for the head batch_size and augment) are left out
  * of both. For the whole network (readFullTraining) the batch is
@@ -612,15 +740,136 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!Number.isInteger(epochs) || epochs < 1) return { error: "num_epochs: expected a whole number of epochs, 1 or more" };
   const learningRate = numberOr(body.learning_rate, mode === "full" ? FULL_LEARNING_RATE : DEFAULT_OPTIONS.learningRate);
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
+  const learningRateSchedule = blank(body.learning_rate_schedule) ? DEFAULT_OPTIONS.learningRateSchedule : body.learning_rate_schedule;
+  if (learningRateSchedule !== "cosine" && learningRateSchedule !== "constant") return { error: "learning_rate_schedule: expected cosine or constant" };
   const loss = readLoss(body);
   if ("error" in loss) return loss;
-  if (mode === "full") return readFullTraining(body, epochs, learningRate, loss);
+  const pick = readSelectChannel(body.select_channel);
+  if ("error" in pick) return pick;
+  const selectChannel = pick.channel;
+  const training = mode === "full" ? readFullTraining(body, epochs, learningRate, loss) : readHeadTraining(body, epochs, learningRate, loss);
+  if ("error" in training) return training;
+  return {
+    options: { ...training.options, learningRateSchedule, selectChannel },
+    params: { ...training.params, learning_rate_schedule: learningRateSchedule, ...(selectChannel === null ? {} : { select_channel: selectChannel }) },
+  };
+}
+
+/** A body's select_channel as a channel's index (a whole number from 0, a
+ * string spelling one as the form's select sends it), null when blank (no
+ * channel picked), or why it is neither: whether the model has that channel
+ * is for the route to say, with the model. */
+export function readSelectChannel(value: unknown): { channel: number | null } | { error: string } {
+  const channel = blank(value) ? null : Number(value);
+  if (channel !== null && !(Number.isInteger(channel) && channel >= 0)) return { error: "select_channel: expected the index of one of the model's output channels, a whole number from 0" };
+  return { channel };
+}
+
+/** readTraining's head part: the loss fields, and the batch in voxels (batch_pixels). */
+function readHeadTraining(body: Record<string, unknown>, epochs: number, learningRate: number, loss: { options: LossFields; params: Record<string, unknown> }): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const batchPixels = numberOr(body.batch_pixels, DEFAULT_OPTIONS.batchPixels);
   if (!Number.isInteger(batchPixels) || batchPixels < 1 || batchPixels > MAX_BATCH_PIXELS) return { error: `batch_pixels: expected a whole number of voxels per step, from 1 to ${MAX_BATCH_PIXELS}` };
   return {
     options: { ...DEFAULT_OPTIONS, epochs, learningRate, ...loss.options, batchPixels },
     params: { num_epochs: epochs, learning_rate: learningRate, ...loss.params, batch_pixels: batchPixels, finetune_mode: "head" },
   };
+}
+
+/** Why `entry` cannot train with `channel` picked (null: none), or null
+ * when it can: no pick for a model that trains one channel at a time
+ * (channelChoice), in the server's words, the form's Channel named; a pick
+ * for an affinity model, each of whose channels has a target of its own
+ * and which train together (the server's cli refuses select_channel with
+ * affinities); a pick past its channels. */
+function refuseChannel(entry: ModelEntry, channel: number | null): string | null {
+  const channels = entry.manifest.channels;
+  if (channel === null) {
+    return channelChoice(entry) ? `${entry.name} has ${channels.length} output channels and trains one at a time: pick the channel your paint is for (Channel, in the training form).` : null;
+  }
+  if (hasAffinityChannels(entry)) return `${entry.name} is an affinity model: its target has a channel of its own for each of its ${channels.length} channels, which train together, so it takes no channel pick (select_channel).`;
+  return notAChannel(entry, channel);
+}
+
+/** Why `channel` is not one of `entry`'s output channels (it is past the
+ * last), or null when it is one: a channel picked to train, to show (POST
+ * /api/finetune/channel) or with the model used (rank.ts, Use this model). */
+export function notAChannel(entry: ModelEntry, channel: number): string | null {
+  const channels = entry.manifest.channels.length;
+  return channel < channels ? null : `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels} (0 to ${channels - 1}).`;
+}
+
+/** `channel` made the one the session shows model `name`'s layer on (null:
+ * the pick cleared), kept in the session's shownChannels and shown now on
+ * the layers that open on it (serving.ts showChannel); a layer built for the
+ * model later opens on it (showLayers), so a pick made before the model is
+ * served is the channel its layer first shows. Answers whether a layer was
+ * changed: none is for a model not served, and a pick cleared leaves the
+ * layers as they are. */
+export async function pickShownChannel(ctx: AppContext, name: string, channel: number | null): Promise<boolean> {
+  const shownChannels = { ...ctx.session.state.shownChannels };
+  if (channel === null) delete shownChannels[name];
+  else shownChannels[name] = channel;
+  await ctx.session.update({ shownChannels });
+  return channel !== null && showChannel(ctx, name);
+}
+
+/** What carryPaint did: the new volume's voxels painted, the old volume's painted
+ * voxels they came from, the new voxels left unpainted because their old voxels
+ * disagreed, and the new volume's chunks written. */
+export interface Carried { painted: number; source: number; conflicts: number; chunks: number }
+
+/** `from`'s paint carried onto `to`, a volume planned over the same dataset
+ * for model `name` on its grid (planVolume, not yet written): Use this
+ * model's (rank.ts) and training's submit for a model on another grid. `to`
+ * is written (createVolume), the paint carried onto it (carryPaint) with
+ * its good regions (boxes in nm, the same on any grid), and made the
+ * session's volume, its paint layer in `from`'s place; `from` is retired,
+ * kept in the store but superseded (supersedeVolume), so the session has
+ * one volume, the one it trains on. The chain and the channel shown are left
+ * as they are: Use this model sets those itself. Answers carryPaint's
+ * counts, the good regions carried and the new paint layer's name. */
+export async function carryOnto(ctx: AppContext, from: PaintVolume, to: PaintVolume, name: string): Promise<Carried & { goodRegions: number; layer: string }> {
+  await createVolume(ctx.paint, to);
+  const carried = await carryPaint(ctx, from, to);
+  const regions = await loadGoodRegions(ctx.paint, from.id);
+  if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
+  await ctx.session.update({ paintVolume: to.id });
+  await supersedeVolume(ctx.paint, from.id, to.id);
+  const layer = paintLayerName(to.id);
+  ctx.viewer.removeLayer(paintLayerName(from.id));
+  ctx.viewer.setLayers({ [layer]: { ...paintLayer(paintLayerUrl(to.id, pageBase()), to), name: layer } });
+  ctx.viewer.selectLayer(layer, PAINT_TAB);
+  ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}; ${from.id} is kept, superseded`);
+  return { ...carried, goodRegions: regions.length, layer };
+}
+
+/** The portable Python's carry of paint from one grid to another
+ * (cellmap_flow/portable/calls.py carry_paint, over portable/carry.py). */
+const CARRY_PAINT = "cellmap_flow.portable.calls:carry_paint";
+
+/** The paint of `from` copied into `to`, an empty volume over the same dataset on
+ * another model's grid (createVolume'd): cellmap_flow.portable.carry, in the engine's
+ * Python, with the paint store's reads and writes around it here. The old volume's
+ * painted chunks go whole, both grids placed by their volume's dataset_offset_nm
+ * (voxel 0's centre, fill.ts volumeCornerNm), and the new chunks that got paint come
+ * back whole, to be written as they are. */
+async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): Promise<Carried> {
+  const grid = (v: PaintVolume) => ({ corner_nm: volumeCornerNm(v.dataset_offset_nm, v.output_voxel_size), voxel_nm: v.output_voxel_size, shape: v.dataset_shape_voxels, chunks: v.chunk_size });
+  const indices: number[][] = [], labels: ArrayBuffer[] = [];
+  for (const index of await paintedChunkIndices(ctx.paint, from.id)) {
+    const chunk = await readPaintedChunk(ctx.paint, from, index);
+    if (chunk) { indices.push(index); labels.push(bytesOf(chunk.labels)); }
+  }
+  const { value, arrays } = await ctx.infer.python<{ value: Carried & { indices: number[][] }; arrays: ArrayBuffer[] }>(
+    CARRY_PAINT, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
+  await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
+  const { painted, source, conflicts, chunks } = value;
+  return { painted, source, conflicts, chunks };
+}
+
+/** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
+export function bytesOf(a: ArrayBufferView): ArrayBuffer {
+  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
 }
 
 type LossFields = Pick<FinetuneOptions, "lossType" | "margin" | "balanceClasses" | "labelSmoothing" | "distillationLambda" | "distillationScope">;
@@ -682,8 +931,13 @@ function readFullTraining(body: Record<string, unknown>, epochs: number, learnin
 
 /** A body field as a number (the form sends numbers; a string is read), or `fallback` when absent. */
 function numberOr(value: unknown, fallback: number): number {
-  if (value === undefined || value === null || value === "") return fallback;
+  if (blank(value)) return fallback;
   return typeof value === "number" ? value : Number(value);
+}
+
+/** Whether a body field is absent: undefined, null, or the form's blank "". */
+function blank(value: unknown): boolean {
+  return value === undefined || value === null || value === "";
 }
 
 /** The job's log as server-sent events (training.py's stream_job_logs): the

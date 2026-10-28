@@ -10,21 +10,10 @@
     </section>
 
     <!-- Add any model by reference (models/resolve.py; in the browser mode
-         web/src/models/index.ts resolve, which reads Hugging Face refs only) -->
-    <div class="add-model mb-3">
-      <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>
-      <div class="d-flex gap-2">
-        {% if mode == "browser" %}
-        <input type="text" class="form-control form-control-sm" id="addModelRef"
-               placeholder="owner/repo/folder on Hugging Face, or setup_54..."
-               title="A model folder of any public Hugging Face model repo laid out as cellmap/onnx-web-models is (owner/repo/folder, a folder with a manifest.json and its .onnx files), the repo alone when it holds one model, its huggingface.co URL, or a folder of cellmap/onnx-web-models (setup_54). The repo's models are listed under Hugging Face from then on.">
-        {% else %}
-        <input type="text" class="form-control form-control-sm" id="addModelRef"
-               placeholder="Hugging Face repo, zoo model, Cellpose model, path..."
-               title="Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.">
-        {% endif %}
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
-      </div>
+         web/src/models/index.ts resolve, which reads Hugging Face refs only):
+         its field is made by js/dashboard/models/add-model.js, before the
+         ticked boxes of the models added (catalog.js addedBox). -->
+    <div class="add-model mb-3" id="addModel">
       {# Browser mode only: a path means nothing to a page, so a model sent
          as a file is picked instead (web/src/model-file.ts): kept in this
          browser, then resolved here by its name. Flask passes no mode, and
@@ -39,153 +28,32 @@
         <small class="text-muted">with its manifest.json if it carries none</small>
       </div>
       {% endif %}
-      <div id="addModelResult" class="add-model-result mt-2" hidden>
-        <div id="addModelSummary" class="small"></div>
-        <div id="addModelNotes" class="small text-muted"></div>
-        <div id="addModelFields" class="add-model-fields mt-2"></div>
-        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addModelRunBtn"
-                title="Start its server now; it joins the models below, ticked, until unticked">Run</button>
-      </div>
       <div id="addedModels" class="mt-2"></div>
     </div>
 
-    <!-- Local Catalog Section. server-only: it lists paths on the cluster's
-         file systems; in the browser mode (web/) the models come from the
-         Hugging Face section below. -->
+    <!-- The Local Catalog's, Hugging Face's and the BioImage Model Zoo's
+         sections are made by their scripts in js/dashboard/models/
+         (catalog.js, huggingface.js, zoo.js) from the pieces every model
+         list is made of, js/shared/model-list.js: the Finetune tab's
+         ranking lists the same models with them. -->
+
+    <!-- Local Catalog Section: a section for each group, from the data
+         below. server-only: it lists paths on the cluster's file systems;
+         in the browser mode (web/) the models come from the Hugging Face
+         section below. -->
     <h5 class="server-only">Local Catalog</h5>
-    <div class="accordion server-only" id="modelAccordion">
-      {% for group_name, models in model_catalog.items() %}
-        <div class="accordion-item">
-          <!-- Accordion Header -->
-          <h2 class="accordion-header" id="heading_{{ loop.index }}">
-            <button
-              class="accordion-button collapsed"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#collapse_{{ loop.index }}"
-              aria-expanded="false"
-              aria-controls="collapse_{{ loop.index }}"
-            >
-              {{ group_name }}
-            </button>
-          </h2>
+    <script type="application/json" id="model-catalog-data">{{ {"groups": catalog_groups, "ticked": default_models} | tojson }}</script>
+    <div class="accordion server-only" id="modelAccordion"></div>
 
-          <!-- Accordion Body (the collapsible part) -->
-          <div
-            id="collapse_{{ loop.index }}"
-            class="accordion-collapse collapse"
-            aria-labelledby="heading_{{ loop.index }}"
-          >
-            <div class="accordion-body">
-              {% for model_name in models %}
-                <div class="form-check mb-2">
-                  <input
-                    class="form-check-input model-checkbox"
-                    type="checkbox"
-                    name="selected_models"
-                    id="chk_{{ group_name }}_{{ model_name }}"
-                    value="{{ model_name }}"
-                    {% if model_name in default_models %}checked{% endif %}
-                  />
-                  <label
-                    class="form-check-label"
-                    for="chk_{{ group_name }}_{{ model_name }}"
-                  >
-                    {{ model_name }}
-                  </label>
-                </div>
-              {% endfor %}
-            </div>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-
-    <!-- Hugging Face Section -->
+    <!-- Hugging Face Section: loaded when it opens. -->
     <h5>Hugging Face</h5>
-    <div class="accordion" id="hfModelAccordion">
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="heading_hf">
-          <button
-            class="accordion-button collapsed"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#collapse_hf"
-            aria-expanded="false"
-            aria-controls="collapse_hf"
-          >
-            cellmap
-            <span id="hfLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
-          </button>
-        </h2>
-        <div
-          id="collapse_hf"
-          class="accordion-collapse collapse"
-          aria-labelledby="heading_hf"
-        >
-          <div class="accordion-body" id="hfModelsContainer">
-            <div class="d-flex gap-2 mb-2">
-              <input type="text" class="form-control" id="hfSearchBar" placeholder="Search models..." style="display: none;" />
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="hfRefreshBtn" style="display: none; white-space: nowrap;" title="Refresh from Hugging Face">Refresh</button>
-            </div>
-            <p class="text-muted" id="hfPlaceholder">Click to load Hugging Face models...</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="accordion" id="hfModelAccordion"></div>
 
-    <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's.
-         Its rows are built by js/dashboard/models/zoo.js from the zoo's index. -->
-    <!-- server-only: the zoo's weights are not web (ONNX) exports. -->
+    <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's,
+         from the zoo's index. server-only: the zoo's weights are not web
+         (ONNX) exports. -->
     <h5 class="server-only">BioImage Model Zoo</h5>
-    <div class="accordion server-only" id="zooModelAccordion">
-      <div class="accordion-item">
-        <h2 class="accordion-header" id="heading_zoo">
-          <button
-            class="accordion-button collapsed"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#collapse_zoo"
-            aria-expanded="false"
-            aria-controls="collapse_zoo"
-          >
-            bioimage.io
-            <span id="zooLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
-          </button>
-        </h2>
-        <div
-          id="collapse_zoo"
-          class="accordion-collapse collapse"
-          aria-labelledby="heading_zoo"
-        >
-          <div class="accordion-body" id="zooModelsContainer">
-            <div id="zooControls" style="display: none;">
-              <div class="d-flex gap-2 mb-2">
-                <input type="text" class="form-control" id="zooSearchBar" placeholder="Search models..." title="Name, description or tags" />
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="zooRefreshBtn" style="white-space: nowrap;" title="Refresh from bioimage.io">Refresh</button>
-              </div>
-              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
-                <div class="form-check mb-0" title="Only models whose tags, name or description say electron microscopy">
-                  <input class="form-check-input" type="checkbox" id="zooEmOnly" checked />
-                  <label class="form-check-label" for="zooEmOnly">EM only</label>
-                </div>
-                <div class="form-check mb-0" title="Models tagged 2D">
-                  <input class="form-check-input" type="checkbox" id="zoo2d" />
-                  <label class="form-check-label" for="zoo2d">2D</label>
-                </div>
-                <div class="form-check mb-0" title="Models tagged 3D">
-                  <input class="form-check-input" type="checkbox" id="zoo3d" />
-                  <label class="form-check-label" for="zoo3d">3D</label>
-                </div>
-                <span class="zoo-count ms-auto" id="zooCount" title="Shown / listed. Ticked models are always shown."></span>
-              </div>
-            </div>
-            <p class="text-muted" id="zooPlaceholder">Click to load BioImage Model Zoo models...</p>
-            <div class="zoo-model-list" id="zooModelList"></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="accordion server-only" id="zooModelAccordion"></div>
 
     <!-- Cellpose Section: Cellpose 4's models, served in pixi's cellpose4
          environment. Its rows are built by js/dashboard/models/cellpose.js from the data
@@ -252,8 +120,9 @@
             <p class="text-muted small mb-2">No cluster here (no <code>bsub</code>): models and finetuning run on this machine, and these settings are not used.</p>
             {% endif %}
             <div class="mb-2">
-              <label class="form-label" for="cfg_queue">GPU Queue</label>
-              <select class="form-select form-select-sm" id="cfg_queue"></select>
+              {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
+              <span class="form-label d-block">GPU Queues</span>
+              <div id="cfg_queue"></div>
             </div>
             <div class="mb-2">
               <label class="form-label" for="cfg_charge_group">Charge Group</label>
@@ -269,11 +138,12 @@
             </div>
             <div class="mb-2 form-check">
               <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
-              <label class="form-check-label" for="cfg_cycle_gpu_queues">Try other GPU queues</label>
+              <label class="form-check-label" for="cfg_cycle_gpu_queues">Move a job that has not started</label>
               <div class="form-text">
-                If the queue above is full or closed, submit to whichever GPU
-                queue has capacity instead of waiting. Uncheck to always use
-                the queue above, however long it takes to start.
+                A job goes to the queue ticked above with the most free GPUs;
+                if it has not started there in 3 minutes, it moves to the next
+                one ticked. Uncheck to always use the first queue ticked,
+                however long it takes to start.
               </div>
             </div>
             <div class="mb-2">
@@ -295,12 +165,9 @@
     <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
       {% if on_cluster %}
       <div>
-        <label class="form-label mb-1" for="gpuQueueSelect">GPU</label>
-        <select
-          id="gpuQueueSelect"
-          class="form-select form-select-sm"
-          style="min-width: 20rem"
-        ></select>
+        {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
+        <span class="form-label d-block mb-1">GPUs</span>
+        <div id="gpuQueuePicker" style="min-width: 20rem"></div>
       </div>
       {% elif mode == "browser" %}
       {# The browser mode (web/build/render.py sets mode); Flask passes no mode

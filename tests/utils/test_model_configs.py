@@ -84,9 +84,10 @@ def test_a_finetune_declares_its_bases_geometry_at_the_voxel_size_it_was_trained
     monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
     base = {"type": "huggingface", "repo": "cellmap/mito"}
     assert FinetuneModelConfig(weights_path="/w.pt", base_model=base).declared_geometry() == {
-        "write_shape": [896] * 3, "output_voxel_size": [16] * 3, "output_channels": 3}
+        "write_shape": [896] * 3, "output_voxel_size": [16] * 3, "output_channels": 3, "channels": None}
     at_8 = FinetuneModelConfig(weights_path="/w.pt", base_model=base, input_voxel_size=8, output_voxel_size=8)
-    assert at_8.declared_geometry() == {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 3}
+    assert at_8.declared_geometry() == {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 3,
+                                        "channels": None}
 
 
 @pytest.mark.parametrize("config, env", [

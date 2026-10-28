@@ -15,7 +15,9 @@ run's directory; this module answers the questions on the way:
   GPU node (``python -m cellmap_flow.finetune.finetune_cli``);
   ``module_command``: such a line for any module, in the model's
   environment (the web export's, finetune/export_web.py, too);
-- ``launch``: that command on LSF, or here when there is no bsub.
+- ``launch``: that command on LSF, or here when there is no bsub;
+  ``QueueFallback``: the job moved to the next of its queues when it has
+  not started on one.
 """
 
 import functools
@@ -23,8 +25,9 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
@@ -353,7 +356,7 @@ def build_command(
     auto_serve: bool,
     serve_data_path: Optional[str],
     models_dir: Optional[Path] = None,
-    queue: Optional[str] = None,
+    queue: Optional[List[str]] = None,
     charge_group: Optional[str] = None,
 ) -> str:
     """Build the shell command used to launch finetuning, for ``bash -c``.
@@ -396,9 +399,9 @@ def build_command(
     if models_dir is not None:
         command_parts += ["--models-dir", str(models_dir)]
     # Only written into the serving YAMLs, so a model served from one runs
-    # where this job did rather than on hard-coded defaults.
+    # on the queues this job could rather than on hard-coded defaults.
     if queue:
-        command_parts += ["--queue", str(queue)]
+        command_parts += ["--queue", *map(str, queue)]
     if charge_group:
         command_parts += ["--charge-group", str(charge_group)]
     return module_command(model_config, _TRAINER_MODULE, command_parts, log_file)
@@ -501,3 +504,51 @@ def launch(job_name: str, command: str, queue: Optional[str], charge_group: Opti
             logger.error(f"Failed to start local job: {e}")
             raise RuntimeError(f"Local job execution failed: {e}")
     return lsf_job
+
+
+class QueueFallback:
+    """Moving a training job that has not started to the next of its queues.
+
+    start_hosts does this for a server, while it waits for the server's
+    address. A training job is not waited on but followed, by its monitor,
+    which calls ``move`` at each poll at which LSF says the job is PENDING.
+    Once the job has been pending the site's pending_fallback_seconds on one
+    queue, it is submitted to the next of ``queues`` (those after the first
+    in queues.candidates' order, so only queues the job may run on) and the
+    waiting one is killed; on the last queue it waits however long that
+    takes. A queue that refuses the submission is not asked again, and the
+    next one is asked at once.
+
+    ``submit`` is ``launch`` with the job's name and command: a queue in, the
+    job submitted there out.
+    """
+
+    def __init__(self, queues: List[str], submit: Callable[[str], object]):
+        self.queues = list(queues)
+        self.submit = submit
+        self.since = time.monotonic()
+
+    def move(self, job) -> bool:
+        """Move ``job``, a FinetuneJob LSF says is pending, to the next queue
+        if it has waited long enough on this one; whether it was moved."""
+        wait = current_site().pending_fallback_seconds
+        if time.monotonic() - self.since < wait:
+            return False
+        while self.queues:
+            queue = self.queues.pop(0)
+            try:
+                moved = self.submit(queue)
+            except Exception as e:
+                logger.error(f"Job {job.job_id} could not be moved to {queue}: {e}")
+                continue
+            waiting, job.lsf_job = job.lsf_job, moved
+            waiting.kill()
+            # A cancel that came while this was being submitted killed the
+            # job waiting, not this one, which would train with nothing
+            # following it.
+            if job.cancel_requested:
+                moved.kill()
+            self.since = time.monotonic()
+            logger.warning(f"Job {job.job_id} had not started after {wait}s; moved to {queue}")
+            return True
+        return False

@@ -68,13 +68,14 @@ export function initFinetuneTab() {
   initGoodRegionMarks({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form, log });
-  initRank();
+  initRank({ form });
   rememberOpenSections();
 }
 
 // The patch tools' groups (Label it, AI-assisted annotation, Good regions)
-// open and close from their headings; each stays as the user left it across
-// reloads. A browser that keeps nothing gets the page's defaults.
+// open and close from their headings, all three closed at first, so the card
+// is three lines until one is wanted; each stays as the user left it across
+// reloads.
 const OPEN_SECTIONS_KEY = "finetunePatchToolsOpen";
 
 function rememberOpenSections() {

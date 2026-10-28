@@ -83,12 +83,61 @@ def test_fill_holes_fills_what_a_blob_encloses(shape):
     pytest.param("unbounded", ["AffinityPostprocessor"], {"model_name": "aff"}, "warn", id="logits"),
     pytest.param("unbounded", ["AffinityPostprocessor"], {"channels_names": "affinities"}, "warn",
                  id="logits-from-a-model-whose-one-channel-name-is-a-string"),
+    # The sigmoid a start set shows them, the sigmoid and the threshold the
+    # ranking set too; the segmentation is the user's choice, not a fault.
+    pytest.param("unbounded", ["SigmoidPostprocessor", "ThresholdPostprocessor"], {"model_name": "aff"}, "optional",
+                 id="a-segmentation-is-optional"),
+    # The threshold leaves the watershed 0s and 1s, and no objects.
+    pytest.param("unbounded", ["SigmoidPostprocessor", "ThresholdPostprocessor", "AffinityPostprocessor"],
+                 {"model_name": "aff"}, "warn", id="a-threshold-ahead-of-the-watershed"),
 ])
 def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain, names, level):
     from cellmap_flow.serving import probe
 
     output_class = {"unbounded": probe.UNBOUNDED, "unit": probe.UNIT}[output_class]
     assert probe.review_postprocess(output_class, chain, out_channels=3, **names)["level"] == level
+
+
+def test_a_2d_affinity_models_slice_gives_its_objects_at_the_cut_off_fitted_to_the_paint():
+    """setup_53_2d and setup_54_2d have three channels (z, y, x), and the
+    browser serves them a slice a block, which has no neighbour along z:
+    their z channel is the model's guess at one, here "apart" everywhere.
+    Two 4x4 squares whose neighbours' affinities are faint, 0.12 along y
+    and x inside each and 0.0025 elsewhere, which a ranking fits at 0.076.
+    Over the row the ranking sets, the sigmoid and that threshold, the
+    advice offers the chain into a segmentation joining neighbours above
+    0.076, which finds the two squares; at the 0.5 it offers without a fit,
+    none. With the threshold ahead of the watershed they were none too, and
+    the chain the advice gives without it finds them."""
+    from cellmap_flow.pipeline_spec import PipelineSpec
+    from cellmap_flow.serving import probe
+
+    objects = np.zeros((1, 12, 12), int)
+    objects[0, 1:5, 1:5], objects[0, 6:10, 6:10] = 1, 2
+    logits = np.full((3, 1, 12, 12), -6.0, np.float32)
+    logits[1, :, :-1][(objects[:, :-1] == objects[:, 1:]) & (objects[:, 1:] > 0)] = -2.0
+    logits[2, :, :, :-1][(objects[..., :-1] == objects[..., 1:]) & (objects[..., 1:] > 0)] = -2.0
+
+    def segmented(steps):
+        data = logits
+        for step in PipelineSpec((), steps).build()[1]:
+            data = step(data, chunk_corner=(0, 0, 0), chunk_num_voxels=objects.size)
+        return len(np.unique(data[data > 0]))
+
+    def applied(review):
+        return [{"name": name, **review["params"].get(name, {})} for name in review["suggest"]]
+
+    model = {"out_channels": 3, "model_name": "mito_aff_setup54_2d"}
+    ranked = ["SigmoidPostprocessor", "ThresholdPostprocessor"]
+    offered = probe.review_postprocess(probe.UNBOUNDED, ranked, threshold=0.076, **model)
+    assert offered["level"] == "optional"
+    assert offered["suggest"] == ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"]
+    assert offered["params"]["AffinityPostprocessor"]["bias"] == 0.076 and segmented(applied(offered)) == 2
+    assert segmented(applied(probe.review_postprocess(probe.UNBOUNDED, ranked, **model))) == 0
+    thresholded = [*ranked, "AffinityPostprocessor"]
+    assert segmented([{"name": name} for name in thresholded]) == 0
+    warned = probe.review_postprocess(probe.UNBOUNDED, thresholded, threshold=0.076, **model)
+    assert warned["level"] == "warn" and segmented(applied(warned)) == 2
 
 
 def test_the_merger_survives_concurrent_chunks():

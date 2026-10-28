@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 import { createBackend, restoreSession } from "../../src/backend";
 import { toYaml } from "../../src/backend/yaml";
 import { ARGS_KEY } from "../../src/contracts";
-import type { ApiResponse, FinetunedRecord } from "../../src/contracts";
+import type { ApiResponse, FinetunedRecord, Step } from "../../src/contracts";
+import { applyPostprocessors } from "../../src/infer/post";
 import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
 import { entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -137,6 +139,26 @@ describe("POST /api/models", () => {
     expect(ctx.session.state.chain).toEqual(expected);
   });
 
+  it("sets the postprocessing a model starting needs, from its manifest's output, only when the chain has none", async (t) => {
+    // The rule is the portable Python's (rank.needed_postprocess), in node's Pyodide.
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    const backend = createBackend(ctx);
+    // setup_54's affinities are logits too: the sigmoid, before it is served.
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    const expected = { input_norm: inputNorm, postprocess: [{ name: "SigmoidPostprocessor" }] };
+    expect(ctx.session.state.chain).toEqual(expected);
+    expect(ctx.infer.served().map((s) => decodeArgs(s.view.split(ARGS_KEY)[1]).chain)).toEqual([expected]);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: NAME_54, postprocess_fitted: false });
+    // The user's steps since are theirs: the next start leaves them, and the list says nothing set them.
+    const theirs = [{ name: "ThresholdPostprocessor", threshold: 0.3 }];
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: theirs }));
+    await backend.handle(request("POST", "/api/models/add", { entry: { type: "onnx", repo: "cellmap/onnx-web-models", folder: "setup_56", name: NAME_56 } }));
+    expect(ctx.session.state.chain.postprocess).toEqual(theirs);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: null, postprocess_fitted: null });
+  }, 120_000);  // Pyodide and numpy load the first time, a few seconds
+
   it("refuses a reference that is not a model the browser runs, changing nothing", async () => {
     const ctx = fakeContext();
     const res = await createBackend(ctx).handle(submit(["cellmap/some-pytorch-model"]));
@@ -155,7 +177,9 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
   it("lists the served models in order, each with where it came from and the Hugging Face row that ticks it", async () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx);
-    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({ success: true, models: [], pipeline: defaultChain(), input_norm_from: null });
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
+      success: true, models: [], pipeline: defaultChain(), input_norm_from: null, postprocess_from: null, postprocess_fitted: null,
+    });
     await backend.handle(submit([HF56, HF54]));
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
       success: true,
@@ -163,6 +187,9 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
       // the chain they run through; the default's input normalization is what both declare
       pipeline: defaultChain(),
       input_norm_from: NAME_56,
+      // the default's sigmoid was there before either started
+      postprocess_from: null,
+      postprocess_fitted: null,
     });
   });
 
@@ -336,6 +363,52 @@ describe("GET /api/model_advice", () => {
     m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
     expect(m.input_norm_matches).toBe(false);
     expect(m.input_norm_differences).toEqual([{ step: "LambdaNormalizer", param: "expression", configured: "2*x", declared: "2*x-1" }]);
+  });
+
+  it("offers an affinity model its chain into a segmentation cut where its ranking fitted the paint, which finds a 2D model's objects on one slice, and warns of a threshold ahead of it", async () => {
+    // A 2D model's three channels (z, y, x) on the one slice it is run on,
+    // which has no neighbour along z: the z channel is the model's guess at
+    // one, here "apart" everywhere. Two 4×4 squares whose neighbours'
+    // affinities are faint, a logit of -2 (0.12) along y and x inside each
+    // and -6 (0.0025) everywhere else, which a ranking fits at 0.076.
+    const square = (y: number, x: number) => (y >= 1 && y < 5 && x >= 1 && x < 5 ? 1 : y >= 6 && y < 10 && x >= 6 && x < 10 ? 2 : 0);
+    const logits = new Float32Array(3 * 12 * 12).fill(-6);
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 12; x++) {
+        const here = square(y, x);
+        if (here && square(y + 1, x) === here) logits[144 + y * 12 + x] = -2;
+        if (here && square(y, x + 1) === here) logits[288 + y * 12 + x] = -2;
+      }
+    }
+    const objects = (steps: Step[]) => new Set(Array.from(applyPostprocessors({ data: logits, shape: [3, 1, 12, 12] }, steps).data as BigUint64Array)).size - 1;
+    const applied = (review: any): Step[] => review.suggest.map((name: string) => ({ name, ...review.params[name] }));
+    const review = async () => body(await backend.handle(request("GET", "/api/model_advice"))).models[0].postprocess_review;
+
+    // The row the ranking set, the sigmoid and that threshold: the chain into
+    // a segmentation is offered in its place, joining neighbours above the
+    // same cut-off, where it finds the squares; at the 0.5 it is offered at
+    // without a fit, none.
+    const ranked: Step[] = [{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: 0.076 }];
+    const fits = { [NAME_54]: { input_norm: [], postprocess: ranked, threshold: 0.076 } };
+    const ctx = fakeContext({ state: { chain: { input_norm: [], postprocess: ranked }, rankFits: fits } });
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    const offered = await review();
+    expect(offered).toMatchObject({ level: "optional", suggest: ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"] });
+    expect(offered.params.AffinityPostprocessor.bias).toBe(0.076);
+    expect(objects(applied(offered))).toBe(2);
+    await ctx.session.update({ rankFits: {} });
+    expect(objects(applied(await review()))).toBe(0);
+
+    // The threshold ahead of the watershed left it 0s and 1s, and no
+    // objects: the advice says to take it out.
+    await ctx.session.update({ rankFits: fits });
+    const thresholded = [...ranked, { name: "AffinityPostprocessor" }];
+    expect(objects(thresholded)).toBe(0);
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: [], postprocess: thresholded }));
+    const warned = await review();
+    expect(warned.level).toBe("warn");
+    expect(objects(applied(warned))).toBe(2);
   });
 });
 
