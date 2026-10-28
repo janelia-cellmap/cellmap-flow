@@ -422,7 +422,7 @@ export interface FinetuneSubmit {
    */
   batch_size?: number;
   /**
-   * Learning rate (AdamW).
+   * The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.
    */
   learning_rate?: number;
   /**
@@ -549,7 +549,7 @@ export interface FinetuneRestart {
    */
   batch_size?: number;
   /**
-   * Learning rate (AdamW).
+   * The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.
    */
   learning_rate?: number;
   /**

@@ -30,6 +30,7 @@ __all__ = [
     "MODES",
     "OUTPUT_CLASSES",
     "MANIFEST_FIELDS",
+    "LEARNING_RATE_FLOOR",
 ]
 
 # What --loss-type, --output-type, --mode and --output-class take, here once.
@@ -49,6 +50,16 @@ DistillationScope = Literal["unlabeled", "all"]
 # so the CLI has no flag for them and a restart changes them through the
 # manifest (the dashboard's restart route writes it).
 MANIFEST_FIELDS = ("patches_per_epoch", "rehearsal_fraction")
+
+# The share of learning_rate a run ends at. Every run starts at the form's
+# rate and eases down to this share of it by its last optimizer step, along
+# half a cosine: big steps while the model is far from the paint, small ones
+# once it is close (trainer/loop.py learning_rate_factor). Every run used to
+# train at one rate throughout; a LICONN head trained at 1e-2 and then
+# restarted at a smaller rate, a schedule made by hand, looked great. The
+# browser's three trainers read it from web/src/generated/python-data.json
+# (web/build/export_data.py; web/src/finetune/schedule.ts).
+LEARNING_RATE_FLOOR = 0.1
 
 
 def _is_offset(offset):
@@ -95,7 +106,11 @@ class TrainingOptions(BaseModel):
     ))
     num_epochs: int = Field(20, ge=1, description="Number of training epochs.")
     batch_size: int = Field(8, ge=1, description="Patches per batch.")
-    learning_rate: float = Field(1e-4, gt=0, description="Learning rate (AdamW).")
+    learning_rate: float = Field(1e-4, gt=0, description=(
+        "The learning rate a run starts at (AdamW). It eases down along half a cosine to "
+        f"{LEARNING_RATE_FLOOR:g} times it at the run's last step (LEARNING_RATE_FLOOR); a "
+        "restart starts at it again."
+    ))
     gradient_accumulation_steps: int = Field(1, ge=1, description=(
         "Batches to accumulate gradients over before each optimizer step."
     ))

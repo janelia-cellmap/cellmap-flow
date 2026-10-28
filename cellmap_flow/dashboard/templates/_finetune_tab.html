@@ -750,49 +750,65 @@
         </div>
       </div>
       {% endif %}
+      {# Each Learning Rate takes any number above 0, typed (1e-4, 0.0003),
+         and has its presets beside it (<id>Presets): picking one types it
+         in, and they show the one typed, or Typed for any other
+         (training-form.js). The field is what is saved and sent. The rate is
+         where a run starts: every trainer eases it down along half a cosine
+         to a tenth of it (finetune/options.py LEARNING_RATE_FLOOR) by the
+         run's last step, which the titles say. #}
+      {% set rate_title = "The learning rate a run starts at. It eases down along half a cosine to a tenth of it by the run's last step: big steps while the model is far from your paint, small ones once it is close. A restart starts at it again. Type any number above 0 (1e-4, 0.0003, ...) or pick a preset." %}
       <div class="col-md-6 head-only">
         <div class="mb-3">
-          <label for="learningRate" class="form-label">Learning Rate</label>
-          <select id="learningRate" class="form-select">
-            {# The browser trains the last layer alone, a few thousand weights
-               started from the model's own, which takes a step a hundred
-               times LoRA's: its own three rates, 1e-2 chosen. Flask passes no
-               mode and keeps the LoRA rates below as they were. #}
-            {% if mode == "browser" %}
-            <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
-            <option value="0.003">3e-3 (Gentler)</option>
-            <option value="0.001">1e-3 (Gentle)</option>
-            {% else %}
-            <option value="0.0000001">1e-7 (Ultra Conservative)</option>
-            <option value="0.000001">1e-6 (Very Conservative)</option>
-            <option value="0.00001">1e-5 (Conservative)</option>
-            <option value="0.0001" selected>1e-4 (Standard)</option>
-            <option value="0.001">1e-3 (Aggressive)</option>
-            <option value="0.01">1e-2 (Very Aggressive)</option>
-            <option value="0.1">1e-1 (Extremely Aggressive)</option>
-            {% endif %}
-          </select>
+          <label for="learningRate" class="form-label" title="{{ rate_title }}">Learning Rate</label>
+          {# The browser trains the last layer alone, a few thousand weights
+             started from the model's own, which takes a step a hundred
+             times LoRA's: its own three rates, 1e-2 the default. Flask passes
+             no mode and keeps the LoRA rates below as they were. #}
+          <div class="input-group">
+            <input type="text" inputmode="decimal" id="learningRate" class="form-control" value="{{ '0.01' if mode == 'browser' else '0.0001' }}" title="{{ rate_title }}">
+            <select id="learningRatePresets" class="form-select" aria-label="Learning rate presets">
+              <option value="">Typed</option>
+              {% if mode == "browser" %}
+              <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
+              <option value="0.003">3e-3 (Gentler)</option>
+              <option value="0.001">1e-3 (Gentle)</option>
+              {% else %}
+              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+              <option value="0.000001">1e-6 (Very Conservative)</option>
+              <option value="0.00001">1e-5 (Conservative)</option>
+              <option value="0.0001" selected>1e-4 (Standard)</option>
+              <option value="0.001">1e-3 (Aggressive)</option>
+              <option value="0.01">1e-2 (Very Aggressive)</option>
+              <option value="0.1">1e-1 (Extremely Aggressive)</option>
+              {% endif %}
+            </select>
+          </div>
           {% if mode == "browser" %}
-          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
+          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about. It eases to a tenth by the end of the run.</small>
           {% else %}
-          <small class="text-muted">1e-4 suits LoRA.</small>
+          <small class="text-muted">1e-4 suits LoRA. It eases to a tenth by the end of the run.</small>
           {% endif %}
         </div>
       </div>
       {# The whole network's rates: two million weights started from the
          model's own take a hundredth of the head's step (Adam at 1e-4, as
-         Marwan measured it), so it has a select of its own and its own saved value. #}
+         Marwan measured it), so it has a field of its own and its own saved value. #}
       {% if mode == "browser" %}
       <div class="col-md-6 full-only">
         <div class="mb-3">
-          <label for="learningRateFull" class="form-label">Learning Rate</label>
-          <select id="learningRateFull" class="form-select">
-            <option value="0.0003">3e-4 (Faster)</option>
-            <option value="0.0001" selected>1e-4 (Standard)</option>
-            <option value="0.00003">3e-5 (Gentle)</option>
-            <option value="0.00001">1e-5 (Very gentle)</option>
-          </select>
-          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
+          <label for="learningRateFull" class="form-label" title="{{ rate_title }}">Learning Rate</label>
+          <div class="input-group">
+            <input type="text" inputmode="decimal" id="learningRateFull" class="form-control" value="0.0001" title="{{ rate_title }}">
+            <select id="learningRateFullPresets" class="form-select" aria-label="Learning rate presets">
+              <option value="">Typed</option>
+              <option value="0.0003">3e-4 (Faster)</option>
+              <option value="0.0001" selected>1e-4 (Standard)</option>
+              <option value="0.00003">3e-5 (Gentle)</option>
+              <option value="0.00001">1e-5 (Very gentle)</option>
+            </select>
+          </div>
+          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew. It eases to a tenth by the end of the run.</small>
         </div>
       </div>
       {% endif %}

@@ -21,9 +21,10 @@
 import { concatDistillation, DISTILLATION_VOXELS, type DistillationPick, quotas, sampleDistillation } from "./distillation";
 import { createFeatureRunner } from "./features";
 import { anchorBoxes, anchorChunks } from "./good-regions";
-import { concatPixels, type DistillationSet, gatherPixels, mulberry32, type PixelSet, trainHead } from "./head-trainer";
+import { concatPixels, type DistillationSet, gatherPixels, headSteps, mulberry32, type PixelSet, trainHead } from "./head-trainer";
 import { runFull } from "./full/run-full";
 import { count, epochSummary, plural } from "./log-words";
+import { scheduleWords } from "./schedule";
 import { headOf, withHead } from "./onnx-head";
 import { collectSamples } from "./samples";
 import { targetTransformFor } from "./target-call";
@@ -70,7 +71,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     const channel = options.selectChannel;
     const trainee = channel === null ? head : headRow(head, channel);
     report.log(`Finetuning ${run.entry.name}'s head on volume ${volume.id}: ${count(chunks)} painted chunk${chunks === 1 ? "" : "s"} of ${volume.chunk_size.join("×")} voxels`);
-    report.log(`The head: a 1×1 convolution, ${head.inChannels} → ${head.outChannels} channels (${head.weightName}${head.biasName ? `, ${head.biasName}` : ", no bias"}, ${head.dtype}); ${options.epochs} epochs of ${count(options.batchPixels)} voxels per step at learning rate ${options.learningRate}, ${lossWords(options)}${options.balanceClasses ? ", classes balanced" : ""}${options.labelSmoothing > 0 && options.lossType !== "margin" ? `, labels smoothed by ${options.labelSmoothing}` : ""}`);
+    report.log(`The head: a 1×1 convolution, ${head.inChannels} → ${head.outChannels} channels (${head.weightName}${head.biasName ? `, ${head.biasName}` : ", no bias"}, ${head.dtype}); ${options.epochs} epochs of ${count(options.batchPixels)} voxels per step, ${lossWords(options)}${options.balanceClasses ? ", classes balanced" : ""}${options.labelSmoothing > 0 && options.lossType !== "margin" ? `, labels smoothed by ${options.labelSmoothing}` : ""}`);
     if (channel !== null && head.outChannels > 1) report.log(`Training channel ${channel} (${run.entry.manifest.channels[channel] ?? "unnamed"}) alone, its row of the head; the other ${plural(head.outChannels - 1, "row")} ${head.outChannels === 2 ? "is" : "are"} kept as the model has them, and with them those channels' prediction`);
 
     // Where the distillation term applies (lora_trainer.py's scope): the
@@ -130,7 +131,8 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
         report.log(`chunk ${i}/${indices.length} [${sample.chunk.index.join(", ")}]: ${words}`);
       }
       if (!painted) throw new Error("no painted voxels: paint background (1) and objects (2 and up) on the annotation layer first, then train");
-      report.log(`${count(painted)} painted voxels in ${count(paintedChunks)} chunk${paintedChunks === 1 ? "" : "s"}; training the head`);
+      // The run's steps, and so its schedule, are known only now: the epochs pass over every painted voxel.
+      report.log(`${count(painted)} painted voxels in ${count(paintedChunks)} chunk${paintedChunks === 1 ? "" : "s"}; training the head at learning rate ${scheduleWords(options.learningRate, headSteps(painted, options))}`);
       if (pick && !held) report.log(`Distillation has no voxel to hold (${pick === "anchor" ? "every voxel of the good regions is painted" : "every voxel of the painted chunks is painted"}); training on the paint alone`);
       const pixels = concatPixels(sets, trainee);
       const heldSet = held ? concatDistillation(heldSets, trainee) : null;

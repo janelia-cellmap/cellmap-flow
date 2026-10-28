@@ -3,10 +3,12 @@
 // balanced or not, smoothed or not; checked by finite differences);
 // trainHead on separable data (a planted linear map plus noise) brings the
 // loss down and recovers the labels, its epoch line the one the dashboard's
-// loss plot parses; and with a distillation set and λ the head is held to
-// the teacher (the head it is given, whatever it starts from).
+// loss plot parses, its steps at the schedule's rates, the form's first and
+// the shared floor of it last; and with a distillation set and λ the head is
+// held to the teacher (the head it is given, whatever it starts from).
 import { describe, expect, it } from "vitest";
 
+import { PYTHON } from "../../src/generated/python-data";
 import { batchLoss, type DistillationSet, mulberry32, type PixelSet, trainHead } from "../../src/finetune/head-trainer";
 import { DEFAULT_OPTIONS, type FinetuneOptions, type Head, type RunReporter } from "../../src/finetune/types";
 
@@ -132,6 +134,23 @@ describe("trainHead", () => {
     expect(report.lines[0]).toMatch(/^Epoch 1\/30 - Loss: \d\.\d{6}$/);
     const parsed = EPOCH_LOSS.exec(report.lines[29])!;
     expect([parsed[1], parsed[2], Number(parsed[3])]).toEqual(["30", "30", Number(trained.losses[29].toFixed(6))]);
+  });
+
+  it("steps at the form's rate first and at the shared floor of it last", async () => {
+    // Nine copies of a voxel whose feature is 0: only the bias learns, and
+    // its gradient, σ(b) − 1, stays near −0.5 over steps this small, so each
+    // of Adam's steps moves it by that step's rate. A run is stopped after
+    // `steps` steps: cancelled() is asked before the epoch and after each.
+    const steps = 9, rate = 1e-3, floor = PYTHON.finetune.learning_rate_floor;
+    const pixels: PixelSet = { x: new Float32Array(steps), y: new Float32Array(steps).fill(1), m: new Float32Array(steps).fill(1), count: steps, inChannels: 1, outChannels: 1 };
+    const biasAfter = async (done: number) => {
+      let asked = 0;
+      const report = { log: () => {}, cancelled: () => asked++ === done };
+      const trained = await trainHead(pixels, head(1, 1), options({ epochs: 1, batchPixels: 1, learningRate: rate, lossType: "bce", labelSmoothing: 0 }), report);
+      return trained.bias[0];
+    };
+    expect((await biasAfter(1)) / rate).toBeCloseTo(1, 2);
+    expect(((await biasAfter(steps)) - (await biasAfter(steps - 1))) / (rate * floor)).toBeCloseTo(1, 2);
   });
 });
 

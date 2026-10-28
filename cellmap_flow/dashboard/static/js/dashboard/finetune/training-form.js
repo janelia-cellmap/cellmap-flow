@@ -1,7 +1,8 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
-// next to some of them, the Channel a model of several channels trains, and
-// the GPU queue picker.
+// next to some of them, the Learning Rates typed or picked from their
+// presets, the Channel a model of several channels trains, and the GPU
+// queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { createQueuePicker, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
@@ -103,6 +104,39 @@ function readPatchesPerEpochOverride() {
   return value;
 }
 
+// --- The Learning Rates ---------------------------------------------------
+//
+// A Learning Rate (learningRate: the server's, and the browser's last
+// layer's; learningRateFull: the browser's whole network's) takes any number
+// above 0, typed as 1e-4 or 0.0003, and has its presets beside it
+// (<id>Presets). Picking a preset types it in; the presets show the preset
+// typed, or Typed for any other rate. The field is what is saved and sent,
+// so a typed rate comes back as typed.
+function rateFields() {
+  return isBrowserMode() ? ["learningRate", "learningRateFull"] : ["learningRate"];
+}
+
+// Field `id`'s presets show the rate typed in it, or Typed.
+function showRatePreset(id) {
+  const presets = document.getElementById(`${id}Presets`);
+  const typed = Number(document.getElementById(id).value);
+  const preset = Array.from(presets.options).find((option) => option.value !== "" && Number(option.value) === typed);
+  presets.value = preset ? preset.value : "";
+}
+
+// The rate in field `id`. Throws an Error, saying why, for anything but a
+// number above 0 (empty, 0 or less, not a number): the routes refuse it
+// too, but say less. Number, not parseFloat, which reads "1e-4x" as 1e-4.
+function readRate(id) {
+  const typed = document.getElementById(id).value.trim();
+  const rate = Number(typed);
+  if (!typed || !Number.isFinite(rate) || rate <= 0) {
+    const why = !typed ? "it is empty" : Number.isFinite(rate) ? `${typed} is not above 0` : `"${typed}" is not a number`;
+    throw new Error(`Learning Rate: ${why}. Type a number above 0, such as 1e-4 or 0.0003, or pick one of its presets.`);
+  }
+  return rate;
+}
+
 function readRehearsalFractionOverride() {
   const raw = document.getElementById("rehearsalFraction").value.trim();
   // Blank means "leave the manifest alone"; "0" is a real choice (train
@@ -128,7 +162,8 @@ function trainingParams() {
     lora_r: parseInt(document.getElementById("loraRank").value),
     num_epochs: parseInt(document.getElementById("numEpochs").value),
     batch_size: parseInt(document.getElementById("batchSize").value),
-    learning_rate: parseFloat(document.getElementById("learningRate").value),
+    // The browser's whole network has a Learning Rate of its own.
+    learning_rate: readRate(isBrowserMode() && document.getElementById("finetuneMode").value === "full" ? "learningRateFull" : "learningRate"),
     loss_type: document.getElementById("lossType").value,
     distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
     distillation_scope: document.getElementById("distillationScope").value,
@@ -144,8 +179,8 @@ function trainingParams() {
   }
   // Browser mode: what trains (the Training field); for the head, its
   // batch in voxels per step, its own field; for the whole network, its
-  // learning rate, its tile side and the batch above, in tiles, and
-  // augmentation. The server-only fields above go too and the page's
+  // learning rate (read above), its tile side and the batch above, in tiles,
+  // and augmentation. The server-only fields above go too and the page's
   // routes ignore them (web/src/backend/routes/finetune.ts readTraining).
   // The Loss Function offers the head's losses there (BCE, MSE, margin) and
   // is read as on the server, by both.
@@ -153,7 +188,6 @@ function trainingParams() {
     const mode = document.getElementById("finetuneMode").value;
     params.finetune_mode = mode;
     if (mode === "full") {
-      params.learning_rate = parseFloat(document.getElementById("learningRateFull").value);
       const tile = parseInt(document.getElementById("tileSize").value, 10);
       if (Number.isInteger(tile)) params.tile_size = tile;
     } else {
@@ -559,6 +593,20 @@ export function initTrainingForm() {
   if (saved) applySavedState(saved);
   // A restored loss sets the field without a change event.
   updateMarginVisibility();
+
+  // A preset picked is typed into its Learning Rate; the presets follow
+  // what is typed, and what was restored.
+  for (const id of rateFields()) {
+    const presets = document.getElementById(`${id}Presets`);
+    presets.addEventListener("change", () => {
+      const field = document.getElementById(id);
+      if (presets.value === "") return field.focus();  // Typed: type one
+      field.value = presets.value;
+      saveFinetuneState();
+    });
+    document.getElementById(id).addEventListener("input", () => showRatePreset(id));
+    showRatePreset(id);
+  }
 
   // A Channel picked by hand is the one the viewer shows too.
   const channel = document.getElementById("trainChannel");

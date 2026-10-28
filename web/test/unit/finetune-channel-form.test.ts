@@ -7,7 +7,10 @@
 // while the Channel still holds the old model's channels; and Use this
 // model's pick for a model not picked yet (pickChannel) is its Channel once
 // it is, where Fit to Paint's (fillChannel) only fills a Channel nothing is
-// picked in. A wrong channel here trains the wrong one without a word.
+// picked in. A wrong channel here trains the wrong one without a word. And
+// its Learning Rate, typed rather than picked from presets: sent as typed,
+// put back as typed when the page loads again, and refused, saying why,
+// when it is not a number above 0.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -65,6 +68,7 @@ async function setUp() {
   };
   element("page-data").textContent = JSON.stringify({ mode: "server" });
   element("trainChannel").options = [new FakeOption("Best match for your paint", "")];
+  element("learningRate").value = "0.0001";  // the template's
   const stored = new Map<string, string>();
   vi.stubGlobal("window", { localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) } });
   vi.stubGlobal("document", { getElementById: element, hidden: false, addEventListener: () => {}, removeEventListener: () => {} });
@@ -119,4 +123,19 @@ it("sends the Channel picked for the model picked, kept per model", async () => 
   pick({ name: "affinities", channel_choice: false, output_channels: 3 });
   expect(element("trainChannelGroup").hidden).toBe(true);
   expect(form.trainingParams()).not.toHaveProperty("select_channel");
+});
+
+it("sends the Learning Rate typed, puts it back on the next load, and refuses one not above 0", async () => {
+  const { element, module, form } = await setUp();
+  const rate = element("learningRate");
+  rate.value = "3e-4";
+  expect(form.trainingParams().learning_rate).toBe(0.0003);
+  form.save();
+  rate.value = "0.0001";  // the template's, as a page loaded again has it
+  module.initTrainingForm();
+  expect(rate.value).toBe("3e-4");
+  for (const bad of ["", "0", "-1e-4", "fast"]) {
+    rate.value = bad;
+    expect(() => form.trainingParams()).toThrow(/Learning Rate/);
+  }
 });
