@@ -3,8 +3,8 @@
 // fixture's 1×6×6 output) and the real feature runner, head finder, trainer
 // and weight writer. The run trains the epochs asked with the dashboard's
 // epoch lines, and the Finetuned's bytes, the trained head in them, run in
-// onnxruntime; a volume with no paint is refused; the run starts from
-// initialHead when given; a cancel ends it early; the runner is released
+// onnxruntime; a volume with no paint is refused; a cancel ends it
+// early; the runner is released
 // however the run ends. Distillation, on by default, holds the painted
 // chunks' unpainted voxels; with good regions it holds their unpainted
 // voxels instead, running the model on a region's block nothing was painted
@@ -161,15 +161,6 @@ describe("runFinetune", () => {
     expect(disposed.count).toBe(1);
   }, 60000);
 
-  it("starts from initialHead when given", async () => {
-    const { paint, collectSamples } = await painted(CHUNKS);
-    const initialHead = { weight: Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]), bias: Float32Array.from([-1, 1]) };
-    const finetuned = await createRunFinetune(deps(collectSamples, { count: 0 }))(run({ initialHead, options: { ...DEFAULT_OPTIONS, epochs: 1, learningRate: 1e-9, batchPixels: 64 } }, paint, reporter()));
-    expect(Array.from(finetuned.weight).map((w) => Math.round(w))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(Array.from(finetuned.bias).map((b) => Math.round(b))).toEqual([-1, 1]);
-    expect(Array.from(headOf(finetuned.bytes).weight).map((w) => Math.round(w))).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-  }, 60000);
-
   it("stops early when cancelled, keeping what was trained", async () => {
     const { paint, collectSamples } = await painted(CHUNKS);
     const disposed = { count: 0 };
@@ -244,11 +235,5 @@ describe("runFinetune of one channel", () => {
     expect(written.bias[1]).not.toBe(base.bias[1]);
     expect(finetuned.losses[7]).toBeLessThan(finetuned.losses[0]);
 
-    // A restart's start is the last run's head: its other row is kept, not the model's.
-    const initialHead = { weight: Float32Array.from([1, 2, 3, 4, 5, 6, 7, 8]), bias: Float32Array.from([-1, 1]) };
-    const again = await createRunFinetune(oneChannelDeps(collectSamples))(run({ initialHead, options: { ...options, selectChannel: 0 } }, paint, reporter()));
-    expect(bitsOf(again.weight.subarray(cin))).toEqual(bitsOf(initialHead.weight.subarray(cin)));
-    expect(again.bias[1]).toBe(1);
-    expect(Array.from(again.weight.subarray(0, cin))).not.toEqual([1, 2, 3, 4]);
   }, 60000);
 });

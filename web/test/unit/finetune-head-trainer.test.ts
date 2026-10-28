@@ -142,18 +142,17 @@ function heldRows(count: number, inChannels: number, outChannels: number, seed: 
 }
 
 describe("trainHead with distillation", () => {
-  it("holds the head to the teacher, the head it is given, wherever it starts from", async () => {
-    // Nothing supervised (every mask 0): distillation alone moves the head.
-    const pixels = { ...separable(400, 3, 1, 7), m: new Float32Array(400) };
+  it("holds the head to the teacher, the head it starts from, against the paint", async () => {
+    // The paint's planted map is another head than the teacher's: free, the
+    // head leaves the teacher for it; distilled, it stays near.
+    const pixels = separable(400, 3, 1, 7);
     const teacher = head(3, 1, [1, -2, 0.5], [0.25]);
-    const start = { weight: Float32Array.from([0, 0, 0]), bias: Float32Array.from([0]) };
     const held = heldRows(500, 3, 1, 8);
-    const trained = await trainHead(pixels, teacher, options({ epochs: 150, learningRate: 0.05, batchPixels: 100, distillationLambda: 1 }), reporter(), start, held);
-    Array.from(trained.weight).forEach((w, i) => expect(w).toBeCloseTo(teacher.weight[i], 2));
-    expect(trained.bias[0]).toBeCloseTo(0.25, 2);
-    expect(trained.supervised.every((loss) => loss === 0)).toBe(true);
-    // At λ 0 nothing moves it.
-    const still = await trainHead(pixels, teacher, options({ epochs: 5, distillationLambda: 0 }), reporter(), start, held);
-    expect(Array.from(still.weight)).toEqual([0, 0, 0]);
+    const away = (t: { weight: Float32Array; bias: Float32Array }) =>
+      Math.hypot(...Array.from(t.weight, (w, i) => w - teacher.weight[i]), t.bias[0] - teacher.bias[0]);
+    const train = (lambda: number) => trainHead(pixels, teacher, options({ epochs: 60, learningRate: 0.05, batchPixels: 100, distillationLambda: lambda }), reporter(), held);
+    const free = await train(0), distilled = await train(10);
+    expect(away(free)).toBeGreaterThan(0.5);
+    expect(away(distilled)).toBeLessThan(away(free) / 3);
   });
 });
