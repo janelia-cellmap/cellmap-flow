@@ -594,7 +594,7 @@ export function initAiAnnotate({ log }) {
       statusLine.textContent = `Failed: ${d.error || "no reason given"}`;
       // Shift+G with no annotation volume: offer one, once, as it happens
       // (not again for an old refusal found when the page loads).
-      if (d.needs_volume && was.status !== null && was.status !== "failed") offerNewVolume(`Could not start AI annotation: ${d.error}`);
+      if (d.needs_volume && was.status !== null && was.status !== "failed") offerNewVolume(`Could not start AI annotation: ${d.error}`, () => runBtn.click());
       summaryStatus.textContent = "failed";
       review.hidden = true;
       // A resend that failed: say so in the popup too, where the user is.
@@ -679,7 +679,7 @@ export function initAiAnnotate({ log }) {
         showError(d.error);
         log.add(`Could not start AI annotation: ${d.error}`);
         log.showEnd();
-        if (d.needs_volume) offerNewVolume(`Could not start AI annotation: ${d.error}`);
+        if (d.needs_volume) offerNewVolume(`Could not start AI annotation: ${d.error}`, () => runBtn.click());
         return;
       }
       started(d, "AI annotation started at the view centre");

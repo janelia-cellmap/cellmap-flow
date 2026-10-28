@@ -239,7 +239,7 @@ export function initLabelIt({ log }) {
         if (d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         if (!d.success) {
           log.add(`Could not ${what}: ${d.error}`);
-          if (d.needs_volume) offerNewVolume(`Could not ${what}: ${d.error}`);
+          if (d.needs_volume) offerNewVolume(`Could not ${what}: ${d.error}`, () => labelView(button, url, what, describe, confirmed, body));
           else alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
           log.add(describe(d, body) + (d.layer_refreshed ? "" : "; reloading the viewer"));

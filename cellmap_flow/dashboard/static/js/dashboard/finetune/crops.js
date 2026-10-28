@@ -6,7 +6,7 @@
 import { esc, setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readText, writeText } from "../../lib/stored.js";
-import { getAnswer, postAnswer, watchProgress } from "./requests.js";
+import { VOLUME_CREATED, getAnswer, postAnswer, watchProgress } from "./requests.js";
 
 // A crop import's progress, as the status line shows it.
 function describeCropImport(p) {
@@ -142,6 +142,8 @@ export function initCrops({ log, picker, form, grid }) {
   // the level on screen), a volume Which model to start from's Use this
   // model later copies onto a model's grid to train.
   const createVolumeBtn = document.getElementById("createVolumeBtn");
+  // What the click came to, for what offered it (requests.js offerNewVolume).
+  const made = (ok) => document.dispatchEvent(new CustomEvent(VOLUME_CREATED, { detail: { ok } }));
   createVolumeBtn.addEventListener("click", function() {
     const selectedModel = picker.selected();
     let voxelSize = null;
@@ -150,6 +152,7 @@ export function initCrops({ log, picker, form, grid }) {
         voxelSize = grid.voxelSize();
       } catch (err) {
         alert(err.message);
+        made(false);
         return;
       }
     }
@@ -159,6 +162,7 @@ export function initCrops({ log, picker, form, grid }) {
     const outputPath = browser ? "" : outputPathInput.value.trim();
     if (!outputPath && !browser) {
       alert("Please specify an output path for the zarr files");
+      made(false);
       return;
     }
 
@@ -206,10 +210,12 @@ export function initCrops({ log, picker, form, grid }) {
         } else {
           log.add(`✗ Error: ${data.error}`);
         }
+        made(data.success);
       })
       .catch(err => {
         log.add(`✗ Error: ${err}`);
         console.error(err);
+        made(false);
       })
       .finally(() => setBusy(createVolumeBtn, false));
   });

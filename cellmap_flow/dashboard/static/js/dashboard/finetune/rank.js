@@ -980,7 +980,9 @@ export function initRank({ form }) {
       const d = await score({ name });
       if (!isScored(d)) {
         sayFit(`Could not fit ${name} to your paint: ${d.error}`, "danger");
-        if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
+        // A new volume has no paint to fit to yet.
+        if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`,
+          () => sayFit("The annotation volume is made: paint on it, then fit."));
         return;
       }
       await applyRow(name, d, false);
