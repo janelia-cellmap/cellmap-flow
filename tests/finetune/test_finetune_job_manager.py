@@ -20,6 +20,7 @@ from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.site import JANELIA
 from cellmap_flow.jobs.spec import JobStatus as LSF
 from cellmap_flow.serving.protocol import IP_PATTERN
+from tests.threads import patch_sleep
 
 URL = "http://node7:8123"
 
@@ -192,7 +193,7 @@ def _monitor(manager, job, chunks, monkeypatch):
         with open(job.log_file, "ab") as f:
             f.write(next(rest, b""))
 
-    monkeypatch.setattr(monitor.time, "sleep", sleep)
+    patch_sleep(monkeypatch, monitor, sleep)
     manager.monitor_job(job)
     return seen
 

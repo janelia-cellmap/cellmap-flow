@@ -22,6 +22,7 @@ from cellmap_flow.ai_annotate import secrets
 from cellmap_flow.dashboard.routes.finetune import publish as routes
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune import distill, export_web
+from tests.threads import patch_sleep
 
 TOKEN = "hf_pasted0123456789abcdefghijklmnopqrst"
 SAVED = "hf_saved00123456789abcdefghijklmnopqrst"
@@ -290,7 +291,7 @@ def _device_endpoints(monkeypatch, token_answers):
         return SimpleNamespace(json=lambda: body, status_code=400 if "error" in body else 200)
 
     monkeypatch.setattr(routes.requests, "post", post)
-    monkeypatch.setattr(routes.time, "sleep", lambda seconds: asked.append(("slept", seconds)))
+    patch_sleep(monkeypatch, routes, lambda seconds: asked.append(("slept", seconds)))
     monkeypatch.setattr(routes, "HF_OAUTH_CLIENT_ID", "https://app.example/.well-known/oauth-cimd")
     return asked
 
@@ -349,7 +350,7 @@ def test_a_smaller_copy_follows_the_model_in_a_commit_of_its_own_and_the_panel_f
     served.running = {"model": [queued, {**queued, "queued": False}], "small": [training]}
     # Between two asks of a job, the panel asks how the publish is going.
     polled = []
-    monkeypatch.setattr(routes.time, "sleep", lambda seconds: polled.append(dashboard.get(PUBLISH).get_json()))
+    patch_sleep(monkeypatch, routes, lambda seconds: polled.append(dashboard.get(PUBLISH).get_json()))
 
     dashboard.post(PUBLISH, json={"small_copy": True})
 
