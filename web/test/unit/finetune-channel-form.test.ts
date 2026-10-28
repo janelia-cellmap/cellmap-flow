@@ -11,11 +11,14 @@
 // its Learning Rate, typed rather than picked from presets: sent as typed,
 // put back as typed when the page loads again, and refused, saying why,
 // when it is not a number above 0; its Ease down box, sent as the schedule
-// (cosine ticked, constant not) and put back as it was left.
+// (cosine ticked, constant not) and put back as it was left. And Restart's
+// confirm (job-monitor.js restartSummary), which lists what the run reads:
+// in the browser's runs the loss and distillation too, and the channel picked.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
 const TRAINING_FORM = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/dashboard/finetune/training-form.js", import.meta.url));
+const JOB_MONITOR = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/dashboard/finetune/job-monitor.js", import.meta.url));
 
 interface TrainingForm {
   initTrainingForm: () => { save: () => void; trainingParams: () => Record<string, unknown> };
@@ -125,6 +128,24 @@ it("sends the Channel picked for the model picked, kept per model", async () => 
   pick({ name: "affinities", channel_choice: false, output_channels: 3 });
   expect(element("trainChannelGroup").hidden).toBe(true);
   expect(form.trainingParams()).not.toHaveProperty("select_channel");
+});
+
+it("lists in Restart's confirm what the run reads: the browser's loss and distillation, and the channel picked", async () => {
+  const { element } = await setUp();
+  element("trainChannel").options.push(new FakeOption("mito (1)", "1"));
+  const { restartSummary } = (await import(/* @vite-ignore */ JOB_MONITOR)) as { restartSummary: (body: Record<string, unknown>, browser: boolean) => string };
+  const body = {
+    finetune_mode: "full", loss_type: "bce", learning_rate: 0.0001, learning_rate_schedule: "cosine", num_epochs: 20, batch_size: 1,
+    tile_size: 172, distillation_lambda: 0, distillation_scope: "unlabeled", label_smoothing: 0, balance_classes: true, augment: false,
+  };
+  // The confirm's rows, label to value ("distillation:  0 (unlabeled)").
+  const rows = (text: string) => Object.fromEntries(text.split("\n").slice(2).filter(Boolean).map((line) => line.trim().split(/:\s+/)));
+
+  const full = rows(restartSummary(body, true));
+  expect(full).toMatchObject({ training: "whole network", loss: "bce", distillation: "0 (unlabeled)", augment: "false" });
+  expect(full).not.toHaveProperty("channel");  // the model trains its channels together
+  expect(rows(restartSummary({ ...body, finetune_mode: "head" }, true)).distillation).toBe("0 (unlabeled)");
+  expect(rows(restartSummary({ ...body, select_channel: 1 }, false)).channel).toBe("mito (1)");
 });
 
 it("sends the Learning Rate typed and its Ease down, puts both back on the next load, and refuses a rate not above 0", async () => {
