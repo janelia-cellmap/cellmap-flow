@@ -155,6 +155,18 @@ test.describe("AI-assisted annotation in the browser", () => {
       const fromKey = await api<Status>(page, "/api/finetune/ai-annotate/status");
       expect(fromKey.annotate_id).not.toBe(ready.annotate_id);
       expect(fromKey.plane).toBe("YZ");
+
+      // The review closed with its result unanswered: Annotate is not held by
+      // it (it was greyed out, with no word of why), and sets it aside first.
+      await expect(page.locator("#aiAnnotateReviewModal")).toHaveClass(/\bshow\b/, { timeout: 30_000 });
+      await page.click("#aiAnnotateReviewModal .modal-header .btn-close");
+      await expect(page.locator("#aiAnnotateReviewModal")).not.toHaveClass(/\bshow\b/, { timeout: 30_000 });
+      await expect(page.locator("#aiAnnotateRunBtn")).toBeEnabled();
+      await page.click("#aiAnnotateRunBtn");
+      await expect(page.locator("#finetuneLog")).toHaveValue(/Rejected the AI annotation waiting for review, to annotate again/, { timeout: SLOW_MS });
+      await expect(page.locator("#aiAnnotateStatus")).toHaveText(/^Ready/, { timeout: SLOW_MS });
+      const again = await api<Status>(page, "/api/finetune/ai-annotate/status");
+      expect(again.annotate_id).not.toBe(fromKey.annotate_id);
       await page.click("#aiAnnotateRejectBtn");
       await expect(page.locator("#finetuneLog")).toHaveValue(/Rejected the AI annotation: nothing was written/, { timeout: SLOW_MS });
       expect((await api<Status>(page, "/api/finetune/ai-annotate/status")).status).toBe("idle");

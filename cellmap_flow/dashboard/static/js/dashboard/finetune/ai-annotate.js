@@ -547,8 +547,11 @@ export function initAiAnnotate({ log }) {
 
     statusLine.classList.toggle("text-danger", d.status === "failed");
     statusLine.classList.toggle("text-muted", d.status !== "failed");
-    // One job at a time: a result waits to be accepted or rejected first.
-    runBtn.disabled = d.status === "running" || d.status === "ready";
+    // One job at a time. A result waiting for review does not hold Annotate:
+    // pressing it sets the result aside first (its click), as closing the
+    // review, which keeps the result, left Annotate greyed out with no word
+    // of why.
+    runBtn.disabled = d.status === "running";
 
     // While a job runs, a popup left open (a resend) keeps the old result,
     // dimmed, under the stage; it cannot be accepted until the new one is in.
@@ -565,7 +568,7 @@ export function initAiAnnotate({ log }) {
       summaryStatus.textContent = "running";
       review.hidden = true;
     } else if (d.status === "ready") {
-      statusLine.textContent = "Ready: the review opens over the page (Review Result opens it again).";
+      statusLine.textContent = "Ready: the review opens over the page (Review Result opens it again; Annotate again sets it aside).";
       modalStatus.textContent = "";
       summaryStatus.textContent = "ready to review";
       if (isNew) {
@@ -657,6 +660,17 @@ export function initAiAnnotate({ log }) {
         if (first) first.focus();
         return;
       }
+      // A result still waiting for review (its popup closed, not answered):
+      // the routes run one job at a time, so it is rejected first.
+      if (last.status === "ready") {
+        const rejected = await postAnswer(`${BASE}/reject`, { annotate_id: last.annotate_id });
+        if (!rejected.success) {
+          showError(`Could not set aside the AI annotation waiting for review: ${rejected.error}`);
+          return;
+        }
+        closeReview();
+        log.add("Rejected the AI annotation waiting for review, to annotate again: nothing of it was written");
+      }
       const d = await postAnswer(`${BASE}/run`, {});
       if (d.needs_acknowledgement) {
         acknowledged = acknowledged.filter((id) => id !== providerSelect.value);
@@ -674,7 +688,7 @@ export function initAiAnnotate({ log }) {
       showError(`Could not start AI annotation: ${e}`);
     } finally {
       setBusy(runBtn, false);
-      runBtn.disabled = last.status === "running" || last.status === "ready";
+      runBtn.disabled = last.status === "running";
     }
   });
 
