@@ -131,6 +131,7 @@ export interface FinetuneOptions {
    * own batch and tile below, and augmentation, but not batchPixels. */
   mode: FinetuneMode;
   epochs: number;
+  /** The rate a run starts at: it eases down to LEARNING_RATE_FLOOR of it by its last step (schedule.ts). */
   learningRate: number;
   /** The supervised loss on the painted voxels (HeadLoss). */
   lossType: HeadLoss;

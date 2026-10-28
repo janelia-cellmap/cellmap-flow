@@ -1,6 +1,6 @@
 """Finetuner on the CPU: what it distils toward, how it reads the model's
-output, how a run survives a NaN or an OOM, and what its single-class
-warning goes by."""
+output, the learning rate it steps at, how a run survives a NaN or an OOM,
+and what its single-class warning goes by."""
 
 import logging
 
@@ -161,6 +161,28 @@ def test_training_one_channel_holds_the_others_where_they_were(make_trainer):
     with torch.no_grad():
         moved = (model(raw) - start).abs().mean(dim=(0, 2, 3, 4))
     assert moved[1] > 5 * max(moved[0], moved[2])
+
+
+def test_the_learning_rate_eases_from_the_forms_down_to_its_floor(make_trainer):
+    """Every step trained at the form's rate. The first takes it now and the
+    last LEARNING_RATE_FLOOR of it, the steps counted as gradient
+    accumulation makes them (three batches two at a time: two steps an epoch,
+    the second a partial accumulation); a step past the count, which an OOM's
+    halved batch makes, stays at the floor."""
+    from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
+    from cellmap_flow.finetune.trainer.loop import learning_rate_factor
+
+    ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, gradient_accumulation_steps=2,
+                           learning_rate=1e-2, target_transform=BinaryTargetTransform())
+    rates = []
+    trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
+    assert not trainer.train().get("diverged")
+    assert len(rates) == 6
+    assert rates[0] == pytest.approx(1e-2)
+    assert rates[-1] == pytest.approx(1e-2 * LEARNING_RATE_FLOOR)
+    assert rates == sorted(rates, reverse=True)
+    assert learning_rate_factor(9, 6) == pytest.approx(LEARNING_RATE_FLOOR)
 
 
 class _OutOfMemory(nn.Module):

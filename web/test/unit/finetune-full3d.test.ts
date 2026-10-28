@@ -108,15 +108,15 @@ describe("net3d's lean training step", () => {
         return v;
       });
 
-      const lean = buildNet3d(tf, graph, weights, { trainable, learningRate: lr });
-      const teacher = buildNet3d(tf, graph, weights, { learningRate: 0 });
+      const lean = buildNet3d(tf, graph, weights, { trainable });
+      const teacher = buildNet3d(tf, graph, weights, { trainable: new Set() });
       // The teacher runs forward only, as the plain network did before its steps.
       const before = buildNet(tf, graph, weights);
       const z0 = teacher.forward(x), z1 = tf.tidy(() => before.forward(x)), z2 = await teacher.forwardAsync(x);
       expect(maxAbs(z0.dataSync(), z1.dataSync())).toBeLessThan(1e-5);
       expect(Array.from(z2.dataSync())).toEqual(Array.from(z0.dataSync()));
       tf.dispose([z0, z1, z2]);
-      await expect(teacher.step(x, () => { throw new Error("not called"); })).rejects.toThrow(/forward only/);
+      await expect(teacher.step(x, () => { throw new Error("not called"); }, lr)).rejects.toThrow(/forward only/);
       before.dispose();
 
       const leanLosses: number[] = [];
@@ -124,7 +124,7 @@ describe("net3d's lean training step", () => {
         const terms = await lean.step(x, (z) => {
           const supervised = maskedBce(tf, z, target, mask);
           return { total: tf.clone(supervised), supervised, distillation: null, otherChannels: null };
-        });
+        }, lr);
         expect(terms.supervised).toBeCloseTo(terms.total, 6);
         leanLosses.push(terms.total);
       }

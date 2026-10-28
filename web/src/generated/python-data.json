@@ -413,6 +413,7 @@
       5.75,
       6.0
     ],
+    "learning_rate_floor": 0.1,
     "job_statuses": [
       "PENDING",
       "RUNNING",

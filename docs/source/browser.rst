@@ -157,8 +157,10 @@ model*: that copies the paint onto the chosen model's grid, and you train on
 the new volume.
 
 The training panel's controls are the server's where they mean something for
-one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
-margin; Dice scores whole patches and needs the server), label smoothing,
+one layer: the epochs, the learning rate (1e-2 by default; type any number
+above 0 or pick a preset; each run eases it down along half a cosine to a
+tenth of it by its last step, as on the server), the loss (BCE by default,
+MSE or margin; Dice scores whole patches and needs the server), label smoothing,
 class balance, and *Distillation Weight* and *Scope*, which keep the layer
 close to the model's own output where you painted nothing: the loss adds the
 weight times the mean squared distance of the layer's logits from the
@@ -283,8 +285,9 @@ A 2D model's whole network trains on square tiles cut from the painted
 slices, in the plane you painted in (x–y, or z–y and z–x where the raw data's
 voxels are cubes, as the server's 2D training does), with Adam; a 3D model's
 on cubes around the paint (below). Its controls are the
-epochs, its own learning rates (1e-4 by default, a hundredth of the last
-layer's), the server's *Batch Size*, in tiles per step (1 by default), *Tile
+epochs, its own learning rate (1e-4 by default, a hundredth of the last
+layer's, eased down to a tenth of it over the run as the last layer's is),
+the server's *Batch Size*, in tiles per step (1 by default), *Tile
 Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
 balance fields, which it reads as the last layer does. Distillation holds the
 model to the starting network's output on the voxels its scope picks in each

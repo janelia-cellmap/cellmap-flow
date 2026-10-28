@@ -1,6 +1,7 @@
 // The head trained on the painted voxels: their features gathered from each
 // chunk's feature map into one matrix (gatherPixels), then the head's
-// weights fitted to their targets with Adam on a masked, class-balanced
+// weights fitted to their targets with Adam, its rate eased down over the
+// run as the server's is (schedule.ts), on a masked, class-balanced
 // loss (trainHead): BCE-with-logits by default, label-smoothed, or the
 // server's MSE on probabilities or margin loss (batchLoss), each the server
 // trainer's (cellmap_flow/finetune/lora_trainer.py with losses.py's
@@ -19,6 +20,7 @@
 // reaches the job card as the epochs end, and a cancel gets through.
 // Everything is deterministic for a seed: the shuffles are mulberry32's,
 // the arithmetic doubles in one order.
+import { learningRateAt } from "./schedule";
 import type { FinetuneOptions, Head, HeadLoss, ModelFeatures, RunReporter, Targets } from "./types";
 
 /** The painted voxels of one or more chunks: `count` rows of the head's
@@ -255,10 +257,18 @@ function teacherLogits(held: DistillationSet, teacher: { weight: Float32Array; b
  * it did before there was any. */
 const DISTILLATION_STREAM = 0x9e3779b9;
 
+/** The Adam steps trainHead takes on `count` painted voxels: an epoch's
+ * batches of `options.batchPixels` (its last one short), times the epochs.
+ * The learning rate eases over them (schedule.ts). */
+export function headSteps(count: number, options: Pick<FinetuneOptions, "epochs" | "batchPixels">): number {
+  return options.epochs * Math.ceil(count / Math.min(options.batchPixels, count));
+}
+
 /** The head fitted to `pixels` from its own weights: `options.epochs` passes over the rows in a seeded shuffle,
- * `options.batchPixels` rows per Adam step (lr `options.learningRate`,
- * betas 0.9 and 0.999, eps 1e-8, PyTorch's defaults), the loss of
- * `batchLoss`.
+ * `options.batchPixels` rows per Adam step (betas 0.9 and 0.999, eps 1e-8,
+ * PyTorch's defaults), at `options.learningRate` eased down to
+ * LEARNING_RATE_FLOOR of it by the last step (schedule.ts learningRateAt,
+ * over headSteps), the loss of `batchLoss`.
  *
  * With `distillation` and λ (`options.distillationLambda`) above 0, each
  * step's loss adds λ × distillationTerm on a share of the distillation
@@ -300,7 +310,8 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
   const w = Float64Array.from(head.weight), b = Float64Array.from(head.bias);
   const mw = new Float64Array(w.length), vw = new Float64Array(w.length), mb = new Float64Array(b.length), vb = new Float64Array(b.length);
   const gw = new Float64Array(w.length), gb = new Float64Array(b.length);
-  const beta1 = 0.9, beta2 = 0.999, eps = 1e-8, lr = options.learningRate;
+  const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
+  const runSteps = headSteps(count, options);
   let step = 0;
 
   const batch = Math.min(options.batchPixels, count);
@@ -375,7 +386,8 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
           }
         }
       }
-      // Adam, as torch.optim.Adam steps it.
+      // Adam, as torch.optim.Adam steps it, at this step's rate.
+      const lr = learningRateAt(options.learningRate, step, runSteps);
       step++;
       const correction1 = 1 - beta1 ** step, correction2 = 1 - beta2 ** step;
       adam(w, gw, mw, vw, lr, beta1, beta2, eps, correction1, correction2);
