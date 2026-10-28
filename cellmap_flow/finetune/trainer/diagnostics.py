@@ -1,6 +1,6 @@
-"""What the log says about a run's health, apart from its loss: whether the
-target has two classes at all, and whether backward reaches the trainable
-parameters. Neither ever stops training."""
+"""What the log says about a run's health, apart from its loss: whether both
+classes are annotated at all, what the first batch supervises, and whether
+backward reaches the trainable parameters. None of it ever stops training."""
 
 import logging
 
@@ -9,21 +9,11 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-def warn_if_single_class(target, mask):
-    """Say so when every supervised voxel carries the same label.
+def describe_first_batch(target, mask):
+    """Say how many voxels the first batch supervises, and how many are positive.
 
-    Gradient descent can only do one thing with a target that is all 1:
-    raise the prediction everywhere. The model duly does that, globally,
-    and the result is worse than the model you started from -- with a
-    loss curve that looks unremarkable, because a one-class problem is
-    genuinely easy to reduce.
-
-    The usual cause is painting only foreground. An affinity target needs
-    both: foreground says "these voxels are one object", background says
-    "this is not object, and these two are not joined". Without the
-    second, nothing anywhere says 0. (Flow targets are not 0/1 classes: an
-    instance patch with no background painted still teaches each object's
-    flows, so the flow loss skips this check.)
+    One batch is a few patches of the epoch's draw, so it may well hold one
+    class only; whether the annotations do is warn_if_single_class's.
     """
     try:
         with torch.no_grad():
@@ -40,26 +30,46 @@ def warn_if_single_class(target, mask):
                     "overlap the sampled patches."
                 )
                 return
-            frac = positive / supervised
-            logger.info(f"Supervised target: {supervised:.0f} voxels, {100 * frac:.1f}% positive")
-            if frac > 0.999 or frac < 0.001:
-                only = "positive (1)" if frac > 0.5 else "negative (0)"
-                missing = "background" if frac > 0.5 else "foreground"
-                logger.warning(
-                    "=" * 70 + "\n"
-                    f"EVERY supervised voxel is {only}. This run cannot "
-                    "teach the model a boundary:\n"
-                    "gradient descent will simply push the prediction that "
-                    "way everywhere, and\n"
-                    f"the result will be worse than the model you started "
-                    f"from.\n\n"
-                    f"Paint some {missing} as well, and put it where it "
-                    "decides something --\n"
-                    "between two objects that touch, and on the things "
-                    "being confused for one.\n" + "=" * 70
-                )
+            logger.info(f"First batch: {supervised:.0f} supervised voxels, {100 * positive / supervised:.1f}% positive")
     except Exception as e:  # never let a diagnostic stop training
-        logger.debug(f"Single-class check failed: {e}")
+        logger.debug(f"First-batch check failed: {e}")
+
+
+def warn_if_single_class(background, foreground):
+    """Say so when every annotated voxel carries the same label.
+
+    ``background`` and ``foreground`` count the voxels annotated as each in
+    the whole volume (the dataset's ``class_voxels``). This went by the
+    first batch, and warned in every iteration of a session painted with
+    both, whose first eight patches happened to hold no background.
+
+    Gradient descent can only do one thing with a target that is all 1:
+    raise the prediction everywhere. The model duly does that, globally,
+    and the result is worse than the model you started from -- with a
+    loss curve that looks unremarkable, because a one-class problem is
+    genuinely easy to reduce.
+
+    The usual cause is painting only foreground. An affinity target needs
+    both: foreground says "these voxels are one object", background says
+    "this is not object, and these two are not joined". Without the
+    second, nothing anywhere says 0. (Flow targets are not 0/1 classes: an
+    instance patch with no background painted still teaches each object's
+    flows, so the flow loss skips this check.)
+    """
+    if (background > 0) == (foreground > 0):  # both annotated, or nothing is
+        return
+    only, missing, way = ("foreground", "background", "up") if foreground else ("background", "foreground", "down")
+    logger.warning(
+        "=" * 70 + "\n"
+        f"Nothing is annotated as {missing}: all {background + foreground} annotated "
+        f"voxels are {only}.\n"
+        "This run cannot teach the model a boundary: gradient descent will "
+        f"simply push\nthe prediction {way} everywhere, and the result will be "
+        "worse than the model you\nstarted from.\n\n"
+        f"Paint some {missing} as well, and put it where it decides something --\n"
+        "between two objects that touch, and on the things being confused for one.\n"
+        + "=" * 70
+    )
 
 
 class GradientFlow:

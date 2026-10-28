@@ -150,6 +150,9 @@ def hub(tmp_path, monkeypatch):
 def test_a_hub_folder_serves_fp32_at_its_largest_block_by_default(hub, ort):
     ort.graph = ([arg("input", [1, 1, 148, 148, 148])], [arg("output", [1, 3, 60, 60, 60])])
     model = registry.build_model({"type": "onnx", "folder": "setup_54"}, "mito")
+    # As the dashboard lists it before its server is up: from the manifest alone.
+    assert model.declared_geometry() == {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3}
+    assert hub == [("cellmap/onnx-web-models", "setup_54/manifest.json", None)] and not ort.sessions
     assert _geometry(model) == ((16, 16, 16), (16, 16, 16), (2368,) * 3, (960,) * 3,
                                 ["mito_aff_z", "mito_aff_y", "mito_aff_x"], [60, 60, 60, 3])
     assert hub == [("cellmap/onnx-web-models", "setup_54/manifest.json", None),

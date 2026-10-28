@@ -22,6 +22,9 @@ Contract with the trainer:
 - An item is ``(raw, annotation)``, float32 tensors of shape
   ``(1, Z, Y, X)``, and a third, the anchor mask, once the session has a
   usable good region (``emits_anchor``).
+- ``class_voxels`` is (background, foreground): how many voxels of the whole
+  volume are annotated as each, which the trainer's single-class warning
+  goes by rather than by the patches an epoch happens to draw.
 - Loader workers are spawned, and each gets the dataset as a pickle, by its
   class path. The pools go with it; the arrays are opened in the worker.
 """
@@ -250,6 +253,11 @@ class VirtualPatchDataset(Dataset):
         its original 2-tuple contract.
         """
         return self.sampler.effective_rehearsal_fraction > 0.0 or self.sampler.effective_anchor_fraction > 0.0
+
+    @property
+    def class_voxels(self) -> Tuple[int, int]:
+        """(background, foreground): the voxels annotated as each (PatchSampler.class_voxels)."""
+        return self.sampler.class_voxels
 
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()

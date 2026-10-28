@@ -57,6 +57,15 @@ def test_a_background_fix_far_from_any_foreground_is_drawn(annotation_volume):
     assert any(1 in ann and 2 not in ann for ann in _drawn(dataset))
 
 
+def test_both_classes_are_counted_wherever_they_are_annotated(annotation_volume):
+    """What the single-class warning goes by. Neither pool holds a crop's
+    background, and the painted pool is only what lies outside every crop."""
+    labels = _labels(32, crop=(1, np.s_[:8, :8, :8]), inside=(2, np.s_[2:4, 2:4, 2:4]),
+                     painted=(1, np.s_[20:22, 20:22, 20:22]))
+    crop = {"annotation_offset_voxels": [0, 0, 0], "annotation_shape_voxels": [8, 8, 8]}
+    assert annotation_volume(labels, crops=[crop]).dataset().class_voxels == (8**3 - 8 + 8, 8)
+
+
 def _region(centre_voxel, id="r1"):
     """A 4-voxel box around ``centre_voxel``, the way the dashboard saves one."""
     return {"id": id, "label": "good", "offset_nm": [centre_voxel * 16.0 - 32.0] * 3, "shape_nm": [64.0] * 3}

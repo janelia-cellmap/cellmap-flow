@@ -89,8 +89,8 @@ POST_CHAIN = [
     ],
 )
 def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, chain, listed):
-    """The Input and Postprocess tabs show the chain that runs, ticked and
-    with its values, so Submit All sends that chain back."""
+    """The Processing tab's lists show the chain that runs, ticked and with
+    its values, so Apply sends that chain back."""
     from cellmap_flow.norm.input_normalize import get_normalizations
     from cellmap_flow.post.postprocessors import get_postprocessors
 

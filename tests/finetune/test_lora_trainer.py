@@ -1,11 +1,15 @@
 """Finetuner on the CPU: what it distils toward, how it reads the model's
-output, and how a run survives a NaN, an OOM or the dashboard's stop."""
+output, how a run survives a NaN or an OOM, and what its single-class
+warning goes by."""
+
+import logging
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
 
 from cellmap_flow.finetune.adaptation import cpu_state_copy, frozen_teacher_copy
 from cellmap_flow.finetune.losses import masked_mean
@@ -147,22 +151,18 @@ def test_an_out_of_memory_epoch_is_retried_on_half_batches(make_trainer, monkeyp
         assert (trainer.dataloader.batch_size, trainer.gradient_accumulation_steps) == (1, 2)
 
 
-class _StopSignal(nn.Module):
-    """Passes its input on; writes the dashboard's stop signal at its first call, in epoch 1."""
-
-    def __init__(self, signal):
-        super().__init__()
-        self.signal = signal
-
-    def forward(self, x):
-        if self.signal is not None:
-            self.signal.write_text("{}")
-        return x
-
-
-def test_the_dashboards_stop_signal_ends_the_run_after_the_current_epoch(make_trainer, tmp_path):
-    trainer = make_trainer(nn.Sequential(_StopSignal(tmp_path / "run" / "stop_signal.json"), nn.Conv3d(1, 1, 1)),
-                           (torch.rand(1, 1, 4, 4, 4), FOREGROUND), num_epochs=3)
-    trainer.train()
-    assert [s["epoch"] for s in trainer.training_stats] == [1]
-    assert not (tmp_path / "run" / "stop_signal.json").exists(), "the signal is used up"
+@pytest.mark.parametrize("class_voxels, warned", [
+    pytest.param((5247, 4906), False, id="background painted, though not in the first batch"),
+    pytest.param((0, 4906), True, id="no background painted"),
+])
+def test_the_single_class_warning_goes_by_what_is_annotated(make_trainer, caplog, class_voxels, warned):
+    """It went by the first batch: a session painted with both, whose first
+    eight patches held no background, was told to paint background, in every
+    iteration."""
+    patches = TensorDataset(torch.rand(1, 1, 4, 4, 4), FOREGROUND)
+    patches.class_voxels = class_voxels  # (background, foreground), as VirtualPatchDataset counts them
+    trainer = make_trainer(nn.Conv3d(1, 1, 1), DataLoader(patches), target_transform=BinaryTargetTransform())
+    diagnostics = "cellmap_flow.finetune.trainer.diagnostics"
+    with caplog.at_level(logging.WARNING, logger=diagnostics):
+        trainer.train()
+    assert any(r.name == diagnostics and r.levelno == logging.WARNING for r in caplog.records) == warned

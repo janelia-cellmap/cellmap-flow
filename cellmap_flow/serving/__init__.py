@@ -12,5 +12,6 @@ model and its chains run inside it as chunkmirage ops
 - ``client``: asking a running server about its model (``model_info``).
 - ``probe``: what a model's output range says about the postprocessing it
   needs.
-- ``restart_token``: the secret a finetune job's server takes a restart with.
+- ``restart_token``: the secret a finetune job's server takes a restart, or a
+  stop, with.
 """

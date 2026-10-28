@@ -37,15 +37,17 @@ rather than being stored beside the real one:
   ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
   ``restart_key`` that restarts one from the viewer; the Review tab's
   ``review``.
-- The log panel's ``log_buffer`` and ``log_clients``; the box tool's
-  ``bbx_generator_state``.
+- The log panel's ``log_buffer``, ``log_ids`` and ``log_clients``; the box
+  tool's ``bbx_generator_state``.
 
 Read the session through ``get_session()`` when it is needed, never into a
 module global: tests/conftest.py installs a fresh Session for every test.
 """
 
+import itertools
 import os
 import threading
+import time
 from collections import deque
 from importlib.resources import files
 
@@ -71,8 +73,8 @@ class Session:
                  "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_clients",
-                 "bbx_generator_state")
+                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_ids",
+                 "log_clients", "bbx_generator_state")
 
     def __init__(self):
         # The data and the viewer
@@ -174,8 +176,16 @@ class Session:
         }
 
         # The log panel and the box tool
-        # The last log lines, for a log panel that connects late.
+        # The last log lines, for a log panel that connects late, each as
+        # (its number, the line).
         self.log_buffer = deque(maxlen=1000)
+        # The numbers, which the log stream sends as event ids. They count on
+        # from when the session was made, in milliseconds, so an id a page
+        # kept from an earlier run of the dashboard (its EventSource
+        # reconnects to this one by itself, sending that id) is below all of
+        # this run's, and the page is sent this run's lines from the first
+        # (unless that run logged more than a line a millisecond).
+        self.log_ids = itertools.count(time.time_ns() // 1_000_000)
         # Each open log stream's queue.
         self.log_clients = []
         # The bounding-box tool's viewer and boxes.

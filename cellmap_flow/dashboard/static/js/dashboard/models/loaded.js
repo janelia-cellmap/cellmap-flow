@@ -59,13 +59,14 @@ export function init({ untick, log }) {
         model.detail ? h("div", { class: "loaded-model-detail", title: model.detail }, model.detail) : null,
         model.note ? h("div", { class: "loaded-model-note" }, model.note) : null),
       // The title is on the span around the button: a disabled button gets
-      // no mouse events, so its own would never show.
+      // no mouse events, so its own would never show. A finetuned model's
+      // note says what its ✕ does, which the general line gets wrong.
       h("span", {
         class: "loaded-model-remove-wrap",
-        title: model.removable
+        title: model.note || (model.removable
           ? "Stop " + model.name + " and remove its layer; the other models stay as they are. "
             + "Tick it again and Submit to bring it back."
-          : (model.note || "This model cannot be removed here."),
+          : "This model cannot be removed here."),
       }, remove));
   }
 
@@ -92,6 +93,9 @@ export function init({ untick, log }) {
   }
 
   function removeLoaded(model, button) {
+    // When ✕ does more than stop the model (a finetune job's, which it
+    // cancels), the entry says what, to be asked first.
+    if (model.confirm && !confirm(model.confirm)) return;
     button.disabled = true;
     postJSON("/api/models/remove", { name: model.name })
       .then((data) => {

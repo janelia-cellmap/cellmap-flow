@@ -87,6 +87,14 @@ small, .text-muted {
   border-bottom-width: 3px;
 }
 
+/* A tab's own sub-tabs (the Processing tab's two lists, the Finetune tab's
+   crops and training): smaller than the dashboard's tabs, so both fit the
+   dashboard column on one row, with the Processing tab's badges. */
+.tab-pane .nav-tabs .nav-link {
+  padding: 8px 8px;
+  font-size: 13px;
+}
+
 /* ---------- Tab Panes ---------- */
 .tab-pane {
   background: transparent;
@@ -236,17 +244,42 @@ small, .text-muted {
   border: 1px solid transparent;
 }
 
+/* Buttons, one look across the page: a section's one main action is
+   .btn-primary (the accent), every other action .btn-outline-secondary,
+   stopping or deleting .btn-outline-danger, and text-like actions .btn-link.
+   Through Bootstrap's own variables, so a disabled or pressed main action
+   stays the accent: overriding background-color alone left Bootstrap's blue
+   on a disabled one ("Applying…"). */
 .btn-primary {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--accent-hover);
+  --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  --bs-btn-focus-shadow-rgb: 16, 185, 129;
+  /* .btn's "border: 1px solid transparent" above would hide it. */
+  border-color: var(--bs-btn-border-color);
 }
 
-.btn-primary:hover,
-.btn-primary:focus {
-  background-color: var(--accent-hover);
-  border-color: var(--accent-hover);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+.btn-outline-danger {
+  --bs-btn-color: var(--danger);
+  --bs-btn-border-color: var(--danger);
+  --bs-btn-hover-color: var(--bg-base);
+  --bs-btn-hover-bg: var(--danger);
+  --bs-btn-hover-border-color: var(--danger);
+  --bs-btn-active-color: var(--bg-base);
+  --bs-btn-active-bg: var(--danger);
+  --bs-btn-active-border-color: var(--danger);
+  --bs-btn-disabled-color: var(--danger);
+  --bs-btn-disabled-border-color: var(--danger);
+  border-color: var(--bs-btn-border-color);
 }
 
 .btn-outline-secondary {
@@ -868,19 +901,19 @@ textarea.form-control[readonly] {
   color: var(--text-muted);
 }
 
-/* The Apply bar at the top of the Input and Postprocess tabs
-   (templates/_apply_bar.html): its pending count and its notice are shown
-   and hidden with the `hidden` attribute, so their display is set here, not
-   with Bootstrap's d-block/d-flex, whose !important would override it. */
+/* The Processing tab (templates/_processing_tab.html): its Apply bar's
+   pending count and its notices are shown and hidden with the `hidden`
+   attribute, so their display is set here, not with Bootstrap's
+   d-block/d-flex, whose !important would override it. */
 .apply-pending {
   display: block;
 }
 
-.apply-notice {
+.chain-notice {
   display: flex;
 }
 
 .apply-pending[hidden],
-.apply-notice[hidden] {
+.chain-notice[hidden] {
   display: none;
 }

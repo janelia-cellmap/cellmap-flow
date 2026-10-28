@@ -316,7 +316,7 @@ describe("GET /api/model_advice", () => {
 
   it("holds a declared value to its number, not its spelling, and names a value that differs", async () => {
     // The manifest declares MinMax 0..255 then 2*x-1 (backend-fakes.ts); this
-    // is that chain as the Input tab's form sends it.
+    // is that chain as the Processing tab's form sends it.
     const asForm = [
       { name: "MinMaxNormalizer", min_value: "0.0", max_value: "255.0", invert: "False" },
       { name: "LambdaNormalizer", expression: "2*x-1" },
@@ -326,6 +326,10 @@ describe("GET /api/model_advice", () => {
     await backend.handle(submit([HF54]));
     let m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
     expect(m.input_norm_matches).toBe(true);
+    expect(m.input_norm_differences).toEqual([]);
+    // The same map written another way is the declared one.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: [asForm[0], { name: "LambdaNormalizer", expression: "x*2 - 1" }], postprocess: [] }));
+    m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
     expect(m.input_norm_differences).toEqual([]);
     // The same steps with the expression edited rated "looks right" before.
     await backend.handle(request("PUT", "/api/pipeline", { input_norm: [asForm[0], { name: "LambdaNormalizer", expression: "2*x" }], postprocess: [] }));

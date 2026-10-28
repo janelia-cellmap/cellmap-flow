@@ -244,19 +244,23 @@ The pages are ES modules served as they are, with no bundler:
 
    dashboard/templates/
      index.html               the dashboard page; includes _dashboard.html and the
-                              _input_tab, _output_tab, _models_tab, _finetune_tab
+                              _models_tab, _processing_tab, _finetune_tab, _run_tab
                               and _review_tab partials
      pipeline_builder_v2.html the pipeline builder
+     _log_panel.html          the dashboard's log at the foot of both pages, with
+                              its stylesheet and script
      bbox_json_template.html
-   dashboard/static/css/      tokens.css (the palette), dark.css, pipeline_builder.css
+   dashboard/static/css/      tokens.css (the palette), dark.css, pipeline_builder.css,
+                              log-panel.css
    dashboard/static/js/
      lib/                     api, dom, page-data, poll, sortable, sse: know no page
-     shared/                  gpu-queues, op-chain, server-config: used by both pages
+     shared/                  gpu-queues, op-chain, server-config, log-panel: used by
+                              both pages
      dashboard/               main.js (the page's entry), connect, models-tab,
                               model-advice; finetune/ and review/, each an index.js
                               that wires one module per part of its tab
      pipeline-builder/        main.js (the entry), state, canvas, nodes, palette,
-                              io, blockwise, bbx, dialogs, log-panel, messages,
+                              io, blockwise, bbx, dialogs, messages,
                               model-config-modal, output-channels
      vendor/js-yaml.js
 
@@ -453,12 +457,14 @@ A chunk served to Neuroglancer
 Apply, or ``PUT /api/pipeline``, and the layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. The dashboard page's Apply, at the top of the Input and Postprocess tabs
-   (``templates/_apply_bar.html``), reads the ticked ops of both tabs
+#. The dashboard page's Apply, at the top of the Processing tab
+   (``templates/_processing_tab.html``), reads the ticked ops of both its lists
    (``static/js/shared/op-chain.js``) and sends ``PUT /api/pipeline`` with
    ``{input_norm, postprocess}`` (``static/js/dashboard/main.js``). Until
    then the bar counts the edits not applied (``op-chain.js``
-   ``chainChanges``, against the chain last applied or shown). The pipeline
+   ``chainChanges``, against the chain last applied or shown). A model
+   advice suggestion's Apply (``static/js/dashboard/model-advice.js``) sets
+   its steps in its list and goes through the same Apply. The pipeline
    builder sends the same, and its canvas as ``builder``, 2 s after its last
    edit (``static/js/pipeline-builder/state.js``).
 #. ``dashboard/routes/pipeline.put_pipeline`` parses the body as a
@@ -485,13 +491,17 @@ Apply, or ``PUT /api/pipeline``, and the layers
 
 The one other change of the chain a model makes: a model started from the
 Models tab when the chain has no input normalizers sets the ones it declares
-(``ModelConfig.declared_input_norm``, an onnx model's manifest), before its
-layer is drawn (``routes/pipeline.set_declared_input_norm``, through
+(``ModelConfig.declared_input_norm``: an onnx model's manifest, or a
+cellmap-models export's metadata.json ``input_normalization``, read by
+``serving/probe.metadata_input_norm``), or, for a CellMap or DaCapo model
+that declares none, their convention ([-1, 1]), before its layer is drawn
+(``routes/pipeline.set_declared_input_norm``, through
 ``_set_chain_and_redraw``; the browser's ``serving.ts``
-``setDeclaredInputNorm``, through ``setChain``). After every model change
-the page reads the chain back from ``GET /api/models/loaded``'s
-``pipeline``, and a list whose chain the backend changed shows it, saying
-so.
+``setDeclaredInputNorm``, through ``setChain``, whose models all declare
+theirs). After every model change the page reads the chain back from
+``GET /api/models/loaded``'s ``pipeline``, and a list whose chain the
+backend changed shows it, saying so above it, and whether the model
+declared it (``input_norm_declared``).
 
 Launching a model server
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -715,8 +725,8 @@ handler run without an app context. It holds:
 - the finetune and review tabs: ``minio_state``, ``annotation_volumes``,
   ``output_sessions``, ``finetune_job_manager`` (made when first asked for),
   ``review``;
-- the log panel's ``log_buffer`` and ``log_clients``, and the box tool's
-  ``bbx_generator_state``.
+- the log panel's ``log_buffer``, ``log_ids`` and ``log_clients``, and the
+  box tool's ``bbx_generator_state``.
 
 It forwards the rest to the owners above: each setting, ``settings``,
 ``server_config`` and ``save_server_config()``; ``input_norms`` and

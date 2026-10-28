@@ -10,7 +10,10 @@ import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
 // Models only appear in g.models_config once a pipeline has been submitted
 // on the main tab. The finetune tab is usually opened first, so a single
 // load on page load almost always finds nothing: the list is polled quietly
-// in the background instead, and polling stops as soon as models show up.
+// in the background instead. A model is listed before its sizes are known,
+// with a `status` in their place ("waiting for its server", or "not running"
+// once stopped on the Models tab), so polling stops once models are listed
+// and none of them has a status.
 const MODEL_POLL_INTERVAL_MS = 2000;
 const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
 
@@ -25,14 +28,34 @@ export function pickModel(name) {
   if (pickWhenListed) pickWhenListed(name);
 }
 
+// New Volume lays the volume on the picked model's grid. While the model
+// has a status instead of sizes there is no server to ask for that grid, and
+// the route (resolve_model_geometry) would build the model in the dashboard
+// itself, so the button waits, saying why, until the sizes are listed. With
+// no model picked it is the paint-first volume's, and free.
+function holdNewVolume(model) {
+  const button = document.getElementById("createVolumeBtn");
+  const waiting = Boolean(model && model.status);
+  button.disabled = waiting;
+  button.title = waiting ? `${model.name}: ${model.status}` : "";
+}
+
 function displayModelInfo(model) {
+  holdNewVolume(model);
   if (!model) return;
 
-  const voxelShape = model.write_shape.map((s, i) =>
-    Math.round(s / model.output_voxel_size[i])
-  );
-
-  document.getElementById("modelInfoContent").innerHTML = `
+  if (model.status) {
+    document.getElementById("modelInfoContent").innerHTML = `
+      <small>
+        <strong>Name:</strong> ${esc(model.name)}<br>
+        <strong>Status:</strong> ${esc(model.status)}
+      </small>
+    `;
+  } else {
+    const voxelShape = model.write_shape.map((s, i) =>
+      Math.round(s / model.output_voxel_size[i])
+    );
+    document.getElementById("modelInfoContent").innerHTML = `
       <small>
         <strong>Name:</strong> ${esc(model.name)}<br>
         <strong>Output Size (nm):</strong> [${esc(model.write_shape.join(', '))}]<br>
@@ -41,6 +64,7 @@ function displayModelInfo(model) {
         <strong>Channels:</strong> ${esc(model.output_channels)}
       </small>
     `;
+  }
   document.getElementById("modelInfo").style.display = "block";
   if (isBrowserMode()) setBrowserTraining(model);
   else applyFinetuneModes(model.finetune_modes);
@@ -91,7 +115,8 @@ export function initModelPicker({ log, savedModelName }) {
 
   // One load of the list. The first load, and a Refresh, say what they
   // found; the others are quiet unless the number of models changes.
-  // Resolves to false once models are listed, which stops the poll.
+  // Resolves to false, which stops the poll, once models are listed with
+  // their sizes.
   function loadModels({ tick, stale }) {
     const quiet = tick > 1 || lastLoadedCount !== null;
     return getAnswer("/api/finetune/models")
@@ -112,6 +137,7 @@ export function initModelPicker({ log, savedModelName }) {
           }
           modelSelect.innerHTML = "";
           selectedModel = null;
+          displayModelInfo(null);
           lastLoadedCount = 0;
           return;
         }
@@ -154,8 +180,9 @@ export function initModelPicker({ log, savedModelName }) {
           wanted = null;
           modelSelect.dispatchEvent(new Event("change"));
         }
-        // A model to pick that is not listed yet keeps the poll going.
-        return wanted ? undefined : false;
+        // A model to pick that is not listed yet keeps the poll going, and
+        // so does one whose sizes are not known yet.
+        return wanted || models.some((m) => m.status) ? undefined : false;
       })
       .catch(err => {
         if (!quiet) log.add(`Error loading models: ${err}`);

@@ -74,6 +74,14 @@ def test_reads_at_the_shape_the_export_runs_at(monkeypatch, model, shapes, voxel
 
     model_config = CellMapModelConfig(folder_path="/models/liver_mito")
 
+    # What the dashboard lists before the server is up: the metadata's
+    # geometry only when it gives one shape, so that it is the one served.
+    declared = model_config.declared_geometry()
+
     assert model_config.geometry.input_shape == (voxels_in,) * 3
     assert model_config.geometry.output_shape == (voxels_out,) * 3
     assert list(model_config.config.block_shape) == [voxels_out] * 3 + [1]
+    config = model_config.config
+    served = {"write_shape": list(config.write_shape), "output_voxel_size": list(config.output_voxel_size),
+              "output_channels": config.output_channels}
+    assert declared == (None if shapes else served)

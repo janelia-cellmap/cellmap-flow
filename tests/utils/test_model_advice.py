@@ -20,7 +20,7 @@ def verdict(dashboard, monkeypatch):
     from cellmap_flow.dashboard.routes import model_advice
 
     monkeypatch.setattr(model_advice, "_fetch_probe", lambda host: {"available": False})
-    monkeypatch.setattr(model_advice, "_raw_dtype_and_range", lambda path: ("uint8", (0, 255)))
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0, 255)))
 
     def verdict(model_config, input_norm=()):
         session = get_session()
@@ -89,6 +89,9 @@ def test_a_declared_value_edited_is_not_a_match(verdict, declaring_model):
                {"name": "LambdaNormalizer", "expression": "2*x-1"}]
     declared = verdict(declaring_model, as_form)
     assert declared["input_norm_matches"] is True and declared["input_norm_differences"] == []
+    # The same map written another way is the declared one.
+    rewritten = verdict(declaring_model, [as_form[0], {"name": "LambdaNormalizer", "expression": "x*2 - 1"}])
+    assert rewritten["input_norm_matches"] is True and rewritten["input_norm_differences"] == []
 
     edited = verdict(declaring_model, [as_form[0], {"name": "LambdaNormalizer", "expression": "2*x"}])
     assert edited["input_norm_matches"] is False

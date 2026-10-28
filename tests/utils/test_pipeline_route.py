@@ -21,7 +21,7 @@ from cellmap_flow.serving.protocol import split_dataset_url
 
 # The chain configured and drawn before each request.
 SHOWN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], "postprocess": []}
-# Submit's body: the Input and Postprocess tabs' steps, every value a string.
+# Apply's body: the Processing tab's steps, every value a string.
 SUBMITTED = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"},
                             {"name": "LambdaNormalizer", "expression": "x*2-1"}],
              "postprocess": [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]}
@@ -116,6 +116,23 @@ def test_what_the_user_set_on_a_layer_survives_a_redraw(call):
     assert call("PUT", "/api/pipeline", SUBMITTED)[0] == 200
     layers = viewer.state.layers
     assert layers["mito"].type == "segmentation" and layers["data"].opacity == 0.3
+
+
+def test_the_raw_is_drawn_again_only_through_a_new_input_normalization(call):
+    """The raw is shown through the input normalizers, and a raw layer drawn
+    again is a new source, whose every chunk the browser fetches again: the
+    raw was black for a long while after an Apply that changed only the
+    postprocessing."""
+    def raw():
+        return get_session().viewer.state.layers["data"].to_json()["source"]
+
+    shown = raw()
+    postprocessed = {"input_norm": SHOWN["input_norm"], "postprocess": SUBMITTED["postprocess"]}
+    assert call("PUT", "/api/pipeline", postprocessed)[0] == 200
+    assert _drawn() == PipelineSpec.from_json_data(postprocessed)
+    assert raw() == shown
+    assert call("PUT", "/api/pipeline", SUBMITTED)[0] == 200
+    assert raw() != shown
 
 
 @pytest.mark.parametrize(

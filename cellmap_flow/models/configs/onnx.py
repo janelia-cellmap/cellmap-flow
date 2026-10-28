@@ -491,23 +491,44 @@ class OnnxModelConfig(ModelConfig):
                 self._manifest_cache = read_manifest(self.path) or {}
         return self._manifest_cache or None
 
-    def declared_input_norm(self) -> Optional[list]:
-        """The input normalization the model's manifest declares, as
-        cellmap-flow steps (``[{"name": ..., **params}]``), or None.
-
-        For the dashboard's model advice (``suggest_input_norm``'s
-        ``declared``), which asks on every poll: a failed download is not
-        tried again for MANIFEST_RETRY_SECONDS.
-        """
+    def _declared_manifest(self) -> Optional[dict]:
+        """The manifest ({} for a file without one) for what the dashboard
+        asks of it on every poll, or None when it cannot be read: a failed
+        download is not tried again for MANIFEST_RETRY_SECONDS."""
         if self._manifest_failed_at is not None and time.monotonic() - self._manifest_failed_at < MANIFEST_RETRY_SECONDS:
             return None
         try:
-            manifest = self._manifest()
+            return self._manifest() or {}
         except Exception as e:
             self._manifest_failed_at = time.monotonic()
             logger.info(f"Could not read {self.name}'s manifest ({e}); trying again after {MANIFEST_RETRY_SECONDS} s")
             return None
-        return (manifest or {}).get("input_norm") or None
+
+    def declared_input_norm(self, data_range=None) -> Optional[list]:
+        """The input normalization the model's manifest declares, as
+        cellmap-flow steps (``[{"name": ..., **params}]``), or None. The
+        manifest gives each step's values, so ``data_range`` is not used.
+
+        For the dashboard's model advice (``suggest_input_norm``'s
+        ``declared``), which asks on every poll (``_declared_manifest``).
+        """
+        return (self._declared_manifest() or {}).get("input_norm") or None
+
+    def declared_geometry(self) -> Optional[dict]:
+        """``ModelConfig.declared_geometry`` from the entry, the manifest and its
+        variant, as the server works it out (``_geometry``) but without the
+        graph: None when they leave a size to the graph, or the manifest
+        cannot be read now (``_declared_manifest``)."""
+        manifest = self._declared_manifest()
+        if manifest is None:
+            return None
+        geometry = Config()
+        try:
+            self._geometry(geometry, manifest, self._variant(manifest))
+        except (TypeError, ValueError):
+            return None
+        return {"write_shape": list(geometry.write_shape), "output_voxel_size": list(geometry.output_voxel_size),
+                "output_channels": geometry.output_channels}
 
     def _variant(self, manifest) -> Optional[dict]:
         """The manifest's variant this model serves: the folder's chosen by
@@ -541,9 +562,9 @@ class OnnxModelConfig(ModelConfig):
         return config
 
     def _describe(self, config, manifest, variant, session):
-        """Set ``config``'s geometry from the entry, the manifest and its
-        variant, and the graph's input and output, each where the one
-        before says nothing; check that they agree with the graph."""
+        """Set ``config`` from the entry, the manifest and its variant, and the
+        graph's input and output: its geometry (``_geometry``), and the
+        tensors the model is fed and fetched by."""
         what = self.name or "the model"
         inputs, outputs = session.get_inputs(), session.get_outputs()
         # The manifest's tensor names, as the browser feeds and fetches by
@@ -562,6 +583,23 @@ class OnnxModelConfig(ModelConfig):
         if len(out_dims) not in (4, 5):
             raise ValueError(f"{what}'s output {output_name} is {graph_out.shape}, not [1, C, z, y, x]")
         graph_channels = out_dims[1] if len(out_dims) == 5 else 1
+        self._geometry(config, manifest, variant, in_dims[2:], out_dims[-3:], graph_channels)
+        config.output_dtype = np.float32
+        config.output_kind = self.output or manifest.get("output") or ""
+        config.input_name, config.output_name = input_name, output_name
+        config.input_dtype = np.float16 if graph_in.type == "tensor(float16)" else np.float32
+
+    def _geometry(self, config, manifest, variant, graph_in=(None,) * 3, graph_out=(None,) * 3, graph_channels=None):
+        """Set ``config``'s geometry from the entry, the manifest and its
+        variant, and the graph's input and output sizes (z, y, x voxels, None
+        where not fixed) and channel count, each where the one before says
+        nothing; check that they agree with the graph. Without the graph's
+        (declared_geometry), the others must say it all.
+
+        Raises:
+            ValueError: none of them says a size, or they disagree.
+        """
+        what = self.name or "the model"
         variant = variant or {}
 
         def first(given, *found, what_is_it):
@@ -584,11 +622,11 @@ class OnnxModelConfig(ModelConfig):
         # In the folder's case input_size chose the variant; a file's
         # manifest's variant is overruled by the entry's sizes.
         given_in = self.input_size if self.folder is None else None
-        in_size = first(entry.per_axis(given_in, 3, "input_size"), variant.get("input_size"), in_dims[2:],
+        in_size = first(entry.per_axis(given_in, 3, "input_size"), variant.get("input_size"), list(graph_in),
                         what_is_it="input_size")
-        out_size = first(entry.per_axis(self.output_size, 3, "output_size"), variant.get("output_size"), out_dims[-3:],
-                         what_is_it="output_size")
-        for kind, size, dims in (("input", in_size, in_dims[2:]), ("output", out_size, out_dims[-3:])):
+        out_size = first(entry.per_axis(self.output_size, 3, "output_size"), variant.get("output_size"),
+                         list(graph_out), what_is_it="output_size")
+        for kind, size, dims in (("input", in_size, list(graph_in)), ("output", out_size, list(graph_out))):
             if any(d is not None and d != s for d, s in zip(dims, size)):
                 raise ValueError(f"{what}'s graph has an {kind} of {dims} (z, y, x); the entry or manifest says "
                                  f"{list(size)}")
@@ -631,10 +669,6 @@ class OnnxModelConfig(ModelConfig):
         config.output_channels = len(channels)
         config.channels = list(channels)
         config.block_shape = np.array((*write, len(channels)))
-        config.output_dtype = np.float32
-        config.output_kind = self.output or manifest.get("output") or ""
-        config.input_name, config.output_name = input_name, output_name
-        config.input_dtype = np.float16 if graph_in.type == "tensor(float16)" else np.float32
         config.slice_wise = slice_wise
 
     def to_dict(self):

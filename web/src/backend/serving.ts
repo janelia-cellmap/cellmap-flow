@@ -84,7 +84,7 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
  * postprocessing stays as it is; the chain is set through setChain, as PUT
  * /api/pipeline sets it, so the models served already are drawn through it
  * too. A chain that has input normalizers already is left alone, and after
- * this only the page's Apply changes it: the Input list shows the chain as
+ * this only the page's Apply changes it: the Processing tab shows the chain as
  * set (GET /api/models/loaded's `pipeline`, which the page reads after every
  * model change) and says where it came from. A model that declares nothing
  * changes nothing, and a declaration naming a step the browser cannot run
@@ -109,9 +109,12 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
 
 /** The name of the first of `entries` whose declared input normalization is
  * `chain`'s input part, step for step; null when none is, or the chain has
- * no input normalizers (pipeline.py's input_norm_declared_by). GET
+ * no input normalizers (pipeline.py's input_norm_set_by). GET
  * /api/models/loaded answers it beside the chain, so the page can say where
- * an input normalization a model's start set came from. */
+ * an input normalization a model's start set came from. Every model here
+ * declares its own (its manifest), so the answer has no
+ * input_norm_declared, which the Flask dashboard's says false for a
+ * convention it set; the page reads none as declared. */
 export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
   if (!chain.input_norm.length) return null;
   const live = JSON.stringify(chain.input_norm);

@@ -331,17 +331,78 @@ def _to_unit_range(lo, hi) -> dict:
 
 SHIFT_TO_SIGNED = {"name": "LambdaNormalizer", "expression": "x*2-1"}
 
+# The input_normalization values metadata_input_norm has logged as not read,
+# so the dashboard's polls do not log them again.
+_unread_logged = set()
+
+
+def metadata_input_norm(input_normalization, data_range):
+    """The input normalization a cellmap-models export's metadata.json
+    declares (its ``input_normalization``), as chain steps
+    (``[{"name", **params}]``), for raw data spanning ``data_range`` (lo,
+    hi); None when it declares none.
+
+    ``{"method": "min_max", "min": a, "max": b}`` says the model reads its
+    input scaled onto [a, b]: a MinMaxNormalizer from the raw data's range
+    onto [0, 1], as the convention's (_to_unit_range), then a
+    LambdaNormalizer onto [a, b], none for [0, 1]. [-1, 1] gives
+    SHIFT_TO_SIGNED's ``x*2-1``, so the declaration is the convention's
+    chain step for step, and a chain set from either matches the other.
+    Another method, or a min or max that is not a number, is not guessed at:
+    it is logged once and declares nothing, as a declaration does without
+    the data's range (no dataset open).
+    """
+    if not input_normalization:
+        return None
+    a = b = None
+    if isinstance(input_normalization, dict) and input_normalization.get("method") == "min_max":
+        try:
+            a, b = float(input_normalization["min"]), float(input_normalization["max"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    if a is None:
+        said = repr(input_normalization)
+        if said not in _unread_logged:
+            _unread_logged.add(said)
+            logger.warning(f"A model's metadata.json input_normalization {said} is not used: "
+                           "only the min_max method, with a number for min and max, is read")
+        return None
+    if data_range is None:
+        return None
+    lo, hi = (float(v) for v in data_range)
+    steps = [_to_unit_range(lo, hi)["MinMaxNormalizer"]]
+    if (a, b) != (0.0, 1.0):
+        steps.append({"name": "LambdaNormalizer", "expression": f"x*{b - a:g}" + (f"{a:+g}" if a else "")})
+    return steps
+
+
+# Where two expressions are compared: a declared "x*2-1" and a typed
+# "2*x-1" are one map, which the text alone did not say.
+EXPRESSION_SAMPLES = (-2.0, -1.0, -0.5, 0.0, 0.25, 0.5, 1.0, 2.0, 255.0)
+
 
 def same_value(configured, declared) -> bool:
     """Whether a configured parameter value is the declared one: numbers by
     value (the form sends "255.0" for a manifest's 255), anything else as
     text, trimmed and without regard to case (a form's "False", Python's
-    False and JSON's false are one value; an expression is compared as
-    written)."""
+    False and JSON's false are one value), and two expressions by what they
+    give at EXPRESSION_SAMPLES, each through the whitelist LambdaNormalizer
+    runs it through (compile_expression)."""
     try:
         return float(configured) == float(declared)
     except (TypeError, ValueError):
-        return str(configured).strip().lower() == str(declared).strip().lower()
+        pass
+    if str(configured).strip().lower() == str(declared).strip().lower():
+        return True
+    import numpy as np
+
+    from cellmap_flow.norm.safe_expression import compile_expression
+
+    try:
+        x = np.asarray(EXPRESSION_SAMPLES, dtype=np.float64)
+        return bool(np.allclose(compile_expression(str(configured))(x), compile_expression(str(declared))(x)))
+    except Exception:
+        return False
 
 
 def input_norm_differences(configured_steps, declared) -> list:

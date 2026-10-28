@@ -36,7 +36,7 @@ def viewer_url_for(viewer_url, headers, scheme):
 
 
 def _form_value(value):
-    """A parameter as the Input/Postprocess form shows and sends it back.
+    """A parameter as the Processing tab's lists show and send it back.
 
     A flat list or tuple is comma-joined, the form the constructors parse
     ("0,2" for ChannelSelection): rendered as it stands it became "[0, 2]",
@@ -50,7 +50,7 @@ def _form_value(value):
 
 
 def chain_items(available, configured):
-    """The rows of an Input/Postprocess list, in the order to render them.
+    """The rows of one of the Processing tab's lists, in the order to render them.
 
     The configured steps come first, in the order they run, each with its own
     parameter values; a step configured twice is listed twice. Every other

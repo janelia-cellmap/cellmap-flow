@@ -4,11 +4,14 @@ The folder's metadata gives the shapes, voxel sizes and channel names; the
 model is its TorchScript export.
 """
 
+import json
 import logging
+import os
 
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
+from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,37 @@ def runs_at(model, input_shape, output_shape) -> bool:
     return tuple(int(s) for s in out.shape[-len(output_shape):]) == tuple(int(s) for s in output_shape)
 
 
+def _other_shapes(metadata):
+    """The metadata's inference shapes (input, output), when it gives them and
+    they are not its training ones; else None. The export runs at one of the
+    two, and which, only the model can say (runs_at)."""
+    inference_in = getattr(metadata, "inference_input_shape", None)
+    inference_out = getattr(metadata, "inference_output_shape", None)
+    if inference_in and inference_out and list(inference_in) != list(metadata.input_shape):
+        return list(inference_in), list(inference_out)
+    return None
+
+
+def metadata_geometry(metadata):
+    """``ModelConfig.declared_geometry`` from an export's metadata (``metadata``
+    has its fields as attributes): its training output, when the metadata
+    gives no other shape (``_other_shapes``), so that it is the one the
+    export runs at; else None, as when a field is missing. setup_16's
+    metadata gives inference shapes too, and its export runs at the training
+    ones; jrc_mus-livers_16nm_to_8nm_mito's runs at its inference ones."""
+    try:
+        if _other_shapes(metadata) is not None:
+            return None
+        voxel_size = Coordinate(metadata.output_voxel_size)
+        return {
+            "write_shape": list(Coordinate(metadata.output_shape) * voxel_size),
+            "output_voxel_size": list(voxel_size),
+            "output_channels": int(metadata.out_channels),
+        }
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 class CellMapModelConfig(ModelConfig):
     """Configuration class for a CellmapModel."""
 
@@ -55,6 +89,7 @@ class CellMapModelConfig(ModelConfig):
             name = folder_path.rstrip("/").split("/")[-1]
         self.name = name
         self.scale = scale
+        self._input_normalization = None
 
     def _get_config(self) -> Config:
         config = Config()
@@ -84,9 +119,9 @@ class CellMapModelConfig(ModelConfig):
         # the model can say (runs_at). The probe at the training shape is the
         # cheap one: the smaller input, and a mismatch fails fast.
         training = (list(metadata.input_shape), list(metadata.output_shape))
-        inference = (getattr(metadata, "inference_input_shape", None), getattr(metadata, "inference_output_shape", None))
-        if inference[0] and inference[1] and list(inference[0]) != training[0] and not runs_at(config.model, *training):
-            input_shape, output_shape = list(inference[0]), list(inference[1])
+        inference = _other_shapes(metadata)
+        if inference is not None and not runs_at(config.model, *training):
+            input_shape, output_shape = inference
             logger.info(f"{self.name} runs at its inference shape {input_shape} → {output_shape}, not its training shape {training[0]}")
         else:
             input_shape, output_shape = training
@@ -97,6 +132,26 @@ class CellMapModelConfig(ModelConfig):
 
         config.block_shape = [*output_shape, metadata.out_channels]
         return config
+
+    def declared_geometry(self):
+        """Its export's metadata.json's (``metadata_geometry``), read without the model."""
+        try:
+            metadata = self.cellmap_model.metadata
+        except (OSError, ValueError):
+            return None
+        return metadata_geometry(metadata)
+
+    def declared_input_norm(self, data_range=None):
+        """Its export's metadata.json's input_normalization
+        (``metadata_input_norm``). cellmap_models' parsed metadata leaves that
+        field out, so the file is read for it, once."""
+        if self._input_normalization is None:
+            try:
+                with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
+                    self._input_normalization = json.load(f).get("input_normalization") or {}
+            except (OSError, ValueError, AttributeError):
+                self._input_normalization = {}
+        return metadata_input_norm(self._input_normalization, data_range)
 
     def to_dict(self):
         """This config as a model entry, which ``registry.build_model`` rebuilds."""

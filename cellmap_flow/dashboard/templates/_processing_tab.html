@@ -1,0 +1,121 @@
+{# The Processing tab: the steps every model's data goes through, the input
+   normalizers before the model and the postprocessing after it, each list
+   in its own sub-tab, with one Apply bar above both.
+
+   The bar stays at the top of the dashboard column while the lists scroll
+   under it. It says how many edits of the two lists the backend does not run
+   yet (shared/op-chain.js's pendingChanges, the two lists together), and its
+   Apply sends both chains (PUT /api/pipeline): they are one request, so one
+   button. Each sub-tab's badge counts its own list's. js/dashboard/main.js
+   (initApply) drives them. Nothing is sent until Apply is pressed (or Enter
+   in a parameter field, or a suggestion's Apply). #}
+
+{# A notice: the bar's says, in red (`tone` "danger"), that Apply was
+   refused; a list's, above it, that the backend changed that chain
+   itself (a model's start set the input normalization it declares, say).
+   Cleared by the next Apply, or its ✕. It is shown and hidden with the
+   `hidden` attribute (main.js), so no d-flex here: Bootstrap sets that with
+   !important, which beats the attribute. css/dark.css gives it its display. #}
+{% macro notice(id, tone, spacing) %}
+<div class="chain-notice alert alert-{{ tone }} align-items-start gap-2 py-1 px-2 small {{ spacing }}" id="{{ id }}" hidden>
+  <span class="chain-notice-text flex-grow-1"></span>
+  <button type="button" class="btn-close btn-close-white chain-notice-close" aria-label="Dismiss"></button>
+</div>
+{% endmacro %}
+
+{# One list. `items` is the configured chain in the order it runs (a step used
+   twice appears twice), then every other op unticked; element ids carry the
+   row index because the same op can have two rows. shared/op-chain.js finds
+   the rows by `row_class` and their boxes by `checkbox_class`. #}
+{% macro op_list(form_id, list_id, row_prefix, row_class, checkbox_class, items) %}
+<form id="{{ form_id }}">
+  <div id="{{ list_id }}">
+  {% for item in items %}
+    {% set row_id = row_prefix ~ loop.index0 %}
+    <div class="{{ row_class }} mb-3 p-2 border rounded">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input {{ checkbox_class }}"
+          type="checkbox"
+          id="{{ row_id }}_enabled"
+          name="{{ row_id }}_enabled"
+          value="{{ item.name }}"
+          {% if item.checked %}checked{% endif %}
+        />
+        <label class="form-check-label ms-2" for="{{ row_id }}_enabled">
+          {{ item.name }}
+        </label>
+      </div>
+      <div class="ps-4 step-params" style="display: {{ 'block' if item.checked else 'none' }};">
+      {% for param_name, param_val in item.params.items() %}
+        <div class="mb-3">
+          <label for="{{ row_id }}_param_{{ param_name }}" class="form-label">
+            {{ param_name }}
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="{{ row_id }}_param_{{ param_name }}"
+            name="{{ row_id }}_param_{{ param_name }}"
+            data-param="{{ param_name }}"
+            value="{{ param_val }}"
+          />
+        </div>
+      {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+</form>
+{% endmacro %}
+
+<div
+  class="apply-bar py-2 mb-2"
+  id="applyBar"
+  style="position: sticky; top: 0; z-index: 10; background: var(--bg-base); border-bottom: 1px solid var(--border);"
+>
+  <div class="d-flex align-items-center gap-2">
+    <h6 class="mb-0 me-auto">Steps for all models</h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="applyButton">Apply</button>
+  </div>
+  {# Shown and hidden with the `hidden` attribute, as the notices are. #}
+  <small class="apply-pending mt-1" id="applyPending" aria-live="polite" hidden></small>
+  {{ notice("applyNotice", "danger", "mt-2 mb-0") }}
+</div>
+{# The suggestions for the chain, from the models' advice
+   (js/dashboard/model-advice.js): above both sub-tabs, so one for the list
+   not shown is in sight too. A suggestion's Apply sets its list and applies,
+   as the bar's Apply does. #}
+<div id="processingAdvice"></div>
+<div class="alert alert-info" role="alert">
+  Drag to reorder: steps run in the order shown, the input normalization
+  before the model and the postprocessing after it. An edit in either list
+  takes effect when you press Apply.
+</div>
+
+{# The two lists as sub-tabs, as the Finetune tab's Annotation Crops and
+   Training are. Each badge counts its list's edits not applied (main.js). #}
+<ul class="nav nav-tabs mb-3" id="processingTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="input-norm-tab" data-bs-toggle="tab" data-bs-target="#inputNormPane" type="button" role="tab">
+      Input normalization <span class="badge rounded-pill text-bg-warning" id="inputNormPending" title="Edits not applied"></span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="postprocess-tab" data-bs-toggle="tab" data-bs-target="#postProcessPane" type="button" role="tab">
+      Postprocessing <span class="badge rounded-pill text-bg-warning" id="postProcessPending" title="Edits not applied"></span>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="processingTabContent">
+  <div class="tab-pane fade show active" id="inputNormPane" role="tabpanel">
+    {{ notice("inputNormNotice", "info", "mb-2") }}
+    {{ op_list("inputNormForm", "inputNormList", "inputNorm", "normalizer-item", "inputNormCheckbox", input_norm_items) }}
+  </div>
+  <div class="tab-pane fade" id="postProcessPane" role="tabpanel">
+    {{ notice("postProcessNotice", "info", "mb-2") }}
+    {{ op_list("postProcessForm", "postProcessList", "postProcess", "postprocessor-item", "postProcessCheckbox", postprocess_items) }}
+  </div>
+</div>

@@ -39,8 +39,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 WEB = Path(__file__).resolve().parents[1]
 OUT = WEB / "src" / "generated" / "python-data.json"
 
-# The chains a fresh browser session starts with, ticked on the Input and
-# Postprocess tabs with these values (build/render.py) and served by the app
+# The chains a fresh browser session starts with, ticked on the Processing
+# tab with these values (build/render.py) and served by the app
 # (web/src/state/index.ts). The six models in Hugging Face's
 # cellmap/onnx-web-models were trained on uint8 raw scaled to [-1, 1] and
 # output logits, so this is what every one of them wants: anything else gives

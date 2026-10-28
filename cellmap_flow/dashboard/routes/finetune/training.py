@@ -17,12 +17,10 @@ the viewer's status bar how it answered one (restart_key).
 """
 
 import os
-import json
 import logging
 import re
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 
 from flask import Response, jsonify, request
@@ -45,6 +43,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     served_output_class,
     settings_note,
 )
+from cellmap_flow.dashboard.routes.logging_routes import requested_offset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
 from cellmap_flow.finetune.options import TrainingOptions
@@ -357,17 +356,6 @@ def _read_complete_lines(path, offset):
     return chunk[:cut].decode("utf-8", errors="replace"), offset + cut
 
 
-def _requested_offset(request):
-    """Where the client wants the log from: the SSE Last-Event-ID, else ?offset=."""
-    for raw in (request.headers.get("Last-Event-ID"), request.args.get("offset")):
-        try:
-            if raw not in (None, ""):
-                return max(0, int(raw))
-        except (TypeError, ValueError):
-            pass
-    return 0
-
-
 # Statuses in which the job can still write to its log.
 _LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
 
@@ -389,7 +377,7 @@ def stream_job_logs(job_id):
     the page stayed open.
     """
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
-    start_offset = _requested_offset(request)
+    start_offset = requested_offset(request)
 
     def iter_visible_lines(text):
         for line in text.splitlines():
@@ -552,40 +540,28 @@ def cancel_job(job_id):
 
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
+    manager = get_session().finetune_job_manager
+    if job_id not in (getattr(manager, "jobs", {}) or {}):
+        return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
     try:
-        jobs = getattr(get_session().finetune_job_manager, "jobs", {}) or {}
-        job = jobs.get(job_id)
-        if job is None:
-            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
-
-        output_dir = Path(job.output_dir)
-        if not output_dir.exists():
-            return jsonify({"success": False, "error": f"Job output dir missing: {output_dir}"}), 400
-
-        signal_path = output_dir / "stop_signal.json"
-        with open(signal_path, "w") as f:
-            json.dump(
-                {
-                    "requested_at": datetime.now().isoformat(),
-                    "reason": "user_requested_stop_early",
-                },
-                f,
-                indent=2,
-            )
-
-        return jsonify(
-            {
-                "success": True,
-                "message": (
-                    "Stop requested. Training will exit after the current epoch; "
-                    "the inference server will then start so you can restart with "
-                    "updated parameters."
-                ),
-            }
-        )
+        # To the job's control endpoint as a restart goes, else as the run's
+        # stop_signal.json (job_manager.restart).
+        manager.stop_training_early(job_id)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error requesting stop-early: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify(
+        {
+            "success": True,
+            "message": (
+                "Stop requested. Training will exit after the current epoch; "
+                "the inference server will then start so you can restart with "
+                "updated parameters."
+            ),
+        }
+    )
 
 
 def _restart_training_settings(job, changes, corrections_dir):

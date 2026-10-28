@@ -157,30 +157,34 @@ def get_loaded_models():
     (services.launch.loaded_models), and the chain they run through.
 
     ``{"success": true, "models": [...], "pipeline": {"input_norm",
-    "postprocess"}, "input_norm_from"}``: ``pipeline`` is the chain as it is
-    set (PUT /api/pipeline's answer gives it the same way), and
-    ``input_norm_from`` the loaded model whose declared input normalization
-    its input part is, else None (routes.pipeline.input_norm_declared_by).
-    The page reads them after every model change: a model's start can set
-    the input normalization (routes.pipeline.set_declared_input_norm), and
-    the Input list then shows it, saying from which model.
+    "postprocess"}, "input_norm_from", "input_norm_declared"}``:
+    ``pipeline`` is the chain as it is set (PUT /api/pipeline's answer gives
+    it the same way), ``input_norm_from`` the loaded model whose start set
+    its input part as it is, else None, and ``input_norm_declared`` whether
+    that model declares it (False: the convention for its kind of model;
+    None with no such model; routes.pipeline.input_norm_set_by). The page
+    reads them after every model change: a model's start can set the input
+    normalization (routes.pipeline.set_declared_input_norm), and the
+    Processing tab's input list then shows it, saying from which model and
+    on what grounds.
     """
-    from cellmap_flow.dashboard.routes.pipeline import input_norm_declared_by
+    from cellmap_flow.dashboard.routes.pipeline import input_norm_set_by
 
     models = loaded_models()
     configs = configs_by_name()
-    declared_by = input_norm_declared_by([configs[m["name"]] for m in models if m["name"] in configs])
+    set_by, declared = input_norm_set_by([configs[m["name"]] for m in models if m["name"] in configs])
     return jsonify({"success": True, "models": models, "pipeline": get_session().pipeline_spec.to_json_data(),
-                    "input_norm_from": declared_by})
+                    "input_norm_from": set_by, "input_norm_declared": declared})
 
 
 @models_bp.route("/api/models/remove", methods=["POST"])
 def remove_loaded_model():
     """The ✕ of one model on the Loaded models list, ``{"name": ...}``: stop
     that model and take its layer away, and nothing else
-    (services.launch.remove_model). Answers the list as it is then; a 404
-    when no model of that name is running, a 409 for a finetune job's model
-    while the job is alive, which the Finetune tab stops."""
+    (services.launch.remove_model): a finetune job's model's job is
+    cancelled with it. Answers the list as it is then; a 404 when no model
+    of that name is running, a 409 when a finetune job could not be
+    cancelled."""
     body, error = parse(RemoveModel, request.get_json(silent=True))
     if error:
         return error

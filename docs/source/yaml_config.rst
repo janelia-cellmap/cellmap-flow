@@ -356,8 +356,8 @@ GPU when the job has one. The model is either
         path: mito_aff_setup54_16nm-ft1.onnx   # beside this YAML
 
 The browser's *Export Config* (in its header) writes such a YAML: the
-volume's URL as ``data_path``, the ``resample`` setting, the Input and
-Postprocess steps as ``json_data``, and each model it serves as a
+volume's URL as ``data_path``, the ``resample`` setting, the Processing
+tab's steps as ``json_data``, and each model it serves as a
 ``type: onnx`` entry, a Hugging Face export by ``repo``, ``folder`` and the
 ``file`` the page ran, a model finetuned there by ``path: <name>.onnx`` (the
 file *Download finetuned model* saves), with a comment saying to put that

@@ -85,7 +85,7 @@ opens an OpenOrganelle volume with `setup_53` running.
 tab has open, with the viewer's `#!` state after it: the view (position,
 zoom, layout, each layer as shown with its shader), whose model layers name
 the chain they were drawn through; the recipient's page serves the models
-through that chain and its Input and Postprocess lists show it (`main.js`'s
+through that chain and its Processing tab shows it (`main.js`'s
 `showChain`, called by `src/main.ts` when the session's chain is not the
 rendered default). The address bar never carries any of it: when the page's
 URL mirrored the viewer's, Chrome's omnibox completed a typed address to the
