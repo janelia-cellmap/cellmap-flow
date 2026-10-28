@@ -302,7 +302,7 @@ function numeric(value: unknown): number | null {
 }
 
 /** Where two expressions are compared: a declared "x*2-1" and a typed
- * "2*x-1" are one map, which the text alone did not say. probe.py's
+ * "2*x-1" are one map, which the text alone does not say. probe.py's
  * EXPRESSION_SAMPLES. */
 const EXPRESSION_SAMPLES = [-2, -1, -0.5, 0, 0.25, 0.5, 1, 2, 255];
 

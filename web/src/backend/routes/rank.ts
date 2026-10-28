@@ -15,12 +15,11 @@
 // server's model advice assumes of it: the raw's dtype range to [-1, 1],
 // assumedInputNorm) and the session's when that is another, and the better
 // score is kept (best_try): read through none, or another model's, a
-// model's score is noise (fly_organelles fed raw 0 to 255 matched 51% in the
-// server's ranking, which read every model through the session's input
-// normalization). Through the session's, a model already served is
-// read as it is served, its chunks from the engine's caches where the viewer
-// has had them computed; any other read is served for the score alone, with
-// those normalizers and no layer, and released after, so a ranking leaves
+// model's score is noise (fly_organelles fed raw 0 to 255 matches 51%).
+// Through the session's, a model already served is read as it is served,
+// its chunks from the engine's caches where the viewer has had them
+// computed; any other read is served for the score alone, with those
+// normalizers and no layer, and released after, so a ranking leaves
 // the Models tab and the GPU as they were (its download stays in the
 // catalog's byte cache, and Show serves it at once). Where the raw under the
 // paint is narrow, a model is scored a second time through the kept
@@ -261,7 +260,7 @@ export function rankRoutes(router: Router): void {
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
     const pick = readSelectChannel(body.select_channel);
     if ("error" in pick) return badRequest(pick.error);
-    const past = pick.channel === null ? null : notAChannel(entry, pick.channel);
+    const past = notAChannel(entry, pick.channel);
     if (past) return badRequest(past);
     const read = readParts(body);
     if ("error" in read) return badRequest(read.error);
@@ -599,9 +598,9 @@ type Group = (typeof GROUPS)[number];
  * session's volume is painted for it, and what the Models tab's listing
  * tags and sorts it by (ListFacts). It starts ticked, as the server's
  * ranking ticks its own, only when it is served or was added by hand: those
- * are the models someone chose to look at. Ticking all the others had Rank
- * download and score every model the catalog has, the cellmap ones and
- * those finetuned here, for one paint. */
+ * are the models someone chose to look at. Ticking all the others would
+ * have Rank download and score every model the catalog has, the cellmap
+ * ones and those finetuned here, for one paint. */
 interface Candidate extends ListFacts {
   name: string;
   repo: string;
