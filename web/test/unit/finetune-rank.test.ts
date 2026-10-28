@@ -92,6 +92,16 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
   });
 
+  it("give an affinity model's layer the sigmoid alone, its fitted threshold kept for Seed from Prediction", async () => {
+    // The watershed that makes its objects needs its affinities graded: the
+    // threshold its row set ahead of it left 0s and 1s, and no objects.
+    const { handle } = await painted({ input_norm: [], postprocess: [] });
+    const aff = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));
+    expect(aff).toMatchObject({ success: true, channel: null });
+    expect(aff.threshold).toBeGreaterThan(0);
+    expect(aff.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+  });
+
   it("score a model added by hand by the name its candidate answers", async () => {
     const { handle } = await painted();
     const { candidate } = body(await handle(request("POST", "/api/finetune/rank/add", { ref: entry("setup_54").id })));

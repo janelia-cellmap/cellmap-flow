@@ -234,8 +234,8 @@ REQUEST_MODELS: dict[str, str] = {
 # browser's DEFAULT_OPTIONS (web/src/finetune/types.ts) takes where it has
 # no reason of its own.
 FINETUNE_FORM_FIELDS = (
-    "lora_r", "num_epochs", "batch_size", "learning_rate", "loss_type", "margin",
-    "label_smoothing", "distillation_lambda", "distillation_scope", "balance_classes", "augment",
+    "lora_r", "num_epochs", "batch_size", "learning_rate", "learning_rate_schedule", "loss_type",
+    "margin", "label_smoothing", "distillation_lambda", "distillation_scope", "balance_classes", "augment",
 )
 
 # What each shared constant is, for the generated TypeScript's comments.

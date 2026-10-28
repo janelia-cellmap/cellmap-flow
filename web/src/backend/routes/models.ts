@@ -10,6 +10,8 @@
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
 import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, ModelEntry, RankFit, ServedModel, SessionState, Step } from "../../contracts";
+import { hasAffinityChannels } from "../../finetune/volume";
+import { PYTHON } from "../../generated/python-data";
 import { compileExpression } from "../../infer/expression";
 import { isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
@@ -329,12 +331,108 @@ export function inputNormDifferences(configured: Step[], declared: Record<string
   return differences;
 }
 
+/** A model's postprocess_review, as probe.py's review_postprocess answers
+ * it: a level ("unknown" when there is nothing to go on), a message, the
+ * chain suggested (step names) and the parameters its steps need. */
+interface PostprocessReview {
+  level: "ok" | "optional" | "warn" | "unknown";
+  message: string;
+  suggest: string[];
+  params?: Record<string, Record<string, number | string>>;
+}
+
+/** probe.py's NEIGHBORHOOD_OFFSETS: the mutex watershed's offsets,
+ * longest-range last, cut to a model's channels. */
+const NEIGHBORHOOD_OFFSETS = PYTHON.advice.neighborhood_offsets;
+
+/** probe.py's suggest_affinity_chain: an affinity model's chain into a
+ * segmentation, the sigmoid first for logits, then DefaultPostprocessor's
+ * 0-255 into AffinityPostprocessor. */
+function affinityChain(outputClass: string): string[] {
+  return [...(outputClass === "unbounded" ? ["SigmoidPostprocessor"] : []), "DefaultPostprocessor", "AffinityPostprocessor"];
+}
+
+/** probe.py's suggest_postprocess_params: the values the steps of `chain`
+ * need, from the range that reaches each (a DefaultPostprocessor after a
+ * sigmoid maps [0, 1] onto 0-255, where its defaults map [-1, 1]), and an
+ * AffinityPostprocessor's bias and neighborhood, cut to the model's
+ * `channels` and written as Python writes a list; only the steps whose
+ * defaults are wrong for the chain. */
+function postprocessParams(chain: string[], outputClass: string, channels: number): Record<string, Record<string, number | string>> {
+  const params: Record<string, Record<string, number | string>> = {};
+  let range: number[] | null = outputClass === "unit" ? [0, 1] : outputClass === "signed_unit" ? [-1, 1] : null;
+  for (const name of chain) {
+    if (name === "SigmoidPostprocessor") {
+      range = [0, 1];
+    } else if (name === "DefaultPostprocessor") {
+      if (range) params[name] = { clip_min: range[0], clip_max: range[1], bias: -range[0] + 0, multiplier: 255 / (range[1] - range[0]) };
+      range = [0, 255];
+    } else if (name === "ThresholdPostprocessor") {
+      // On logits the boundary is 0, not a sigmoid's 0.5.
+      params[name] = { threshold: range ? (range[0] + range[1]) / 2 : 0 };
+      range = [0, 1];
+    } else if (name === "AffinityPostprocessor") {
+      const offsets = NEIGHBORHOOD_OFFSETS.slice(0, channels);
+      params[name] = { bias: 0.5, ...(channels ? { neighborhood: `[${offsets.map((o) => `[${o.join(", ")}]`).join(", ")}]` } : {}) };
+      range = null;
+    }
+  }
+  return params;
+}
+
+/** The review of the postprocessing `served` is shown through (`names`,
+ * the chain's step names), as probe.py's review_postprocess gives an
+ * affinity model's, from the output class its served info reads off the
+ * model (there is no output probe in the browser): a threshold ahead of
+ * the watershed warned of, as is an output nothing puts in [0, 1] for it;
+ * and, once its affinities show (as probabilities, the sigmoid its start
+ * or the ranking set on logits), the chain into a segmentation offered as
+ * "optional", one quiet line with its Apply. Any other model, or an
+ * affinity model whose activation is still to set, is "unknown", which the
+ * banner does not show. */
+function postprocessReview(served: ServedModel, names: string[]): PostprocessReview {
+  const outputClass = served.info.output_class ?? null;
+  const channels = served.info.output_channels;
+  if (outputClass && hasAffinityChannels(served.entry)) {
+    const verdict = (level: PostprocessReview["level"], message: string, suggest: string[]): PostprocessReview =>
+      ({ level, message, suggest, params: postprocessParams(suggest, outputClass, channels) });
+    if (names.includes("AffinityPostprocessor")) {
+      // Whether the affinities reach it in [0, 1], or DefaultPostprocessor's 0-255.
+      const scaled = names.includes("DefaultPostprocessor") || names.includes("SigmoidPostprocessor") || outputClass === "unit";
+      // A threshold ahead of it leaves 0s and 1s, which it reads as 0-255
+      // and divides by 255: no edge reaches its bias. The chain is
+      // suggested back without it, or as the whole affinity chain when
+      // nothing else ahead puts the affinities in [0, 1].
+      const ahead = names.indexOf("AffinityPostprocessor");
+      if (names.slice(0, ahead).includes("ThresholdPostprocessor")) {
+        return verdict("warn",
+          "A ThresholdPostprocessor comes before the AffinityPostprocessor, so the watershed gets 0s and 1s instead of affinities and finds no objects: take the threshold out.",
+          scaled ? names.filter((n, i) => i > ahead || n !== "ThresholdPostprocessor") : affinityChain(outputClass));
+      }
+      if (!scaled) {
+        return verdict("warn",
+          "AffinityPostprocessor needs affinities in [0, 1] (or the 0-255 that DefaultPostprocessor produces), but this model's output is not bounded to [0, 1] and nothing ahead of it rescales it, so the watershed works on the wrong values.",
+          affinityChain(outputClass));
+      }
+      return verdict("ok", "Affinity chain looks complete.", []);
+    }
+    const unset = (outputClass === "unbounded" && !names.length) || ((outputClass === "unit" || outputClass === "signed_unit") && names.includes("SigmoidPostprocessor"));
+    if (!unset) return verdict("optional", `its ${channels} channels look like affinities, which this chain turns into a segmentation.`, affinityChain(outputClass));
+  }
+  const { output_class, output_class_from, output_op } = served.info;
+  const from = output_class_from === "graph"
+    ? `Its network ends in a ${output_op}, so its output is ${output_class}.`
+    : `Its network's last op does not say what its output is; the model's manifest says: ${served.entry.manifest.output || "not stated"}.`;
+  return { level: "unknown", message: `No output probe in the browser. ${from}`, suggest: [] };
+}
+
 /** One model's entry of /api/model_advice. There is no output probe in the
- * browser (probe_available: false, and a review that says so, which the
- * banner does not show): the output class is the served model's
+ * browser (probe_available: false): the output class is the served model's
  * (ModelInfo.output_class: its network's last op, else its manifest's
  * text), with where it was read (output_class_from, output_op) as the
- * server's advice gives it, and the review says which it was. The input
+ * server's advice gives it. The postprocessing review is an affinity
+ * model's (postprocessReview), and "unknown" for any other, which the
+ * banner does not show, saying where the class was read. The input
  * normalization is the one the model's
  * manifest declares, which suggest_input_norm treats as declared metadata:
  * high confidence, and a match when the configured steps are those in
@@ -358,11 +456,8 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const configuredNorm = stepNames(chain.input_norm);
   const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
   const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
-  const output = manifest.output ?? "";
   const { output_class, output_class_from, output_op } = served.info;
-  const from = output_class_from === "graph"
-    ? `Its network ends in a ${output_op}, so its output is ${output_class}.`
-    : `Its network's last op does not say what its output is; the model's manifest says: ${output || "not stated"}.`;
+  const configuredPost = stepNames(chain.postprocess);
   return {
     model: served.entry.name,
     probe_available: false,
@@ -372,16 +467,12 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
     output_op: output_op ?? null,
     output_min: null,
     output_max: null,
-    configured_postprocess: stepNames(chain.postprocess),
+    configured_postprocess: configuredPost,
     configured_input_norm: configuredNorm,
     input_voxel_size: served.info.input_voxel_size,
     input_resampled_from: null,
     input_relabelled_from: null,
-    postprocess_review: {
-      level: "unknown",
-      message: `No output probe in the browser. ${from}`,
-      suggest: [],
-    },
+    postprocess_review: postprocessReview(served, configuredPost),
     input_norm_suggestion: order.length
       ? { input_norm: declared, order, reason: "Declared in the model's manifest (cellmap/onnx-web-models)", confidence: "high" }
       : { input_norm: null, order: [], reason: "The model's manifest does not say", confidence: "low" },

@@ -132,7 +132,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
       }
       if (!painted) throw new Error("no painted voxels: paint background (1) and objects (2 and up) on the annotation layer first, then train");
       // The run's steps, and so its schedule, are known only now: the epochs pass over every painted voxel.
-      report.log(`${count(painted)} painted voxels in ${count(paintedChunks)} chunk${paintedChunks === 1 ? "" : "s"}; training the head at learning rate ${scheduleWords(options.learningRate, headSteps(painted, options))}`);
+      report.log(`${count(painted)} painted voxels in ${count(paintedChunks)} chunk${paintedChunks === 1 ? "" : "s"}; training the head at learning rate ${scheduleWords(options.learningRate, headSteps(painted, options), options.learningRateSchedule)}`);
       if (pick && !held) report.log(`Distillation has no voxel to hold (${pick === "anchor" ? "every voxel of the good regions is painted" : "every voxel of the painted chunks is painted"}); training on the paint alone`);
       const pixels = concatPixels(sets, trainee);
       const heldSet = held ? concatDistillation(heldSets, trainee) : null;

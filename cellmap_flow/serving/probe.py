@@ -224,8 +224,10 @@ def review_postprocess(
     with its Apply: as a suggestion's banner, over the sigmoid a model's
     start or the ranking set (portable/rank.py needed_postprocess, an
     affinity model's logits' too), it read as though that were wrong. A
-    threshold is no fault either: the ranking sets one at the probability
-    the paint is fitted best at.
+    threshold is no fault either (the ranking sets a binary model's at the
+    probability the paint is fitted best at), but ahead of an
+    AffinityPostprocessor it is a "warn": the watershed then has no
+    affinities to join objects by.
 
     ``evidence`` (``activation_evidence``'s) is what says the class, which
     each message gives. ``output_class`` None, when neither the network nor
@@ -259,7 +261,29 @@ def review_postprocess(
 
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
-            if not (has_default or has_sigmoid or output_class == UNIT):
+            # Whether the affinities reach it in [0, 1], or the 0-255 of a
+            # DefaultPostprocessor.
+            scaled = has_default or has_sigmoid or output_class == UNIT
+            # The watershed joins neighbours by how far their affinity is
+            # above its bias: a threshold ahead of it leaves 0s and 1s, which
+            # it reads as DefaultPostprocessor's 0-255 and divides by 255, and
+            # no edge reaches the bias. The chain is suggested back without
+            # it, or as the whole affinity chain when nothing else ahead puts
+            # the affinities in [0, 1].
+            ahead = names.index("AffinityPostprocessor")
+            if "ThresholdPostprocessor" in names[:ahead]:
+                rest = [n for i, n in enumerate(names) if i > ahead or n != "ThresholdPostprocessor"]
+                return verdict(
+                    "warn",
+                    (
+                        "A ThresholdPostprocessor comes before the "
+                        "AffinityPostprocessor, so the watershed gets 0s and 1s "
+                        "instead of affinities and finds no objects: take the "
+                        "threshold out."
+                    ),
+                    rest if scaled else suggest_affinity_chain(output_class),
+                )
+            if not scaled:
                 return verdict(
                     "warn",
                     (

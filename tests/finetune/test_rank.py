@@ -222,6 +222,26 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
 
+def test_an_affinity_models_row_gives_its_layer_the_sigmoid_alone(dashboard, painted, monkeypatch):
+    """The watershed that makes an affinity model's objects needs its
+    affinities graded: the threshold its row set ahead of it left 0s and 1s
+    and no objects. The threshold fitted to the paint is still the row's,
+    Seed from Prediction's."""
+    session = get_session()
+    session.models_config = [_model("model")]
+    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    monkeypatch.setattr(rank_routes, "fetch_model_info", lambda host: {"channels": ["aff_z", "aff_y", "aff_x"], "output_class": UNBOUNDED})
+    monkeypatch.setattr(rank_routes, "autodetect_output_type",
+                        lambda config, output_type, offsets: ("affinities", "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"))
+    painted.logits = np.repeat(painted.logits, 3, axis=0)
+
+    body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
+
+    assert body["success"], body
+    assert body["channel"] is None and 0 < body["threshold"] < 1
+    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}]
+
+
 def test_a_model_is_read_through_its_own_input_normalization_when_the_session_has_none(dashboard, painted, monkeypatch):
     """fly_organelles, ranked with no input normalization set, read raw 0 to
     255 and matched 51%, nucleus its best channel for paint of mitochondria.

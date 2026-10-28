@@ -3,7 +3,8 @@
 
 The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
-their parameters, the chain a fresh session starts with, the organelle
+their parameters, the chain a fresh session starts with, the offsets the
+model advice's affinity chain gives the mutex watershed, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
 ranking's constants, the learning rate's floor, the finetune log's patterns
 and the unit table. This
@@ -99,6 +100,7 @@ def python_data():
     from cellmap_flow.io import metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.post.postprocessors import get_postprocessors_list
+    from cellmap_flow.serving import probe
     from cellmap_flow.viewer import layers, raw
 
     return {
@@ -107,6 +109,10 @@ def python_data():
             "postprocess": ops(get_postprocessors_list()),
         },
         "default_chain": DEFAULT_CHAIN,
+        # The model advice's (serving/probe.py): the mutex watershed's
+        # offsets, cut to an affinity model's channels in the chain into a
+        # segmentation it offers.
+        "advice": {"neighborhood_offsets": probe.NEIGHBORHOOD_OFFSETS},
         "ai_annotate": {
             "organelles": [asdict(profile) for profile in organelles.ORGANELLES.values()],
             "aliases": organelles._ALIASES,

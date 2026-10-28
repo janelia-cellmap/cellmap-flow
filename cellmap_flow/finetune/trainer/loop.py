@@ -7,7 +7,8 @@ make its target, forward, the supervised term (supervised.SupervisedLoss),
 the distillation term and, when one channel trains (select_channel), the
 hold on the others (distillation.Distillation), step, record. The learning
 rate eases from the form's down to LEARNING_RATE_FLOOR of it over the run's
-steps (learning_rate_factor). Around it:
+steps, or stays at the form's, as learning_rate_schedule says
+(learning_rate_factor). Around it:
 
 - recovery from an OOM (halve the batch, then drop distillation and the
   hold) and from a NaN under mixed precision (restart in fp32): recovery.py;
@@ -44,19 +45,21 @@ from cellmap_flow.utils.device import best_device
 logger = logging.getLogger(__name__)
 
 
-def learning_rate_factor(step: int, steps: int) -> float:
+def learning_rate_factor(step: int, steps: int, schedule: str) -> float:
     """The share of the run's learning rate that optimizer step ``step``
-    (0 to ``steps`` - 1) of a run of ``steps`` takes: 1 at the first,
+    (0 to ``steps`` - 1) of a run of ``steps`` takes under ``schedule``
+    (TrainingOptions.learning_rate_schedule). "cosine": 1 at the first,
     LEARNING_RATE_FLOOR at the last, along half a cosine between them, so
     a run takes big steps while the model is far from the paint and small
-    ones once it is close. A run of one step takes the rate itself.
+    ones once it is close. "constant": 1 at every step, the form's rate
+    throughout. A run of one step takes the rate itself.
 
     A step past the last stays at the floor rather than going back up the
     cosine: an OOM that halves the batch mid-run gives the epochs left more
     steps than the run counted at its start. The browser's trainers compute
     the same rate (web/src/finetune/schedule.ts learningRateAt).
     """
-    if steps <= 1:
+    if schedule == "constant" or steps <= 1:
         return 1.0
     k = min(step, steps - 1)
     return LEARNING_RATE_FLOOR + (1 - LEARNING_RATE_FLOOR) * (1 + math.cos(math.pi * k / (steps - 1))) / 2
@@ -68,11 +71,14 @@ def rate_words(rate: float) -> str:
     return f"{float(mantissa):g}e{int(exponent)}"
 
 
-def schedule_words(rate: float, steps: int) -> str:
-    """What a run's learning rate does, for its start line: "1e-4, cosine to
-    1e-5 over 40 steps" (web/src/finetune/schedule.ts scheduleWords)."""
+def schedule_words(rate: float, steps: int, schedule: str) -> str:
+    """What a run's learning rate does under ``schedule``, for its start
+    line: "1e-4, cosine to 1e-5 over 40 steps", or "1e-4, constant over 40
+    steps" (web/src/finetune/schedule.ts scheduleWords)."""
     if steps <= 1:
         return rate_words(rate)
+    if schedule == "constant":
+        return f"{rate_words(rate)}, constant over {steps} steps"
     return f"{rate_words(rate)}, cosine to {rate_words(rate * LEARNING_RATE_FLOOR)} over {steps} steps"
 
 
@@ -87,7 +93,8 @@ class Finetuner:
       GradScaler; it falls back to fp32 when the model NaNs under either
     - Gradient accumulation to simulate larger batch sizes
     - The learning rate eased from the form's down to LEARNING_RATE_FLOOR
-      of it over the run (learning_rate_factor)
+      of it over the run, or kept at the form's (learning_rate_schedule,
+      learning_rate_factor)
     - Partial annotation support (mask unannotated regions)
     - Distillation toward the starting model, on unlabeled voxels, on all
       voxels, or on the good regions' rehearsal patches
@@ -104,9 +111,9 @@ class Finetuner:
         dataloader: DataLoader for training data
         output_dir: Directory to save checkpoints and logs
         options: The training settings (finetune/options.py); the defaults if None.
-            Every one of them is read here: the epochs, batch and learning rate, the
-            loss and its margin, smoothing and class balance, the distillation weight
-            and scope, mask_unannotated, select_channel, mixed_precision,
+            Every one of them is read here: the epochs, batch, learning rate and its
+            schedule, the loss and its margin, smoothing and class balance, the
+            distillation weight and scope, mask_unannotated, select_channel, mixed_precision,
             tensorboard, and output_class, what the model's output is (None reads
             it as logits; the training job probes the model when nothing declared it)
         device: Training device ("cuda" or "cpu", auto-detected if None)
@@ -251,8 +258,8 @@ class Finetuner:
         """AdamW over the parameters that train (the adapter's, or every
         weight in a full finetune), at the form's learning rate, and its
         schedule: the rate eased to LEARNING_RATE_FLOOR of it over the run's
-        steps (learning_rate_factor), the scheduler stepped after each
-        optimizer step (_step).
+        steps, or kept at it (learning_rate_schedule, learning_rate_factor),
+        the scheduler stepped after each optimizer step (_step).
 
         Counted once, here: an OOM that halves the batch later gives the
         epochs left more steps, and those stay at the floor. A new trainer,
@@ -262,8 +269,8 @@ class Finetuner:
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.options.learning_rate,
         )
-        steps = self.schedule_steps
-        return optimizer, LambdaLR(optimizer, lambda step: learning_rate_factor(step, steps))
+        steps, schedule = self.schedule_steps, self.options.learning_rate_schedule
+        return optimizer, LambdaLR(optimizer, lambda step: learning_rate_factor(step, steps, schedule))
 
     def _config_rows(self):
         trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -272,7 +279,8 @@ class Finetuner:
             ("epochs", self.num_epochs),
             ("batch size", getattr(self.dataloader, "batch_size", "?")),
             ("gradient accumulation", self.gradient_accumulation_steps),
-            ("learning rate", schedule_words(self.options.learning_rate, self.schedule_steps)),
+            ("learning rate", schedule_words(self.options.learning_rate, self.schedule_steps,
+                                             self.options.learning_rate_schedule)),
             ("mixed precision", self.precision.describe()),
             ("loss", self.supervised.loss_type),
             ("margin", self.supervised.margin),
@@ -344,7 +352,7 @@ class Finetuner:
         log(f"Batches per epoch: {len(self.dataloader)}")
         log(f"Gradient accumulation: {self.gradient_accumulation_steps}")
         log(f"Effective batch size: {self.dataloader.batch_size * self.gradient_accumulation_steps}")
-        log(f"Learning rate: {schedule_words(self.options.learning_rate, self.schedule_steps)}")
+        log(f"Learning rate: {schedule_words(self.options.learning_rate, self.schedule_steps, self.options.learning_rate_schedule)}")
         log(f"Mixed precision: {self.precision.describe()}")
         log(f"Mask unannotated regions: {self.supervised.mask_unannotated}")
         if self.select_channel is not None:
@@ -799,7 +807,8 @@ class Finetuner:
         # do: the rate of the step it is at, from the form's.
         self.scheduler.last_epoch = self.global_step
         for group, rate in zip(self.optimizer.param_groups, self.scheduler.base_lrs):
-            group["lr"] = rate * learning_rate_factor(self.global_step, self.schedule_steps)
+            group["lr"] = rate * learning_rate_factor(
+                self.global_step, self.schedule_steps, self.options.learning_rate_schedule)
         self.best_loss = checkpoint['best_loss']
         # It had a best epoch, whose best_checkpoint.pth this run carries on.
         self._has_best_checkpoint = math.isfinite(self.best_loss)

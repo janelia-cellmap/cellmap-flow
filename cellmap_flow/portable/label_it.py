@@ -11,6 +11,10 @@ from ``dashboard/routes/finetune/view_labels.py`` around its read of the
 model server's array; the browser from ``web/src/backend/routes/view-labels.ts``
 around the engine's ``readOutput``, through ``label_it_calls.py``.
 
+The box every tool covers is here too when the page asks for the field of
+view (``field_of_view_nm``): what the viewer's panel shows, at the slice on
+screen, rather than a box around its centre.
+
 The mutex watershed is the one method not here: ``mwatershed`` is Rust, with
 no Pyodide wheel, so each mode runs its own on what ``affinities`` gives
 (``post.segment.mutex_watershed`` on the server, ``web/src/infer/affinity.ts``
@@ -24,9 +28,12 @@ package the first time a call fails to import it, then calls again, so the
 first seed pays for scipy and opening a dataset does not.
 """
 
+import math
 from typing import Optional
 
 import numpy as np
+
+from cellmap_flow.portable.ai_annotate import AXIS_NAMES, display_names, screen_axes
 
 # How a seed makes objects of the prediction (``post.segment``), each fitting
 # a kind of output; which a model offers is each mode's to say
@@ -351,3 +358,164 @@ def components(prediction, output_class, channels, threshold=0.5, min_size=0, co
     the prediction over ``channels``, an id per connected object
     (``connected_components``)."""
     return connected_components(foreground_mask(prediction, output_class, channels, threshold), connectivity, min_size, per_slice)
+
+
+# ---------------------------------------------------------------------------
+# The field of view
+# ---------------------------------------------------------------------------
+
+# The most annotation voxels a field-of-view box may hold: 2048 x 2048, one
+# slice. A large monitor's panel at one voxel a screen pixel is about half of
+# it (the viewer's frame is three quarters of a 2560-pixel screen, less the
+# layer's side panel: some 1600 x 1300). Zoomed out past it, the viewer
+# shows a coarser level than the paint's, so what a tool labels cannot be
+# checked voxel by voxel, and the box gets costly: every tool reads it,
+# writes it and keeps it twice for Undo (ten deep), and a seed has the model
+# predict all of it. A view over it is refused, saying how far to zoom in;
+# one over LARGE_BOX_VOXELS (128^3, half of it) is asked about first, as any
+# box is.
+FIELD_OF_VIEW_MAX_VOXELS = 2048**2
+
+# Neuroglancer's top row, above its panels, in screen pixels: one line of
+# layer chips (22 pixels with their borders and padding, and their 1-pixel
+# margins) and the row's 3-pixel margin below it, by its stylesheet. More
+# when the chips wrap onto a second line, which a viewer's state does not
+# say.
+NEUROGLANCER_TOP_ROW_PX = 27
+
+# The side panels a viewer state can show, by its key, and where
+# neuroglancer puts each unless the state says otherwise: (side, size in
+# pixels, shown). A state writes only what differs from these (a side
+# panel location's toJSON), so the layer panel opened, as the paint layer's
+# is on its Draw tab, is {"visible": true} alone. Panels in one column of a
+# side share its width; the columns of a side add up.
+_SIDE_PANELS = {
+    "selectedLayer": ("right", 300, False),
+    "selection": ("right", 300, False),
+    "layerListPanel": ("left", 300, False),
+    "helpPanel": ("left", 300, False),
+    "settingsPanel": ("left", 300, False),
+    "statistics": ("bottom", 100, False),
+}
+# Each of the state's toolPalettes, shown unless it says not.
+_TOOL_PALETTE = ("right", 300, True)
+
+# The share of the room the side panels leave (across, down) that the panel
+# the field of view is taken from has, in each layout with a slice panel:
+# all of it alone; half its width beside a 3D view (a row of the two);
+# half each way in the four-panel layouts, where it is the top-left panel,
+# "xy", the one the AI annotation's plane rule reads
+# (``ai_annotate/geometry.depth_axis_from_layout``, the browser's
+# ``depthAxisFromLayout``), as the depth axis given here is.
+_PANEL_SHARE = {
+    "xy": (1, 1), "xz": (1, 1), "yz": (1, 1),
+    "xy-3d": (0.5, 1), "xz-3d": (0.5, 1), "yz-3d": (0.5, 1),
+    "4panel": (0.5, 0.5), "4panel-alt": (0.5, 0.5),
+}
+
+
+def _layout_name(state):
+    """The state's layout by name, lower-cased (a layout with a setting of
+    its own is an object with a ``type``); neuroglancer's default, "4panel",
+    when it has none."""
+    layout = state.get("layout") or "4panel"
+    name = layout.get("type") if isinstance(layout, dict) else layout
+    return name.lower() if isinstance(name, str) else str(name)
+
+
+def _side_panels(state):
+    """The side panels ``state`` shows: ``(side, column, size)`` each."""
+    locations = [(state.get(key), default) for key, default in _SIDE_PANELS.items()]
+    locations += [(palette, _TOOL_PALETTE) for palette in (state.get("toolPalettes") or {}).values()]
+    shown = []
+    for location, (side, size, visible) in locations:
+        # Absent, a panel is where it starts: hidden.
+        if isinstance(location, dict) and location.get("visible", visible):
+            shown.append((location.get("side", side), location.get("col", 0), float(location.get("size", size))))
+    return shown
+
+
+def panel_px(viewer_px, state):
+    """``(across, down)``: the size in screen pixels of the panel the field
+    of view is taken from, in a viewer frame ``viewer_px`` (width, height)
+    pixels big showing ``state`` (the viewer's state, its JSON); None in a
+    layout with no slice panel ("3d") or one not in _PANEL_SHARE (a row of
+    viewers).
+
+    The page measures its frame, not the panel: in the server's mode the
+    frame holds neuroglancer's own page, of another origin, whose panels
+    the page cannot read. So the panel is the frame less neuroglancer's top
+    row (NEUROGLANCER_TOP_ROW_PX) and the side panels the state shows
+    (_SIDE_PANELS), and then its share of what is left (_PANEL_SHARE).
+    """
+    share = _PANEL_SHARE.get(_layout_name(state))
+    if share is None:
+        return None
+    width, height = (float(v) for v in viewer_px)
+    height -= NEUROGLANCER_TOP_ROW_PX
+    columns = {}
+    for side, column, size in _side_panels(state):
+        columns[side, column] = max(size, columns.get((side, column), 0.0))
+    for (side, _), size in columns.items():
+        if side in ("left", "right"):
+            width -= size
+        else:
+            height -= size
+    return width * share[0], height * share[1]
+
+
+def field_of_view_nm(viewer_px, state, pixel_nm, depth_axis, display_dimensions, voxel_size, depth_nm=None) -> list:
+    """The size in nm (z, y, x) of the box the viewer's panel shows: the
+    box every Label it tool covers, centred where the viewer looks, when
+    the page asks for the field of view.
+
+    In the plane, what the panel shows at its zoom: its size in screen
+    pixels (``panel_px`` of ``viewer_px``, the page's viewer frame, and
+    ``state``, the viewer's state as JSON) times ``pixel_nm``, the nm one
+    screen pixel spans (``viewer.raw.view_of``'s, the browser's
+    ``viewPixelNm``): its width along the data axis it draws across, its
+    height along the one it draws down (``ai_annotate.screen_axes`` of
+    ``depth_axis`` in a viewer showing ``display_dimensions``). Along
+    ``depth_axis``, the axis the panel looks along by the AI annotation's
+    plane rule, it is ``depth_nm`` (the Box field's depth along it, when it
+    gives one), else one annotation voxel of ``voxel_size`` (nm, z, y, x):
+    the slice on screen.
+
+    Raises ValueError, which both modes answer 400: without the frame's
+    size or the viewer's zoom, in a layout with no slice panel or side
+    panels that leave it none, and for a view of more than
+    FIELD_OF_VIEW_MAX_VOXELS annotation voxels, saying how far to zoom in.
+    """
+    try:
+        width, height = (float(v) for v in viewer_px)
+    except (TypeError, ValueError):
+        raise ValueError(f"viewer_px must be the viewer's width and height in screen pixels, got {viewer_px!r}") from None
+    if not all(math.isfinite(v) and v > 0 for v in (width, height)):
+        raise ValueError(f"viewer_px must be the viewer's width and height in screen pixels, got {viewer_px!r}")
+    if pixel_nm is None or not pixel_nm > 0:
+        raise ValueError("The viewer has not said how far it is zoomed yet: move or zoom it once, then try again.")
+    panel = panel_px((width, height), state)
+    if panel is None:
+        raise ValueError(f"The viewer's {_layout_name(state)} layout has no slice to take the field of view of: "
+                         "pick xy, xz, yz or 4panel at the viewer's top right.")
+    if min(panel) < 1:
+        raise ValueError("The viewer's side panels leave no room for its slice: close one, or widen the viewer.")
+    down, across, _ = screen_axes(depth_axis, display_names(display_dimensions))
+    voxel = [float(v) for v in voxel_size]
+    size = [0.0] * 3
+    size[across], size[down] = panel[0] * float(pixel_nm), panel[1] * float(pixel_nm)
+    size[depth_axis] = voxel[depth_axis] if depth_nm is None else float(depth_nm)
+    voxels = [max(1, round(s / v)) for s, v in zip(size, voxel)]
+    count = math.prod(voxels)
+    if count > FIELD_OF_VIEW_MAX_VOXELS:
+        # Zooming in by f shrinks the plane f times each way; the depth stays.
+        zoom = math.ceil(10 * math.sqrt(count / FIELD_OF_VIEW_MAX_VOXELS)) / 10
+        deep = voxels[depth_axis] > 1
+        depth = f", {voxels[depth_axis]:,} deep" if deep else ""
+        shallower = ", or give Box a smaller depth" if deep else ""
+        raise ValueError(
+            f"The view shows {voxels[across]:,} × {voxels[down]:,} voxels ({AXIS_NAMES[across]} × {AXIS_NAMES[down]})"
+            f"{depth}, more than the {FIELD_OF_VIEW_MAX_VOXELS:,} a field-of-view box holds: zoom in about "
+            f"{zoom:g}× (Ctrl and the scroll wheel, over the viewer){shallower}."
+        )
+    return size
