@@ -34,7 +34,7 @@ import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } 
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
 import { PYTHON } from "./generated/python-data";
-import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
+import { finetunedRecord, isFinetuned, nextFinetunedName, publishedRef } from "./models/finetuned";
 import { NoBrowserCopyError } from "./models/hf";
 import { hubName, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
@@ -280,16 +280,16 @@ export async function resolveLinkedModels(
  * (a Hugging Face model; a finetuned one would be this browser's own, not
  * the sender's, unless the link names it by where it was published from
  * here: those are the sender's bytes), its bytes are fetched in the link's
- * file when its manifest
- * still has that file (else in the catalog's default, said in the log), the
- * link's numbers are written over its head, whose shape must be theirs, and
- * the result is kept as a finetuned model whose record says it came from a
- * link. It takes the link's name unless a model kept here (or a Hugging
- * Face model) has it already: a model of this browser is never replaced,
- * and the new one is the next of the base's series instead
- * (nextFinetunedName), passing over `reserved`, the link's names for its
- * other finetuned models. `claimed`, the entries resolved for the link so
- * far, are not served twice. Throws what went wrong; nothing is kept then. */
+ * file when its manifest still has that file (else in the catalog's
+ * default, said in the log), the link's numbers are written over its head,
+ * whose shape must be theirs, and the result is kept as a finetuned model
+ * whose record says it came from a link. It takes the link's name unless a
+ * model kept here (or a Hugging Face model) has it already: a model of this
+ * browser is never replaced, and the new one is the next of the base's
+ * series instead (nextFinetunedName), passing over `reserved`, the link's
+ * names for its other finetuned models. `claimed`, the entries resolved for
+ * the link so far, are not served twice. Throws what went wrong; nothing is
+ * kept then. */
 export async function rebuildFinetuned(
   catalog: LinkCatalog,
   model: LinkedFinetuned,
@@ -316,7 +316,7 @@ export async function rebuildFinetuned(
   const base = await catalog.resolve(model.base);
   if (!base) throw new Error(`${model.base} is not a model this browser can run`);
   const published = records.find((r) => r.id === base.id)?.published;
-  if (isFinetuned(base) && (!published || `${published.repo}/${published.folder}` !== model.base)) {
+  if (isFinetuned(base) && (!published || publishedRef(published) !== model.base)) {
     throw new Error(`${model.base} is a model finetuned in this browser, not one from Hugging Face`);
   }
   const variant = base.manifest.variants.find((v) => v.file === model.file);

@@ -26,10 +26,10 @@
 // as a file. The page that opens the link leaves out what it cannot show
 // and says so in the same notice (showLinkNotice, called by main.ts).
 import { message } from "./backend/router";
-import { type Catalog, FINETUNED_REPO, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
+import { type Catalog, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
 import { headOf } from "./finetune/onnx-head";
 import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn } from "./link";
-import { isFinetuned } from "./models/finetuned";
+import { isFinetuned, lineage, publishedRef } from "./models/finetuned";
 import { HF_REPO } from "./models/hf";
 import { decodeState, isStateHash } from "./viewer/share";
 
@@ -78,11 +78,6 @@ function hubLinkRef(entry: ModelEntry): string {
   return entry.repo === HF_REPO ? entry.folder : entry.id;
 }
 
-/** The ref of the place a model was published to, `<owner>/<repo>/<folder>`. */
-export function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
-  return `${published.repo}/${published.folder}`;
-}
-
 /** The refs of `models` for a link, in their order: a Hugging Face model's
  * hubLinkRef; a finetuned model published from here, where it was
  * published to; any other finetuned model's finetunedRef, its last layer
@@ -110,7 +105,8 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
         linked.refs.push(publishedRef(record.published));
         continue;
       }
-      const { ancestry, root } = lineage(record, records);
+      const { ancestry, base, published, kept } = lineage(record, records);
+      if (!kept) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
       if (ancestry.some((r) => r.from_file)) {
         throw new Error("it was opened from a file in this browser, which a link does not carry; publish it to Hugging Face (the Finetune tab) to put it in a link, or send the file");
       }
@@ -118,8 +114,8 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
         throw new Error("its whole network was trained in this browser, millions of weights where a link carries a last layer's few dozen; publish it to Hugging Face (the Finetune tab) to put it in a link, or send the .onnx file the Finetune tab's Download finetuned model saves");
       }
       const head = headOf(await catalog.modelBytes(model));
-      linked.refs.push(finetunedRef({ name: model.name, base: await baseRef(root, catalog), file: root.file, weight: head.weight, bias: head.bias }));
-      linked.rebuilt.push({ name: model.name, base: root.name });
+      linked.refs.push(finetunedRef({ name: model.name, base: published ?? (await hubBaseRef(base, catalog)), file: base.file, weight: head.weight, bias: head.bias }));
+      linked.rebuilt.push({ name: model.name, base: base.name });
     } catch (e) {
       linked.refs.push(model.folder);
       linked.unlinked.push({ name: model.name, why: message(e) });
@@ -128,35 +124,12 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
   return linked;
 }
 
-/** The model a finetuned model is rebuilt on where a link opens: a record's
- * `base` (its id, name and the file whose head was trained), with `ref` set
- * when it is a model published from here, which a link names by that. */
-type LinkBase = FinetunedRecord["base"] & { ref?: string };
-
-/** What `record` is rebuilt on in a link (`root`), and the finetuned models
- * between them, `record` first: up the records' bases to the first that is
- * not a model finetuned here, or one that was published from here, whose
- * bytes are on Hugging Face. An error when the way stops short of either: a
- * model on it is no longer kept. */
-function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): { ancestry: FinetunedRecord[]; root: LinkBase } {
-  const ancestry = [record];
-  for (let base = record.base; ; ) {
-    if (!base.id.startsWith(`${FINETUNED_REPO}/`)) return { ancestry, root: base };
-    const parent = records.find((r) => r.id === base.id);
-    if (!parent || ancestry.includes(parent)) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
-    if (parent.published) return { ancestry, root: { ...base, ref: publishedRef(parent.published) } };
-    ancestry.push(parent);
-    base = parent.base;
-  }
-}
-
-/** `root`'s ref in a link: where it was published, or the Hugging Face
- * model's, looked up in the catalog (which says when it is gone). */
-async function baseRef(root: LinkBase, catalog: Pick<Catalog, "resolve">): Promise<string> {
-  if (root.ref) return root.ref;
-  const base = await catalog.resolve(root.id);
-  if (!base) throw new Error(`${root.name}, the model it was finetuned from, is not in the model catalog`);
-  return hubLinkRef(base);
+/** The ref in a link of `base`, the Hugging Face model a lineage ends at,
+ * looked up in the catalog (which says when it is gone). */
+async function hubBaseRef(base: FinetunedRecord["base"], catalog: Pick<Catalog, "resolve">): Promise<string> {
+  const entry = await catalog.resolve(base.id);
+  if (!entry) throw new Error(`${base.name}, the model it was finetuned from, is not in the model catalog`);
+  return hubLinkRef(entry);
 }
 
 /** What the sender is told about a link beside its having been copied: a

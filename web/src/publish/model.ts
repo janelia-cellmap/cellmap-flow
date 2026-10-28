@@ -10,9 +10,8 @@
 // manifest is the record's entry's, its one variant the bytes the browser
 // serves for it, which the route uploads as `<folder>/<file>.onnx`.
 import type { FinetunedRecord, ModelManifest } from "../contracts";
-import { FINETUNED_REPO } from "../contracts";
 import { PYTHON } from "../generated/python-data";
-import { publishedRef } from "../share-link";
+import { lineage } from "../models/finetuned";
 
 /** A publish as cellmap_flow/portable/publish.py takes it (its `pub`, whose
  * docstring says each field): where it goes and when, the manifest whose
@@ -72,17 +71,8 @@ export function publicationOf(
  * opened from a file (its base has no id) was finetuned from what its own
  * manifest's "published" block says, if anything. */
 export function finetunedFrom(record: FinetunedRecord, records: readonly FinetunedRecord[]): string | undefined {
-  const seen = new Set<string>();
-  for (let current = record; ;) {
-    const { base } = current;
-    if (!base.id) return current.entry.manifest.published?.finetuned_from;
-    if (!base.id.startsWith(`${FINETUNED_REPO}/`) || seen.has(base.id)) return base.id;
-    seen.add(base.id);
-    const parent = records.find((r) => r.id === base.id);
-    if (!parent) return base.id;
-    if (parent.published) return publishedRef(parent.published);
-    current = parent;
-  }
+  const { ancestry, base, published } = lineage(record, records);
+  return published ?? (base.id || ancestry[ancestry.length - 1].entry.manifest.published?.finetuned_from);
 }
 
 /** How `record` was trained, where it says: its whole network ("full") or
