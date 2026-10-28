@@ -198,7 +198,7 @@ browser that picked the folder.
 
 ## Running the models over a region
 
-The **Run** tab (browser mode only, `src/run-region/`) runs the served models
+The **Save predictions** tab (browser mode only, `src/run-region/`) runs the served models
 over a region and saves their predictions as OME-Zarr in a folder on your
 machine. The docs' [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html#running-the-models-over-a-region)
 says how to use it, and `ARCHITECTURE.md` ("Run on a region") how it works.
@@ -271,8 +271,8 @@ AI-assisted annotation (`src/ai-annotate/`, the port of
 `cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View
 Centre* reads one plane of raw EM around the point from the open volume
 (`geometry.ts`, `plane.ts`), sends it from the page to a Gemini image model
-(`gemini.ts`: Google's Gemini API with an API key, or Vertex AI with a project
-and an access token; `fake.ts` paints in the page, for trying it and for the
+(`gemini.ts`: Vertex AI with a project and an access token, the default, or
+Google's Gemini API with an API key; `fake.ts` paints in the page, for trying it and for the
 tests), turns the colour it painted into a mask (`mask.ts`) and, on *Accept*,
 writes it into the paint store as an object per connected piece (by the
 server's own Python, `cellmap_flow/portable/ai_annotate.py` and `fill.py`),

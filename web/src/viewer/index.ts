@@ -129,9 +129,10 @@ export function withSelectedLayer(state: NgState, name: string, tab?: string): N
   return next;
 }
 
-/** The page boots with data-viewer="pending" on <html> when the session has
- * a dataset (index.html's inline script), which keeps the connect panel
- * invisible (browser.css) until the viewer replaces it; cleared when the
+/** The page boots with data-viewer="pending" on <html> when it is a link
+ * naming a volume or the session has a dataset (index.html's inline
+ * script), which turns the connect panel into a line saying the volume is
+ * opening (browser.css) until the viewer replaces it; cleared when the
  * viewer is mounted, or when restore() finds nothing to show. */
 function viewerSettled(): void {
   if (typeof document !== "undefined" && document.documentElement?.dataset) delete document.documentElement.dataset.viewer;
@@ -438,7 +439,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
         // The session knows the dataset but not its geometry, which the
         // engine reads as the session is restored (backend restoreSession,
         // a second or so): the viewer waits for it (datasetOpened), the
-        // connect panel staying hidden meanwhile, and layers set before
+        // connect panel saying it is opening meanwhile, and layers set before
         // then are queued. Mounted at once without it, Neuroglancer took
         // the coordinate space from whichever layer's metadata came first,
         // 8 nm (the raw) or 16 nm (the model's output), and adding the

@@ -99,7 +99,8 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
     browser session has them.
 
     The names are those routes/index_page.py:index passes to render_template,
-    plus ``mode`` and ``app_entry``, which Flask leaves undefined. Keep the two
+    plus ``mode``, ``app_entry`` and ``dataset_param``, which Flask leaves
+    undefined (the templates read them in the browser's page alone). Keep the two
     in step: the template is rendered with StrictUndefined, so a variable that
     the templates come to need and this context lacks fails the render (and
     tests/web/test_render.py) with its name, rather than rendering blank.
@@ -107,6 +108,7 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
     from cellmap_flow.dashboard.routes.index_page import chain_items
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.pipeline_spec import PipelineSpec
+    from cellmap_flow.portable.publish import DATASET_PARAM
     from cellmap_flow.post.postprocessors import get_postprocessors_list
 
     # chain_items takes live steps (it calls their to_dict), as the Flask
@@ -122,6 +124,9 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
     return dict(
         mode="browser",
         app_entry=app_entry,
+        # A link's volume (src/link.ts): the page's first-paint script says it
+        # is opening one when the query names it.
+        dataset_param=DATASET_PARAM,
         url_for=make_url_for(static_prefix),
         # No viewer yet: the page shows the connect panel, and the in-page
         # backend puts the viewer in when a dataset is opened.

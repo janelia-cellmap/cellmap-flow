@@ -39,12 +39,20 @@
   display: block !important;
 }
 
-/* While the page boots with a dataset already open (index.html's inline
-   script sets data-viewer="pending" from the session's sessionStorage flag),
-   the connect panel stays invisible: the viewer replaces it with the iframe,
-   or main.ts clears the attribute when there is nothing to show. */
-[data-viewer="pending"] #noNeuroglancerPanel {
-  visibility: hidden;
+/* While the page boots with a volume to open (index.html's inline script
+   sets data-viewer="pending": the page is a link naming one, or the
+   session's sessionStorage flag says one is open), the connect panel shows
+   only that it is opening it: the viewer replaces the panel with the
+   iframe, or clears the attribute when there is nothing to show. */
+#viewerOpening {
+  display: none;
+  overflow-wrap: anywhere;
+}
+[data-viewer="pending"] #noNeuroglancerPanel > :not(.no-data-icon, #viewerOpening) {
+  display: none;
+}
+[data-viewer="pending"] #viewerOpening {
+  display: block;
 }
 
 /* A folder on this machine (src/local-folder): the connect panel's "Browse local
@@ -67,7 +75,7 @@
   color: var(--text-muted);
 }
 
-/* The Run tab's Output folder block while a folder is dragged over it
+/* The Save predictions tab's Output folder block while a folder is dragged over it
    (src/run-region/panel.ts acceptDroppedFolder). */
 #runFolderDrop.local-drop-target {
   outline: 2px dashed var(--accent);
@@ -159,11 +167,11 @@
   color: var(--text-primary);
 }
 
-/* Run on a region (the browser-only Run tab, templates/_run_tab.html, driven
-   by src/run-region/panel.ts): the region's offset and size in nm as a grid,
-   a row each, a column per axis (z, y, x) under a header row, narrow enough
-   for the dashboard's column on a phone; and the models' checkboxes, one a
-   line. Each number field is at least eight characters wide, so a six-digit
+/* Run on a region (the browser-only Save predictions tab,
+   templates/_run_tab.html, driven by src/run-region/panel.ts): the region's
+   offset and size in nm as a grid, a row each, a column per axis (z, y, x)
+   under a header row, narrow enough for the dashboard's column on a phone;
+   and the models' checkboxes, one a line. Each number field is at least eight characters wide, so a six-digit
    nm value shows whole on a phone, where the columns used to shrink until
    the last digits were cut off; the spinner goes (step is "any", and the
    values come from the box drawn in the viewer). */

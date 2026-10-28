@@ -267,14 +267,14 @@ function annotationDimensions(source: unknown): Dimensions | null {
 /** The layer's points are in nm (runRegionLayer) when its source says nothing else. */
 const NM_SPACE: Record<string, [number, string]> = { z: [1e-9, "m"], y: [1e-9, "m"], x: [1e-9, "m"] };
 
-/** The id of the box the Run tab draws from its fields (withBox). */
+/** The id of the box the Save predictions tab draws from its fields (withBox). */
 export const TYPED_BOX_ID = "run-region-box";
 
 /** `layer` with `region` (nm) as its one box, in the layer's own coordinate
  * space (latestBox read backwards), so the box in the viewer follows the
- * offset and size typed into the Run tab. The boxes drawn before are
- * replaced, as a run takes the latest box only; anything else in the layer
- * is kept. `layer` as it was when its space cannot hold the box. */
+ * offset and size typed into the Save predictions tab. The boxes drawn
+ * before are replaced, as a run takes the latest box only; anything else in
+ * the layer is kept. `layer` as it was when its space cannot hold the box. */
 export function withBox(layer: LayerSpec, region: RegionNm): LayerSpec {
   const space = annotationDimensions(layer.source) ?? NM_SPACE;
   const end = region.offset.map((o, a) => o + region.size[a]);

@@ -181,7 +181,7 @@ describe("GET /api/finetune/ai-annotate/config", () => {
     expect(d.providers[0].credentials).toEqual(["api_key"]);
     expect(d.providers[1].credentials).toEqual(["project", "access_token"]);
     expect(d.providers[2]).toMatchObject({ models: [FAKE_MODEL], destination: FAKE_DESTINATION, credentials: [] });
-    expect(d.default_provider).toBe("gemini");
+    expect(d.default_provider).toBe("vertex"); // DEFAULT_PROVIDER, wherever it is listed
     expect(d.daily_call_limit).toBe(DAILY_CALL_LIMIT);
     expect(d.calls_today).toBe(0);
     expect(d.crop_size_px).toBe(64);

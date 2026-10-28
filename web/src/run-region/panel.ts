@@ -385,7 +385,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
     }
     el.folderName.textContent = folder ? folder.name : "No folder chosen";
     el.folderNote.textContent = folder
-      ? `Each model goes to ${folder.name}/<model>.zarr. The browser asks to allow writing to the folder when you click Run, when it has not yet (after a reload, say).`
+      ? `Each model goes to ${folder.name}/<model>.zarr. The browser asks to allow writing to the folder when you click Save, when it has not yet (after a reload, say).`
       : "Choose where the predictions go, or drop a folder here: each model is written to <folder>/<model>.zarr. Chrome won't let a page write straight into Downloads or your home folder (\"it contains system files\"): make a new folder inside it (the picker has a New Folder button) and choose that.";
   }
 
@@ -414,7 +414,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
    * be; the browser asks to allow writing to it when Run is clicked (start). */
   function acceptDroppedFolder(): void {
     const take = (dropped: OutputFolder) => {
-      status(`Output folder: ${dropped.name}. The browser asks to allow writing to it when you click Run.`);
+      status(`Output folder: ${dropped.name}. The browser asks to allow writing to it when you click Save.`);
       void useFolder(dropped);
     };
     dropDirectory(el.folderDrop, take, (text) => status(text, "error"), OUTPUT_DROP);

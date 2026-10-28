@@ -79,6 +79,10 @@ async function boot() {
   const link = parseLink(location.search);
   const linked = link.datasetUrl ?? datasetUrlFromPage();
   if (linked && linked !== session.state.datasetUrl) await session.update({ datasetUrl: linked });
+  // The connect panel says which volume it is opening (index.html's
+  // #viewerOpening, shown while the viewer is pending).
+  const opening = document.getElementById("viewerOpening");
+  if (opening && session.state.datasetUrl) opening.textContent = `Opening ${session.state.datasetUrl}…`;
   const events = new EventTarget();
   const viewer = createViewer({ session, log });
   const infer = await createInference({ session, log });
@@ -127,10 +131,10 @@ async function boot() {
   // `#!` state) it mounts the iframe at once, and with only the session's
   // dataset it waits for the engine to read the volume's geometry (restoring
   // the session, below, which can take seconds; datasetOpened); layers set
-  // before it exists are queued either way. The connect panel the page hid
-  // before its first paint (see index.html's inline script and browser.css)
-  // shows again where there is no dataset, and stays hidden while the viewer
-  // waits. The dashboard does not wait for either.
+  // before it exists are queued either way. The connect panel, which the page
+  // turned into an "Opening …" line before its first paint when a volume is
+  // to open (index.html, browser.css), comes back where there is none. The
+  // dashboard does not wait for either.
   await viewer.restore();
   const restored = restoreSession(ctx).then(() => {
     document.documentElement.dataset.session = "restored";
@@ -152,8 +156,9 @@ async function boot() {
   // which add-model.js listens on.
   installOpenFileUi({ catalog, log });
   installShareUi({ session, viewer, catalog, log });
-  // The Run tab (src/run-region): its own DOM, the folder picker in its
-  // clicks and the engine's materialize; nothing of the dashboard's script.
+  // The Save predictions tab (src/run-region): its own DOM, the folder picker
+  // in its clicks and the engine's materialize; nothing of the dashboard's
+  // script.
   installRunRegionUi(ctx);
   await restored;
 }

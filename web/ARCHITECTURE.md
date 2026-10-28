@@ -124,7 +124,7 @@ model to Hugging Face (`publish/`), all five below, and the dashboard build
    `installLocalFolderUi()`, the panel's "Browse local folder…" button and
    drop target, which fill the URL field and press Connect, so connect.js
    must be listening first; the Share button; and `installRunRegionUi()`,
-   the Run tab (below).
+   the Save predictions tab (below).
 
 ## Request path for `/api/*`
 
@@ -418,8 +418,8 @@ takes back whichever came last.
 
 ## Run on a region (src/run-region/)
 
-The Run tab (`templates/_run_tab.html`, included by `_dashboard.html` in
-browser mode only) runs the served models over a region and saves their
+The Save predictions tab (`templates/_run_tab.html`, included by
+`_dashboard.html` in browser mode only) runs the served models over a region and saves their
 predictions as OME-Zarr in a folder on this machine, where the viewer only
 ever computes the chunks it shows. It is the one tab that is not a dashboard
 script on `/api/` routes: its folder is picked with `showDirectoryPicker`,
@@ -511,7 +511,7 @@ which the panel offers.
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
 sessionStorage. IndexedDB holds what outlives the tab: picked folders' handles
-(`db.ts`; the Run tab's output folder among them), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
+(`db.ts`; the Save predictions tab's output folder among them), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
 each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
 before serving its cached copy, so a model re-exported under the same name
 is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
