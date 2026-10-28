@@ -59,8 +59,8 @@ Who publishes is one of three tokens, the answers' ``via``:
   and the dashboard asks for the token until it is given. The page of a
   dashboard on a cluster node is opened through a tunnel or a proxy, at an
   address the app's client metadata cannot list as a redirect, so the
-  browser mode's popup, which returns to the page, cannot work here. A sign-in's token
-  expires, so it is kept in memory only and never saved.
+  browser mode's popup, which returns to the page, cannot work here. A
+  sign-in's token expires, so it is kept in memory only and never saved.
 
 Every token, and a sign-in's device code, is registered with
 ai_annotate.secrets before anything can log it, since the log panel streams

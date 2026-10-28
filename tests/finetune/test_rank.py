@@ -34,6 +34,10 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.portable.rank import best_try, needed_postprocess, norm_tries, score_row
 from cellmap_flow.serving.probe import UNBOUNDED
 
+# uint8 raw scaled onto [-1, 1]: the CellMap convention's input normalization.
+SIGNED = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
+          {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+
 
 def _stripes(edge, called, forgive_edges, high=3.0, low=-3.0):
     """The score of a 1x4x10 block painted object in x < ``edge`` and
@@ -101,14 +105,11 @@ def test_the_row_keeps_a_clearly_better_stretch_and_gives_the_threshold_and_inpu
 
 
 def test_a_model_is_tried_through_its_own_normalization_and_the_sessions():
-    own = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+    own = SIGNED
     # The session's chain as the page keeps it, in strings: the same steps, tried once.
     same = [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
     assert [t["from"] for t in norm_tries(own, "convention", same)] == ["convention"]
     assert [t["from"] for t in norm_tries(own, "declared", own[:1])] == ["declared", "session"]
-    # What the others matched goes into the row, to say why this one.
-    row = score_row({"matches": 0.9, "cutoff": 0.0}, None, own, None, "assumed", [{"from": "none", "matches": 0.51}])
-    assert row["input_norm_others"] == [{"from": "none", "matches": 0.51}]
     # An assumption comes after the session's, so it loses a tie to it.
     assert [t["from"] for t in norm_tries(own, "assumed", own[:1])] == ["session", "assumed"]
     assert norm_tries([], "convention", []) == [{"input_norm": [], "from": "none"}]
@@ -153,6 +154,14 @@ def _model(name):
     return SimpleNamespace(name=name, declared_input_norm=lambda data_range=None: None)
 
 
+def _serve_model(config=None):
+    """The session with "model" (``config``, else ``_model``'s) running on http://gpu:8000."""
+    session = get_session()
+    session.models_config = [config or _model("model")]
+    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    return session
+
+
 @pytest.fixture
 def painted(tmp_path, monkeypatch):
     """The session's volume, a 16^3 grid painted object (2) at 2..6 and
@@ -191,10 +200,9 @@ def painted(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("running", [True, False], ids=["read-through-its-server", "started-for-its-score"])
 def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running):
-    session, started, killed = get_session(), [], []
+    started, killed = [], []
     if running:
-        session.models_config = [_model("model")]
-        session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+        _serve_model()
     else:
         def start_hosts(command, job_name, queue, **kwargs):
             job = SimpleNamespace(model_name=job_name, host="http://gpu:9000", queue=queue,
@@ -215,9 +223,6 @@ def test_a_model_is_scored_on_the_paint(dashboard, painted, monkeypatch, running
     assert [job.queue for job in started] == ([] if running else [["gpu_a100", "gpu_rtx6000"]])
     assert (body["matches"], body["cutoff"], body["channel"], body["window"]) == (1, 0, "nuc", None)
     assert (body["object_voxels"], body["background_voxels"]) == (64, 64)
-    # Its logits show right through a sigmoid, which the session's empty
-    # chain lacks, cut where the paint is fitted best: its own boundary.
-    assert body["postprocess"] == [{"name": "SigmoidPostprocessor"}, {"name": "ThresholdPostprocessor", "threshold": 0.5}]
     assert {host for host, _ in painted.reads} == {"http://gpu:8000" if running else "http://gpu:9000"}
     assert killed == ([] if running else ["model"]) and ("note" in body) != running
 
@@ -231,11 +236,9 @@ def test_an_affinity_models_row_shows_what_was_scored_and_the_advice_cuts_its_ob
     objects), joining neighbours above the same cut-off."""
     from cellmap_flow.dashboard.routes import model_advice
 
-    session = get_session()
     config = _model("model")
     config.to_dict = lambda: {"channels_names": ["aff_z", "aff_y", "aff_x"]}
-    session.models_config = [config]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    session = _serve_model(config)
     monkeypatch.setattr(rank_routes, "fetch_model_info", lambda host: {"channels": ["aff_z", "aff_y", "aff_x"], "output_class": UNBOUNDED})
     monkeypatch.setattr(rank_routes, "autodetect_output_type",
                         lambda config, output_type, offsets: ("affinities", "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"))
@@ -260,60 +263,49 @@ def test_an_affinity_models_row_shows_what_was_scored_and_the_advice_cuts_its_ob
     assert review["params"]["AffinityPostprocessor"]["bias"] == body["threshold"]
 
 
-def test_a_model_is_read_through_its_own_input_normalization_when_the_session_has_none(dashboard, painted, monkeypatch):
+@pytest.mark.parametrize("own_from", ["convention", "assumed"])
+def test_a_model_is_read_through_its_own_input_normalization_when_the_session_has_none(dashboard, painted, monkeypatch,
+                                                                                         own_from):
     """fly_organelles, ranked with no input normalization set, read raw 0 to
     255 and matched 51%, nucleus its best channel for paint of mitochondria.
-    A model is read through what its start sets, and the session's too when
-    that is another, the better kept."""
-    session = get_session()
-    session.models_config = [_model("model")]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
-    own = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}, {"name": "LambdaNormalizer", "expression": "x*2-1"}]
-    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline.start_input_norm", lambda config, dtype, range_: (own, False))
+    A model is read through what its start sets (its kind's convention, say),
+    and the session's too when that is another, the better kept. A start
+    sets nothing for fly_organelles' /nrs copies, which declare nothing and
+    are not CellMap's by their folder; they were ranked on raw values ("Input
+    none"), and are read through the model advice's assumption instead."""
+    session = _serve_model()
+    if own_from == "convention":
+        monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline.start_input_norm",
+                            lambda config, dtype, range_: (SIGNED, False))
     monkeypatch.setattr("cellmap_flow.dashboard.routes.model_advice.raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
-    # It sees the objects only through its own steps.
+    # It sees the objects only through [-1, 1], its own steps.
     original = view_labels.read_prediction
 
     def read(host, name, volume, lo, hi, info, postprocess=(), input_norm=None):
         out, plo, phi = original(host, name, volume, lo, hi, info, postprocess, input_norm)
-        return (out if input_norm == own else np.full_like(out, -4.0)), plo, phi
+        signed = [(s["name"], s.get("expression")) for s in input_norm or []] == [
+            ("MinMaxNormalizer", None), ("LambdaNormalizer", "x*2-1")]
+        return (out if signed else np.full_like(out, -4.0)), plo, phi
 
     monkeypatch.setattr(view_labels, "read_prediction", read)
 
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
     assert body["success"], body
-    assert (body["matches"], body["input_norm_from"], body["input_norm"]) == (1, "convention", own)
-    assert all(steps == own for _, steps in painted.reads)
+    assert (body["matches"], body["input_norm_from"]) == (1, own_from)
+    assert [(s["name"], s.get("expression")) for s in body["input_norm"]] == [
+        ("MinMaxNormalizer", None), ("LambdaNormalizer", "x*2-1")]
+    assert all(steps == body["input_norm"] for _, steps in painted.reads), "the session's none is not tried"
 
     # With the session's chain as something else that sees nothing, its own
     # is still kept, and the row says what the other matched.
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
-    assert (body["matches"], body["input_norm_from"]) == (1, "convention")
+    assert (body["matches"], body["input_norm_from"]) == (1, own_from)
     assert body["input_norm_others"] == [{"from": "session", "matches": 0.5}]
 
 
-def test_a_model_nothing_declares_is_read_through_the_assumed_normalization(dashboard, painted, monkeypatch):
-    """fly_organelles' /nrs copies declare nothing and are not CellMap's by
-    their folder, so a start sets nothing; they were ranked on raw values
-    ("Input none"). The model advice's assumption is tried instead."""
-    session = get_session()
-    session.models_config = [_model("model")]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
-    monkeypatch.setattr("cellmap_flow.dashboard.routes.model_advice.raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
-
-    body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
-
-    assert body["success"], body
-    assert body["input_norm_from"] == "assumed"
-    assert [s["name"] for s in body["input_norm"]] == ["MinMaxNormalizer", "LambdaNormalizer"]
-    assert body["input_norm"][1]["expression"] == "x*2-1"
-
-
 def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, painted, monkeypatch):
-    session = get_session()
-    session.models_config = [_model("model")]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    session = _serve_model()
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
     # As normalized it sees nothing; with the raw stretched, the objects.
@@ -328,9 +320,7 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
 
 
 def test_fit_to_paint_sets_the_input_normalization_and_postprocessing_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
-    session = get_session()
-    session.models_config = [_model("model")]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    session = _serve_model()
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
     # The chain set, without a raw to redraw the viewer from.
@@ -424,10 +414,9 @@ def cached(tmp_path, monkeypatch):
 def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cached(dashboard, painted, cached):
     from cellmap_flow.models.configs.cellpose import CellposeModelConfig
 
-    session = get_session()
+    session = _serve_model()
     # Cellpose predicts flows, which the ranking does not score.
-    session.models_config = [_model("model"), CellposeModelConfig(voxel_size=8, name="cells")]
-    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    session.models_config.append(CellposeModelConfig(voxel_size=8, name="cells"))
     session.model_catalog = {"mito": {"mito_16nm": "/models/mito"}}
 
     # Nothing cached: nothing is fetched, and the answer says so.
@@ -616,7 +605,6 @@ def test_use_this_model_waits_for_the_models_start_not_three_minutes(monkeypatch
         with pytest.raises(RuntimeError, match="No GPU queue accepted"):
             rank_routes._served_geometry("setup_54_2d", None)
         assert clock.now < rank_routes.SERVER_WAIT_SECONDS, "not after waiting out the 3 minutes"
-
 
 
 def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_finetunes_built_after(

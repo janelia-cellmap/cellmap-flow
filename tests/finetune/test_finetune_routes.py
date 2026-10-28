@@ -397,7 +397,7 @@ def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp
 
 
 MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
-PROXY ="https://gateway.example.org/minio/annotations/vol-1.zarr"
+PROXY = "https://gateway.example.org/minio/annotations/vol-1.zarr"
 
 
 @pytest.mark.parametrize("template, headers, expected", [

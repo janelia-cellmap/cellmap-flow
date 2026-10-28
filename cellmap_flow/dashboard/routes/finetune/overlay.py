@@ -249,10 +249,11 @@ def refresh_annotated_regions_layer(corrections_path=None):
         if not os.path.isdir(corrections_dir):
             continue
         # A session's boxes are its current volume's, the one its manifest
-        # trains on: every volume in the directory drew its own, overlapping
-        # boxes on different grids for the one paint. A directory without a
-        # manifest (a volume painted before any model, instance corrections'
-        # volumes, one per ROI) draws every volume in it.
+        # trains on, not every volume's in the directory: they are the one
+        # paint on different grids, and their boxes would overlap. A
+        # directory without a manifest (a volume painted before any model,
+        # instance corrections' volumes, one per ROI) draws every volume in
+        # it.
         trained = trained_volume_name(corrections_dir)
         entries = (
             [trained] if trained and os.path.isdir(os.path.join(corrections_dir, trained))
