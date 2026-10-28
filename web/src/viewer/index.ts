@@ -49,11 +49,6 @@ const PATH_INPUT_ID = "datasetPathInput";
  * raw EM of an OpenOrganelle dataset. */
 export const EXAMPLE_DATASET_URL = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8";
 
-/** The connect panel's text in the browser, in place of the server's
- * "No Neuroglancer URL configured. Enter a dataset path below". */
-const CONNECT_DESCRIPTION = "No dataset open. Enter the URL of a public OME-Zarr volume (one served with CORS, "
-  + "such as an OpenOrganelle dataset), or pick a folder on this machine, to open it in the viewer. The models run in this browser.";
-
 /** What Neuroglancer's default page puts on its window: its state, its
  * layers (for a segmentation layer's equivalence sets, changed in place),
  * where the pointer is, and its key bindings. The names are Neuroglancer's
@@ -348,12 +343,11 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     mountFrame(hash);
   }
 
-  /** The connect panel, worded for the browser: a URL, not a cluster path. */
+  /** The connect panel's field, with a volume's URL as its example: the
+   * panel's text is the browser's in the template already (index.html). */
   function adjustConnectPanel(): void {
     const input = document.getElementById(PATH_INPUT_ID) as HTMLInputElement | null;
     if (input) input.placeholder = EXAMPLE_DATASET_URL;
-    const description = document.querySelector(`#${PANEL_ID} .no-data-desc`);
-    if (description) description.textContent = CONNECT_DESCRIPTION;
   }
 
   /** The viewer's own URL: its window's, which carries the state Neuroglancer

@@ -117,7 +117,7 @@ async function boot() {
   // A link with models and no dataset, as a published model's card has it:
   // nothing shows until a volume is opened, so the page says what waits.
   if (!session.state.datasetUrl && linkedModels.entries.length) {
-    notes.push(`${linkedModels.entries.map((m) => m.name).join(", ")} will run on the volume you open.`);
+    notes.push({ short: `${linkedModels.entries.map((m) => m.name).join(", ")} will run on the volume you open.` });
   }
   showLinkNotice(title, notes, missing ? "warning" : "info");
   const ctx: AppContext = { session, catalog, infer, viewer, paint, events, log };
