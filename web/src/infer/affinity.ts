@@ -453,9 +453,9 @@ export function mutexWatershed(nd: NdArray, offsets: number[][], bias: number, m
   // longer, pairs no voxel in it (a 2D model's z channel on the one slice it
   // serves): agglom builds it no edge, and it is left out of the mean too,
   // as segment.mutex_watershed leaves it out. Its values are the model's
-  // guess at a neighbour the block does not have, and they pulled a slice's
-  // objects a third of the way to background. Every channel is kept when
-  // none pairs a voxel.
+  // guess at a neighbour the block does not have, and in the mean they would
+  // pull a slice's objects a third of the way to background. Every channel
+  // is kept when none pairs a voxel.
   const unpaired = offsets.slice(0, C).map((offset) => offset.some((o, a) => Math.abs(o) >= spatial[a]!));
   const kept = Array.from({ length: C }, (_, c) => c).filter((c) => !unpaired[c]);
   const channels = kept.length ? kept : Array.from({ length: C }, (_, c) => c);

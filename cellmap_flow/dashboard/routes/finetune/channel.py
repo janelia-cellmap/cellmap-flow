@@ -7,15 +7,15 @@ POST /api/finetune/channel {model_name, select_channel} records the channel
 (an index into the model's output channels, as select_channel takes it, or
 null to forget the pick) as the one to show of that model
 (Session.shown_channels), and moves the model's layer to it, and its
-running finetunes' that follow its pick, if the viewer has them: fly_organelles' layer opened on all_mem, its first of eight, while
-the paint and the training were for mito. Every layer built for the model
-after (a redraw, a start, viewer.layers prediction_layer), and for a
-finetune of it unless one was picked for that (Session.shown_channel),
-opens on it. A model with no channel axis, or under a chain that changes
-the number of its channels, shows no pick (viewer.layers display_channel
-refuses it). Forgetting the pick leaves the layer where it is, where the
-user may have moved it since. Answers ``{success, shown}``, ``shown``
-whether a layer was moved.
+running finetunes' that follow its pick, if the viewer has them: the paint
+and the training are for that channel (fly_organelles' mito, not all_mem,
+the first of its eight). Every layer built for the model after (a redraw,
+a start, viewer.layers prediction_layer), and for a finetune of it unless
+one was picked for that (Session.shown_channel), opens on it. A model with
+no channel axis, or under a chain that changes the number of its channels,
+shows no pick (viewer.layers display_channel refuses it). Forgetting the
+pick leaves the layer where it is, where the user may have moved it since.
+Answers ``{success, shown}``, ``shown`` whether a layer was moved.
 """
 
 import logging

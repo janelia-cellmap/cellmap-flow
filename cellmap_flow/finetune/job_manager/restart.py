@@ -93,7 +93,6 @@ def request_restart(job: FinetuneJob, updated_params: Optional[Dict[str, Any]] =
     # Reset training progress (keep inference server info)
     state.start_iteration(job)
 
-    # Update stored params
     if updated_params:
         job.params.update(updated_params)
 

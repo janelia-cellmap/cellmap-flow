@@ -147,14 +147,12 @@ export function initLabelIt({ log }) {
   seedMinSize.addEventListener("change", rememberSeedSettings);
   seedConnectivity.addEventListener("change", rememberSeedSettings);
   seedPerSlice.addEventListener("change", rememberSeedSettings);
-  seedBox.addEventListener("change", () => {
-    rememberSeedSettings();
-    showBox();
-  });
-  seedFieldOfView.addEventListener("change", () => {
-    rememberSeedSettings();
-    showBox();
-  });
+  for (const field of [seedBox, seedFieldOfView]) {
+    field.addEventListener("change", () => {
+      rememberSeedSettings();
+      showBox();
+    });
+  }
   seedMethod.addEventListener("change", () => {
     chosenMethod = seedMethod.value;
     rememberSeedSettings();
@@ -189,10 +187,10 @@ export function initLabelIt({ log }) {
   // default (the volume model's latest finetune, else that model) marked.
   // Refreshed every few seconds and before the picker opens, since models
   // and finetunes come and go; the choice is kept while it is still running.
-  // One request at a time, and none while the page is hidden: a timer that
-  // asked every 5 s whatever happened stacked them up behind a slow server
-  // until they held every connection the browser opens to the dashboard,
-  // and Apply and everything else waited behind them.
+  // One request at a time, and none while the page is hidden: asked every
+  // 5 s regardless, they stack up behind a slow server until they hold
+  // every connection the browser opens to the dashboard, and Apply and
+  // everything else wait behind them.
   const undoViewLabelsBtn = document.getElementById("undoViewLabelsBtn");
   const seedModel = document.getElementById("seedModel");
   function showOnly(text) {

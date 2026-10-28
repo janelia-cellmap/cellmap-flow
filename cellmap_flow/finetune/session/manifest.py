@@ -46,10 +46,10 @@ def remove_manifest(corrections_dir: str) -> bool:
 
     For a session whose volume is now one no manifest can name (a volume
     painted before any model): a manifest left naming the volume before it
-    kept that one the session's (trained_volume_name), so Rank, Seed and Use
-    this model read the old paint while the user painted the new volume. The
-    manifest is derived (write_volume_manifest builds it again from a volume
-    record), and the volume it named stays where it is.
+    would keep that one the session's (trained_volume_name), and Rank, Seed
+    and Use this model would read the old paint while the user paints the
+    new volume. The manifest is derived (write_volume_manifest builds it
+    again from a volume record), and the volume it named stays where it is.
     """
     path = os.path.join(str(corrections_dir), VIRTUAL_MANIFEST_FILENAME)
     if not os.path.exists(path):

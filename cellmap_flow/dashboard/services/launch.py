@@ -19,7 +19,8 @@
   ticked on the tab and not submitted.
 - ``launching()`` / ``start_error()``: whether a model's start is still
   going, and why its last one failed, which the Finetune tab's Use this
-  model waits on (routes/finetune/rank_routes.py _served_geometry).
+  model waits on (routes/finetune/rank_routes.py _served_geometry), and the
+  model advice says while any is (routes/model_advice.py).
 """
 
 from cellmap_flow.config.yaml import ConfigError
@@ -354,12 +355,13 @@ def running_names() -> set:
     return {job.model_name for job in get_session().jobs} | launching
 
 
-def launching(name) -> bool:
+def launching(name=None) -> bool:
     """Whether ``name``'s start is still going: its launch thread waits for
     its job's host (jobs/launch.py start_hosts: the job pending on a GPU
-    queue, falling back to the next, or its server loading the model)."""
+    queue, falling back to the next, or its server loading the model). With
+    no ``name``, whether any model's is."""
     with _launching_lock:
-        return name in _launching
+        return bool(_launching) if name is None else name in _launching
 
 
 def start_error(name):

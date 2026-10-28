@@ -4,8 +4,7 @@
 // and underscores all separate words, in what is typed and in the text
 // alike, so "mito aff", "mito-aff" and "mito_aff" all find
 // mito-aff-unet-setup-16 (listed by the ranking as mito_aff_unet_setup_16),
-// and "16 nm" reads as "16nm". Blank matches everything. The Hugging Face
-// list matched what was typed as one string, so "mito aff" found nothing.
+// and "16 nm" reads as "16nm". Blank matches everything.
 
 // An item's text to search, from its parts (the empty ones left out).
 export function searchText(...parts) {

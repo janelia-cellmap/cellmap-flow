@@ -761,8 +761,8 @@
          starts, is the run's learning_rate_schedule: ticked, every trainer
          eases the rate down along half a cosine to a tenth of it
          (finetune/options.py LEARNING_RATE_FLOOR) by the run's last step
-         (cosine); unticked, every step takes the rate (constant), as runs did
-         before the schedule. It is saved and sent with its field. #}
+         (cosine); unticked, every step takes the rate (constant). It is saved
+         and sent with its field. #}
       {% set rate_title = "The learning rate a run starts at, and with Ease down unticked every step's. A restart starts at it again. Type any number above 0 (1e-4, 0.0003, ...) or pick a preset." %}
       {% set ease_title = "Ticked, the rate eases down along half a cosine from the one above to a tenth of it at the run's last step: big steps while the model is far from your paint, small ones once it is close. Unticked, every step takes the rate above, as runs did before: for a run you steer yourself, restarting it at a smaller rate. The run's log says which at its start." %}
       <div class="col-md-6 head-only">
@@ -771,7 +771,7 @@
           {# The browser trains the last layer alone, a few thousand weights
              started from the model's own, which takes a step a hundred
              times LoRA's: its own three rates, 1e-2 the default. Flask passes
-             no mode and keeps the LoRA rates below as they were. #}
+             no mode and gets the LoRA rates below. #}
           <div class="input-group">
             <input type="text" inputmode="decimal" id="learningRate" class="form-control" value="{{ '0.01' if mode == 'browser' else '0.0001' }}" title="{{ rate_title }}">
             <select id="learningRatePresets" class="form-select" aria-label="Learning rate presets">

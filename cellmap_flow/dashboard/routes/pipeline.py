@@ -269,10 +269,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 
     # A raw layer built again is a new source, with a token of its own, so
     # the browser drops every raw chunk it has and fetches them all again
-    # through this process: the raw stayed black for a long while after an
-    # Apply that changed only the postprocessing. Its chunks only change
-    # with the input normalization, so otherwise the one shown stays, with
-    # the shader and controls the user has on it.
+    # through this process, and the raw is black for a long while. Its
+    # chunks only change with the input normalization, so otherwise the one
+    # shown stays, with the shader and controls the user has on it.
     # .state, not .txn(): this only reads.
     redraw_raw = input_changed or "data" not in session.viewer.state.layers
     # Without a contrast of the user's to restore, the raw's is sampled where

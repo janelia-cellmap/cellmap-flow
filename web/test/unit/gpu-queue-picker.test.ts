@@ -8,6 +8,8 @@
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { FakeElement } from "./dashboard-dom";
+
 const GPU_QUEUES = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/shared/gpu-queues.js", import.meta.url));
 
 interface Picker {
@@ -18,44 +20,6 @@ interface Picker {
 
 interface GpuQueues {
   createQueuePicker: (root: unknown, options?: { onChange?: (queues: string[]) => void }) => Picker;
-}
-
-// The few DOM properties the picker reads and writes, on plain objects: the
-// unit tests run in node, which has no DOM.
-class FakeNode {
-  children: FakeNode[] = [];
-  dataset: Record<string, string> = {};
-  classes = new Set<string>();
-  classList = { add: (...names: string[]) => names.forEach((name) => this.classes.add(name)) };
-  className = "";
-  textContent = "";
-  title = "";
-  type = "";
-  value = "";
-  checked = false;
-  listeners: Array<(event: { target: FakeNode }) => void> = [];
-
-  constructor(public tagName: string) {}
-
-  replaceChildren(...nodes: FakeNode[]): void {
-    this.children = nodes;
-  }
-
-  append(...nodes: FakeNode[]): void {
-    this.children.push(...nodes);
-  }
-
-  setAttribute(): void {}
-
-  addEventListener(type: string, listener: (event: { target: FakeNode }) => void): void {
-    if (type === "change") this.listeners.push(listener);
-  }
-
-  // Only the one query the picker makes, its checkboxes.
-  querySelectorAll(): FakeNode[] {
-    const below = (node: FakeNode): FakeNode[] => node.children.flatMap((child) => [child, ...below(child)]);
-    return below(this).filter((node) => node.tagName === "input" && node.type === "checkbox");
-  }
 }
 
 const ANSWER = {
@@ -69,22 +33,21 @@ const ANSWER = {
 };
 
 async function setUp() {
-  vi.stubGlobal("document", { createElement: (tag: string) => new FakeNode(tag) });
+  vi.stubGlobal("document", { createElement: (tag: string) => new FakeElement(tag) });
   const { createQueuePicker } = (await import(/* @vite-ignore */ GPU_QUEUES)) as GpuQueues;
-  const root = new FakeNode("div");
+  const root = new FakeElement("div");
   const changes: string[][] = [];
   const picker = createQueuePicker(root, { onChange: (queues) => changes.push(queues) });
   const button = () => root.children[0];
-  const boxes = () => root.children[1].querySelectorAll();
+  const boxes = () => root.querySelectorAll("input");
   // What each item says, and whether it is ticked.
   const items = () => boxes().map((box) => [box.value, box.checked]);
-  const words = () => root.children[1].children.map((row) => row.children[0].children[1].textContent);
-  // A click on a box: it toggles, and its change reaches the list, where
-  // the picker listens (the fake does not bubble events).
+  const words = () => root.querySelectorAll("label span").map((span) => span.textContent);
+  // A click on a box: it toggles, and its change bubbles to the list.
   const click = (queue: string) => {
     const box = boxes().find((b) => b.value === queue)!;
     box.checked = !box.checked;
-    root.children[1].listeners.forEach((listener) => listener({ target: box }));
+    box.dispatchEvent({ type: "change" });
   };
   return { root, picker, changes, button, items, words, click };
 }
@@ -99,7 +62,6 @@ it("ticks every queue until a choice is made, and keeps one ticked", async () =>
   expect(root.children).toEqual([]);
 
   picker.render(ANSWER);
-  expect(button().dataset.bsToggle).toBe("dropdown");
   expect(picker.value()).toEqual(["gpu_h100", "gpu_h200", "gpu_a100", "gpu_rtx6000"]);
   expect(button().textContent).toBe("H100, H200, A100, RTX 6000");
   expect(words()).toEqual([

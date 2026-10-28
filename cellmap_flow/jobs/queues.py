@@ -274,7 +274,7 @@ def queue_list(value):
     A job may run on several GPU queues (the dashboard's pickers tick them),
     so wherever a queue is read it is a list; one name is a list of one, so
     a YAML's ``queue: gpu_h200`` and a command line's ``--queue gpu_h200``
-    read as they always did. A string may name several, separated by commas
+    name the one queue. A string may name several, separated by commas
     or spaces, as a text field holds them (the pipeline builder's Queue).
     None and "" name none: [].
 

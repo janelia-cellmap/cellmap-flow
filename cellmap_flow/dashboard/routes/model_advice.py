@@ -132,8 +132,8 @@ def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
     convention for its kind of model (routes.pipeline.set_declared_input_norm).
     """
     if getattr(model_config, "normalizes_input", False):
-        # No suggestion, so the page shows none: [-1, 1] was suggested
-        # for a Cellpose model, which normalizes each slice itself.
+        # No suggestion, so the page shows none: not [-1, 1] for a
+        # Cellpose model, which normalizes each slice itself.
         return {"input_norm": None, "order": [], "reason": "The model normalizes its input itself",
                 "confidence": "high"}, None
     declared = _declared_input_norm(model_config, raw_range)
@@ -152,27 +152,22 @@ def _fetch_probe(host: str) -> dict:
     return fetch_model_info(host)
 
 
-def _launching() -> bool:
-    """Whether a model's launch has not returned yet (services/launch.py):
-    its job may be listed already while its start is still to set the
-    chain's postprocessing (routes.pipeline.set_needed_postprocess)."""
-    from cellmap_flow.dashboard.services.launch import _launching, _launching_lock
-
-    with _launching_lock:
-        return bool(_launching)
-
-
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
 def model_advice():
     """Per-model verdicts on the currently configured input/output handling.
 
     ``{"success": true, "models": [...], "starting", "digest"}``: an entry
     per served model; ``starting``, whether a model's start is still on its
-    way (_launching), and ``digest``, the chain's (PipelineSpec.digest). The
-    page asks again while ``starting``, and reads the chain again when the
-    digest moves: a model's start sets the postprocessing its output needs
-    once its server answers, after the Submit that started it.
+    way (services/launch.py launching: its job may be listed already while
+    its start is still to set the chain's postprocessing,
+    routes.pipeline.set_needed_postprocess), and ``digest``, the chain's
+    (PipelineSpec.digest). The page asks again while ``starting``, and reads
+    the chain again when the digest moves: a model's start sets the
+    postprocessing its output needs once its server answers, after the
+    Submit that started it.
     """
+    from cellmap_flow.dashboard.services.launch import launching
+
     session = get_session()
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
@@ -260,8 +255,8 @@ def model_advice():
         # to the letter (its x*2-1 is anyone's 2*x-1).
         # The steps the ranking fitted to the paint for this model, which Use
         # this model, Fit to Paint or Use these settings set (a MinMax
-        # stretched to the raw under the paint, say), match as they are:
-        # suggested the declared ones back, a second Apply undid the ranking.
+        # stretched to the raw under the paint, say), match as they are: the
+        # declared ones suggested back, a second Apply would undo the ranking.
         fitted = (session.rank_fits.get(name) or {}).get("input_norm")
         entry["input_norm_fitted"] = bool(fitted) and same_steps(fitted, [dict(s) for s in session.pipeline_spec.input_norm])
         entry["input_norm_differences"] = [] if entry["input_norm_fitted"] else input_norm_differences(configured_steps, declared)
@@ -271,5 +266,5 @@ def model_advice():
         )
         results.append(entry)
 
-    return jsonify({"success": True, "models": results, "starting": _launching(),
+    return jsonify({"success": True, "models": results, "starting": launching(),
                     "digest": session.pipeline_spec.digest()})

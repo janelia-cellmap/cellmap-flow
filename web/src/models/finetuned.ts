@@ -36,6 +36,33 @@ export function isFinetuned(entry: ModelEntry): boolean {
   return entry.repo === FINETUNED_REPO;
 }
 
+/** The ref of the place a model was published to, `<owner>/<repo>/<folder>`. */
+export function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
+  return `${published.repo}/${published.folder}`;
+}
+
+/** Where `record` came from, up its records' bases through the models
+ * finetuned in this browser (`records`): those on the way, `record` first
+ * (`ancestry`), and the base the way ends at (`base`). That is the first
+ * base that is not a model finetuned here (a Hugging Face model, or a file:
+ * the id "" of a model opened from one), or the first that was published
+ * from here, whose bytes are on Hugging Face (`published`, its ref there);
+ * or, with `kept` false, one this browser no longer keeps, as a ring of
+ * records ends too. A link rebuilds a model on that base (share-link.ts),
+ * and a publish names it as what the model was finetuned from
+ * (publish/model.ts). */
+export function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): { ancestry: FinetunedRecord[]; base: FinetunedRecord["base"]; published: string | null; kept: boolean } {
+  const ancestry = [record];
+  for (let base = record.base; ; ) {
+    if (!base.id.startsWith(`${FINETUNED_REPO}/`)) return { ancestry, base, published: null, kept: true };
+    const parent = records.find((r) => r.id === base.id);
+    if (!parent || ancestry.includes(parent)) return { ancestry, base, published: null, kept: false };
+    if (parent.published) return { ancestry, base, published: publishedRef(parent.published), kept: true };
+    ancestry.push(parent);
+    base = parent.base;
+  }
+}
+
 /** The entry a model finetuned from `base` is served as, named `name`
  * (nextFinetunedName): repo FINETUNED_REPO, id `finetuned/<name>`, folder
  * and name both `name`, the base's manifest under the new name with one

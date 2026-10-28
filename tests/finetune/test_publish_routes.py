@@ -246,9 +246,7 @@ def test_a_model_with_no_browser_form_publishes_its_server_form_alone(dashboard,
     assert (done["ref"], done["try_link"], done["dataset_link"]) == (None, None, None), "nothing opens it in the browser"
     files = hub.repos[f"ada/{MODEL}"]["files"]
     assert sorted(files) == ["README.md", "export_record.json", "metadata.json", "model.ts"], "no model.pt2, as asked"
-    card = files["README.md"].decode()
-    assert f"`ada/{MODEL}`" in card and served.no_browser in card
-    assert "?model=" not in card, "no link to the app, which could not open it"
+    assert served.no_browser in files["README.md"].decode(), "the card says why (tests/portable/test_publish.py)"
 
 
 def test_a_commit_the_hub_refuses_fails_the_publish(dashboard, hub, served):
@@ -333,36 +331,19 @@ def test_a_code_denied_or_expired_says_so(dashboard, hub, monkeypatch, answer):
     assert account["device"]["status"] == "failed" and account["device"]["error"]
 
 
-def test_a_smaller_copy_follows_the_model_in_a_commit_of_its_own(dashboard, hub, served):
+def test_a_smaller_copy_follows_the_model_in_a_commit_of_its_own_and_the_panel_follows_both_jobs(
+        dashboard, hub, served, monkeypatch):
     """The model is published as asked, then the smaller copy distill
-    trained beside its export: its folder, and the card again naming it."""
+    trained beside its export: its folder, and the card again naming it.
+    While the export waits in the queue and runs, and the smaller copy
+    trains beside it, what the panel polls says which cluster job each is
+    and the epoch."""
     hub.users[TOKEN] = {"user": "ada"}
     dashboard.post(CREDENTIALS, json={"token": TOKEN})
     commits = []
     create_commit = hub.Api.create_commit
     hub.Api.create_commit = lambda api, repo, operations, commit_message: (
         commits.append(sorted(op.path_in_repo for op in operations)), create_commit(api, repo, operations, commit_message))
-
-    dashboard.post(PUBLISH, json={"small_copy": True})
-    done = dashboard.get(PUBLISH).get_json()
-
-    assert (done["status"], done["small_status"]) == ("done", "done"), done
-    assert done["small_ref"] == f"ada/{MODEL}/{MODEL}-small"
-    assert done["small_try_link"].endswith(f"?model=ada/{MODEL}/{MODEL}-small")
-    assert len(commits) == 2 and f"{MODEL}-small/small_fp16.onnx" in commits[1] and "README.md" in commits[1]
-    files = hub.repos[f"ada/{MODEL}"]["files"]
-    published = json.loads(files[f"{MODEL}-small/manifest.json"])["published"]
-    assert published["distilled_from"] == f"ada/{MODEL}/{MODEL}"
-    card = files["README.md"].decode()
-    assert f"`ada/{MODEL}/{MODEL}-small`" in card, "the card names the smaller copy"
-
-
-def test_a_running_publish_says_which_cluster_job_it_waits_on_and_the_smaller_copys_epoch(dashboard, hub, served,
-                                                                                         monkeypatch):
-    """What the panel polls while the export waits in the queue and runs,
-    and the smaller copy trains beside it: each job, and the epoch."""
-    hub.users[TOKEN] = {"user": "ada"}
-    dashboard.post(CREDENTIALS, json={"token": TOKEN})
     queued = {"id": "101", "queued": True, "log": "/r/web_export/m/export_log.txt", "epoch": None, "epochs": None}
     training = {"id": "102", "queued": False, "log": "/r/web_export/m-small/export_log.txt", "epoch": 7, "epochs": 100}
     served.running = {"model": [queued, {**queued, "queued": False}], "small": [training]}
@@ -377,4 +358,12 @@ def test_a_running_publish_says_which_cluster_job_it_waits_on_and_the_smaller_co
     assert [p["job"]["queued"] for p in polled[1:]] == [True, False]
     assert {p["job"]["id"] for p in polled[1:]} == {"101"}
     done = dashboard.get(PUBLISH).get_json()
-    assert (done["status"], done["small_status"], done["small_job"]) == ("done", "done", None)
+    assert (done["status"], done["small_status"], done["small_job"]) == ("done", "done", None), done
+    assert done["small_ref"] == f"ada/{MODEL}/{MODEL}-small"
+    assert done["small_try_link"].endswith(f"?model=ada/{MODEL}/{MODEL}-small")
+    assert len(commits) == 2 and f"{MODEL}-small/small_fp16.onnx" in commits[1] and "README.md" in commits[1]
+    files = hub.repos[f"ada/{MODEL}"]["files"]
+    published = json.loads(files[f"{MODEL}-small/manifest.json"])["published"]
+    assert published["distilled_from"] == f"ada/{MODEL}/{MODEL}"
+    card = files["README.md"].decode()
+    assert f"`ada/{MODEL}/{MODEL}-small`" in card, "the card names the smaller copy"

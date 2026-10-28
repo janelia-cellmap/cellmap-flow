@@ -181,8 +181,7 @@ def load_crops_from_yaml():
         # The model is only needed for that: with a volume in the session
         # the crops go into it whatever model is picked, and with neither the
         # volume is painted before any model (make_paint_volume, as New
-        # Volume makes one without a model). The import used to refuse at
-        # once with no model picked, a volume or not.
+        # Volume makes one without a model).
         volume_id, volume_meta = session_store().session_volume(corrections_dir)
         created_volume = False
         if volume_meta is None and model_name:

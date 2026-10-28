@@ -3,10 +3,10 @@
 // #model-catalog-data (routes/index_page.py), with the rows every model list
 // has (shared/model-list.js), tagged with what each export's folder holds
 // (its group's facts, by name: formats, finetune modes and size); and the
-// boxes of the models added by reference
-// (add-model.js). Each box is an `input.model-checkbox` in
-// #modelSelectionForm whose value is the model's name, ticked to start when
-// that model is running. Submit sends the ticked names as selected_models.
+// boxes of the models added by reference (add-model.js). Each box is an
+// `input.model-checkbox` in #modelSelectionForm whose value is the model's
+// name, ticked to start when that model is running. Submit sends the ticked
+// names as selected_models.
 import { pageData } from "../../lib/page-data.js";
 import { modelRow, modelSection, untickBox } from "../../shared/model-list.js";
 

@@ -221,6 +221,13 @@ def hub_refusal(status: int, repo: str, via: str) -> Optional[str]:
             "repository it may write to.")
 
 
+def _with_block(manifest: dict, block: dict) -> dict:
+    """``manifest`` with ``block``, less what is not known (None), as its
+    "published" block in place of any it had."""
+    kept = {k: v for k, v in manifest.items() if k != "published"}
+    return {**kept, "published": {k: v for k, v in block.items() if v is not None}}
+
+
 def published_manifest(pub: dict) -> dict:
     """The manifest uploaded as ``<folder>/manifest.json``: ``pub``'s, its
     variants as they are, and the "published" block in place of any it had
@@ -238,8 +245,7 @@ def published_manifest(pub: dict) -> dict:
         "app": f"cellmap-flow {pub['app_version']} ({pub['where']})",
         "dataset": pub.get("dataset"),
     }
-    manifest = {k: v for k, v in pub["manifest"].items() if k != "published"}
-    return {**manifest, "published": {k: v for k, v in block.items() if v is not None}}
+    return _with_block(pub["manifest"], block)
 
 
 def _voxels(size) -> str:
@@ -396,8 +402,7 @@ def small_manifest(pub: dict) -> dict:
         "published_at": small["published_at"],
         "app": f"cellmap-flow {pub['app_version']} ({pub['where']})",
     }
-    manifest = {k: v for k, v in small["manifest"].items() if k != "published"}
-    return {**manifest, "published": {k: v for k, v in block.items() if v is not None}}
+    return _with_block(small["manifest"], block)
 
 
 def _small_section(pub: dict) -> List[str]:
