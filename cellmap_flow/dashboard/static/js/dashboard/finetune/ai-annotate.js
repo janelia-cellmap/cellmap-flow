@@ -21,7 +21,7 @@
 // never into a log line, an error or the page's text. Everything browser-only
 // here is behind lib/page-data's isBrowserMode and the template's browser-only
 // elements (null on the Flask page); in server mode the panel behaves as it did.
-import { setBusy } from "../../lib/dom.js";
+import { setBusy, setHint } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
@@ -62,6 +62,8 @@ export function initAiAnnotate({ log }) {
   const ackBox = document.getElementById("aiAnnotateAck");
   const ackHint = document.getElementById("aiAnnotateAckHint");
   const destination = document.getElementById("aiAnnotateDestination");
+  const destinationMore = document.getElementById("aiAnnotateDestinationMore");
+  const destinationNote = document.getElementById("aiAnnotateDestinationNote");
   const runBtn = document.getElementById("aiAnnotateRunBtn");
   const keyHint = document.getElementById("aiAnnotateKeyHint");
   const usage = document.getElementById("aiAnnotateUsage");
@@ -220,18 +222,37 @@ export function initAiAnnotate({ log }) {
     return browser && modelSelect.value === OTHER ? modelName.value.trim() : modelSelect.value;
   }
 
+  // The destination's words for the box's label: where the planes go, the
+  // first sentence or what comes before a closing aside in brackets that is
+  // a sentence of its own ("..., location global (Google may process the
+  // data in any region)"); and that aside or the sentences after, which open
+  // under the "i" beside the label. A short one is all label.
+  function splitDestination(text) {
+    const aside = /^(.*\S)\s*\(([A-Z][^()]*)\)$/.exec(text);
+    if (aside) return [aside[1], `${aside[2]}.`];
+    const sentence = /^(.*?\.)\s+(\S.*)$/.exec(text);
+    return sentence ? [sentence[1], sentence[2]] : [text, ""];
+  }
+
+  // The destination as the provider words it: what an acknowledgement
+  // agrees to, sent with it (the server compares the very words) and logged.
+  let shownDestination = "";
+
   // Where the selected provider sends the plane, and whether the user has
   // agreed to that for this dataset. An acknowledgement cannot be taken
   // back from here, so a ticked box stays ticked.
   function showAcknowledgement() {
     const provider = providers[providerSelect.value];
-    destination.textContent = provider ? provider.destination || provider.id : "";
+    shownDestination = provider ? provider.destination || provider.id : "";
+    const [where, more] = splitDestination(shownDestination);
+    destination.textContent = where;
+    destinationNote.textContent = more;
+    destinationMore.hidden = !more;
     const done = acknowledged.includes(providerSelect.value);
     ackBox.checked = done;
     ackBox.disabled = false;
-    ackHint.textContent = done
-      ? "Acknowledged for this dataset. Untick to be asked again before the next run."
-      : "Tick to agree before the first run; asked once per provider and dataset.";
+    if (done) setHint(ackHint, "Acknowledged for this dataset.", "Untick to be asked again before the next run.");
+    else setHint(ackHint, "Tick to agree before the first run.", "Asked once per provider and dataset.");
   }
 
   function showLabelName() {
@@ -247,7 +268,7 @@ export function initAiAnnotate({ log }) {
     // refuses it if the config has since moved the provider elsewhere.
     if (acknowledge === true) {
       body.acknowledge = true;
-      body.destination = destination.textContent;
+      body.destination = shownDestination;
     } else if (acknowledge === false) {
       body.acknowledge = false;
     }
@@ -332,7 +353,7 @@ export function initAiAnnotate({ log }) {
     saveSettings(agree).then((d) => {
       if (d) {
         log.add(agree
-          ? `AI annotation: agreed to send this dataset's planes to ${destination.textContent}`
+          ? `AI annotation: agreed to send this dataset's planes to ${shownDestination}`
           : "AI annotation: no longer agreed to send this dataset's planes; the next run asks again");
       }
       // The server's list decides what the box shows, saved or not.
@@ -350,13 +371,16 @@ export function initAiAnnotate({ log }) {
   // reload asks for them again. Fields cleared take them out. Nothing here
   // reads a key back, logs it or puts it in a message.
 
+  // Each a line, and the rest under its "i".
   const CREDENTIAL_HINTS = {
-    gemini_api: "Used as soon as it is pasted, kept in this page only (paste it again after a reload), and sent only to Google " +
+    gemini_api: ["Kept in this page only, and sent only to Google.",
+      "Used as soon as it is pasted, kept in this page only (paste it again after a reload), and sent only to Google " +
       "(generativelanguage.googleapis.com) with each plane. On the Gemini API's free tier Google may use what is sent to improve " +
-      "its products; on the paid tier it does not.",
-    vertex_gemini: "Used as soon as they are pasted, kept in this page only (paste them again after a reload), and sent only to Google " +
+      "its products; on the paid tier it does not."],
+    vertex_gemini: ["Kept in this page only, and sent only to Google.",
+      "Used as soon as they are pasted, kept in this page only (paste them again after a reload), and sent only to Google " +
       "(aiplatform.googleapis.com) with each plane; Vertex AI does not use what is sent to train its models. The token is the " +
-      "output of gcloud auth print-access-token and lasts about an hour: paste a new one when a call fails asking you to sign in.",
+      "output of gcloud auth print-access-token and lasts about an hour: paste a new one when a call fails asking you to sign in."],
   };
   // How long after the last keystroke the fields are handed over.
   const CREDENTIALS_DELAY_MS = 500;
@@ -387,8 +411,8 @@ export function initAiAnnotate({ log }) {
     credentials.hidden = fields.length === 0;
     for (const el of credentials.querySelectorAll("[data-credential]")) el.hidden = !fields.includes(el.dataset.credential);
     const provider = providers[providerSelect.value];
-    credsHint.textContent = (provider && CREDENTIAL_HINTS[provider.type]) ||
-      "Kept in this page only and sent only to the provider, with each plane.";
+    setHint(credsHint, ...((provider && CREDENTIAL_HINTS[provider.type]) ||
+      ["Kept in this page only and sent only to the provider, with each plane."]));
     credsState.textContent = fields.length === 0 ? ""
       : configured() ? "in use"
       : fields.includes("api_key") ? "paste a key" : "paste the project and a token";
