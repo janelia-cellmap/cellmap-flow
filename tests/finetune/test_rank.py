@@ -1,7 +1,7 @@
 """Which model to start from, in server mode (finetune/rank.py, session/volume.py
 carry_paint, dashboard/routes/finetune/rank_routes.py), as the browser's
-web/test/unit/finetune-rank.test.ts tests it there: the score is balanced
-between object and background paint, read at the model's own cut-off and
+web/test/unit/finetune-rank.test.ts tests it there: the score needs both
+object and background paint right, read at the model's own cut-off and
 forgiving a binary model the strokes' edges; a binary model answers its
 best channel by name and index, an affinity model neither; a model running is read
 through its server and any other started for its score alone; the raw is
@@ -49,15 +49,19 @@ def _stripes(edge, called, forgive_edges, high=3.0, low=-3.0):
     return rank.rank_score(tallies, ["nuc"], False)
 
 
-def test_the_score_is_balanced_read_at_the_models_cut_off_and_forgives_the_strokes_edges():
+def test_the_score_needs_both_classes_right_read_at_the_models_cut_off_and_forgives_the_strokes_edges():
     right, all_background = _stripes(1, 1, False), _stripes(1, 0, False)
     assert right["matches"] == 1
-    # Nine voxels in ten are background, all called right: half the score.
-    assert all_background["matches"] == all_background["matches_at_zero"] == 0.5
+    # Nine voxels in ten are background, all called right, and the object
+    # missed: no match, however much of the paint is background (the plain
+    # mean of the two shares gave it half).
+    assert all_background["matches"] == all_background["matches_at_zero"] == 0
     assert all_background["loss"] > right["loss"]
+    # Half the objects found, the background all right: the two shares' geometric mean.
+    assert math.isclose(_stripes(4, 2, False)["matches"], math.sqrt(0.5))
     # Objects at -1, background at -3: none called object at 0, all at its cut-off.
     shifted = _stripes(5, 5, False, high=-1.0)
-    assert (shifted["matches_at_zero"], shifted["matches"]) == (0.5, 1)
+    assert (shifted["matches_at_zero"], shifted["matches"]) == (0, 1)
     assert -3 <= shifted["cutoff"] < -1 and _stripes(5, 5, False)["cutoff"] == 0
     # A boundary a voxel off counts against it only on the strokes' edge.
     assert _stripes(5, 6, False)["matches"] < 1
@@ -301,7 +305,7 @@ def test_a_model_is_read_through_its_own_input_normalization_when_the_session_ha
     session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
     assert (body["matches"], body["input_norm_from"]) == (1, own_from)
-    assert body["input_norm_others"] == [{"from": "session", "matches": 0.5}]
+    assert body["input_norm_others"] == [{"from": "session", "matches": 0}]
 
 
 def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, painted, monkeypatch):
@@ -314,7 +318,7 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
     body = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
 
     assert body["success"], body
-    assert (body["matches"], body["matches_without_window"], body["window"]) == (1, 0.5, [100.0, 120.0])
+    assert (body["matches"], body["matches_without_window"], body["window"]) == (1, 0, [100.0, 120.0])
     assert (body["threshold"], body["input_window"]) == (0.5, [100.0, 120.0])
     assert painted.reads[-1][1][0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
 

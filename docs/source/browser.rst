@@ -209,11 +209,12 @@ matches the volume's paint: open the card (it starts closed, and stays as you
 leave it), tick the models, press *Rank models*, and each is scored in turn,
 a few seconds to half a minute each, and listed best first.
 
-- **Match**, which ranks them, is the share of the painted voxels the model
-  gets right, objects and background counting equally, so that paint mostly
-  of background does not reward a model that calls everything background:
-  such a model matches 50%. Beside it are the share of painted objects it
-  calls object and of painted background it calls background.
+- **Match**, which ranks them, is the share of painted objects the model
+  calls object and the share of painted background it calls background,
+  multiplied and square-rooted (their geometric mean). Each share is of its
+  own class, so paint mostly of background does not tilt it, and a model has
+  to get both right: one that calls everything background matches 0%.
+  Beside it are the two shares.
 - Each model is scored at its own cut-off: the threshold on its output that
   fits the paint best. The row's *Threshold* gives it as a probability, as
   *Seed from Prediction* takes it (0.5 is the model's own boundary), with the

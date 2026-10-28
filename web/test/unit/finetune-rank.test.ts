@@ -197,7 +197,7 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const theirs = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
     expect(theirs).toMatchObject({ success: true, matches: 1, input_norm: session, input_norm_from: "session" });
     // What its own matched, in the row, which says why the session's.
-    expect(theirs.input_norm_others).toEqual([{ from: "declared", matches: 0.5 }]);
+    expect(theirs.input_norm_others).toEqual([{ from: "declared", matches: 0 }]);
     expect(theirs.note).toBeUndefined();
     expect(ctx.infer.serves.slice(serves).map((s) => s.chain.input_norm)).toEqual([declared]);
   });
