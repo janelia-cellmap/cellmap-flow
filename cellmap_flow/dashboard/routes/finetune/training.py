@@ -317,9 +317,10 @@ def submit_finetuning():
         # a 3D one's 178^3 at 8 nm for a 2D one's 1 x 556 x 556 at 16) has
         # the paint carried onto its grid first, as Use this model carries
         # it, and trains on that; the chain and the channel stay as the user
-        # set them. Its job read the volume's patches and torch.export
-        # refused them. The carry is the last thing before the manifest and
-        # the job, after every refusal, so a refused submit changes nothing.
+        # set them. Its job would read the volume's patches, which
+        # torch.export refuses. The carry is the last thing before the
+        # manifest and the job, after every refusal, so a refused submit
+        # changes nothing.
         carry, unknown = grid_change(body.model_name, model_config, actual_corrections_path)
         if unknown is not None:
             return unknown
