@@ -31,9 +31,9 @@ import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
-import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
+import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, OutputActivation, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
 import { viewModelName, viewName } from "../shared/args";
-import { modelInfo } from "../shared/model-info";
+import { modelInfo, networkActivation } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
 import { boxFromChunks } from "./output";
@@ -50,6 +50,12 @@ const RAW_VIEW = "raw";
 /** Its chunk shape is metadata for a view we never serve (the viewer reads the
  * raw volume from its own URL); the Engine wants one all the same. */
 const RAW_CHUNK = [64, 64, 64];
+
+/** A model file's identity: the key its onnxruntime session is kept under,
+ * one per file, shared by the layers using it. */
+function sessionKey(entry: ModelEntry): string {
+  return `${entry.id}/${entry.variant.file}`;
+}
 
 /** The suffix of the view a served model's own output is read from (readOutput). */
 const OUTPUT_SUFFIX = "~output";
@@ -135,19 +141,25 @@ export class InferenceEngine implements Inference {
   // ------------------------------------------------------------- the models
 
   async serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel> {
-    const engine = this.engine, dataset = this.info;
-    if (!engine || !dataset) throw new Error("open a dataset before serving a model");
+    if (!this.engine || !this.info) throw new Error("open a dataset before serving a model");
     // A chain step the browser cannot run is refused here, before the layer
     // exists, rather than failing on every chunk.
     validateNormalizers(chain.input_norm);
     validatePostprocessors(chain.postprocess);
+    // What its network ends in, before anything of the layer exists: the
+    // layer's display range, the ranking's cut-offs and a seed's
+    // probabilities read the class from its info. The engine and dataset are
+    // read after it, so a dataset opened meanwhile is the one served on.
+    const activation = await this.outputActivation(entry, modelBytes);
+    const engine = this.engine, dataset = this.info;
+    if (!engine || !dataset) throw new Error("open a dataset before serving a model");
     if (dataset.channels > 1) throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode reads single-channel volumes (it does not select a channel yet)`);
 
     const geometry = geometryOf(entry);
     const rawLevel = chooseRawLevel(dataset.levels, geometry.input_voxel_size);
     const raw = dataset.levels[rawLevel];  // in nm, for the geometry
     const sourceRaw = engine.sources[RAW_VIEW].levels[rawLevel];  // as the engine declares it, for the view
-    const info = modelInfo(entry);
+    const info = modelInfo(entry, activation);
     const effective = effectiveOutputVoxelSize(raw, geometry);
     if (effective) {
       // The level read is not at the model's voxel size: it is read as if it
@@ -180,7 +192,7 @@ export class InferenceEngine implements Inference {
     // The model under a key that is its identity (one session per model
     // file, shared by the layers using it), its bytes from the catalog (so
     // its IndexedDB cache is used) when the first chunk needs them.
-    const name = `${entry.id}/${entry.variant.file}`;
+    const name = sessionKey(entry);
     const model: OnnxModel = {
       key: name,
       bytes: async () => {
@@ -244,6 +256,39 @@ export class InferenceEngine implements Inference {
   }
 
   served(): ServedModel[] { return [...this.servedList]; }
+
+  /** What each model file's network ends in, by its session key (sessionKey):
+   * read once, by the first serve or the start that asks before it. */
+  private activations = new Map<string, Promise<OutputActivation | null>>();
+
+  /** What `entry`'s network ends in (shared/model-info.ts
+   * networkActivation), read from its bytes the first time it is asked for
+   * its file: a finetuned model's are its own, its head or whole network as
+   * trained here. Said in the log once, with what is read when the graph
+   * does not say. A read that fails (the bytes, the Python) is said and not
+   * kept, so the next serve tries again; the serve goes on with the
+   * manifest's text meanwhile. */
+  outputActivation(entry: ModelEntry, modelBytes: () => Promise<ArrayBuffer>): Promise<OutputActivation | null> {
+    const key = sessionKey(entry);
+    const known = this.activations.get(key);
+    if (known) return known;
+    const reading = (async () => {
+      this.setStatus(`loading ${key}…`);
+      const activation = await networkActivation(await modelBytes(), entry.manifest.io?.output, this);
+      const said = activation
+        ? `its network ends in a ${activation.op}, so its output is ${activation.output_class}`
+        : `its network's last op does not say what its output is; read from its manifest instead: ${entry.manifest.output || "not stated"}`;
+      this.setStatus(`${key}: ${said}`);
+      this.opts.log(`${entry.name}: ${said}`);
+      return activation;
+    })().catch((e: unknown) => {
+      this.activations.delete(key);
+      this.opts.log(`${entry.name}: what its network ends in was not read (${e instanceof Error ? e.message : String(e)}); read from its manifest instead: ${entry.manifest.output || "not stated"}`);
+      return null;
+    });
+    this.activations.set(key, reading);
+    return reading;
+  }
 
   /** Voxels [lo, hi) of raw level `level`, as the engine's reader reads them
    * for a stage's input (Engine.read on the raw view): what the finetune's

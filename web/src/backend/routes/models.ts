@@ -15,15 +15,18 @@ import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, Model
 import { hasAffinityChannels } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
 import { compileExpression } from "../../infer/expression";
-import { HF_REPO, isFinetuned } from "../../models";
+import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
 import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
- * the id "cellmap/onnx-web-models/setup_54" (models-tab.js shows its last
- * segment and the metadata's description). A model the session is serving
+ * the id "cellmap/onnx-web-models/setup_54" (huggingface.js shows its last
+ * segment and the metadata's description), with what its row tags it with
+ * and sorts it by (models/metadata.ts listFacts: its format, its ways to
+ * finetune, its size and precisions), as the ranking's candidates have
+ * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing
  * has no such field, so its rows start unticked as before. `refresh` reads
@@ -34,7 +37,7 @@ async function listModels(ctx: AppContext, refresh: boolean) {
   try {
     const entries = refresh ? await ctx.catalog.refresh() : await ctx.catalog.list();
     const serving = new Set(ctx.session.state.models.map((m) => m.id));
-    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
+    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
   } catch (e) {
     return json(500, { error: message(e) });
   }
@@ -456,21 +459,25 @@ function postprocessReview(served: ServedModel, names: string[], threshold: numb
     const unset = (outputClass === "unbounded" && !names.length) || ((outputClass === "unit" || outputClass === "signed_unit") && names.includes("SigmoidPostprocessor"));
     if (!unset) return verdict("optional", `its ${channels} channels look like affinities, which this chain turns into a segmentation, joined above ${cut}.`, affinityChain(outputClass));
   }
-  return {
-    level: "unknown",
-    message: `No output probe in the browser. The model's manifest says its output is: ${served.entry.manifest.output || "not stated"}.`,
-    suggest: [],
-  };
+  const { output_class, output_class_from, output_op } = served.info;
+  const from = output_class_from === "graph"
+    ? `Its network ends in a ${output_op}, so its output is ${output_class}.`
+    : `Its network's last op does not say what its output is; the model's manifest says: ${served.entry.manifest.output || "not stated"}.`;
+  return { level: "unknown", message: `No output probe in the browser. ${from}`, suggest: [] };
 }
 
 /** One model's entry of /api/model_advice. There is no output probe in the
- * browser (probe_available: false); the postprocessing review is an
- * affinity model's (postprocessReview, its chain cut at the threshold
- * `fit` holds), and "unknown" for any other, which the banner does not
- * show. The input normalization is the one the model's manifest declares,
- * which suggest_input_norm treats as declared metadata: high confidence,
- * and a match when the configured steps are those in that order with the
- * declared values (inputNormDifferences says where a value is not).
+ * browser (probe_available: false): the output class is the served model's
+ * (ModelInfo.output_class: its network's last op, else its manifest's
+ * text), with where it was read (output_class_from, output_op) as the
+ * server's advice gives it. The postprocessing review is an affinity
+ * model's (postprocessReview, its chain cut at the threshold `fit` holds),
+ * and "unknown" for any other, which the banner does not show, saying
+ * where the class was read. The input normalization is the one the model's
+ * manifest declares, which suggest_input_norm treats as declared metadata:
+ * high confidence, and a match when the configured steps are those in
+ * that order with the declared values (inputNormDifferences says where
+ * a value is not).
  *
  * The input normalization the ranking fitted this model to (`fit`, the
  * session's rankFits for it: the steps its last score was read through,
@@ -489,12 +496,15 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const configuredNorm = stepNames(chain.input_norm);
   const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
   const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
+  const { output_class, output_class_from, output_op } = served.info;
   const configuredPost = stepNames(chain.postprocess);
   return {
     model: served.entry.name,
     probe_available: false,
     out_channels: served.info.output_channels,
-    output_class: served.info.output_class ?? null,
+    output_class: output_class ?? null,
+    output_class_from: output_class_from ?? null,
+    output_op: output_op ?? null,
     output_min: null,
     output_max: null,
     configured_postprocess: configuredPost,

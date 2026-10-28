@@ -8,6 +8,8 @@
 // round, and each row's label is for its own box although the same model is
 // listed on both tabs. In the ranking, a section's search hides the rows that
 // do not match but a ticked one, which Rank scores: nothing is ranked unseen.
+// On a server, a Hugging Face section shows only the models with a copy that
+// runs in the browser to start, and a ticked one whatever it has.
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -213,14 +215,15 @@ const CANDIDATES = {
 let page: ReturnType<typeof fakePage>;
 
 // The page in `mode`, the server's or the browser's, whose ranking lists
-// `candidates`.
-function setUp(mode: string, candidates: unknown) {
+// `candidates` and whose Hugging Face list is `hf`, with the repos of
+// `running` running (ticked on the Models tab).
+function setUp(mode: string, candidates: unknown, hf: unknown = HF, running: string[] = []) {
   vi.resetModules();
   page = fakePage({
-    "page-data": { mode, default_hf_repos: [] },
+    "page-data": { mode, default_hf_repos: running },
     "model-catalog-data": { groups: [["cellmap", ["mito_16nm", "nuc_8nm"]]], ticked: ["mito_16nm"] },
   });
-  const answers: Record<string, unknown> = { "/api/huggingface-models": HF, "/api/finetune/rank/candidates": candidates };
+  const answers: Record<string, unknown> = { "/api/huggingface-models": hf, "/api/finetune/rank/candidates": candidates };
   vi.stubGlobal("document", page);
   vi.stubGlobal("Node", FakeNode);
   vi.stubGlobal("window", { localStorage: { getItem: () => null, setItem: () => {} } });
@@ -313,7 +316,7 @@ it("keeps a ticked model in view when its section's search hides it, and filters
     search.dispatchEvent({ type: "input" });
   };
 
-  expect(shown("Hugging Face")).toEqual(["nuc_model", "mito_aff"]);
+  expect(shown("Hugging Face")).toEqual(["mito_aff", "nuc_model"]);
   type("mito aff");
   expect(shown("Hugging Face")).toEqual(["mito_aff"]);
   // Ticked, nuc_model is scored by Rank, so it shows whatever is typed.
@@ -322,7 +325,7 @@ it("keeps a ticked model in view when its section's search hides it, and filters
   nuc.checked = true;
   nuc.dispatchEvent({ type: "change" });
   type("mito aff");
-  expect(shown("Hugging Face")).toEqual(["nuc_model", "mito_aff"]);
+  expect(shown("Hugging Face")).toEqual(["mito_aff", "nuc_model"]);
   // A search in one section is that section's: the running model stays.
   expect(shown("Running")).toEqual(["mito_16nm (painted for)"]);
 
@@ -349,4 +352,48 @@ it("gives the browser's Hugging Face list, cellmap's repo, the search bar, and l
   expect(titles).toEqual(["Running", "cellmap", "Finetuned"]);
   expect(sections[1].querySelector("#rankHfSearchBar")?.tagName).toBe("input");
   expect(page.body.querySelector("#rankZooEmOnly")).toBe(null);
+  // Every model runs in the browser there: no box to show only those.
+  expect(page.body.querySelector("#rankHfBrowser")).toBe(null);
+  expect(page.body.querySelector("#hfBrowser")).toBe(null);
+});
+
+it("shows on a server the Hugging Face models with a browser copy and the ticked ones, by name or by size", async () => {
+  // As models/hf_catalog.py lists them: two with a copy that runs in the
+  // browser, two known to have none (one of them running), one its listing
+  // says nothing of.
+  const facts = (size_mb: number, browser_copy: string | null) => ({ formats: ["TorchScript"], finetune_modes: ["full"], size_mb, browser_copy });
+  const hf = {
+    "cellmap/setup-54": facts(56, "cellmap/onnx-web-models/setup_54"),
+    "cellmap/fly-organelles": facts(3192, null),
+    "cellmap/jrc-livers": facts(947, null),
+    "cellmap/setup-54-2d": facts(16.5, "cellmap/onnx-web-models/setup_54_2d"),
+    "cellmap/unknown": { description: "cached before its facts were listed" },
+  };
+  const candidates = {
+    ...CANDIDATES,
+    candidates: Object.entries(hf).map(([repo, meta]) => ({ name: repo.split("/")[1], group: "Hugging Face", ticked: repo === "cellmap/jrc-livers", ...meta })),
+  };
+  setUp("server", candidates, hf, ["cellmap/jrc-livers"]);
+  const { rowsOf } = await bothTabs();
+  const tabRows = () => page.querySelectorAll("#hfModelAccordion .hf-model-item");
+  const onTab = () => tabRows().filter((row) => row.style.display !== "none").map(nameOf);
+  const inRanking = () => Object.entries(rowsOf("Hugging Face")).filter(([, row]) => !row.hidden).map(([name]) => name);
+  const change = (id: string, set: (el: FakeElement) => void) => {
+    const el = page.getElementById(id);
+    set(el);
+    el.dispatchEvent({ type: "change" });
+  };
+
+  // Runs in the browser is ticked to start: fly-organelles is hidden, and
+  // jrc-livers, running and ticked, stays, as one its listing says nothing of.
+  const shownByName = ["jrc-livers", "setup-54", "setup-54-2d", "unknown"];
+  expect(onTab()).toEqual(shownByName);
+  expect(inRanking()).toEqual(shownByName);
+
+  // Unticked, every one; by size, the smallest first, the one of no size last.
+  change("hfBrowser", (box) => { box.checked = false; });
+  change("hfSort", (select) => { select.value = "size"; });
+  expect(onTab()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "fly-organelles", "unknown"]);
+  change("rankHfSort", (select) => { select.value = "size"; });
+  expect(inRanking()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "unknown"]);
 });

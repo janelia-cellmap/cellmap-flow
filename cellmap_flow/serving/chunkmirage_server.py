@@ -299,10 +299,15 @@ class ChunkmirageServer:
         reported even when the warmup probe failed; script-defined models
         expose nothing else to the dashboard, which makes this the only place
         it can learn their shapes and channel names. The activation half is
-        measured once at warmup (Inferencer._warmup) and lets the dashboard
-        propose a postprocessing chain, or flag one that contradicts the
-        model. A resampled input really is at input_voxel_size; a relabelled
-        one is at the level's, which moves the output (see to_model_info).
+        read once, as the model is loaded (inference/runner.py), and lets the
+        dashboard propose a postprocessing chain, or flag one that
+        contradicts the model: ``output_class``, read off the network's graph
+        (``output_class_from`` "graph", with ``output_op``, the op that ends
+        it) or else from the warmup probe's range (``output_min``,
+        ``output_max``) on noise ("probe", a guess); None, from neither,
+        when the graph does not say and the probe's output was flat. A
+        resampled input really is at input_voxel_size; a relabelled one is
+        at the level's, which moves the output (see to_model_info).
         """
         raw = self.raw
         stored = raw.source_voxel_size
@@ -315,14 +320,19 @@ class ChunkmirageServer:
         info["input_relabelled_from"] = list(stored) if relabelled else None
         info["display_channel"] = getattr(self.inferencer.model_config, "display_channel", None)
         info["engine"] = ENGINE
-        output_class = getattr(self.inferencer, "output_class", None)
-        if output_class is None:
+        inferencer = self.inferencer
+        output_class = getattr(inferencer, "output_class", None)
+        output_range = getattr(inferencer, "output_range", None)
+        if output_class is None and output_range is None:
             info.update({"available": False, "reason": "output probe did not run"})
             return info
-        output_range = getattr(self.inferencer, "output_range", None)
+        # Available once the graph or the probe has had its say, even when
+        # neither knows (a flat probe): asking again would get the same.
         info.update({
             "available": True,
             "output_class": output_class,
+            "output_class_from": getattr(inferencer, "output_class_from", None),
+            "output_op": getattr(inferencer, "output_op", None),
             "output_min": output_range[0] if output_range else None,
             "output_max": output_range[1] if output_range else None,
         })

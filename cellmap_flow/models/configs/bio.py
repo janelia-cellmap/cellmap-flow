@@ -643,6 +643,34 @@ class BioModelConfig(ModelConfig):
             result = results[0]
         return np.ascontiguousarray(result.astype(config.output_dtype, copy=False))
 
+    def output_graph(self):
+        """What its description says ends its output, as a graph: its one
+        output's postprocessing (a sigmoid, a softmax, a clip and its bounds;
+        an ensure_dtype to a float type casts), which process_chunk's pipeline
+        applies, after the network, which is not read here: an op
+        (``bioimage.io network``) that decides nothing. So a model whose
+        description applies its sigmoid is known, and one whose network
+        does, or that has none, is left to the output probe. Of several
+        outputs, served one after another (``_output``), none."""
+        from bioimageio.core import load_model_description
+
+        description = load_model_description(self.model, format_version="latest", perform_io_checks=False)
+        if len(description.outputs) != 1:
+            return None
+        value = "network"
+        nodes = [{"op": "bioimage.io network", "inputs": ["input"], "outputs": [value]}]
+        for i, op in enumerate(getattr(description.outputs[0], "postprocessing", None) or []):
+            name = str(getattr(op, "id", None) or getattr(op, "implemented_id", "?"))
+            kwargs = getattr(op, "kwargs", None)
+            if name == "ensure_dtype" and np.dtype(str(kwargs.dtype)).kind == "f":
+                name = "cast"
+            node = {"op": name, "inputs": [value], "outputs": [f"postprocessing_{i}"]}
+            if name == "clip":
+                node.update({k: getattr(kwargs, k) for k in ("min", "max") if isinstance(getattr(kwargs, k, None), (int, float))})
+            nodes.append(node)
+            value = f"postprocessing_{i}"
+        return nodes, value
+
     def _output(self, sample, dims):
         """A predicted sample's outputs, each (channels, *dims) and cropped, one after another."""
         config = self.config

@@ -19,7 +19,7 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
     get_session().jobs = [_job("mito_server")]
     html = dashboard.get("/").get_data(as_text=True)
     catalog = _page_data(html, "model-catalog-data")
-    assert ["User", ["mito_server"]] in catalog["groups"] and catalog["ticked"] == ["mito_server"], \
+    assert ["User", ["mito_server"]] in [group[:2] for group in catalog["groups"]] and catalog["ticked"] == ["mito_server"], \
         "the running model is listed on the Models tab, ticked"
     assert get_session().model_catalog == catalog_before, "but not added to the catalog everything else reads"
 

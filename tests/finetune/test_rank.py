@@ -435,7 +435,9 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
     assert [c["name"] for c in body["candidates"]] == ["model", "mito_16nm"]
     assert (body["hf_cached"], body["zoo_cached"]) == (False, False)
 
-    cached.hf({"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8]},
+    copy = {"formats": ["TorchScript", "torch.export"], "finetune_modes": ["lora", "full"], "size_mb": 56.0,
+            "browser_copy": "cellmap/onnx-web-models/setup_56", "variants": [{"variant": "fp32", "file_mb": 42.91}]}
+    cached.hf({"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8], **copy},
                # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
                "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
     cached.zoo([SHRIMP, SHARK, CHIPMUNK])
@@ -454,6 +456,8 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
         (2, True), (None, True), (3, True), (2, False)]
     assert rows["mito_16nm"]["entry"] == {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}
     assert rows["nuc_model"]["entry"] == {"type": "huggingface", "repo": "org/nuc-model", "name": "nuc_model"}
+    # What its row shows of it, as the Models tab's list cached it.
+    assert {key: rows["nuc_model"][key] for key in copy} == copy
     # Each zoo model with the entry the Models tab's Submit starts it from,
     # its voxel size blank: the one it was trained at, or its description's
     # left to its server; with neither, none, and why.

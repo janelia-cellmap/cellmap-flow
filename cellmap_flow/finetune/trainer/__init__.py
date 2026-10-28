@@ -2,7 +2,8 @@
 
 - ``loop.Finetuner``: the epoch loop, the best epoch, the stop signal;
 - ``supervised.SupervisedLoss``: the supervised term, and how the model's
-  output is read for it (``probe_output_class``);
+  output is read for it (``output_class_of``: off the network's graph,
+  else ``probe_output_class``);
 - ``distillation.Distillation``: the term that holds the model to the one
   it started from, and its teacher;
 - ``recovery``: mixed precision and the way back to fp32, out-of-memory

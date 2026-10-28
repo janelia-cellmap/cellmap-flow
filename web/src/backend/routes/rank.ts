@@ -76,7 +76,7 @@ import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
-import { HF_REPO } from "../../models";
+import { HF_REPO, type ListFacts, listFacts } from "../../models";
 import { withVariant } from "../../models/manifest";
 import { dtypeRange } from "../../viewer/display";
 import type { Router } from "../router";
@@ -122,10 +122,13 @@ export function rankRoutes(router: Router): void {
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
   // (score_row's, portable/rank.py), the postprocessing its layer needs
-  // (postprocess: needed_postprocess's steps, or null), how long it took,
-  // and a note when some painted chunks lie where the model's level does
-  // not reach. Refused without a dataset, a volume or paint (400), and for
-  // a model the catalog does not have (404).
+  // (postprocess: needed_postprocess's steps, or null), the output class
+  // its output was read as and where that came from (output_class,
+  // output_class_from and output_op, the served model's info: its network's
+  // last op, else its manifest's text; the Output column's title says it),
+  // how long it took, and a note when some painted chunks lie where the
+  // model's level does not reach. Refused without a dataset, a volume or
+  // paint (400), and for a model the catalog does not have (404).
   router.post("/api/finetune/rank/score", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -221,8 +224,10 @@ export function rankRoutes(router: Router): void {
       const seconds = (performance.now() - started) / 1000;
       const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(kept.score.matches)} as normalized)` : "";
       ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0) through ${through(score.input_norm_from)}, ${stepsText(score.input_norm)}${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
+      const { output_class, output_class_from, output_op } = kept.served.info;
       return json(200, {
-        success: true, name, ...score, postprocess, seconds,
+        success: true, name, ...score, postprocess,
+        output_class: output_class ?? null, output_class_from: output_class_from ?? null, output_op: output_op ?? null, seconds,
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
@@ -591,10 +596,13 @@ type Group = (typeof GROUPS)[number];
 /** A model of the ranking's list, as rank.js shows and filters it: what it
  * predicts, at what voxel size, in 2D or 3D (dims, by the slices it reads),
  * the group it is listed under, whether it is served and whether the
- * session's volume is painted for it. Each starts ticked: the browser runs
- * every one itself, where the server starts one not running on the cluster
- * for its score and leaves it unticked. */
-interface Candidate {
+ * session's volume is painted for it, and what the Models tab's listing
+ * tags and sorts it by (ListFacts). It starts ticked, as the server's
+ * ranking ticks its own, only when it is served or was added by hand: those
+ * are the models someone chose to look at. Ticking all the others had Rank
+ * download and score every model the catalog has, the cellmap ones and
+ * those finetuned here, for one paint. */
+interface Candidate extends ListFacts {
   name: string;
   repo: string;
   folder: string;
@@ -605,13 +613,14 @@ interface Candidate {
   group: Group;
   finetuned: boolean;
   served: boolean;
-  ticked: true;
+  ticked: boolean;
   volume_model: boolean;
 }
 
 /** Each entry's candidate, for the session as it is now (`volume` its
  * volume): the listing's and rank/add's answer alike. Its group is Running
- * while it is served, Added once added by hand, else its repo's. */
+ * while it is served, Added once added by hand, else its repo's, and it is
+ * ticked in the first two. */
 function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEntry) => Candidate {
   const served = new Set(ctx.infer.served().map((s) => s.entry.id));
   const added = new Set(ctx.session.state.rankAdded);
@@ -623,7 +632,8 @@ function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEn
   return (e) => ({
     name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,
     voxel_size_nm: e.manifest.output_voxel_size_nm, dims: readsOneSlice(e) ? 2 : 3, group: group(e),
-    finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), ticked: true, volume_model: volume?.model_id === e.id,
+    finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), ticked: served.has(e.id) || added.has(e.id),
+    volume_model: volume?.model_id === e.id, ...listFacts(e),
   });
 }
 

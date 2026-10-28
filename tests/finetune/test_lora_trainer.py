@@ -47,6 +47,26 @@ def test_a_non_finite_batch_never_reaches_the_weights(make_trainer, accumulate):
     assert all(torch.isfinite(p).all() for p in trainer.model.parameters())
 
 
+def test_a_network_that_ends_in_a_convolution_is_read_as_logits_however_it_answers_the_probe():
+    """jrc_mus-livers' peroxisome model answered the probe with one value,
+    -0.9595 everywhere, which reads as a tanh's [-1, 1]: no sigmoid, and its
+    cut put at 2p - 1. Its network ends in a convolution, and the job reads
+    the graph first, as its server does."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.finetune.trainer.supervised import output_class_of
+    from cellmap_flow.inference.graph import module_graph
+    from cellmap_flow.serving.probe import UNBOUNDED
+
+    conv = nn.Conv3d(1, 1, 1)
+    nn.init.zeros_(conv.weight)
+    nn.init.constant_(conv.bias, -0.9595)
+    model = torch.jit.script(nn.Sequential(conv))
+    config = SimpleNamespace(output_graph=lambda: module_graph(model))
+
+    assert output_class_of(config, model, torch.rand(2, 1, 4, 4, 4)) == UNBOUNDED
+
+
 def test_a_tanh_model_is_read_as_its_server_reads_it(make_trainer):
     """The trainer had a sigmoid probe of its own, which took a tanh's [-1, 1]
     for logits, while ranking and seeding read it as (p + 1) / 2

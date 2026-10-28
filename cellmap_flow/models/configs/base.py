@@ -291,6 +291,29 @@ class ModelConfig:
         """
         return None
 
+    def output_graph(self):
+        """The graph of what this model serves, for its output activation:
+        ``(nodes, output)`` as ``portable.activation.output_activation``
+        reads them, or None when it cannot be read. The inference server
+        reads it once the model is built (inference/runner.py), so it may
+        load what the built model has.
+
+        By default ``config.model``'s (``inference.graph.module_graph``: a
+        TorchScript, a torch.export program or module, a torch.fx trace of
+        any other module), when that is what the server runs: not when the
+        config predicts through its own ``predict`` or ``process_chunk``,
+        which may do anything to the model's output (a script's sigmoid
+        after it). A type whose own process_chunk it knows says its graph
+        itself (an onnx model's file, a bioimage.io model's postprocessing).
+        """
+        from cellmap_flow.inference.graph import module_graph
+        from cellmap_flow.inference.runner import predict
+
+        config = self.config
+        if callable(getattr(config, "process_chunk", None)) or getattr(config, "predict", predict) is not predict:
+            return None
+        return module_graph(getattr(config, "model", None))
+
     def trainable_model(self):
         """The torch module the finetune trainer trains, or None for
         ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).

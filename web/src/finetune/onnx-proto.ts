@@ -1,11 +1,13 @@
 // A field-level reader and writer of protobuf messages, and on top of it the
 // little of ONNX's schema that finetuning the head needs: the graph's nodes,
 // its initializers (where their bytes lie in the file) and its inputs and
-// outputs by name, and two edits, a graph output added and an initializer's
-// values replaced; and the model's metadata_props written and read, where a
-// finetuned model's download carries its manifest (routes/finetune.ts; the
-// server's onnx model type reads it, cellmap_flow/models/configs/onnx.py;
-// so does the Models tab's Open an .onnx file…, src/model-file.ts).
+// outputs by name (what a served model's network ends in is read from the
+// same: shared/model-info.ts networkActivation), and two edits, a graph
+// output added and an initializer's values replaced; and the model's
+// metadata_props written and read, where a finetuned model's download
+// carries its manifest (routes/finetune.ts; the server's onnx model type
+// reads it, cellmap_flow/models/configs/onnx.py; so does the Models tab's
+// Open an .onnx file…, src/model-file.ts).
 // Protobuf is a sequence of (field number, wire type) tags, each followed by
 // a varint, a fixed-size value or a length-prefixed run of bytes, and a
 // message is such a sequence inside a length-prefixed field; so a model is

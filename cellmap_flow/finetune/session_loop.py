@@ -36,7 +36,7 @@ from cellmap_flow.finetune.cli import apply_restart_params, build_target_transfo
 from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.data.loader import patch_refusal, training_patch_voxels
 from cellmap_flow.finetune.trainer import Finetuner
-from cellmap_flow.finetune.trainer.supervised import probe_output_class
+from cellmap_flow.finetune.trainer.supervised import output_class_of
 from cellmap_flow.jobs.spec import exists_now
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.serving.restart_token import read_or_create_restart_token
@@ -488,12 +488,13 @@ class TrainingSession:
 
         # What the model's output is (a sigmoid baked in, a tanh, or logits),
         # which the losses compare it by: as its server reports it when the
-        # dashboard knew (--output-class), else probed here, once per job --
-        # the model is built once and a restart does not change its head.
+        # dashboard knew (--output-class), else read here as the server reads
+        # it, off the network's graph or else a probe, once per job -- the
+        # model is built once and a restart does not change its head.
         self.model.to(self.device)
         if options.output_class is None:
-            args.output_class = probe_output_class(
-                self.model, next(iter(dataloader))[0], select_channel=options.select_channel
+            args.output_class = output_class_of(
+                self.model_config, self.model, next(iter(dataloader))[0], select_channel=options.select_channel
             )
             options = options.replaced(output_class=args.output_class)
 
