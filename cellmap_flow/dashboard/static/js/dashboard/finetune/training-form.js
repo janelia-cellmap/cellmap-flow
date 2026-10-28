@@ -358,9 +358,12 @@ function updateAugmentAdvice() {
   // many as the paint makes, which the form cannot know: the advice is the
   // epochs alone.
   if (isBrowserMode()) {
-    advice.textContent = epochs > 0
-      ? `Each tile or block is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch. With augmentation, plan on 3 to 5 times the epochs; with paint on only one or two objects, leave it off.`
-      : "";
+    if (epochs > 0) {
+      setHint(advice, `Each tile or block is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch.`,
+        "With augmentation, plan on 3 to 5 times the epochs; with paint on only one or two objects, leave it off.");
+    } else {
+      advice.textContent = "";
+    }
     advice.className = "d-block text-muted";
     return;
   }
@@ -419,7 +422,7 @@ function showGpuQueues(data) {
 let browserModel = null;
 let headNote = null;  // the template's words for the head, kept to put back
 let tileWords = null;  // the template's Tile Size label and its title, likewise
-let batchHint = null;  // and its Batch Size hint
+let batchHint = null;  // and its Batch Size hint (its nodes, an "i" among them)
 
 function trainingMode() {
   return document.getElementById("finetuneMode").value;
@@ -460,23 +463,25 @@ function fillTileSizes(full) {
 function holdBatchForBlocks() {
   const select = document.getElementById("batchSize");
   const hint = document.getElementById("batchSizeHint");
-  batchHint = batchHint ?? hint.textContent;
+  batchHint = batchHint ?? Array.from(hint.childNodes, (n) => n.cloneNode(true));
   if (trainsBlocks()) {
     if (!select.disabled) select.dataset.kept = select.value;
     select.value = "1";
     select.disabled = true;
-    hint.textContent = "A 3D model's whole network trains one block a step: a block is a batch's memory already.";
+    setHint(hint, "One block a step, for a 3D model.",
+      "A 3D model's whole network trains one block a step: a block is a batch's memory already.");
   } else if (select.disabled) {
     select.disabled = false;
     if (select.dataset.kept) select.value = select.dataset.kept;
     delete select.dataset.kept;
-    hint.textContent = batchHint;
+    hint.replaceChildren(...batchHint.map((n) => n.cloneNode(true)));
   }
 }
 
 // What a step of the tile picked is expected to cost at the batch picked,
 // from the manifest's measurement (scaled by area for a side it did not
-// measure), and how much of the tile is output.
+// measure), and how much of the tile is output; where the cost comes from
+// and what a smaller tile trades behind the "i".
 function updateTileHint() {
   const hint = document.getElementById("tileSizeHint");
   const full = browserModel && browserModel.full_training;
@@ -490,15 +495,16 @@ function updateTileHint() {
   const batch = parseInt(document.getElementById("batchSize").value, 10) || 1;
   const noun = full.dims === 3 ? "block" : "tile";
   const percent = tile.useful * 100;
-  const useful = `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}% of each ${noun} is output, the rest context`;
+  const useful = `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}% of each ${noun} is output`;
   // A 3D model's costs were measured on one GPU, which the hint names.
   const where = full.measured_gpu
-    ? `${tile.measured ? "" : ", scaled from the sides"} measured on ${full.measured_gpu}`
-    : tile.measured ? " where it was measured" : ", scaled from the sides measured";
+    ? `${tile.measured ? "Measured" : "Scaled from the sides measured"} on ${full.measured_gpu}. `
+    : tile.measured ? "Measured at this side. " : "Scaled from the sides measured. ";
   const cost = tile.step_ms === null
     ? ""
-    : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step${where}; `;
-  hint.textContent = `${cost}${useful}. Smaller ${noun}s train faster in less memory, but spend more of each ${noun} on context.`;
+    : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step; `;
+  setHint(hint, `${cost}${useful}.`,
+    `${cost ? where : ""}The rest of each ${noun} is context. Smaller ${noun}s train faster in less memory, but spend more of each ${noun} on context.`);
   hint.title = full.measured_on ? `Measured on ${full.measured_on}` : "";
 }
 
@@ -537,14 +543,17 @@ export function setBrowserTraining(model) {
   const both = modes.includes("head") && modes.includes("full");
   document.getElementById("finetuneModeGroup").hidden = !both;
   const note = document.getElementById("finetuneModeNote");
-  note.textContent = !both ? "" : noGpu
-    || "The last layer trains in seconds; the whole network in minutes, on this machine's GPU.";
+  if (!both || noGpu) note.textContent = both ? noGpu : "";
+  else setHint(note, "The last layer trains in seconds; the whole network in minutes.", "The whole network trains on this machine's GPU.");
   fillTileSizes(model && model.full_training);
   holdBatchForBlocks();
   applyTrainingMode();
   if (!modes.length) {
     const browserNote = document.getElementById("browserFinetuneNote");
-    if (browserNote) browserNote.textContent = "This model cannot be finetuned in the browser: its manifest declares no training for the file served (an int8 file's weights are quantized and cannot be written).";
+    if (browserNote) {
+      setHint(browserNote, "This model cannot be finetuned in the browser.",
+        "Its manifest declares no training for the file served (an int8 file's weights are quantized and cannot be written).");
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 // The model picker at the top of the Annotation Crops panel: the served
 // models that can be finetuned (/api/finetune/models), and the one picked.
-import { esc } from "../../lib/dom.js";
+import { esc, setHint } from "../../lib/dom.js";
 import { listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
@@ -97,9 +97,9 @@ function applyFinetuneModes(modes) {
   }
   rank.disabled = !lora && !full;
   if (!lora && !full) {
-    note.textContent = "This model cannot be finetuned (its weights are in a format that cannot be trained).";
+    setHint(note, "This model cannot be finetuned.", "Its weights are in a format that cannot be trained.");
   } else if (!lora) {
-    note.textContent = "Full finetune only: this model's network is compiled (TorchScript), so LoRA adapters cannot be attached.";
+    setHint(note, "Full finetune only: rank 0.", "This model's network is compiled (TorchScript), so LoRA adapters cannot be attached.");
   } else {
     note.textContent = "Higher = more capacity. 0 = full finetune.";
   }

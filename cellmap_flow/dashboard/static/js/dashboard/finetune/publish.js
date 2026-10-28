@@ -41,6 +41,7 @@
 // it in memory (the page's, or the dashboard's process's), never in the
 // page's storage; nothing here keeps it, logs it or puts it in a message.
 import { initCopyButtons } from "../../lib/clipboard.js";
+import { setHint } from "../../lib/dom.js";
 import { HUGGINGFACE_SIGN_IN_EVENT, listen } from "../../lib/events.js";
 import { formatMb } from "../../lib/format.js";
 import { poll } from "../../lib/poll.js";
@@ -100,11 +101,14 @@ export function initPublish() {
   // The server's only (its publish uploads a copy of the network; the template leaves it out elsewhere).
   const loraBox = document.getElementById("publishLoraCopy");
   const loraCost = document.getElementById("publishLoraCost");
-  const loraCostAnyModel = loraCost ? loraCost.textContent : "";
+  // The template's words, its "i" among them, kept as nodes to put back.
+  const nodesOf = (el) => (el ? Array.from(el.childNodes, (n) => n.cloneNode(true)) : []);
+  const putBack = (el, nodes) => el.replaceChildren(...nodes.map((n) => n.cloneNode(true)));
+  const loraCostAnyModel = nodesOf(loraCost);
   // The server's only too: a smaller copy, trained on the cluster.
   const smallBox = document.getElementById("publishSmallCopy");
   const smallCost = document.getElementById("publishSmallCost");
-  const smallCostAnyModel = smallCost ? smallCost.textContent : "";
+  const smallCostAnyModel = nodesOf(smallCost);
   const publishBtn = document.getElementById("publishBtn");
   const statusLine = document.getElementById("publishStatus");
   const progress = document.getElementById("publishProgress");
@@ -253,14 +257,20 @@ export function initPublish() {
     // What model.pt2 costs for this model, where its training said how big
     // its network is (the server's status answer); else the rule for any.
     if (loraCost && "lora_copy_bytes" in answer) {
-      loraCost.textContent = answer.lora_copy_bytes
-        ? `Adds ${formatMb(answer.lora_copy_bytes / 1e6)} for this model: a second copy of its weights, in the upload and on Hugging Face.`
-        : loraCostAnyModel;
+      if (answer.lora_copy_bytes) {
+        setHint(loraCost, `Adds ${formatMb(answer.lora_copy_bytes / 1e6)} for this model.`,
+          "A second copy of its weights, in the upload and on Hugging Face.");
+      } else {
+        putBack(loraCost, loraCostAnyModel);
+      }
     }
     if (smallCost && "small_copy_bytes" in answer) {
-      smallCost.textContent = answer.small_copy_bytes
-        ? `Trains it on one cluster GPU, for up to ${answer.small_copy_hours.pruned} hours when the model is a funlib UNet (it starts from the model's own channels) and ${answer.small_copy_hours.random} otherwise (from scratch), then adds it to the repository: about ${formatMb(answer.small_copy_bytes / 1e6)} in its four files for this model.`
-        : smallCostAnyModel;
+      if (answer.small_copy_bytes) {
+        setHint(smallCost, "Trains it on one cluster GPU for hours, then adds it.",
+          `Up to ${answer.small_copy_hours.pruned} hours when the model is a funlib UNet (it starts from the model's own channels) and ${answer.small_copy_hours.random} otherwise (from scratch). About ${formatMb(answer.small_copy_bytes / 1e6)} in its four files for this model.`);
+      } else {
+        putBack(smallCost, smallCostAnyModel);
+      }
     }
     // The smaller copy follows the publish by hours: asked on until it is in.
     running = isRunning(answer);
