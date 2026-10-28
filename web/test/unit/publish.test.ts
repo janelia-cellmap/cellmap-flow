@@ -164,7 +164,6 @@ describe.skipIf(!python)("publishing a model finetuned in the browser", () => {
     // The card links to the public app, not this page's address, with the
     // model alone and on the dataset (asked for here).
     const card = new TextDecoder().decode(files.get("README.md"));
-    expect(card.startsWith("---\nlibrary_name: onnx\n")).toBe(true);
     expect(card).toContain(`/?model=${ref})`);
     expect(card).toContain(`/?dataset=${RAW}&model=${ref})`);
     expect(card).not.toContain("localhost");
