@@ -754,10 +754,14 @@
          and has its presets beside it (<id>Presets): picking one types it
          in, and they show the one typed, or Typed for any other
          (training-form.js). The field is what is saved and sent. The rate is
-         where a run starts: every trainer eases it down along half a cosine
-         to a tenth of it (finetune/options.py LEARNING_RATE_FLOOR) by the
-         run's last step, which the titles say. #}
-      {% set rate_title = "The learning rate a run starts at. It eases down along half a cosine to a tenth of it by the run's last step: big steps while the model is far from your paint, small ones once it is close. A restart starts at it again. Type any number above 0 (1e-4, 0.0003, ...) or pick a preset." %}
+         where a run starts. Its Ease down box (<id>Ease), ticked as the page
+         starts, is the run's learning_rate_schedule: ticked, every trainer
+         eases the rate down along half a cosine to a tenth of it
+         (finetune/options.py LEARNING_RATE_FLOOR) by the run's last step
+         (cosine); unticked, every step takes the rate (constant), as runs did
+         before the schedule. It is saved and sent with its field. #}
+      {% set rate_title = "The learning rate a run starts at, and with Ease down unticked every step's. A restart starts at it again. Type any number above 0 (1e-4, 0.0003, ...) or pick a preset." %}
+      {% set ease_title = "Ticked, the rate eases down along half a cosine from the one above to a tenth of it at the run's last step: big steps while the model is far from your paint, small ones once it is close. Unticked, every step takes the rate above, as runs did before: for a run you steer yourself, restarting it at a smaller rate. The run's log says which at its start." %}
       <div class="col-md-6 head-only">
         <div class="mb-3">
           <label for="learningRate" class="form-label" title="{{ rate_title }}">Learning Rate</label>
@@ -784,10 +788,14 @@
               {% endif %}
             </select>
           </div>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="learningRateEase" checked>
+            <label class="form-check-label" for="learningRateEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
+          </div>
           {% if mode == "browser" %}
-          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about. It eases to a tenth by the end of the run.</small>
+          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
           {% else %}
-          <small class="text-muted">1e-4 suits LoRA. It eases to a tenth by the end of the run.</small>
+          <small class="text-muted">1e-4 suits LoRA.</small>
           {% endif %}
         </div>
       </div>
@@ -808,7 +816,11 @@
               <option value="0.00001">1e-5 (Very gentle)</option>
             </select>
           </div>
-          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew. It eases to a tenth by the end of the run.</small>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="learningRateFullEase" checked>
+            <label class="form-check-label" for="learningRateFullEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
+          </div>
+          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
         </div>
       </div>
       {% endif %}

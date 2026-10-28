@@ -43,7 +43,7 @@ function isRestartKey(event) {
 const RESTART_SUMMARY_ROWS = {
   server: [
     ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["lora_r", "lora_r"],
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
@@ -56,14 +56,14 @@ const RESTART_SUMMARY_ROWS = {
   ],
   head: [
     ["loss", "loss_type"],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["epochs", "num_epochs"],
     ["label_smoothing", "label_smoothing"],
     ["balance_classes", "balance_classes"],
   ],
   full: [
     ["training", () => "whole network"],
-    ["learning_rate", "learning_rate"],
+    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
     ["tile_size", "tile_size", "default"],

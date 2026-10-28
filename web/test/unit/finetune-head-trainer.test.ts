@@ -136,21 +136,23 @@ describe("trainHead", () => {
     expect([parsed[1], parsed[2], Number(parsed[3])]).toEqual(["30", "30", Number(trained.losses[29].toFixed(6))]);
   });
 
-  it("steps at the form's rate first and at the shared floor of it last", async () => {
+  it("steps at the form's rate first and at the shared floor of it last, or at the form's to the last when constant", async () => {
     // Nine copies of a voxel whose feature is 0: only the bias learns, and
     // its gradient, σ(b) − 1, stays near −0.5 over steps this small, so each
     // of Adam's steps moves it by that step's rate. A run is stopped after
     // `steps` steps: cancelled() is asked before the epoch and after each.
     const steps = 9, rate = 1e-3, floor = PYTHON.finetune.learning_rate_floor;
     const pixels: PixelSet = { x: new Float32Array(steps), y: new Float32Array(steps).fill(1), m: new Float32Array(steps).fill(1), count: steps, inChannels: 1, outChannels: 1 };
-    const biasAfter = async (done: number) => {
+    const biasAfter = async (done: number, learningRateSchedule: FinetuneOptions["learningRateSchedule"] = "cosine") => {
       let asked = 0;
       const report = { log: () => {}, cancelled: () => asked++ === done };
-      const trained = await trainHead(pixels, head(1, 1), options({ epochs: 1, batchPixels: 1, learningRate: rate, lossType: "bce", labelSmoothing: 0 }), report);
+      const trained = await trainHead(pixels, head(1, 1), options({ epochs: 1, batchPixels: 1, learningRate: rate, learningRateSchedule, lossType: "bce", labelSmoothing: 0 }), report);
       return trained.bias[0];
     };
+    const lastStep = async (schedule: FinetuneOptions["learningRateSchedule"]) => (await biasAfter(steps, schedule)) - (await biasAfter(steps - 1, schedule));
     expect((await biasAfter(1)) / rate).toBeCloseTo(1, 2);
-    expect(((await biasAfter(steps)) - (await biasAfter(steps - 1))) / (rate * floor)).toBeCloseTo(1, 2);
+    expect((await lastStep("cosine")) / (rate * floor)).toBeCloseTo(1, 2);
+    expect((await lastStep("constant")) / rate).toBeCloseTo(1, 2);
   });
 });
 

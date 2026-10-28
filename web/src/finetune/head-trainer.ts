@@ -259,16 +259,17 @@ const DISTILLATION_STREAM = 0x9e3779b9;
 
 /** The Adam steps trainHead takes on `count` painted voxels: an epoch's
  * batches of `options.batchPixels` (its last one short), times the epochs.
- * The learning rate eases over them (schedule.ts). */
+ * The learning rate's schedule runs over them (schedule.ts). */
 export function headSteps(count: number, options: Pick<FinetuneOptions, "epochs" | "batchPixels">): number {
   return options.epochs * Math.ceil(count / Math.min(options.batchPixels, count));
 }
 
 /** The head fitted to `pixels` from its own weights: `options.epochs` passes over the rows in a seeded shuffle,
  * `options.batchPixels` rows per Adam step (betas 0.9 and 0.999, eps 1e-8,
- * PyTorch's defaults), at `options.learningRate` eased down to
- * LEARNING_RATE_FLOOR of it by the last step (schedule.ts learningRateAt,
- * over headSteps), the loss of `batchLoss`.
+ * PyTorch's defaults), from `options.learningRate`, eased down to
+ * LEARNING_RATE_FLOOR of it by the last step or kept, as
+ * `options.learningRateSchedule` says (schedule.ts learningRateAt, over
+ * headSteps), the loss of `batchLoss`.
  *
  * With `distillation` and λ (`options.distillationLambda`) above 0, each
  * step's loss adds λ × distillationTerm on a share of the distillation
@@ -387,7 +388,7 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
         }
       }
       // Adam, as torch.optim.Adam steps it, at this step's rate.
-      const lr = learningRateAt(options.learningRate, step, runSteps);
+      const lr = learningRateAt(options.learningRate, step, runSteps, options.learningRateSchedule);
       step++;
       const correction1 = 1 - beta1 ** step, correction2 = 1 - beta2 ** step;
       adam(w, gw, mw, vw, lr, beta1, beta2, eps, correction1, correction2);

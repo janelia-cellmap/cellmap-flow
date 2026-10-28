@@ -10,7 +10,8 @@
 // picked in. A wrong channel here trains the wrong one without a word. And
 // its Learning Rate, typed rather than picked from presets: sent as typed,
 // put back as typed when the page loads again, and refused, saying why,
-// when it is not a number above 0.
+// when it is not a number above 0; its Ease down box, sent as the schedule
+// (cosine ticked, constant not) and put back as it was left.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -69,6 +70,7 @@ async function setUp() {
   element("page-data").textContent = JSON.stringify({ mode: "server" });
   element("trainChannel").options = [new FakeOption("Best match for your paint", "")];
   element("learningRate").value = "0.0001";  // the template's
+  element("learningRateEase").checked = true;  // the template's
   const stored = new Map<string, string>();
   vi.stubGlobal("window", { localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) } });
   vi.stubGlobal("document", { getElementById: element, hidden: false, addEventListener: () => {}, removeEventListener: () => {} });
@@ -125,15 +127,18 @@ it("sends the Channel picked for the model picked, kept per model", async () => 
   expect(form.trainingParams()).not.toHaveProperty("select_channel");
 });
 
-it("sends the Learning Rate typed, puts it back on the next load, and refuses one not above 0", async () => {
+it("sends the Learning Rate typed and its Ease down, puts both back on the next load, and refuses a rate not above 0", async () => {
   const { element, module, form } = await setUp();
-  const rate = element("learningRate");
+  const rate = element("learningRate"), ease = element("learningRateEase");
+  expect(form.trainingParams().learning_rate_schedule).toBe("cosine");
   rate.value = "3e-4";
-  expect(form.trainingParams().learning_rate).toBe(0.0003);
+  ease.checked = false;
+  expect(form.trainingParams()).toMatchObject({ learning_rate: 0.0003, learning_rate_schedule: "constant" });
   form.save();
-  rate.value = "0.0001";  // the template's, as a page loaded again has it
+  rate.value = "0.0001";  // the template's, as a page loaded again has them
+  ease.checked = true;
   module.initTrainingForm();
-  expect(rate.value).toBe("3e-4");
+  expect([rate.value, ease.checked]).toEqual(["3e-4", false]);
   for (const bad of ["", "0", "-1e-4", "fast"]) {
     rate.value = bad;
     expect(() => form.trainingParams()).toThrow(/Learning Rate/);

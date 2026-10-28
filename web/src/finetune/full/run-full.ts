@@ -13,12 +13,12 @@
 // the distance of the logits from the starting network's (the base's
 // weights) over the voxels its scope picks. Good regions
 // are not used. The epochs are the form's, and the learning rate starts at
-// the form's and eases down over the run (../schedule.ts), each step's rate
-// given to an Adam of our own: TF.js's keeps one rate (adam.ts). A run of
-// one channel of several (selectChannel) trains that channel so, and holds
-// the others to the starting network over every voxel of each tile or
-// block (loss.ts lossTerms), so the starting network is built for it even
-// at λ 0.
+// the form's and eases down over the run or stays, as its schedule says
+// (../schedule.ts), each step's rate given to an Adam of our own: TF.js's
+// keeps one rate (adam.ts). A run of one channel of several (selectChannel)
+// trains that channel so, and holds the others to the starting network over
+// every voxel of each tile or block (loss.ts lossTerms), so the starting
+// network is built for it even at λ 0.
 //
 // A 2D model (createRunFull) is built by Marwan Zouinkhi's runtime
 // (cellmap-tfjs-train.ts buildNet) from weights named as the initializers;
@@ -282,7 +282,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     const channels = samples[0].target.length / (output * output);
     const batch = Math.max(1, Math.min(options.batchPatches, samples.length));
     const stepsPerEpoch = Math.ceil(samples.length / batch), runSteps = options.epochs * stepsPerEpoch;
-    report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps)}`);
+    report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps, options.learningRateSchedule)}`);
 
     const { tf, backend, fallback, release } = await deps.loadTf();
     // The routes refuse the run without a GPU (tfjs.ts webgpuMissing): on
@@ -328,7 +328,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
           let zs: TF.Tensor4D | null = null;
           try {
             if (teacher) zs = tf.tidy(() => teacher!.forward(xs));
-            const step = fullTrainStep(tf, net, opt, xs, ts, ms, zs, options, learningRateAt(options.learningRate, steps, runSteps));
+            const step = fullTrainStep(tf, net, opt, xs, ts, ms, zs, options, learningRateAt(options.learningRate, steps, runSteps, options.learningRateSchedule));
             value = (await step.total.data())[0];
             supervised = (await step.supervised.data())[0];
             if (step.distillation) distillation = (await step.distillation.data())[0];
@@ -469,7 +469,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   if (samples.length < blocks.length) report.log(`${plural(blocks.length - samples.length, "block")} of lone painted voxels give the loss nothing to count (an affinity needs two painted neighbours) and ${blocks.length - samples.length === 1 ? "is" : "are"} left out`);
   const channels = samples[0].target.length / output ** 3;
   const runSteps = options.epochs * samples.length;
-  report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps)}`);
+  report.log(`Learning rate ${scheduleWords(options.learningRate, runSteps, options.learningRateSchedule)}`);
 
   const { tf, backend, fallback, release } = await deps.loadTf();
   const augmentRandom = mulberry32((options.seed ^ 0x9e3779b9) >>> 0);
@@ -505,7 +505,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
           // forwardAsync waits for the GPU to free what each segment made:
           // half forward's peak at 172³, and a GpuMemoryError, as a step's.
           if (teacher) zs = await teacher.forwardAsync(xs);
-          terms = await net.step(xs, (z) => lossTerms(tf, z, ts, ms, zs, options), learningRateAt(options.learningRate, steps, runSteps));
+          terms = await net.step(xs, (z) => lossTerms(tf, z, ts, ms, zs, options), learningRateAt(options.learningRate, steps, runSteps, options.learningRateSchedule));
         } catch (e) {
           throw e instanceof GpuMemoryError ? new Error(outOfMemory(entry.name, graph, side, costs, e)) : e;
         } finally {

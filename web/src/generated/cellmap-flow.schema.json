@@ -683,6 +683,7 @@
       "num_epochs": 20,
       "batch_size": 8,
       "learning_rate": 0.0001,
+      "learning_rate_schedule": "cosine",
       "loss_type": "margin",
       "margin": 0.3,
       "label_smoothing": 0.1,
@@ -1528,9 +1529,18 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.",
+          "description": "The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "learning_rate_schedule": {
+          "default": "cosine",
+          "description": "What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.",
+          "enum": [
+            "cosine",
+            "constant"
+          ],
+          "type": "string"
         },
         "gradient_accumulation_steps": {
           "default": 1,
@@ -1782,9 +1792,18 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.",
+          "description": "The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "learning_rate_schedule": {
+          "default": "cosine",
+          "description": "What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.",
+          "enum": [
+            "cosine",
+            "constant"
+          ],
+          "type": "string"
         },
         "gradient_accumulation_steps": {
           "default": 1,

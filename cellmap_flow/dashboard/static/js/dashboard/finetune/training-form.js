@@ -1,8 +1,8 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, the Learning Rates typed or picked from their
-// presets, the Channel a model of several channels trains, and the GPU
-// queue picker.
+// presets and eased down over the run or not, the Channel a model of
+// several channels trains, and the GPU queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { createQueuePicker, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
@@ -29,6 +29,7 @@ const SAVED_FIELDS = [
   ["patchesPerEpoch", "patchesPerEpoch", "blank"],
   ["rehearsalFraction", "rehearsalFraction", "blank"],
   ["learningRate", "learningRate", "value"],
+  ["learningRateEase", "learningRateEase", "checkbox"],
   ["lossType", "lossType", "value"],
   ["marginValue", "marginValue", "value"],
   ["labelSmoothing", "labelSmoothing", "blank"],
@@ -46,9 +47,10 @@ const SAVED_FIELDS = [
 // the browser's loss. Its batch, voxels per step, is a field of its own
 // (batchPixels, in the template's browser-only block). The whole network's
 // fields are browser-only too: the Training choice, the Tile Size (a 3D
-// model's Block Size) and the whole network's learning rate; and its batch,
-// the server's Batch Size, is kept under a key of its own (fullBatchSize)
-// for the same reason as the loss: every browser saved the hidden field's 8.
+// model's Block Size) and the whole network's learning rate and its Ease
+// down; and its batch, the server's Batch Size, is kept under a key of its
+// own (fullBatchSize) for the same reason as the loss: every browser saved
+// the hidden field's 8.
 function savedFields() {
   if (!isBrowserMode()) return SAVED_FIELDS;
   const renamed = { lossType: "headLossType", batchSize: "fullBatchSize" };
@@ -59,6 +61,7 @@ function savedFields() {
       ["finetuneMode", "finetuneMode", "value"],
       ["tileSize", "tileSize", "value"],
       ["fullLearningRate", "learningRateFull", "value"],
+      ["fullLearningRateEase", "learningRateFullEase", "checkbox"],
     ]);
 }
 
@@ -111,7 +114,9 @@ function readPatchesPerEpochOverride() {
 // above 0, typed as 1e-4 or 0.0003, and has its presets beside it
 // (<id>Presets). Picking a preset types it in; the presets show the preset
 // typed, or Typed for any other rate. The field is what is saved and sent,
-// so a typed rate comes back as typed.
+// so a typed rate comes back as typed. Its Ease down box (<id>Ease) is the
+// schedule sent with it: ticked, the rate eases down to a tenth of it over
+// the run (cosine); unticked, every step takes it (constant).
 function rateFields() {
   return isBrowserMode() ? ["learningRate", "learningRateFull"] : ["learningRate"];
 }
@@ -158,12 +163,14 @@ function readRehearsalFractionOverride() {
 function trainingParams() {
   const patchesPerEpoch = readPatchesPerEpochOverride();
   const rehearsalFraction = readRehearsalFractionOverride();
+  // The browser's whole network has a Learning Rate and an Ease down of its own.
+  const rate = isBrowserMode() && document.getElementById("finetuneMode").value === "full" ? "learningRateFull" : "learningRate";
   const params = {
     lora_r: parseInt(document.getElementById("loraRank").value),
     num_epochs: parseInt(document.getElementById("numEpochs").value),
     batch_size: parseInt(document.getElementById("batchSize").value),
-    // The browser's whole network has a Learning Rate of its own.
-    learning_rate: readRate(isBrowserMode() && document.getElementById("finetuneMode").value === "full" ? "learningRateFull" : "learningRate"),
+    learning_rate: readRate(rate),
+    learning_rate_schedule: document.getElementById(`${rate}Ease`).checked ? "cosine" : "constant",
     loss_type: document.getElementById("lossType").value,
     distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
     distillation_scope: document.getElementById("distillationScope").value,
@@ -179,9 +186,10 @@ function trainingParams() {
   }
   // Browser mode: what trains (the Training field); for the head, its
   // batch in voxels per step, its own field; for the whole network, its
-  // learning rate (read above), its tile side and the batch above, in tiles,
-  // and augmentation. The server-only fields above go too and the page's
-  // routes ignore them (web/src/backend/routes/finetune.ts readTraining).
+  // learning rate and schedule (read above), its tile side and the batch
+  // above, in tiles, and augmentation. The server-only fields above go too
+  // and the page's routes ignore them (web/src/backend/routes/finetune.ts
+  // readTraining).
   // The Loss Function offers the head's losses there (BCE, MSE, margin) and
   // is read as on the server, by both.
   if (isBrowserMode()) {

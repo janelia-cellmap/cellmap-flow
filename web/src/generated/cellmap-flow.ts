@@ -422,9 +422,13 @@ export interface FinetuneSubmit {
    */
   batch_size?: number;
   /**
-   * The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.
+   * The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.
    */
   learning_rate?: number;
+  /**
+   * What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.
+   */
+  learning_rate_schedule?: "cosine" | "constant";
   /**
    * Batches to accumulate gradients over before each optimizer step.
    */
@@ -549,9 +553,13 @@ export interface FinetuneRestart {
    */
   batch_size?: number;
   /**
-   * The learning rate a run starts at (AdamW). It eases down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR); a restart starts at it again.
+   * The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.
    */
   learning_rate?: number;
+  /**
+   * What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.
+   */
+  learning_rate_schedule?: "cosine" | "constant";
   /**
    * Batches to accumulate gradients over before each optimizer step.
    */
@@ -724,7 +732,7 @@ export const PROMPT_MAX_CHARS = 4000;
 /** The longest provider or model id and target name the AI-annotation routes take (requests.py). */
 export const LABEL_MAX_CHARS = 100;
 /** The Finetune tab's form at its defaults: what a blank field trains with (finetune/options.py TrainingOptions). */
-export const FINETUNE_DEFAULTS = { lora_r: 64, num_epochs: 20, batch_size: 8, learning_rate: 0.0001, loss_type: "margin", margin: 0.3, label_smoothing: 0.1, distillation_lambda: 0.01, distillation_scope: "unlabeled", balance_classes: true, augment: false } as const;
+export const FINETUNE_DEFAULTS = { lora_r: 64, num_epochs: 20, batch_size: 8, learning_rate: 0.0001, learning_rate_schedule: "cosine", loss_type: "margin", margin: 0.3, label_smoothing: 0.1, distillation_lambda: 0.01, distillation_scope: "unlabeled", balance_classes: true, augment: false } as const;
 
 export type Availability = Route["availability"];
 /** Every route of the dashboard and where it is answered (schema.py AVAILABILITY). */
