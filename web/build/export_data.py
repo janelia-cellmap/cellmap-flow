@@ -7,10 +7,9 @@ their parameters, the chain a fresh session starts with, the offsets the
 model advice's affinity chain gives the mutex watershed, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
 ranking's constants, the learning rate's floor, the finetune log's patterns,
-the unit table, the version a model published from the browser names, the
-query parameters of the app's links and the Hugging Face sign-in's client id
-and scopes. This
-script reads them from the Python that owns them and writes them to
+the unit table, the names of a channel axis, the version a model published
+from the browser names, the query parameters of the app's links and the
+Hugging Face sign-in's client id and scopes. This script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
 
@@ -100,7 +99,7 @@ def python_data():
     from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
     from cellmap_flow.portable import publish, rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
-    from cellmap_flow.io import metadata
+    from cellmap_flow.io import CHANNEL_AXIS_NAMES, metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.post.postprocessors import get_postprocessors_list
     from cellmap_flow.serving import probe
@@ -177,6 +176,9 @@ def python_data():
             "large_box_voxels": view_labels.LARGE_BOX_VOXELS,
         },
         "units": {"nm_per_unit": metadata._NM_PER_UNIT},
+        # The names a raw volume's channel axis goes by (io/raw.py
+        # channel_select; web/src/infer/channels.ts).
+        "channels": {"axis_names": list(CHANNEL_AXIS_NAMES)},
     }
 
 

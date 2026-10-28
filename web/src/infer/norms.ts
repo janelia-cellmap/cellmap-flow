@@ -9,12 +9,17 @@
 // "true"/"false" by lower-cased comparison for a bool). Unknown parameters are
 // ignored, as a constructor given only its own arguments never sees them.
 //
-// Only the normalizers that are arithmetic on the voxel values are here. The
-// others (EuclideanDistance, Dilate, ChannelSelector) need a label volume or
-// a library, and a chain that names one is refused before serving, with the
-// error below naming it, rather than silently skipped as the prototype did.
-// The Python classes of those here say `browser = True`, which is what the
-// browser page offers (web/test/unit/python-data.test.ts holds the two equal).
+// Only the normalizers that are arithmetic on the voxel values are here, and
+// ChannelSelector, which changes no value: it says which of the raw volume's
+// channels is read, and is taken where the raw is read (selectedChannel:
+// infer/engine.ts rawView and readRaw, stages.ts modelInput), as the server
+// takes it when it opens the raw (io/raw.py channel_select), so here it only
+// checks its channel. The others (EuclideanDistance, Dilate) need a label
+// volume or a library, and a chain that names one is refused before serving,
+// with the error below naming it, rather than silently skipped as the
+// prototype did. The Python classes of those here say `browser = True`, which
+// is what the browser page offers (web/test/unit/python-data.test.ts holds the
+// two equal).
 import type { Step, StepValue } from "../contracts";
 import { compileExpression } from "./expression";
 
@@ -36,10 +41,19 @@ export function asBool(value: StepValue | undefined, fallback: boolean): boolean
   return Boolean(value);
 }
 
+/** The step that picks the raw volume's channel (input_normalize.py's
+ * ChannelSelector, `{name, channel}`): first in the chain, where the
+ * dashboard's Channel puts it. */
+export const CHANNEL_SELECTOR = "ChannelSelector";
+
 /** The normalizers the browser runs, by the Python class name the dashboard
  * sends: each builds the step from its parameters, parsed as the Python
  * constructor parses them (throwing on a bad one). */
 const NORMALIZERS: Record<string, (step: Step) => Normalizer> = {
+  [CHANNEL_SELECTOR]: (step) => {
+    selectedChannel([step]);  // the channel was picked where the raw was read
+    return () => {};
+  },
   MinMaxNormalizer: (step) => {
     // clip to [min, max], scale to [0, 1], optionally flip
     const min = asNumber(step.min_value, 0.0, "MinMaxNormalizer.min_value");
@@ -71,6 +85,40 @@ const NORMALIZERS: Record<string, (step: Step) => Normalizer> = {
 };
 
 export const SUPPORTED_NORMALIZERS: readonly string[] = Object.keys(NORMALIZERS);
+
+/** The raw channel `steps` read (io/raw.py selected_channel): the first
+ * ChannelSelector's, else 0. Its `channel` is parsed as the constructor
+ * parses it, and must be a channel's index. */
+export function selectedChannel(steps: readonly Step[]): number {
+  const pick = steps.find((step) => step.name === CHANNEL_SELECTOR);
+  if (!pick) return 0;
+  const channel = asNumber(pick.channel, 0, "ChannelSelector.channel");
+  if (!Number.isInteger(channel) || channel < 0) throw new Error(`ChannelSelector.channel must be a channel's index, a whole number from 0, got ${JSON.stringify(pick.channel)}`);
+  return channel;
+}
+
+/** Why channel `channel` of a raw volume of `channels` cannot be read, or
+ * null when it can: a volume of one is read whatever the pick, as the server
+ * reads an array with no channel axis (io/raw.py channel_select). */
+export function missingChannel(channel: number, channels: number): string | null {
+  return channels > 1 && channel >= channels ? `ChannelSelector picks channel ${channel}, but the raw volume has ${channels} (0 to ${channels - 1})` : null;
+}
+
+/** `steps` without the channel pick: the normalization proper, which a
+ * model declares and the model advice compares (portable/rank.py's
+ * normalizers). */
+export function withoutChannelPick(steps: readonly Step[]): Step[] {
+  return steps.filter((step) => step.name !== CHANNEL_SELECTOR);
+}
+
+/** `steps` read on the channel `chain` (input steps) picks: its
+ * ChannelSelector first, when it has one, then `steps` without one of
+ * their own (portable/rank.py's on_channel). A model's steps replace the
+ * normalization, never the channel, which is the raw's and the user's. */
+export function withChannelPick(steps: readonly Step[], chain: readonly Step[]): Step[] {
+  const pick = chain.find((step) => step.name === CHANNEL_SELECTOR);
+  return [...(pick ? [{ ...pick }] : []), ...withoutChannelPick(steps)];
+}
 
 function makeNormalizer(step: Step): Normalizer {
   if (!Object.hasOwn(NORMALIZERS, step.name)) {

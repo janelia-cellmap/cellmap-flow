@@ -30,6 +30,13 @@ one tab of the browser's own, *Run*, which saves the models' predictions over
 a region to a folder ([below](#running-the-models-over-a-region)).
 `ARCHITECTURE.md` describes how the parts fit together.
 
+A volume of several channels (an OME-Zarr's `c` axis, as light microscopy
+writes it, or a precomputed volume's channels) is read one channel at a time:
+the Processing tab's *Channel* picks which, named by the volume's `omero`
+labels when it has them, as the input chain's first step `ChannelSelector`,
+the server's. The models, the raw layer, painting and training, AI annotation
+and the ranking all read that channel.
+
 ## Running it locally
 
 You need Node 22, and a Python with cellmap-flow's dependencies for the one

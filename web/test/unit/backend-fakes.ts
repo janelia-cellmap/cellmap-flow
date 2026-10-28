@@ -68,6 +68,7 @@ export const DATASET: DatasetInfo = {
   url: "https://example.org/data.zarr",
   dtype: "uint8",
   channels: 1,
+  channelLabels: null,
   axes: [
     { name: "z", unit: "nanometer" },
     { name: "y", unit: "nanometer" },

@@ -14,7 +14,8 @@ import { applyPostprocessors } from "../../src/infer/post";
 import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
-import { entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { rawLayer } from "../../src/viewer/layers";
+import { DATASET, entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { portablePython } from "./pyodide";
 
 function body(res: ApiResponse): any {
@@ -338,6 +339,29 @@ describe("PUT /api/pipeline", () => {
     expect(body(res).success).toBe(false);
     expect(body(res).error).toContain("MutexWatershedPostprocessor");
     expect(ctx.session.state.chain).toEqual(defaultChain());
+  });
+});
+
+describe("the raw's channels", () => {
+  it("answers a volume's channels, takes the Channel's pick into the chain, and shows that channel in the raw layer", async () => {
+    const dataset = { ...DATASET, url: "https://example.org/lm.zarr", channels: 2, channelLabels: ["DAPI", "GFP"] };
+    const ctx = fakeContext({ dataset });
+    ctx.viewer.layers.data = rawLayer(dataset.url, dataset, 0);
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    expect(body(await backend.handle(request("GET", "/api/raw/channels")))).toEqual({ success: true, channels: 2, labels: ["DAPI", "GFP"], selected: 0 });
+
+    const pick = { name: "ChannelSelector", channel: "1" };
+    const res = await backend.handle(request("PUT", "/api/pipeline", { ...defaultChain(), input_norm: [pick, ...defaultChain().input_norm] }));
+    expect(res.status).toBe(200);
+    expect(ctx.infer.serves.at(-1)!.chain.input_norm[0]).toEqual(pick);
+    expect(ctx.viewer.layers.data.localPosition).toEqual([1]);
+    expect(body(await backend.handle(request("GET", "/api/raw/channels"))).selected).toBe(1);
+    // The pick is the dataset's, not the model's: its declared normalization still matches.
+    expect(body(await backend.handle(request("GET", "/api/model_advice"))).models[0].input_norm_matches).toBe(true);
+    // A channel the volume has not got changes nothing.
+    expect((await backend.handle(request("PUT", "/api/pipeline", { input_norm: [{ name: "ChannelSelector", channel: 2 }], postprocess: [] }))).status).toBe(400);
+    expect(ctx.session.state.chain.input_norm[0]).toEqual(pick);
   });
 });
 

@@ -19,6 +19,7 @@ const info: DatasetInfo = {
   url: DATASET,
   dtype: "uint8",
   channels: 1,
+  channelLabels: null,
   axes: [{ name: "z", unit: "nm" }, { name: "y", unit: "nm" }, { name: "x", unit: "nm" }],
   levels: [
     { shape: [500, 1000, 2000], voxel: [8, 8, 8], origin: [0, 0, 0] },
@@ -89,8 +90,8 @@ describe("rawSource (raw.neuroglancer_source)", () => {
 describe("rawLayer (layers.raw_layer)", () => {
   it("is an image layer named data over the zarr, with the raw shader for the dtype", () => {
     expect(RAW_LAYER_NAME).toBe("data");
-    expect(rawLayer(DATASET, info)).toEqual({ type: "image", name: "data", source: `zarr://${DATASET}`, shader: rawShader("uint8") });
-    expect(rawLayer(DATASET, { ...info, dtype: "uint16" }).shader).toBe(rawShader("uint16"));
+    expect(rawLayer(DATASET, info, 0)).toEqual({ type: "image", name: "data", source: `zarr://${DATASET}`, shader: rawShader("uint8") });
+    expect(rawLayer(DATASET, { ...info, dtype: "uint16" }, 0).shader).toBe(rawShader("uint16"));
   });
 });
 
@@ -122,7 +123,7 @@ describe("predictionLayer (layers.prediction_layer)", () => {
 
 describe("initialState (bootstrap.new_viewer)", () => {
   it("is the raw's dimensions, the centre, one voxel per pixel, the layers in order, one panel", () => {
-    const raw = rawLayer(DATASET, info);
+    const raw = rawLayer(DATASET, info, 0);
     const model = predictionLayer(served("mito"), chain(sigmoid), "red");
     const state = initialState(info, { data: raw, mito: model });
     expect(state).toEqual({

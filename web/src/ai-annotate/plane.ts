@@ -102,17 +102,18 @@ export async function planPlane(
 /** The image sent for `planned`'s plane (pipeline.read_plane and
  * build_request's image): its raw box read as stored (no input
  * normalization: the image is scaled to 8 bits for the model on its own)
- * from its level, clipped to the level and zero past it (chunkmirage's
+ * from channel `channel` of its level (the one the session's chain picks,
+ * as the server's RawInput reads it with normalize=False), clipped to the
+ * level and zero past it (chunkmirage's
  * `padded`, as finetune/samples.ts pads a training block), and handed to the
  * Python, which takes the plane along the depth axis, lays it out as the
  * panel draws it, resamples it to the plan's image and scales it to grey.
  * RGBA, the grey in every channel. */
-export async function readImage(infer: Pick<Inference, "readRaw" | "python">, dataset: DatasetInfo, planned: PlannedPlane): Promise<RgbaImage> {
-  if (dataset.channels > 1) throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode annotates single-channel volumes`);
+export async function readImage(infer: Pick<Inference, "readRaw" | "python">, dataset: DatasetInfo, planned: PlannedPlane, channel: number): Promise<RgbaImage> {
   const { begin, count } = planned.raw_box;
   const end = begin.map((b, a) => b + count[a]);
   const inside = clipBox(begin, count, dataset.levels[planned.level].shape);
-  const data = inside ? await infer.readRaw(planned.level, inside.lo, inside.hi) : null;
+  const data = inside ? await infer.readRaw(planned.level, inside.lo, inside.hi, channel) : null;
   const block = padded(data, dataset.dtype, 1, inside?.lo ?? begin, inside?.hi ?? begin, begin, end, "zero").data;
   const bytes = block.buffer.slice(block.byteOffset, block.byteOffset + block.byteLength) as ArrayBuffer;
   const rgba = await infer.python<ArrayBuffer>(`${AI_PYTHON}:request_image`, { plan: planned.plan, dtype: dataset.dtype, count }, [bytes]);

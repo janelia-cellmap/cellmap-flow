@@ -23,7 +23,7 @@ const python = await portablePython();
 /** A dataset of one uint8 level of `shape` voxels at 4 nm whose voxel 0's centre is at `origin`. */
 function dataset(shape: number[], origin = [2, 2, 2]): DatasetInfo {
   return {
-    url: "https://example.org/raw.zarr", dtype: "uint8", channels: 1,
+    url: "https://example.org/raw.zarr", dtype: "uint8", channels: 1, channelLabels: null,
     axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
     levels: [{ shape, voxel: [4, 4, 4], origin }],
   };
@@ -83,7 +83,7 @@ describe.skipIf(!python)("the AI annotation's portable Python", () => {
         const point = [volumeCorner + 201, volumeCorner + 403, volumeCorner + 606];  // in volume voxel (25, 50, 75)
         const infer = fakeInfer(LEVEL);
         const planned = await planPlane(infer, dataset(LEVEL, origin), volume(VOLUME_SHAPE, offset), point, depthAxis, 16);
-        const image = await readImage(infer, dataset(LEVEL, origin), planned);
+        const image = await readImage(infer, dataset(LEVEL, origin), planned, 0);
         const { plan } = planned;
         const { lo, hi } = infer.reads[0];
         for (let a = 0; a < 3; a++) {
@@ -111,7 +111,7 @@ describe.skipIf(!python)("the AI annotation's portable Python", () => {
     const infer = fakeInfer(LEVEL);
     const planned = await planPlane(infer, dataset(LEVEL), volume([50, 100, 160]), [201, 403, 1196], 0, 16);
     expect([planned.plan.write_lo[2], planned.plan.write_hi[2]]).toEqual([141, 150]);
-    const image = await readImage(infer, dataset(LEVEL), planned);
+    const image = await readImage(infer, dataset(LEVEL), planned, 0);
     const { lo, hi } = infer.reads[0];
     expect([lo[2], hi[2]]).toEqual([282, 300]);
     expect([image.height, image.width]).toEqual([32, 18]);
@@ -134,7 +134,7 @@ describe.skipIf(!python)("the AI annotation's portable Python", () => {
   it("stages the mask's objects on the write box with the review's overlay, and accepts them into the box", async () => {
     const infer = fakeInfer(LEVEL);
     const planned = await planPlane(infer, dataset(LEVEL), volume(VOLUME_SHAPE), [201, 403, 606], 0, 16);
-    const image = await readImage(infer, dataset(LEVEL), planned);
+    const image = await readImage(infer, dataset(LEVEL), planned, 0);
     // Two blocks of the 32 × 32 image: two objects of the 16 × 16 write box.
     const mask = Uint8Array.from({ length: 32 * 32 }, (_, i) => (Math.floor(i / 32) < 8 && i % 32 < 8) || (Math.floor(i / 32) >= 20 && i % 32 >= 20) ? 1 : 0);
     const staged = await stageMask(python!, planned.plan, mask, image, [255, 0, 0]);

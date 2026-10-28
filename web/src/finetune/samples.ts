@@ -15,7 +15,8 @@
 //   - the input box on the raw level: the chunk's box scaled by the ratio
 //     of the grids and grown by the model's halo (chunkmirage's inputBox);
 //   - the raw read where the box lies inside the level (Inference.readRaw,
-//     the engine's reader) and its edge repeated past it (chunkmirage's
+//     the engine's reader, on the channel the volume's chain picks) and its
+//     edge repeated past it (chunkmirage's
 //     padded with the "edge" padding the engine serves the models with, as
 //     the Python server's Pipeline(padding="edge"));
 //   - that block converted to float32, the voxels inside the level
@@ -29,6 +30,7 @@
 import { inputBox, padded, type StageAt } from "../../chunkmirage/web/src/stages";
 import type { Inference } from "../contracts";
 import { chooseRawLevel, geometryOf, halo as haloOf, inputShape, outputLevel, outputShape, ratio } from "../infer/geometry";
+import { selectedChannel } from "../infer/norms";
 import { modelInput } from "../infer/stages";
 import type { FinetuneRun, PaintedChunk, Sample } from "./types";
 import { paintedChunkIndices, readPaintedChunk } from "./volume";
@@ -58,6 +60,7 @@ export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" 
   }
   const halo = haloOf(g), r = ratio(g), inShape = inputShape(g);
   const spec = { normalizers: volume.input_norm, rawShape: raw.shape };
+  const channel = selectedChannel(volume.input_norm);
 
   for (const index of indices ?? (await paintedChunkIndices(run.paint, volume.id))) {
     if (index.length !== chunk.length) continue;  // not a chunk of a (z, y, x) array
@@ -71,8 +74,8 @@ export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" 
     // its edge repeated (Engine.input). Nothing is read for a box wholly outside.
     const { lo: inLo, hi: inHi } = inputBox(lo, hi, r, halo);
     const readLo = inLo.map((o) => Math.max(o, 0)), readHi = inHi.map((h, a) => Math.min(h, raw.shape[a]));
-    const data = readHi.every((h, a) => h > readLo[a]) ? await run.infer.readRaw(rawLevel, readLo, readHi) : null;
-    const block = padded(data, dataset.dtype, dataset.channels, readLo, readHi, inLo, inHi, "edge");
+    const data = readHi.every((h, a) => h > readLo[a]) ? await run.infer.readRaw(rawLevel, readLo, readHi, channel) : null;
+    const block = padded(data, dataset.dtype, 1, readLo, readHi, inLo, inHi, "edge");
     // The stage's view of the chunk: only its box matters to modelInput (the
     // view and level name the engine's cache keys, which no sample has).
     const at: StageAt = { view: "", level: 0, index, lo, hi, voxel: level.voxel };

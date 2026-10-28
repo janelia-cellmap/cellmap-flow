@@ -14,14 +14,14 @@
 // the postprocessing its output needs when the chain has none
 // (setNeededPostprocess).
 import { ARGS_KEY } from "../contracts";
-import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
-import { SUPPORTED_NORMALIZERS } from "../infer/norms";
+import type { AppContext, Chain, DatasetInfo, ModelEntry, ServedModel, Step } from "../contracts";
+import { selectedChannel, SUPPORTED_NORMALIZERS, withChannelPick, withoutChannelPick } from "../infer/norms";
 import { withVariant } from "../models";
 import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs } from "../shared/args";
 import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
-import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
+import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer, RAW_LAYER_NAME, rawChannelShown } from "../viewer/layers";
 
 /** The dashboard's address as the Python routes put it in the blob
  * (request.host_url: the scheme, host and the page's base, with the
@@ -56,13 +56,16 @@ export function allServed(ctx: AppContext, entries: ModelEntry[], blob: string):
  * (pipeline.py's _set_chain_and_redraw): the models drawn, or null when no
  * dataset is open (the chain is kept and nothing drawn). The same chain
  * again over layers that carry it already draws nothing (it would reset
- * what the user set in the viewer, a layer hidden, an opacity). */
+ * what the user set in the viewer, a layer hidden, an opacity). A chain
+ * that picks another raw channel shows that one in the raw layer too. */
 export async function setChain(ctx: AppContext, chain: Chain): Promise<ServedModel[] | null> {
   const previous = ctx.session.state.chain;
   const [{ blob, digest }, previousDigest] = await Promise.all([blobFor(chain), blobFor(previous).then((b) => b.digest)]);
   const entries = ctx.session.state.models;
   await ctx.session.update({ chain });
-  if (!ctx.infer.dataset()) return null;
+  const dataset = ctx.infer.dataset();
+  if (!dataset) return null;
+  if (selectedChannel(chain.input_norm) !== selectedChannel(previous.input_norm)) showRawChannel(ctx, dataset, selectedChannel(chain.input_norm));
   if (digest === previousDigest && allServed(ctx, entries, blob)) return ctx.infer.served().filter((s) => entries.some((e) => e.id === s.entry.id));
   const postprocessChanged = JSON.stringify(previous.postprocess) !== JSON.stringify(chain.postprocess);
   const served = await serveModels(ctx, entries, chain, { blob, postprocessChanged });
@@ -79,8 +82,9 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
 
 /** Set the input normalization a model declares as the chain's, as part of
  * starting it, when the chain has none (pipeline.py's
- * set_declared_input_norm). Returns the name of the model whose declaration
- * it is, or null when nothing changed.
+ * set_declared_input_norm; a channel pick is no normalization, and stays
+ * first). Returns the name of the model whose declaration it is, or null
+ * when nothing changed.
  *
  * The Models tab's Submit and Add (routes/models.ts) call this with the
  * models they are about to serve that are not served yet, before serving
@@ -95,16 +99,16 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
  * is skipped, saying so, and the next model's is tried. */
 export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly ModelEntry[]): Promise<string | null> {
   const { chain } = ctx.session.state;
-  if (chain.input_norm.length) return null;
+  if (withoutChannelPick(chain.input_norm).length) return null;
   for (const entry of starting) {
-    const steps = declaredInputNorm(entry);
+    const steps = withoutChannelPick(declaredInputNorm(entry));
     if (!steps.length) continue;
     const unsupported = steps.find((step) => !SUPPORTED_NORMALIZERS.includes(step.name));
     if (unsupported) {
       ctx.log(`${entry.name}'s declared input normalization is not used: ${unsupported.name} is not available in the browser`);
       continue;
     }
-    await setChain(ctx, { input_norm: steps, postprocess: chain.postprocess });
+    await setChain(ctx, { input_norm: withChannelPick(steps, chain.input_norm), postprocess: chain.postprocess });
     ctx.log(`Input normalization set from ${entry.name}'s declaration: ${stepNames(steps).join(" → ")}`);
     return entry.name;
   }
@@ -190,17 +194,19 @@ async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelE
 export const PORTABLE = "cellmap_flow.portable.calls";
 
 /** The name of the first of `entries` whose declared input normalization is
- * `chain`'s input part, step for step; null when none is, or the chain has
- * no input normalizers (pipeline.py's input_norm_set_by). GET
+ * `chain`'s input part (its channel pick aside), step for step; null when
+ * none is, or the chain has no input normalizers (pipeline.py's
+ * input_norm_set_by). GET
  * /api/models/loaded answers it beside the chain, so the page can say where
  * an input normalization a model's start set came from. Every model here
  * declares its own (its manifest), so the answer has no
  * input_norm_declared, which the Flask dashboard's says false for a
  * convention it set; the page reads none as declared. */
 export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
-  if (!chain.input_norm.length) return null;
-  const live = JSON.stringify(chain.input_norm);
-  return entries.find((entry) => JSON.stringify(declaredInputNorm(entry)) === live)?.name ?? null;
+  const steps = withoutChannelPick(chain.input_norm);
+  if (!steps.length) return null;
+  const live = JSON.stringify(steps);
+  return entries.find((entry) => JSON.stringify(withoutChannelPick(declaredInputNorm(entry))) === live)?.name ?? null;
 }
 
 export interface ServeOptions {
@@ -334,6 +340,14 @@ export function showChannel(ctx: AppContext, model: string): boolean {
     changed = true;
   }
   return changed;
+}
+
+/** The raw layer shown on channel `channel` of `dataset` (layers.ts
+ * rawChannelShown), otherwise as it is; nothing for a volume of one
+ * channel, or with no raw layer. */
+export function showRawChannel(ctx: AppContext, dataset: DatasetInfo, channel: number): void {
+  const layer = ctx.viewer.layer(RAW_LAYER_NAME);
+  if (layer && dataset.channels > 1) ctx.viewer.setLayers({ [RAW_LAYER_NAME]: rawChannelShown(layer, dataset, channel) });
 }
 
 /** "148" for a cubic block, "148x148x64" otherwise. */

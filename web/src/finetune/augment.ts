@@ -21,6 +21,7 @@
 // centre keeps them registered. z is flipped but never turned into, as on
 // the server: EM is often coarser along z.
 import type { Step } from "../contracts";
+import { withoutChannelPick } from "../infer/norms";
 
 /** One tile's draw: a flip per axis (z, y, x), the quarter turns in y–x (0 to 3), the brightness factor. */
 export interface AugmentDraw {
@@ -71,9 +72,10 @@ const INTEGER_RANGES: Record<string, [number, number]> = {
 /** The range the raw is kept inside (augment.py _intensity_range): the first
  * normalizer's window when it is a MinMaxNormalizer, the range the data is
  * known to use and is clipped to next anyway; else an integer dtype's own;
- * else none (a float raw, which keeps its negative half). */
+ * else none (a float raw, which keeps its negative half). The channel pick
+ * ahead of it is not a normalizer: it changes no value. */
 export function intensityRange(norm: readonly Step[], dtype: string): [number, number] | null {
-  const first = norm[0];
+  const first = withoutChannelPick(norm)[0];
   if (first?.name === "MinMaxNormalizer") {
     const low = Number(first.min_value ?? 0), high = Number(first.max_value ?? 255);
     if (high > low) return [low, high];
