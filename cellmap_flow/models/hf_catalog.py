@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from huggingface_hub import get_paths_info, hf_hub_download, list_models, list_repo_files
 
+from cellmap_flow.models.configs.cellmap import export_finetune_modes
 from cellmap_flow.models.resolve import _onnx_folders
 
 HUGGING_FACE_ORGS_NAME = "cellmap"
@@ -64,15 +65,12 @@ def weight_facts(sizes: Dict[str, Optional[int]]) -> Dict[str, Any]:
     top-level files are ``sizes`` (each name's size in bytes, None when not
     known).
 
-    LoRA is offered only with a ``model.pt2``, as the training form offers it
-    (HuggingFaceModelConfig.finetune_modes and CellMapModelConfig's, which
-    decide it by the same file, without the model): without one,
-    cellmap_models' ``train()`` hands the trainer the TorchScript, which takes
-    no adapter."""
+    ``finetune_modes`` is the training form's for the model
+    (``export_finetune_modes``)."""
     weights = [size for name, size in sizes.items() if name.endswith(WEIGHT_ENDINGS) and size]
     return {
         "formats": [label for ending, label in FORMATS if any(name.endswith(ending) for name in sizes)],
-        "finetune_modes": ["lora", "full"] if "model.pt2" in sizes else ["full"],
+        "finetune_modes": list(export_finetune_modes(sizes)),
         "size_mb": round(max(weights) / 1e6, 2) if weights else None,
     }
 

@@ -11,7 +11,7 @@ import time
 from types import SimpleNamespace
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
-from cellmap_flow.models.configs.cellmap import CellMapModelConfig, metadata_geometry
+from cellmap_flow.models.configs.cellmap import CellMapModelConfig, export_finetune_modes, metadata_geometry
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -89,14 +89,9 @@ class HuggingFaceModelConfig(ModelConfig):
         return self._metadata
 
     def finetune_modes(self):
-        """LoRA and full when the repo has a ``model.pt2``, full only without
-        one, as for an export's folder (CellMapModelConfig.finetune_modes):
-        cellmap_models' ``train()`` then hands the trainer the TorchScript,
-        which takes no adapter. cellmap/jrc_mus-livers_16nm_to_8nm_mito has
-        model.pt, model.ts and model.onnx: offered LoRA, its job failed at
-        its start. The repo's file list is asked for, not the model, once for
-        the life of this config; when the Hub cannot say, both are offered,
-        and the job says which it takes."""
+        """``export_finetune_modes`` of the repo's files. Their list is asked
+        for, not the model, once for the life of this config; when the Hub
+        cannot say, both are offered, and the job says which it takes."""
         if self._files is None and (
             self._files_failed_at is None
             or time.monotonic() - self._files_failed_at >= self.METADATA_RETRY_SECONDS
@@ -108,8 +103,8 @@ class HuggingFaceModelConfig(ModelConfig):
             except Exception as e:
                 self._files_failed_at = time.monotonic()
                 logger.warning(f"Could not list the files of {self.repo} ({e}); offering LoRA and full")
-        if self._files is not None and "model.pt2" not in self._files:
-            return ("full",)
+        if self._files is not None:
+            return export_finetune_modes(self._files)
         return ("lora", "full")
 
     def declared_geometry(self):
