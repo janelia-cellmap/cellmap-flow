@@ -407,8 +407,8 @@ lines' loss reads
 against two marks: 0.69 for the default class-balanced BCE is guessing, and
 about 0.20 with label smoothing of 0.1 is the paint fitted exactly.
 
-The *Patch on screen* tools label the box centred where the viewer looks, as
-on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
+The *Patch on screen* tools label the box centred where the viewer looks, or
+with *Field of view* what the viewer's panel shows, as on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
 *Seed from Prediction* copies a model's
 prediction into the unpainted voxels, an id per object and background 1, for
 you to fix with the brush; *All Background* labels them background; *Split
