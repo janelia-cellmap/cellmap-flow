@@ -127,7 +127,7 @@ How a seed makes objects of the prediction is its **Method**, under *Seed, split
 | Method | Offered for | What it does |
 |---|---|---|
 | **Model's instances** | a server that serves integer labels (Cellpose with `output: masks`) | The model's own ids, one object each, numbered afresh. An id repeated in another server chunk is another object, since Cellpose numbers each chunk from 1. |
-| **Mutex watershed** | affinity models (offsets in the script, or `_aff` channels) | Reads the offset channels. Neighbours join where the affinity is over the threshold and stay apart where it is under, so touching objects split. A fragment whose mean affinity is under the threshold is background. |
+| **Mutex watershed** | affinity models (offsets in the script, or `_aff` channels) | Reads the offset channels. Neighbours join where the affinity is over the threshold and stay apart where it is under, so touching objects split. A fragment whose mean affinity is under the threshold is background. A channel whose offset reaches past the patch (a 2D model's z channel on one slice) counts for neither. |
 | **Distance watershed** | distance models (`distance` in the name) | Foreground is over the threshold. Objects grow from the distance's peaks (h-maxima 0.05 deep), so touching objects split where the distance dips between them. |
 | **Threshold + components** | every model | Foreground is over the threshold, and each connected object gets an id. Touching objects stay one. This is the default when a request names no method. |
 
