@@ -219,7 +219,6 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
   const size = (row) => (row.dataset.size ? Number(row.dataset.size) : Infinity);
   return {
     element,
-    search,
     refresh,
     matches(data) {
       if (!matchesWords(data.search || "", search.value)) return false;

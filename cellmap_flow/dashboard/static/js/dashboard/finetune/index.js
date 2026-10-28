@@ -31,10 +31,10 @@
 // page: the template hides what needs a server (server-only), and each module
 // asks lib/page-data's isBrowserMode where it must behave differently (no
 // output path to insist on, the paint's download and delete, the finetuned
-// model's download, the AI annotation's credentials, the head's batch). The patch tools, Label it, AI-assisted annotation and Good
-// regions, all run there, their routes answered in the page
-// (web/src/backend/routes/view-labels.ts, ai-annotate.ts, good-regions.ts
-// and rank.ts).
+// model's download, the AI annotation's credentials, the head's batch). The
+// patch tools, Label it, AI-assisted annotation and Good regions, all run
+// there, their routes answered in the page (web/src/backend/routes/
+// view-labels.ts, ai-annotate.ts, good-regions.ts and rank.ts).
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";

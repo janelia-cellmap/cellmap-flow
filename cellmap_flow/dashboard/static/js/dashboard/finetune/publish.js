@@ -28,19 +28,18 @@
 // dashboard/routes/finetune/publish.py's on a server, and answer alike.
 // Where the two differ the credentials answer says so, and the panel goes
 // by it, not by the mode: Sign in opens a popup where it gives an
-// `oauth_url` (the browser's), and asks for a
-// code to enter at huggingface.co where it offers `device_sign_in` (the
-// server's), followed until the sign-in is done or has failed (`device`);
-// Remember on this server is offered where it says `can_remember`; and a
-// token it says is "saved" (on the server, by `hf auth login` or Remember)
-// is signed out there, not here. What Sign in and a pasted token come to is
-// said under the account line, where they are; one that fails puts the
-// token field in focus, the other way to sign in, and once signed in the
-// Publish button is brought into view and focused. A pasted token goes to
-// the credentials route at once and the field is emptied once it is taken:
-// the route keeps it in memory (the page's, or the dashboard's process's),
-// never in the page's storage; nothing here keeps it, logs it or puts it in
-// a message.
+// `oauth_url` (the browser's), and asks for a code to enter at
+// huggingface.co where it offers `device_sign_in` (the server's), followed
+// until the sign-in is done or has failed (`device`); Remember on this
+// server is offered where it says `can_remember`; and a token it says is
+// "saved" (on the server, by `hf auth login` or Remember) is signed out
+// there, not here. What Sign in and a pasted token come to is said under
+// the account line, where they are; one that fails puts the token field in
+// focus, the other way to sign in, and once signed in the Publish button is
+// brought into view and focused. A pasted token goes to the credentials
+// route at once and the field is emptied once it is taken: the route keeps
+// it in memory (the page's, or the dashboard's process's), never in the
+// page's storage; nothing here keeps it, logs it or puts it in a message.
 import { initCopyButtons } from "../../lib/clipboard.js";
 import { HUGGINGFACE_SIGN_IN_EVENT, listen } from "../../lib/events.js";
 import { formatMb } from "../../lib/format.js";
@@ -64,6 +63,12 @@ const STEP_WORDS = {
 // text written again would end a selection in it.
 function setText(el, text) {
   if (el.textContent !== text) el.textContent = text;
+}
+
+// Whether a publish answer says the model, or its smaller copy, which
+// follows it by hours, is still on its way.
+function isRunning(answer) {
+  return answer.status === "running" || answer.small_status === "running";
 }
 
 // The cluster job a step waits on, as the answers' `job` gives it (a
@@ -169,7 +174,7 @@ export function initPublish() {
     const name = model;
     try {
       const answer = await getAnswer(publishUrl(name));
-      if (name === model && answer.success && (answer.status === "running" || answer.small_status === "running")) {
+      if (name === model && answer.success && isRunning(answer)) {
         showPublish(answer);
       }
     } catch (_) {
@@ -258,7 +263,7 @@ export function initPublish() {
         : smallCostAnyModel;
     }
     // The smaller copy follows the publish by hours: asked on until it is in.
-    running = answer.status === "running" || answer.small_status === "running";
+    running = isRunning(answer);
     publishBtn.disabled = running || !signedIn();
     showProgress(answer.status === "none" ? null : answer);
     if (running) startPolling();
@@ -350,7 +355,7 @@ export function initPublish() {
       const answer = await getAnswer(publishUrl(name));
       if (stale() || name !== model) return false;
       showPublish(answer);
-      return answer.status === "running" || answer.small_status === "running";
+      return isRunning(answer);
     }, { intervalMs: 1000, immediate: false, pauseWhenHidden: true });
   }
 
@@ -415,10 +420,9 @@ export function initPublish() {
   // A pasted token is handed over a moment after the field stops changing,
   // when it is left, or on Enter in it, and the field emptied once the route
   // has taken it.
-  // The value being handed over, which is not sent twice (the field's
-  // pause and its change both hand over), cleared with the field once the
-  // route has taken it.
   let tokenTimer = null;
+  // The value being handed over, which is not sent twice (the field's pause
+  // and its change both hand over).
   let sending = null;
   async function handOverToken() {
     clearTimeout(tokenTimer);

@@ -548,9 +548,8 @@ export function initAiAnnotate({ log }) {
     statusLine.classList.toggle("text-danger", d.status === "failed");
     statusLine.classList.toggle("text-muted", d.status !== "failed");
     // One job at a time. A result waiting for review does not hold Annotate:
-    // pressing it sets the result aside first (its click), as closing the
-    // review, which keeps the result, left Annotate greyed out with no word
-    // of why.
+    // pressing it sets the result aside first (its click). Closing the
+    // review keeps the result, and a greyed-out Annotate would not say why.
     runBtn.disabled = d.status === "running";
 
     // While a job runs, a popup left open (a resend) keeps the old result,

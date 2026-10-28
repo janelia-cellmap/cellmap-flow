@@ -35,10 +35,10 @@ export function initModelAdvice({ input, postprocess, apply }) {
   // Loading a model, not only Submit All, is when advice is most useful.
   listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
   // So is a chain the backend set itself with no model change (Fit to
-  // Paint, Use these settings: finetune/rank.js): an affinity model's chain
+  // Paint, Use these settings: finetune/rank.js), which the poll, stopped
+  // once every probe has answered, would not see: an affinity model's chain
   // into a segmentation is then offered cut at the threshold the ranking
-  // fitted, where the line shown, once every probe had answered and the
-  // poll stopped, still cut at 0.5.
+  // fitted, not at 0.5.
   listen(CHAIN_CHANGED_EVENT, () => refreshModelAdvice());
   // The poll waits while the page is hidden, and may have stopped: a tab
   // shown again asks at once.
@@ -134,7 +134,7 @@ function renderInputNormAdvice(m, box, wanted) {
     // The steps the Finetune tab's ranking fitted to the paint for this
     // model (Use this model, Fit to Paint, Use these settings): a
     // confirmation too, never the declared steps suggested back over them,
-    // whose Apply undid the ranking.
+    // whose Apply would undo the ranking.
     const configured = m.configured_input_norm || [];
     const key = adviceKey("input-fitted", m, configured);
     showAdvice(box, wanted, key, function () {
@@ -203,8 +203,8 @@ function renderInputNormAdvice(m, box, wanted) {
 
 // A chain the model's output shows right without (an affinity model's into
 // a segmentation): one quiet line with its Apply, not a suggestion's banner,
-// which over the sigmoid a start or the ranking set read as though that
-// were wrong.
+// which over the sigmoid a start or the ranking set would read as though
+// that were wrong.
 function renderOptionalPostprocess(m, rev, box, wanted) {
   const suggest = rev.suggest || [];
   if (!suggest.length) return;
