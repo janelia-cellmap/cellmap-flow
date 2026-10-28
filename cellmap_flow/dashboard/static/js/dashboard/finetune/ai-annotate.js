@@ -62,8 +62,6 @@ export function initAiAnnotate({ log }) {
   const ackBox = document.getElementById("aiAnnotateAck");
   const ackHint = document.getElementById("aiAnnotateAckHint");
   const destination = document.getElementById("aiAnnotateDestination");
-  const destinationMore = document.getElementById("aiAnnotateDestinationMore");
-  const destinationNote = document.getElementById("aiAnnotateDestinationNote");
   const runBtn = document.getElementById("aiAnnotateRunBtn");
   const keyHint = document.getElementById("aiAnnotateKeyHint");
   const usage = document.getElementById("aiAnnotateUsage");
@@ -222,18 +220,6 @@ export function initAiAnnotate({ log }) {
     return browser && modelSelect.value === OTHER ? modelName.value.trim() : modelSelect.value;
   }
 
-  // The destination's words for the box's label: where the planes go, the
-  // first sentence or what comes before a closing aside in brackets that is
-  // a sentence of its own ("..., location global (Google may process the
-  // data in any region)"); and that aside or the sentences after, which open
-  // under the "i" beside the label. A short one is all label.
-  function splitDestination(text) {
-    const aside = /^(.*\S)\s*\(([A-Z][^()]*)\)$/.exec(text);
-    if (aside) return [aside[1], `${aside[2]}.`];
-    const sentence = /^(.*?\.)\s+(\S.*)$/.exec(text);
-    return sentence ? [sentence[1], sentence[2]] : [text, ""];
-  }
-
   // The destination as the provider words it: what an acknowledgement
   // agrees to, sent with it (the server compares the very words) and logged.
   let shownDestination = "";
@@ -244,10 +230,8 @@ export function initAiAnnotate({ log }) {
   function showAcknowledgement() {
     const provider = providers[providerSelect.value];
     shownDestination = provider ? provider.destination || provider.id : "";
-    const [where, more] = splitDestination(shownDestination);
-    destination.textContent = where;
-    destinationNote.textContent = more;
-    destinationMore.hidden = !more;
+    // All of it, in view: what is sent where is what the box agrees to.
+    destination.textContent = shownDestination;
     const done = acknowledged.includes(providerSelect.value);
     ackBox.checked = done;
     ackBox.disabled = false;
