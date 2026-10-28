@@ -1,7 +1,7 @@
 """python -m cellmap_flow.finetune.finetune_cli, through main(): what a run
-serves, what it refuses, what a restart may change, and how a run that
-cannot serve or restart fails. A run with one restart between two
-iterations is test_training_snapshot's.
+serves, what it refuses, what a restart may change, when Stop Early ends its
+training, and how a run that cannot serve or restart fails. A run with one
+restart between two iterations is test_training_snapshot's.
 """
 
 import json
@@ -72,6 +72,57 @@ def test_a_target_a_three_channel_model_cannot_train_on_is_refused_before_traini
     assert ("Starting epoch" in cli.out) == trains and len(cli.loaded) == 1
 
 
+# A 2D model's script: one slice of 4 x 4 at 16 nm in and out.
+SCRIPT_2D = """
+from funlib.geometry import Coordinate
+import torch.nn as nn
+
+input_voxel_size = output_voxel_size = Coordinate(16, 16, 16)
+read_shape = write_shape = Coordinate(1, 4, 4) * input_voxel_size
+output_channels = 1
+model = nn.Conv3d(1, 1, 1)
+"""
+
+
+@pytest.mark.parametrize("two_d, patch", [
+    pytest.param(True, [178] * 3, id="a 3D model's volume for a 2D model: refused"),
+    pytest.param(False, [4] * 3, id="the model's own grid: trained"),
+])
+def test_a_volume_on_another_models_grid_is_refused_before_a_patch_is_read(run_cli, tmp_path, caplog, two_d, patch):
+    """setup_54_2d's job (1 x 556 x 556 at 16 nm) read the 178^3 patches at
+    8 nm of a volume made for a 3D model, and torch.export refused them
+    ("Expected input at *args[0].shape[2] to be equal to 1, but got 178"),
+    after the FP16 probe had blamed the precision."""
+    flags = []
+    if two_d:
+        (tmp_path / "model_2d.py").write_text(SCRIPT_2D)
+        flags = ["--model-script", str(tmp_path / "model_2d.py")]
+    grid = {"input_size_voxels": patch, "output_size_voxels": [4] * 3 if patch == [4] * 3 else [56] * 3,
+            "input_voxel_size_nm": [8] * 3, "output_voxel_size_nm": [8] * 3}
+    cli = run_cli(*flags, manifest={"kind": "volume_zarr_v1", "raw_dataset_path": "/data/raw.zarr", **grid})
+    assert (cli.code, len(cli.loaded)) == ((1, 0) if two_d else (0, 1))
+    if two_d:
+        # Both grids named.
+        assert "178×178×178" in caplog.text and "1×4×4" in caplog.text
+
+
+def test_a_restart_trains_the_same_channel_and_holds_the_others_again(run_cli, tmp_path, monkeypatch):
+    """A restart that does not name the channel keeps the one the job trains."""
+    from cellmap_flow.finetune import session_loop
+
+    trainers = []
+
+    class Recorded(session_loop.Finetuner):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            trainers.append(self)
+
+    monkeypatch.setattr(session_loop, "Finetuner", Recorded)
+    run_cli("--select-channel", "1", "--auto-serve", "--serve-data-path", str(tmp_path), channels=3,
+            restarts=[{"params": {"learning_rate": 1e-3}}])
+    assert [(t.select_channel, t.distillation.holds_others) for t in trainers] == [(1, True)] * 2
+
+
 def _metadata(run, **params):
     """A metadata.json with ``params``, as the job manager writes one."""
     run.mkdir(parents=True)
@@ -115,6 +166,57 @@ def test_a_restart_that_cannot_be_set_up_waits_for_the_next(run_cli, tmp_path):
     assert "RESTART_FAILED: no populated chunks" in cli.markers
     assert all(torch.equal(value, states["served"][key]) for key, value in states["meanwhile"].items())
     assert len([line for line in cli.markers if line.startswith("TRAINING_ITERATION_COMPLETE:")]) == 2
+
+
+def _epochs(cli):
+    """How many epochs each iteration of the run started."""
+    return [part.count("Starting epoch") for part in cli.out.split("RESTARTING_TRAINING")]
+
+
+def test_a_stop_asked_for_while_the_job_sets_up_is_kept(run_cli):
+    """No server is up in the first iteration, so the stop comes as
+    stop_signal.json. Training deleted it as stale when it began, and a stop
+    asked for while the model loaded was lost: the run trained every epoch."""
+    def stop_meanwhile(record):
+        record.run.mkdir(parents=True, exist_ok=True)  # as the job manager made it, at submit
+        (record.run / "stop_signal.json").write_text("{}")
+        return run_cli.patches()
+
+    cli = run_cli("--num-epochs", "3", loaders=[stop_meanwhile])
+    assert cli.code == 0 and _epochs(cli) == [0]
+    assert not (cli.run / "stop_signal.json").exists(), "the stop is used up"
+
+
+class _AskedWhileFetched(TensorDataset):
+    """``tensors``' patches; fetching one calls ``ask``."""
+
+    def __init__(self, ask, *tensors):
+        super().__init__(*tensors)
+        self.ask = ask
+
+    def __getitem__(self, index):
+        self.ask()
+        return super().__getitem__(index)
+
+
+def test_a_stop_over_the_control_endpoint_ends_training_after_the_epoch_it_came_in(run_cli, tmp_path):
+    """In the iterations after the first, the server's control endpoint hands
+    the stop over (JobControl is what it calls). One that came before the
+    restart, as the previous training ended on its own, was for that one."""
+    controls = []
+
+    def restart(signal_file, control):
+        controls.append(control)
+        control.request_stop({})
+        control.request_restart({"params": {}})
+
+    def stop_in_epoch_1(record):
+        patches = run_cli.patches().dataset.tensors
+        return DataLoader(_AskedWhileFetched(lambda: controls[0].request_stop({}), *patches), batch_size=2)
+
+    cli = run_cli("--num-epochs", "3", "--auto-serve", "--serve-data-path", str(tmp_path),
+                  restarts=[restart], loaders=[None, stop_in_epoch_1])
+    assert _epochs(cli) == [3, 1]
 
 
 def test_the_cli_takes_every_model_type_the_job_manager_submits():

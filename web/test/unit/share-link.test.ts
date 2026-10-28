@@ -7,11 +7,14 @@ import { describe, expect, it } from "vitest";
 
 import type { FinetunedRecord, ModelEntry } from "../../src/contracts";
 import { headOf, withHead } from "../../src/finetune/onnx-head";
-import { parseFinetunedRef, parseLink, sameHead } from "../../src/link";
-import { finetunedEntry } from "../../src/models/finetuned";
+import { parseFinetunedRef, parseLink, resolveLinkedModels, sameHead } from "../../src/link";
+import { createCatalog } from "../../src/models";
+import { MemoryByteCache } from "../../src/models/byte-cache";
+import { finetunedEntry, MemoryFinetunedRegistry } from "../../src/models/finetuned";
+import { MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { linkRefs, shareLink } from "../../src/share-link";
 import { encodeState } from "../../src/viewer/share";
-import { entryFixture } from "./models-helpers";
+import { entryFixture, fakeHub, publishedManifest } from "./models-helpers";
 
 const PAGE = "https://janelia-cellmap.github.io/cellmap-flow/app/";
 const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8";
@@ -68,5 +71,34 @@ describe("linkRefs", () => {
     expect(sameHead(parseFinetunedRef(linked.refs[2]), heads.ft1)).toBe(true);
     expect(linked.rebuilt).toEqual([{ name: ft2.name, base: hub.name }, { name: ft1.name, base: hub.name }]);
     expect(linked.unlinked).toEqual([]);
+  });
+
+  it("names another repo's model by its id, a published finetune where it was published and a finetune of another repo's model on it, and another browser opens all three", async () => {
+    const ALICE = "alice/mito-ft1", A_FT = "mito_aff_setup54_16nm-ft1";
+    const CAROL = "carol/mito-full", C_FT = "mito_aff_setup53_16nm-ft1";
+    const repos = {
+      [ALICE]: { manifests: { [A_FT]: publishedManifest(entryFixture("setup_54"), A_FT) } },
+      [CAROL]: { manifests: { [C_FT]: publishedManifest(hub, C_FT) } },
+    };
+    const onnx = { [`${A_FT}.onnx`]: HEAD_ONNX, [`${C_FT}.onnx`]: HEAD_ONNX };
+    const browser = () => createCatalog({ log: () => {}, fetch: fakeHub({ repos, onnx }).fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry() });
+
+    // The sender: alice's model, a last-layer finetune of it, and a whole network it trained and published to carol's repo.
+    const sender = browser();
+    const alice = (await sender.resolve(`${ALICE}/${A_FT}`))!;
+    const onAlice = record(alice, "mito_aff_setup54_16nm-ft2");
+    await sender.addFinetuned(onAlice, withHead(HEAD_ONNX, headOf(HEAD_ONNX), heads.ft2.weight, heads.ft2.bias));
+    const full: FinetunedRecord = { ...record(hub, C_FT), params: { finetune_mode: "full" }, published: { repo: CAROL, folder: C_FT, at: "2026-10-26T12:00:00.000Z" } };
+    await sender.addFinetuned(full, HEAD_ONNX.slice().buffer);
+    const linked = await linkRefs([alice, onAlice.entry, full.entry], sender);
+    expect(linked.unlinked).toEqual([]);
+    expect([linked.refs[0], parseFinetunedRef(linked.refs[1]).base, linked.refs[2]]).toEqual([`${ALICE}/${A_FT}`, `${ALICE}/${A_FT}`, `${CAROL}/${C_FT}`]);
+
+    const { models } = parseLink(new URL(shareLink(PAGE, DATASET, linked.refs, null)!).search);
+    const recipient = browser();
+    const opened = await resolveLinkedModels(recipient, models, () => {});
+    expect(opened.leftOut).toEqual([]);
+    expect(opened.entries.map((e) => [e.repo, e.name])).toEqual([[ALICE, A_FT], ["finetuned", onAlice.name], [CAROL, C_FT]]);
+    expect(sameHead(headOf(await recipient.modelBytes(opened.entries[1])), heads.ft2)).toBe(true);
   });
 });

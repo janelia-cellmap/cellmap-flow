@@ -564,8 +564,8 @@ class LambdaPostprocessor(PostProcessor):
         return np.float32
 
 
-# The order the dashboard lists the postprocessors in (the Input/Postprocess
-# tabs, and the browser mode's page, which is rendered from the same list):
+# The order the dashboard lists the postprocessors in (the Processing tab,
+# and the browser mode's page, which is rendered from the same list):
 # the steps that map values first, then the ones that make a segmentation,
 # then the ones that work on a segmentation's ids, the relabelling next to
 # last and the merger last, since a chain reads top to bottom and that is the

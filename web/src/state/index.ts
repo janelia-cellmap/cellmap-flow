@@ -15,7 +15,7 @@
 // merges a change in, persists it and tells the listeners. Without
 // sessionStorage (a test, or a browser that blocks storage) the session
 // lives in memory for the page's life and says so in the console.
-import type { Chain, SessionState, SessionStore } from "../contracts";
+import type { Chain, RankFit, SessionState, SessionStore, Step } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 
 /** The session's key in the tab's sessionStorage. */
@@ -24,7 +24,7 @@ export const SESSION_KEY = "cellmap-flow:session";
 /** The chain a fresh session starts with, a fresh copy each call. Every
  * model the browser runs (cellmap/onnx-web-models) was trained on uint8
  * scaled to [-1, 1] and outputs logits, so this is what makes their
- * predictions right; the dashboard's Input and Postprocess tabs show it
+ * predictions right; the dashboard's Processing tab shows it
  * ticked: it is web/build/export_data.py's DEFAULT_CHAIN, the one
  * build/render.py ticks on the page. */
 export function defaultChain(): Chain {
@@ -32,7 +32,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -51,7 +51,38 @@ export function completeState(stored: unknown): SessionState {
     resample: typeof s.resample === "boolean" ? s.resample : false,
     prefs: s.prefs && typeof s.prefs === "object" && !Array.isArray(s.prefs) ? (s.prefs as SessionState["prefs"]) : {},
     paintVolume: typeof s.paintVolume === "string" ? s.paintVolume : null,
+    shownChannels: shownChannelsOf(s.shownChannels),
+    rankAdded: Array.isArray(s.rankAdded) ? s.rankAdded.filter((id): id is string => typeof id === "string") : [],
+    rankFits: rankFitsOf(s.rankFits),
+    startPostprocess: startPostprocessOf(s.startPostprocess),
   };
+}
+
+/** A stored `rankFits` made whole: the entries that are a fit (steps a
+ * list, the postprocessing a list or null), each threshold a number or
+ * null; {} for anything else, which only forgets what the ranking fitted
+ * until the next score. */
+function rankFitsOf(stored: unknown): Record<string, RankFit> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored as Record<string, Partial<RankFit> | null>).flatMap(([name, f]) =>
+    f && Array.isArray(f.input_norm) && (f.postprocess === null || Array.isArray(f.postprocess))
+      ? [[name, { input_norm: f.input_norm, postprocess: f.postprocess, threshold: typeof f.threshold === "number" ? f.threshold : null }]]
+      : []));
+}
+
+/** A stored `startPostprocess` made whole, or null when it is not one. */
+function startPostprocessOf(stored: unknown): SessionState["startPostprocess"] {
+  const s = stored as { model?: unknown; postprocess?: unknown } | null;
+  return s && typeof s === "object" && typeof s.model === "string" && Array.isArray(s.postprocess)
+    ? { model: s.model, postprocess: s.postprocess as Step[] } : null;
+}
+
+/** A stored `shownChannels` made whole: the entries that are a channel's
+ * index (a whole number, 0 and up), since each becomes a layer's position
+ * on its channel axis; {} for anything that is not an object of them. */
+function shownChannelsOf(stored: unknown): Record<string, number> {
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored).filter(([, c]) => Number.isInteger(c) && (c as number) >= 0)) as Record<string, number>;
 }
 
 /** A SessionStore over `initial`, persisted through `save` after each update. */

@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- The Sign in with Hugging Face popup (src/publish/oauth.ts): it goes to
+     Hugging Face and, on the way back, hands the app its token and closes.
+     Its URL without a query is a redirect URL the app's client metadata
+     document lists (web/README.md). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in with Hugging Face · cellmap-flow</title>
+  <style>
+    body { margin: 2rem; font: 15px/1.5 system-ui, sans-serif; background: #1e1e1e; color: #ddd; }
+  </style>
+</head>
+<body>
+  <p id="message">Taking you to Hugging Face…</p>
+  <script type="module" src="./src/publish/oauth-popup.ts"></script>
+</body>
+</html>

@@ -17,6 +17,7 @@ from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 from cellmap_flow.finetune.job_manager.state import JobStatus
 from cellmap_flow.finetune.model_loading import decode_model_entry
 from cellmap_flow.jobs.lsf import LSFJob
+from cellmap_flow.jobs.site import JANELIA
 from cellmap_flow.jobs.spec import JobStatus as LSF
 from cellmap_flow.serving.protocol import IP_PATTERN
 
@@ -112,6 +113,45 @@ def test_a_trainer_that_fails_fails_its_job(submit, monkeypatch, tmp_path):
     assert job.job.log_file.read_text() == "trained\n"
 
 
+class _Queued:
+    """An LSF job on ``queue``: pending on gpu_h200, which never starts it,
+    and failing at once elsewhere, which ends its monitor."""
+
+    def __init__(self, queue):
+        self.queue, self.job_id, self.killed = queue, f"lsf-{queue}", False
+
+    def get_status(self):
+        return LSF.PENDING if self.queue == "gpu_h200" else LSF.FAILED
+
+    def kill(self):
+        self.killed = True
+
+
+def test_a_job_that_has_not_started_moves_to_the_next_queue_ticked(submit, monkeypatch):
+    """A training job went to the one queue picked and waited there, however
+    long. It goes to the freest of the queues ticked now, and on to the next
+    of them, and no other, while LSF does not start it."""
+    from dataclasses import replace
+
+    from cellmap_flow.finetune.job_manager import manager
+    from cellmap_flow.finetune.job_manager import submit as submitting
+
+    launched = []
+    # gpu_h200 the freest of the two ticked, gpu_a100 not ticked.
+    monkeypatch.setattr(manager, "gpu_queue_candidates", lambda queues, cycle=True: ["gpu_h200", "gpu_h100"])
+    monkeypatch.setattr(submitting, "launch",
+                        lambda name, command, queue, **kw: launched.append(_Queued(queue)) or launched[-1])
+    monkeypatch.setattr(submitting, "current_site", lambda: replace(JANELIA, pending_fallback_seconds=0))
+    monkeypatch.setattr(monitor.time, "sleep", lambda seconds: None)
+    run = submit(_Script(), queue=["gpu_h100", "gpu_h200"])
+    FinetuneJobManager().monitor_job(run.job)
+    assert [job.queue for job in launched] == ["gpu_h200", "gpu_h100"]
+    assert launched[0].killed and run.job.lsf_job is launched[1]
+    metadata = json.loads((run.job.output_dir / "metadata.json").read_text())
+    assert (metadata["lsf_job_id"], metadata["queue"]) == ("lsf-gpu_h100", ["gpu_h100", "gpu_h200"])
+    assert "--queue gpu_h100 gpu_h200" in run.command, "the served finetune may run on either"
+
+
 @pytest.mark.parametrize("override", [pytest.param(False, id="its own checkpoint"),
                                       pytest.param(True, id="a checkpoint override")])
 def test_the_trainer_builds_a_fly_model_as_the_dashboard_has_it(submit, tmp_path, override):
@@ -180,12 +220,14 @@ def monitored(make_job, monkeypatch):
 
 def test_the_monitor_reads_one_loss_per_epoch(monitored):
     """From the epoch's summary line, even split across two reads; per-batch
-    losses are running means mid-epoch, and are not read."""
-    run = monitored(["Starting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
+    losses are running means mid-epoch, and are not read. The network's size
+    the trainer printed first is kept too (the Publish panel's cost)."""
+    run = monitored(["NETWORK_PARAMETERS: 2122\nStarting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
                      "ss: 0.5 - Supervised: 0.5\nStarting epoch 2 of 10...\nEpoch 2/10 - Loss: 0.25 - Sup\n",
                      "  Batch 1/3 - Loss: 0.123\n"])
     assert [(epoch, loss) for _, epoch, loss in run.seen] == [(1, None), (2, 0.25), (2, 0.25)]
     assert run.job.total_epochs == 10
+    assert run.job.network_parameters == 2122
 
 
 def test_the_last_status_marker_in_the_log_decides(monitored):

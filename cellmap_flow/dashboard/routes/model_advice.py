@@ -7,11 +7,18 @@ degrades the result silently rather than erroring, which is a bad failure mode.
 
 This endpoint combines two sources into a verdict the UI can show:
 
-* the running server's output probe (``/__control__/output_probe``), which
-  observes what activation the model's output already has, and
+* the running server's model info (``/__control__/model_info``), which says
+  what activation the model's output already has: read off its network's
+  graph (the op that ends it), or else observed by its output probe on
+  noise, a guess, and
 * the model's declared metadata (channel count, name, training framework).
 
 It never changes anything -- callers decide whether to apply the suggestion.
+Nor does it undo what the Finetune tab's ranking set: the input
+normalization the ranking fitted to the paint for a model
+(Session.rank_fits) counts as matching, not as one to suggest the
+declared one back over, and an affinity model's chain into a segmentation
+is offered cut at the threshold it fitted.
 """
 
 import json
@@ -23,14 +30,15 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.serving.probe import input_norm_differences, review_postprocess, suggest_input_norm
+from cellmap_flow.portable.rank import same_steps
+from cellmap_flow.serving.probe import activation_evidence, input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
 logger = logging.getLogger(__name__)
 
 model_advice_bp = Blueprint("model_advice", __name__)
 
-def _model_metadata(model_config) -> dict:
+def model_metadata(model_config) -> dict:
     """Best-effort metadata for a model config, from whatever source has it."""
     meta = {}
     try:
@@ -52,19 +60,22 @@ def _model_metadata(model_config) -> dict:
     return meta
 
 
-def _declared_input_norm(model_config):
+def _declared_input_norm(model_config, data_range):
     """The input normalization a model declares itself
-    (``ModelConfig.declared_input_norm``), in suggest_input_norm's
-    ``declared`` form (``{name: params}``, in order), or None; None too for
-    a job whose model is not among the session's.
+    (``ModelConfig.declared_input_norm``, for raw data spanning
+    ``data_range``), in suggest_input_norm's ``declared`` form (``{name:
+    params}``, in order), or None; None too for a job whose model is not
+    among the session's.
 
-    An onnx model's manifest declares the steps the browser feeds it through;
-    no other type declares any.
+    An onnx model's manifest declares the steps the browser feeds it through,
+    a model a server published to Hugging Face its metadata.json the steps
+    it was trained with, and a cellmap-models export's metadata.json the
+    range the model reads; no other model declares any.
     """
     if model_config is None:
         return None
     norm = {}
-    for step in model_config.declared_input_norm() or []:
+    for step in model_config.declared_input_norm(data_range=data_range) or []:
         if isinstance(step, dict) and step.get("name"):
             norm[step["name"]] = {k: v for k, v in step.items() if k != "name"}
     return norm or None
@@ -75,7 +86,7 @@ def _declared_input_norm(model_config):
 _raw_range_cache = {}
 
 
-def _raw_dtype_and_range(dataset_path):
+def raw_dtype_and_range(dataset_path):
     """The dtype and value range of the raw data, for scaling it to the model.
 
     Integer data has an exact range from its dtype. Float data does not -- the
@@ -109,14 +120,59 @@ def _raw_dtype_and_range(dataset_path):
     return dtype_name, value_range
 
 
+def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
+    """What ``model_config``'s input normalization should be on raw data of
+    ``raw_dtype`` spanning ``raw_range``: suggest_input_norm's suggestion,
+    and the declaration it holds the chain to (_declared_input_norm), or
+    None when the model declares none. ``meta`` is model_metadata's for it
+    ({} for a job whose model is not among the session's).
+
+    The page shows the suggestion, and a model's start sets it on a chain
+    with no input normalization when it is the model's declaration or the
+    convention for its kind of model (routes.pipeline.set_declared_input_norm).
+    """
+    if getattr(model_config, "normalizes_input", False):
+        # No suggestion, so the page shows none: [-1, 1] was suggested
+        # for a Cellpose model, which normalizes each slice itself.
+        return {"input_norm": None, "order": [], "reason": "The model normalizes its input itself",
+                "confidence": "high"}, None
+    declared = _declared_input_norm(model_config, raw_range)
+    suggestion = suggest_input_norm(
+        framework=meta.get("framework"),
+        raw_dtype=raw_dtype,
+        declared=declared,
+        source=meta.get("repo") or meta.get("folder_path"),
+        data_range=raw_range,
+    )
+    return suggestion, declared
+
+
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
     return fetch_model_info(host)
 
 
+def _launching() -> bool:
+    """Whether a model's launch has not returned yet (services/launch.py):
+    its job may be listed already while its start is still to set the
+    chain's postprocessing (routes.pipeline.set_needed_postprocess)."""
+    from cellmap_flow.dashboard.services.launch import _launching, _launching_lock
+
+    with _launching_lock:
+        return bool(_launching)
+
+
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
 def model_advice():
-    """Per-model verdicts on the currently configured input/output handling."""
+    """Per-model verdicts on the currently configured input/output handling.
+
+    ``{"success": true, "models": [...], "starting", "digest"}``: an entry
+    per served model; ``starting``, whether a model's start is still on its
+    way (_launching), and ``digest``, the chain's (PipelineSpec.digest). The
+    page asks again while ``starting``, and reads the chain again when the
+    digest moves: a model's start sets the postprocessing its output needs
+    once its server answers, after the Submit that started it.
+    """
     session = get_session()
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
@@ -126,7 +182,7 @@ def model_advice():
     ]
     configured_norm = [step.get("name") for step in configured_steps]
 
-    raw_dtype, raw_range = _raw_dtype_and_range(session.dataset_path)
+    raw_dtype, raw_range = raw_dtype_and_range(session.dataset_path)
 
     by_name = {}
     for cfg in session.models_config or []:
@@ -138,7 +194,7 @@ def model_advice():
     results = []
     for job in session.jobs or []:
         name = getattr(job, "model_name", None)
-        meta = _model_metadata(by_name[name]) if name in by_name else {}
+        meta = model_metadata(by_name[name]) if name in by_name else {}
         probe = _fetch_probe(getattr(job, "host", None))
 
         # Only folder-backed models carry metadata.json; a script model
@@ -151,6 +207,9 @@ def model_advice():
             "probe_available": bool(probe.get("available")),
             "out_channels": out_channels,
             "output_class": probe.get("output_class"),
+            # What says it: "graph" (output_op, the op that ends it) or "probe".
+            "output_class_from": probe.get("output_class_from"),
+            "output_op": probe.get("output_op"),
             "output_min": probe.get("output_min"),
             "output_max": probe.get("output_max"),
             "configured_postprocess": configured_post,
@@ -173,38 +232,25 @@ def model_advice():
             }
         else:
             entry["postprocess_review"] = review_postprocess(
-                probe["output_class"],
+                probe.get("output_class"),
                 configured_post,
                 out_channels=out_channels,
                 model_name=meta.get("model_name") or name or "",
                 channels_names=meta.get("channels_names"),
+                evidence=activation_evidence(probe.get("output_class_from"), probe.get("output_op"),
+                                             (probe.get("output_min"), probe.get("output_max"))),
+                # The threshold the ranking fitted to the paint for it, which
+                # an affinity chain's watershed joins neighbours above.
+                threshold=(session.rank_fits.get(name) or {}).get("threshold"),
             )
 
         # Input side is a declared convention, not something we can observe.
-        declared = _declared_input_norm(by_name.get(name))
-        if getattr(by_name.get(name), "normalizes_input", False):
-            # No suggestion, so the page shows none: [-1, 1] was suggested
-            # for a Cellpose model, which normalizes each slice itself.
-            declared = None
-            entry["input_norm_suggestion"] = {
-                "input_norm": None,
-                "order": [],
-                "reason": "The model normalizes its input itself",
-                "confidence": "high",
-            }
-        else:
-            entry["input_norm_suggestion"] = suggest_input_norm(
-                framework=meta.get("framework"),
-                raw_dtype=raw_dtype,
-                declared=declared,
-                source=meta.get("repo") or meta.get("folder_path"),
-                data_range=raw_range,
-            )
+        suggestion, declared = input_norm_suggestion(by_name.get(name), meta, raw_dtype, raw_range)
+        entry["input_norm_suggestion"] = suggestion
         # A "low" confidence suggestion is just the dtype default, made without
         # knowing the training framework -- reporting a mismatch against it
         # would flag a correct hand-tuned config as wrong. Say "unknown"
         # instead, so callers can stay quiet rather than mislead.
-        suggestion = entry["input_norm_suggestion"]
         # Order-sensitive on purpose: LambdaNormalizer("x*2-1") before the
         # rescale computes something quite different from after it, so the
         # same two normalizers in the wrong sequence is not a match. A
@@ -212,11 +258,18 @@ def model_advice():
         # 2*x for a manifest's 2*x-1 feed the model something else, and the
         # page said that "looks right". A convention's values are not held
         # to the letter (its x*2-1 is anyone's 2*x-1).
-        entry["input_norm_differences"] = input_norm_differences(configured_steps, declared)
-        entry["input_norm_matches"] = (
+        # The steps the ranking fitted to the paint for this model, which Use
+        # this model, Fit to Paint or Use these settings set (a MinMax
+        # stretched to the raw under the paint, say), match as they are:
+        # suggested the declared ones back, a second Apply undid the ranking.
+        fitted = (session.rank_fits.get(name) or {}).get("input_norm")
+        entry["input_norm_fitted"] = bool(fitted) and same_steps(fitted, [dict(s) for s in session.pipeline_spec.input_norm])
+        entry["input_norm_differences"] = [] if entry["input_norm_fitted"] else input_norm_differences(configured_steps, declared)
+        entry["input_norm_matches"] = entry["input_norm_fitted"] or (
             list(configured_norm) == list(suggestion["order"])
             and not entry["input_norm_differences"]
         )
         results.append(entry)
 
-    return jsonify({"success": True, "models": results})
+    return jsonify({"success": True, "models": results, "starting": _launching(),
+                    "digest": session.pipeline_spec.digest()})

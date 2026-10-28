@@ -2,7 +2,8 @@
 
 Only the device part of a chunk waits for the GPU. A model's declared shapes
 are checked on its warmup forward, half precision is opt-in and checked
-against fp32, and the chain sees the chunk it is given.
+against fp32, what its output is comes from its network's last op before
+its output on noise, and the chain sees the chunk it is given.
 """
 
 import threading
@@ -18,6 +19,7 @@ from cellmap_flow.inference.runner import DeviceSlots, predict
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.io.raw import RawInput, open_raw
 from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.portable.label_it import UNBOUNDED, UNIT
 from cellmap_flow.post.postprocessors import PostProcessor
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
@@ -133,8 +135,46 @@ def test_a_declared_shape_the_model_does_not_produce_stops_the_server(raw_zarr, 
     config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
     with pytest.raises(ValueError, match="write_shape"):
         ChunkmirageServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
-    (probe,) = config._config.model.inputs  # raised by the warmup's forward
+    # Raised by the warmup's forward; the trace reading the graph before it
+    # gave the module a torch.fx Proxy, not a tensor.
+    (probe,) = [x for x in config._config.model.inputs if isinstance(x, torch.Tensor)]
     assert probe.abs().max() > 0
+
+
+# The identity's geometry, its model $model: a 1x1 convolution answering
+# -0.9595 everywhere, as jrc_mus-livers_16nm_to_8nm_peroxisome answered the
+# warmup's noise (read as a tanh's [-1, 1]), scripted, or a plain module.
+ACTIVATION = IDENTITY_MODEL.replace("model = Identity()", "") + """
+
+def flat_conv():
+    conv = torch.nn.Conv3d(1, 1, 1)
+    torch.nn.init.zeros_(conv.weight)
+    torch.nn.init.constant_(conv.bias, -0.9595)
+    return conv
+
+
+class Flat(torch.nn.Module):
+    def forward(self, x):
+        return x * 0 - 0.9595
+
+
+model = $model
+"""
+
+
+@pytest.mark.parametrize("model, expected", [
+    pytest.param("torch.jit.script(flat_conv())", (UNBOUNDED, "graph", "Conv"), id="a-conv"),
+    pytest.param("torch.jit.script(torch.nn.Sequential(flat_conv(), torch.nn.Sigmoid()))", (UNIT, "graph", "Sigmoid"),
+                 id="a-conv-then-a-sigmoid"),
+    # Its graph ends in arithmetic, and its output on noise is flat: no evidence.
+    pytest.param("Flat()", (None, None, None), id="flat-and-no-graph-says"),
+])
+def test_what_a_models_output_is_comes_from_its_network_before_its_probe(raw_zarr, model_script, model, expected):
+    config = ScriptModelConfig(script_path=model_script(ACTIVATION, model=model), name="activation")
+    info = ChunkmirageServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config).model_info()
+    assert (info["output_class"], info["output_class_from"], info["output_op"]) == expected
+    # The probe ran either way: the server has said what it will say.
+    assert info["available"] and info["output_min"] is not None
 
 
 def test_postprocessors_space_their_ids_by_output_voxels(raw_zarr, model_script):

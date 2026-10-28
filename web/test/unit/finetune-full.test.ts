@@ -14,9 +14,10 @@ import { describe, expect, it } from "vitest";
 import type { DatasetInfo } from "../../src/contracts";
 import { transformBlock } from "../../src/finetune/augment";
 import type { Tf } from "../../src/finetune/full/cellmap-tfjs-train";
+import { createAdam } from "../../src/finetune/full/adam";
 import { buildNet, maskedBce, readOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
 import { parseTrainGraph } from "../../src/finetune/full/graph";
-import { fullTrainStep, supervisedLoss } from "../../src/finetune/full/loss";
+import { fullTrainStep, lossTerms, OTHER_CHANNELS_WEIGHT, supervisedLoss } from "../../src/finetune/full/loss";
 import { onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
 import { blockLabels, blockRaw, normalizeTile, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
@@ -158,6 +159,37 @@ describe("the whole network's loss", () => {
   });
 });
 
+describe("the whole network's loss for one channel of several", () => {
+  it("trains the channel picked on its paint and holds every other channel to the starting network on every voxel", { timeout: 60_000 }, async () => {
+    const { tf } = await loadTf();
+    // Three voxels of two channels, channels last: the starting network's
+    // logits, and the student's with channel 0 moved by d0 and channel 1 by
+    // d1; the paint (one channel, the picked one's) on the first two voxels.
+    const teacher = [0.5, -1, 0.2, 1.5, -0.3, 2];
+    const moved = (d0: number, d1: number) => teacher.map((t, i) => t + (i % 2 ? d1 : d0));
+    const y = [1, 0, 1], m = [1, 1, 0];
+    const o = { lossType: "bce" as const, margin: 0.3, balanceClasses: false, labelSmoothing: 0, distillationLambda: 0.5, distillationScope: "unlabeled" as const, selectChannel: 1 };
+    const terms = (z: number[]) => tf.tidy(() => {
+      const t = lossTerms(tf, tf.tensor2d(z, [3, 2]), tf.tensor2d(y, [3, 1]), tf.tensor2d(m, [3, 1]), tf.tensor2d(teacher, [3, 2]), o);
+      return { total: t.total.dataSync()[0], supervised: t.supervised.dataSync()[0], distillation: t.distillation!.dataSync()[0], others: t.otherChannels!.dataSync()[0] };
+    });
+    // Channel 0 moved by 0.4 on every voxel: held at 0.4², painted or not;
+    // channel 1's supervised term is the head's on channel 1 alone.
+    const away = terms(moved(0.4, 0));
+    expect(away.others).toBeCloseTo(0.16, 6);
+    expect(away.distillation).toBeCloseTo(0, 6);
+    const z1 = Float64Array.from([teacher[1], teacher[3], teacher[5]]);
+    expect(away.supervised).toBeCloseTo(batchLoss(z1, Float32Array.from(y), Float32Array.from(m), o, new Float64Array(3)), 5);
+    expect(away.total).toBeCloseTo(away.supervised + OTHER_CHANNELS_WEIGHT * away.others, 5);
+    // Channel 1 moved by 0.3: nothing held, and its own distillation on its
+    // one unpainted voxel, as the form's scope says.
+    const trained = terms(moved(0, 0.3));
+    expect(trained.others).toBeCloseTo(0, 6);
+    expect(trained.distillation).toBeCloseTo(0.09, 6);
+    expect(trained.total).toBeCloseTo(trained.supervised + 0.5 * trained.distillation, 5);
+  });
+});
+
 describe("Marwan's TF.js runtime on head.onnx", () => {
   // TF.js's CPU backend: seconds a test on a quiet machine, near a minute on a busy one.
   it("lowers the masked loss in a few steps", { timeout: 120_000 }, async () => {
@@ -178,10 +210,10 @@ describe("Marwan's TF.js runtime on head.onnx", () => {
     const mask = tf.tensor4d(Float32Array.from({ length: 72 }, (_, i) => (i % 5 === 0 ? 0 : 1)), [1, 6, 6, 2]);
     const z0 = tf.tidy(() => teacher.forward(x));
     const bce = tf.tidy(() => maskedBce(tf, z0, target, mask).dataSync()[0]);
-    const opt = tf.train.adam(0.05);
+    const opt = createAdam(tf);
     const o = { lossType: "bce" as const, margin: 0.3, labelSmoothing: 0, balanceClasses: false, distillationLambda: 1, distillationScope: "unlabeled" as const };
     const terms = [0, 1, 2].map(() => {
-      const step = fullTrainStep(tf, net, opt, x, target, mask, z0, o);
+      const step = fullTrainStep(tf, net, opt, x, target, mask, z0, o, 0.05);
       const out = { supervised: step.supervised.dataSync()[0], distillation: step.distillation!.dataSync()[0], total: step.total.dataSync()[0] };
       [step.total, step.supervised, step.distillation!].forEach((s) => s.dispose());
       return out;
@@ -192,6 +224,32 @@ describe("Marwan's TF.js runtime on head.onnx", () => {
     expect(terms[2].total).toBeCloseTo(terms[2].supervised + terms[2].distillation, 5);
     [x, target, mask, z0].forEach((t) => t.dispose());
     opt.dispose(); net.dispose(); teacher.dispose();
+  });
+
+  // TF.js's optimizer keeps the rate it was made with, so the whole network
+  // steps an Adam of its own (adam.ts), each step at the schedule's rate:
+  // given one rate throughout, it must step as TF.js's does.
+  it("steps as TF.js's Adam does at the rate it is given", { timeout: 120_000 }, async () => {
+    const { tf } = await loadTf();
+    const bytes = new Uint8Array(readFileSync(resolve(FIXTURES, "head.onnx")));
+    const offsets = onnxInitializerOffsets(bytes), names = Object.keys(TINY.params);
+    const ours = buildNet(tf, TINY, readOnnxWeights(bytes, offsets, names)), theirs = buildNet(tf, TINY, readOnnxWeights(bytes, offsets, names));
+    const x = tf.tensor4d(slice(8), [1, 8, 8, 1]);
+    const target = tf.tensor4d(Float32Array.from({ length: 72 }, (_, i) => (i % 3 === 0 ? 1 : 0)), [1, 6, 6, 2]);
+    const mask = tf.tensor4d(Float32Array.from({ length: 72 }, (_, i) => (i % 5 === 0 ? 0 : 1)), [1, 6, 6, 2]);
+    // Marwan's masked BCE, which trainStep minimizes.
+    const o = { lossType: "bce" as const, margin: 0.3, labelSmoothing: 0, balanceClasses: false, distillationLambda: 0, distillationScope: "unlabeled" as const };
+    const adam = createAdam(tf), tfAdam = tf.train.adam(0.05);
+    for (let i = 0; i < 3; i++) {
+      const step = fullTrainStep(tf, ours, adam, x, target, mask, null, o, 0.05);
+      const loss = trainStep(tf, theirs, tfAdam, x, target, mask);
+      expect(step.total.dataSync()[0]).toBeCloseTo(loss.dataSync()[0], 6);
+      tf.dispose([step.total, step.supervised, loss]);
+    }
+    const a = ours.exportWeights(), b = theirs.exportWeights();
+    for (const name of names) expect(maxAbs(a[name], b[name])).toBeLessThan(1e-6);
+    [x, target, mask].forEach((t) => t.dispose());
+    adam.dispose(); tfAdam.dispose(); ours.dispose(); theirs.dispose();
   });
 
   it("writes the trained weights back where onnxruntime reads them, in fp32 and fp16", { timeout: 120_000 }, async () => {

@@ -35,8 +35,9 @@ setup_53_2d) is given one slice a call, ``slices_per_chunk`` slices a chunk,
 as the bioimage type runs a 2D model. The session is wrapped in a torch
 module (``_onnx_module``), so that the inference runner serves it as it
 serves any network: the warmup forward checks the declared shapes against
-the graph's, and its output probe sees an export's logits unbounded, so the
-dashboard suggests a SigmoidPostprocessor (or the affinity chain for
+the graph's. What its output is, the runner reads off the file's graph
+(``output_graph``, ``read_graph``): an export's last Conv says logits, so
+the dashboard suggests a SigmoidPostprocessor (or the affinity chain for
 affinities), as for any model whose output is logits. The price is one more
 copy each way: the runner puts a block on the device, and the module hands
 it to ONNX Runtime from the host (148³ float32 is 13 MB, milliseconds a
@@ -68,6 +69,7 @@ import json
 import logging
 import os
 import re
+import struct
 import time
 from typing import Dict, Optional
 
@@ -95,7 +97,7 @@ DEFAULT_SLICES_PER_CHUNK = 8
 MANIFEST_RETRY_SECONDS = 60
 
 
-# --- the file's metadata, without onnx or onnxruntime --------------------------
+# --- the file's metadata and graph, without onnx or onnxruntime -----------------
 
 def _varint(f) -> int:
     """The varint at ``f``'s position, which is then past it."""
@@ -110,6 +112,39 @@ def _varint(f) -> int:
         shift += 7
         if shift > 63:
             raise ValueError("a varint is longer than ten bytes")
+
+
+def _fields(f, end, where):
+    """Each field of the protobuf message from ``f``'s position to ``end``, as
+    ``(number, wire type, value)``: a run of fields, each a tag (its number
+    and wire type) and its value, a varint, 4 or 8 bytes, or a
+    length-prefixed run of bytes. For the last (wire type 2) ``value`` is the
+    run's length and ``f`` is at its first byte, for the caller to read or
+    not: the next field is read from past it either way, so a 1 GB
+    initializer is stepped over unread.
+
+    Raises:
+        ValueError: what is there is not a protobuf message, so not an ONNX
+            model (a failed download's HTML page, say); ``where`` names it.
+    """
+    while f.tell() < end:
+        tag = _varint(f)
+        number, wire = tag >> 3, tag & 7
+        if number == 0:
+            raise ValueError(f"{where} is not an ONNX model (a field numbered 0)")
+        if wire == 0:
+            yield number, wire, _varint(f)
+        elif wire in (1, 5):  # a fixed 64- or 32-bit value
+            yield number, wire, f.read(8 if wire == 1 else 4)
+        elif wire == 2:
+            length = _varint(f)
+            start = f.tell()
+            if start + length > end:
+                raise ValueError(f"{where} is not an ONNX model (field {number} runs past its end)")
+            yield number, wire, length
+            f.seek(start + length)
+        else:
+            raise ValueError(f"{where} is not an ONNX model (wire type {wire})")
 
 
 def _string_entry(message: bytes):
@@ -128,42 +163,146 @@ def read_metadata(path) -> Dict[str, str]:
     """The ``metadata_props`` of the ONNX model at ``path`` (ModelProto field 14), by key.
 
     Read without onnx or onnxruntime, so the dashboard's environment can
-    read it: a model is a protobuf ModelProto, a run of fields, each a tag
-    (its number and wire type) and its value, a varint or a length-prefixed
-    run of bytes. Each field is stepped over but the metadata's entries; the
-    graph (field 7), nearly all of the file, is never read.
+    read it: each of the ModelProto's fields is stepped over (``_fields``)
+    but the metadata's entries; the graph (field 7), nearly all of the file,
+    is never read.
 
     Raises:
         ValueError: the file is not a protobuf message with a graph, so not
             an ONNX model (a failed download's HTML page, say).
     """
     metadata, graph = {}, False
-    size = os.path.getsize(path)
     with open(path, "rb") as f:
-        while f.tell() < size:
-            tag = _varint(f)
-            number, wire = tag >> 3, tag & 7
-            if number == 0:
-                raise ValueError(f"{path} is not an ONNX model (a field numbered 0)")
-            if wire == 0:
-                _varint(f)
-            elif wire in (1, 5):  # a fixed 64- or 32-bit value
-                f.seek(8 if wire == 1 else 4, os.SEEK_CUR)
-            elif wire == 2:
-                length = _varint(f)
-                if f.tell() + length > size:
-                    raise ValueError(f"{path} is not an ONNX model (field {number} runs past its end)")
-                if number == 14:
-                    key, value = _string_entry(f.read(length))
-                    metadata[key] = value
-                else:
-                    graph |= number == 7
-                    f.seek(length, os.SEEK_CUR)
-            else:
-                raise ValueError(f"{path} is not an ONNX model (wire type {wire})")
+        for number, wire, value in _fields(f, os.path.getsize(path), path):
+            if wire == 2 and number == 14:
+                key, text = _string_entry(f.read(value))
+                metadata[key] = text
+            graph |= wire == 2 and number == 7
     if not graph:
         raise ValueError(f"{path} is not an ONNX model: it has no graph")
     return metadata
+
+
+# A TensorProto read for its value: one number, its name and its type are a
+# few dozen bytes. A longer one (a weight) is stepped over.
+SCALAR_TENSOR_BYTES = 256
+# TensorProto.DataType's numbers of the types a scalar is read in, as struct formats.
+_SCALAR_TYPES = {1: "<f", 6: "<i", 7: "<q", 10: "<e", 11: "<d"}
+
+
+def _tensor(message: bytes, where):
+    """(name, its one number or None) of a TensorProto: field 8 the name, 2
+    the type, 9 the raw bytes, 4, 5, 7 and 10 the typed values."""
+    f, name, kind, value = io.BytesIO(message), "", None, None
+    for number, wire, field in _fields(f, len(message), where):
+        if number == 8 and wire == 2:
+            name = f.read(field).decode("utf-8")
+        elif number == 2 and wire == 0:
+            kind = field
+        elif number == 9 and wire == 2:
+            raw = f.read(field)
+            fmt = _SCALAR_TYPES.get(kind)
+            if fmt is not None and len(raw) == struct.calcsize(fmt):
+                value = struct.unpack(fmt, raw)[0]
+        elif number == 4 and wire == 5:
+            value = struct.unpack("<f", field)[0]
+        elif number == 10 and wire == 1:
+            value = struct.unpack("<d", field)[0]
+        elif number in (4, 10) and wire == 2 and field in (4, 8):  # one packed float or double
+            value = struct.unpack("<f" if field == 4 else "<d", f.read(field))[0]
+        elif number in (5, 7) and wire == 0:
+            value = field
+        elif number in (5, 7) and wire == 2:  # packed ints: the first
+            value = _varint(f)
+    return name, None if value is None else float(value)
+
+
+def _node(message: bytes, where):
+    """A NodeProto as portable.activation's node, with its attributes'
+    numbers (a Constant's value, an old Clip's min and max) under
+    ``attributes``: field 1 its inputs, 2 its outputs, 4 its op_type, 7 its
+    domain, 5 its AttributeProtos (1 the name, 2 a float, 3 an int, 5 a
+    tensor)."""
+    f = io.BytesIO(message)
+    node, domain, attributes = {"op": "", "inputs": [], "outputs": []}, "", {}
+    for number, wire, field in _fields(f, len(message), where):
+        if wire != 2:
+            continue
+        if number in (1, 2):
+            node["inputs" if number == 1 else "outputs"].append(f.read(field).decode("utf-8"))
+        elif number == 4:
+            node["op"] = f.read(field).decode("utf-8")
+        elif number == 7:
+            domain = f.read(field).decode("utf-8")
+        elif number == 5:
+            attribute = f.read(field)
+            g, key, value = io.BytesIO(attribute), "", None
+            for n, w, v in _fields(g, len(attribute), where):
+                if n == 1 and w == 2:
+                    key = g.read(v).decode("utf-8")
+                elif n == 2 and w == 5:
+                    value = struct.unpack("<f", v)[0]
+                elif n == 3 and w == 0:
+                    value = v
+                elif n == 5 and w == 2:
+                    value = _tensor(g.read(v), where)[1]
+            attributes[key] = value
+    if domain not in ("", "ai.onnx"):
+        # Another domain's op (com.microsoft's) is not the standard op of its name.
+        node["op"] = f"{domain}.{node['op']}"
+    node["attributes"] = attributes
+    return node
+
+
+def read_graph(path):
+    """The graph of the ONNX model at ``path``, as ``portable.activation``
+    reads it: ``(nodes, outputs)``, each node ``{"op" (its op_type),
+    "inputs", "outputs"}``, a Clip's with ``min`` and ``max`` where they are
+    constants, and the graph's output names.
+
+    Read without onnx, as read_metadata reads the metadata (the onnx
+    environment has onnxruntime, not onnx): the ModelProto's graph (field
+    7) is a GraphProto, whose nodes (field 1) and outputs (field 12, a
+    ValueInfoProto named by its field 1) are read, and whose initializers
+    (field 5), the weights, are stepped over unless one is a single number
+    (SCALAR_TENSOR_BYTES), as a Clip's bounds are.
+
+    Raises:
+        ValueError: the file is not an ONNX model.
+    """
+    nodes, outputs, numbers = [], [], {}
+    with open(path, "rb") as f:
+        for number, wire, length in _fields(f, os.path.getsize(path), path):
+            if number != 7 or wire != 2:
+                continue
+            for field, kind, size in _fields(f, f.tell() + length, path):
+                if kind != 2:
+                    continue
+                if field == 1:
+                    nodes.append(_node(f.read(size), path))
+                elif field == 12:
+                    info = f.read(size)
+                    g = io.BytesIO(info)
+                    outputs += [g.read(v).decode("utf-8") for n, w, v in _fields(g, len(info), path) if n == 1 and w == 2]
+                elif field == 5 and size <= SCALAR_TENSOR_BYTES:
+                    name, value = _tensor(f.read(size), path)
+                    numbers[name] = value
+    for node in nodes:
+        if node["op"] == "Constant" and node["outputs"]:
+            attributes = node["attributes"]
+            numbers[node["outputs"][0]] = next((attributes[k] for k in ("value", "value_float", "value_int")
+                                                if attributes.get(k) is not None), None)
+    for node in nodes:
+        attributes = node.pop("attributes")
+        if node["op"] == "Clip":
+            # Its bounds: inputs 2 and 3 since opset 11, attributes before.
+            for i, key in enumerate(("min", "max")):
+                value = attributes.get(key, numbers.get(node["inputs"][i + 1]) if len(node["inputs"]) > i + 1 else None)
+                if value is not None:
+                    node[key] = float(value)
+        # "" is an optional input left out, held till here for the Clip's places.
+        node["inputs"] = [name for name in node["inputs"] if name]
+    return nodes, outputs
 
 
 def read_manifest(path) -> Optional[dict]:
@@ -491,23 +630,52 @@ class OnnxModelConfig(ModelConfig):
                 self._manifest_cache = read_manifest(self.path) or {}
         return self._manifest_cache or None
 
-    def declared_input_norm(self) -> Optional[list]:
-        """The input normalization the model's manifest declares, as
-        cellmap-flow steps (``[{"name": ..., **params}]``), or None.
-
-        For the dashboard's model advice (``suggest_input_norm``'s
-        ``declared``), which asks on every poll: a failed download is not
-        tried again for MANIFEST_RETRY_SECONDS.
-        """
+    def _declared_manifest(self) -> Optional[dict]:
+        """The manifest ({} for a file without one) for what the dashboard
+        asks of it on every poll, or None when it cannot be read: a failed
+        download is not tried again for MANIFEST_RETRY_SECONDS."""
         if self._manifest_failed_at is not None and time.monotonic() - self._manifest_failed_at < MANIFEST_RETRY_SECONDS:
             return None
         try:
-            manifest = self._manifest()
+            return self._manifest() or {}
         except Exception as e:
             self._manifest_failed_at = time.monotonic()
             logger.info(f"Could not read {self.name}'s manifest ({e}); trying again after {MANIFEST_RETRY_SECONDS} s")
             return None
-        return (manifest or {}).get("input_norm") or None
+
+    def declared_input_norm(self, data_range=None) -> Optional[list]:
+        """The input normalization the model's manifest declares, as
+        cellmap-flow steps (``[{"name": ..., **params}]``), or None. The
+        manifest gives each step's values, so ``data_range`` is not used.
+
+        For the dashboard's model advice (``suggest_input_norm``'s
+        ``declared``), which asks on every poll (``_declared_manifest``).
+        """
+        return (self._declared_manifest() or {}).get("input_norm") or None
+
+    def declared_geometry(self) -> Optional[dict]:
+        """``ModelConfig.declared_geometry`` from the entry, the manifest and its
+        variant, as the server works it out (``_geometry``) but without the
+        graph: None when they leave a size to the graph, or the manifest
+        cannot be read now (``_declared_manifest``)."""
+        manifest = self._declared_manifest()
+        if manifest is None:
+            return None
+        geometry = Config()
+        try:
+            self._geometry(geometry, manifest, self._variant(manifest))
+        except (TypeError, ValueError):
+            return None
+        return {"write_shape": list(geometry.write_shape), "output_voxel_size": list(geometry.output_voxel_size),
+                "output_channels": geometry.output_channels, "channels": list(geometry.channels)}
+
+    def output_graph(self):
+        """The served file's graph (``read_graph``), read back from the
+        output it is fetched by; the manifest's ``output`` words are not
+        consulted, as the graph says it for certain."""
+        config = self.config
+        nodes, _ = read_graph(config.onnx_file)
+        return nodes, config.output_name
 
     def _variant(self, manifest) -> Optional[dict]:
         """The manifest's variant this model serves: the folder's chosen by
@@ -534,6 +702,7 @@ class OnnxModelConfig(ModelConfig):
         self._describe(config, manifest or {}, variant, session)
         config.model = _onnx_module()(session, config.input_name, config.output_name, config.input_dtype,
                                       config.slice_wise)
+        config.onnx_file = path  # what output_graph reads
         output = config.output_kind
         if "logit" in output.lower():
             logger.info(f"{label}: its output is {output!r}. For probabilities add a SigmoidPostprocessor to the "
@@ -541,9 +710,9 @@ class OnnxModelConfig(ModelConfig):
         return config
 
     def _describe(self, config, manifest, variant, session):
-        """Set ``config``'s geometry from the entry, the manifest and its
-        variant, and the graph's input and output, each where the one
-        before says nothing; check that they agree with the graph."""
+        """Set ``config`` from the entry, the manifest and its variant, and the
+        graph's input and output: its geometry (``_geometry``), and the
+        tensors the model is fed and fetched by."""
         what = self.name or "the model"
         inputs, outputs = session.get_inputs(), session.get_outputs()
         # The manifest's tensor names, as the browser feeds and fetches by
@@ -562,6 +731,23 @@ class OnnxModelConfig(ModelConfig):
         if len(out_dims) not in (4, 5):
             raise ValueError(f"{what}'s output {output_name} is {graph_out.shape}, not [1, C, z, y, x]")
         graph_channels = out_dims[1] if len(out_dims) == 5 else 1
+        self._geometry(config, manifest, variant, in_dims[2:], out_dims[-3:], graph_channels)
+        config.output_dtype = np.float32
+        config.output_kind = self.output or manifest.get("output") or ""
+        config.input_name, config.output_name = input_name, output_name
+        config.input_dtype = np.float16 if graph_in.type == "tensor(float16)" else np.float32
+
+    def _geometry(self, config, manifest, variant, graph_in=(None,) * 3, graph_out=(None,) * 3, graph_channels=None):
+        """Set ``config``'s geometry from the entry, the manifest and its
+        variant, and the graph's input and output sizes (z, y, x voxels, None
+        where not fixed) and channel count, each where the one before says
+        nothing; check that they agree with the graph. Without the graph's
+        (declared_geometry), the others must say it all.
+
+        Raises:
+            ValueError: none of them says a size, or they disagree.
+        """
+        what = self.name or "the model"
         variant = variant or {}
 
         def first(given, *found, what_is_it):
@@ -584,11 +770,11 @@ class OnnxModelConfig(ModelConfig):
         # In the folder's case input_size chose the variant; a file's
         # manifest's variant is overruled by the entry's sizes.
         given_in = self.input_size if self.folder is None else None
-        in_size = first(entry.per_axis(given_in, 3, "input_size"), variant.get("input_size"), in_dims[2:],
+        in_size = first(entry.per_axis(given_in, 3, "input_size"), variant.get("input_size"), list(graph_in),
                         what_is_it="input_size")
-        out_size = first(entry.per_axis(self.output_size, 3, "output_size"), variant.get("output_size"), out_dims[-3:],
-                         what_is_it="output_size")
-        for kind, size, dims in (("input", in_size, in_dims[2:]), ("output", out_size, out_dims[-3:])):
+        out_size = first(entry.per_axis(self.output_size, 3, "output_size"), variant.get("output_size"),
+                         list(graph_out), what_is_it="output_size")
+        for kind, size, dims in (("input", in_size, list(graph_in)), ("output", out_size, list(graph_out))):
             if any(d is not None and d != s for d, s in zip(dims, size)):
                 raise ValueError(f"{what}'s graph has an {kind} of {dims} (z, y, x); the entry or manifest says "
                                  f"{list(size)}")
@@ -631,10 +817,6 @@ class OnnxModelConfig(ModelConfig):
         config.output_channels = len(channels)
         config.channels = list(channels)
         config.block_shape = np.array((*write, len(channels)))
-        config.output_dtype = np.float32
-        config.output_kind = self.output or manifest.get("output") or ""
-        config.input_name, config.output_name = input_name, output_name
-        config.input_dtype = np.float16 if graph_in.type == "tensor(float16)" else np.float32
         config.slice_wise = slice_wise
 
     def to_dict(self):

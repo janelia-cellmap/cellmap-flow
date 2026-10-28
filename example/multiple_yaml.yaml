@@ -6,7 +6,8 @@ data_path: "/some/shared/path"
 # Required: project/charge group identifier
 charge_group: "my_project_name"
 
-# Optional: queue name (defaults to the saved queue, else "gpu_h100", if omitted)
+# Optional: a GPU queue, or a list of them ([gpu_h100, gpu_h200]); each job goes to
+# the one with the most free GPUs. Defaults to the saved queues, else every GPU queue.
 queue: "gpu_h100"
 
 # List of models to run. Each entry must include a "type" field and the corresponding parameters.

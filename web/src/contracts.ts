@@ -110,6 +110,42 @@ export interface SessionState {
    * id in the paint store (a PaintVolume), or null. Tab-scoped like the
    * models; the store's listing is the durable one. */
   paintVolume: string | null;
+  /** The channel each model's layer shows, by model name, as POST
+   * /api/finetune/channel sets it (the training form's Channel) and Use this
+   * model does (the row's channel, before the model is served): the
+   * channel's index into the model's output channels. A
+   * layer built for the model later opens on it, and so does one for a
+   * model finetuned from it (serving.ts shownChannel). The server's
+   * `shown_channels` on its dashboard session. */
+  shownChannels: Record<string, number>;
+  /** The models added to Which model to start from's list by hand (POST
+   * /api/finetune/rank/add): their catalog ids, in the order added, so
+   * every listing after lists them under Added. The server's `rank_added`
+   * on its dashboard session. */
+  rankAdded: string[];
+  /** What the ranking's last score of each model fitted to the paint, by
+   * the model's name: its row's input normalization and the postprocessing
+   * its layer needs (null when the chain needed none), which Use this
+   * model, Fit to Paint and Use these settings set from (rank.ts's score),
+   * and its row's threshold. The model advice does not suggest another
+   * input normalization over them, and cuts an affinity model's chain into
+   * a segmentation at the threshold; GET /api/models/loaded says the
+   * chain's postprocessing was fitted to the paint while it is theirs. The
+   * server's `rank_fits` on its dashboard session. */
+  rankFits: Record<string, RankFit>;
+  /** The postprocessing a model's start set on a chain with none, and the
+   * model (serving.ts setNeededPostprocess), which GET /api/models/loaded
+   * says the chain's came from while it is still that; null until a start
+   * sets any. The server's `start_postprocess`. */
+  startPostprocess: { model: string; postprocess: Step[] } | null;
+}
+
+/** What a model's score fitted to the paint (SessionState.rankFits). */
+export interface RankFit {
+  input_norm: Step[];
+  postprocess: Step[] | null;
+  /** The row's threshold, a probability; null in a fit stored before it was kept. */
+  threshold: number | null;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that
@@ -138,11 +174,12 @@ export interface ModelVariant {
   mean_abs?: number;
   flip_frac?: number;
   ort_cpu_s?: number;
-  /** A model finetuned in this browser: the Hugging Face file its bytes
-   * were made from (FINETUNED_REPO entries only, since 2026-10-16). Its
-   * graph is that file's, byte for byte but for the weights trained, so
-   * the base's finetune block (ModelManifest.finetune) describes it by
-   * that file's name, and its finetune files are in that folder. */
+  /** A model finetuned in a browser: the Hugging Face file its bytes were
+   * made from (FINETUNED_REPO entries since 2026-10-16, and the manifests
+   * of such a model downloaded or published, which keep it). Its graph is
+   * that file's, byte for byte but for the weights trained, so the base's
+   * finetune block (ModelManifest.finetune) describes it by that file's
+   * name, and its finetune files are in that folder. */
   source?: { repo: string; folder: string; file: string };
 }
 
@@ -173,6 +210,25 @@ export interface ModelManifest {
    * Absent from a manifest written before 2026-10-16, whose head the
    * browser finds in the graph itself (finetune/modes.ts). */
   finetune?: FinetuneSpec;
+  /** A model published to Hugging Face from the browser (publish/): its
+   * name, which its entry is listed under (models/manifest.ts hubName),
+   * where it was finetuned from (a model ref) and how, and when; the block
+   * as the publish wrote it. */
+  published?: PublishedBlock;
+}
+
+/** A published model's manifest's "published" block. */
+export interface PublishedBlock {
+  name: string;
+  finetuned_from?: string;
+  finetune_mode?: string;
+  epochs?: number;
+  final_loss?: number | null;
+  trained_at?: string;
+  published_at?: string;
+  app?: string;
+  dataset?: string;
+  [k: string]: unknown;
 }
 
 /** A manifest's `finetune` block: one entry per way to train the model,
@@ -236,6 +292,14 @@ export interface ModelEntry {
   onnxUrl: string;
 }
 
+/** What a model's network ends in: the class of its output and the op that
+ * decides it, as the page names it ("Sigmoid", "Conv"):
+ * cellmap_flow/portable/activation.py output_activation's answer. */
+export interface OutputActivation {
+  output_class: string;
+  op: string;
+}
+
 /** What /__control__/model_info says about a served model (models/geometry.py,
  * chunkmirage_server.py), as the dashboard's layer code reads it. */
 export interface ModelInfo {
@@ -251,6 +315,13 @@ export interface ModelInfo {
   output_axes: string[];
   available: boolean;
   output_class?: string | null;
+  /** Where output_class was read (shared/model-info.ts outputClass):
+   * "graph", the network's last op that computes values, which output_op
+   * names; "manifest", the manifest's `output` text, when the graph does not
+   * say (the server's model_info says "probe" there: the output on noise);
+   * null when neither says. */
+  output_class_from?: "graph" | "manifest" | null;
+  output_op?: string | null;
   output_min?: number | null;
   output_max?: number | null;
   display_channel?: number | null;
@@ -268,7 +339,13 @@ export interface Catalog {
   list(): Promise<ModelEntry[]>;
   /** The same, fetched afresh from the Hub (the dashboard's Refresh button). */
   refresh(): Promise<ModelEntry[]>;
-  /** An entry from a reference the dashboard sends: an id, a repo/folder, or a name. */
+  /** An entry from a reference the dashboard or a link sends: an id, a
+   * repo/folder, a name, or any form models/hf.ts hubRef reads. A ref of a
+   * repo the list does not have is looked up on the Hub, and the repo's
+   * models join the list, this visit and the next. Null for a ref that
+   * names no model the browser can run; an Error saying why for one that
+   * names a repo whose model cannot be had (no such public repo, no such
+   * folder in it, several folders where one was meant, rate-limited). */
   resolve(ref: string): Promise<ModelEntry | null>;
   /** The manifest as /api/huggingface-models shows a repo's metadata.json. */
   metadataFor(entry: ModelEntry): Record<string, unknown>;
@@ -322,6 +399,17 @@ export interface FinetunedRecord {
    * no volume here (""), no parameters and no epochs: the training was in
    * the browser the link was made in. */
   from_link?: { name: string };
+  /** Set when the model was opened from a file on this machine (the Models
+   * tab's Open an .onnx file…, src/model-file.ts): the file's name. Such a
+   * record's `base` is that file too (no id: it is no catalog entry), and it
+   * has no volume, parameters or epochs; a link can name it only once it
+   * has been published. */
+  from_file?: { name: string };
+  /** Set when the model was published to Hugging Face from this browser
+   * (publish/): the repository and folder it was uploaded to, which is also
+   * its ref (`<repo>/<folder>`), so a link names it there rather than
+   * carrying its weights. */
+  published?: { repo: string; folder: string; at: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -447,9 +535,16 @@ export interface Inference {
   openDataset(url: string): Promise<DatasetInfo>;
   dataset(): DatasetInfo | null;
   /** Serve `entry` through `chain`; `blob` is the chain's URL blob (shared/args.ts), which names the view.
-   * `modelBytes` gives the .onnx bytes (Catalog.modelBytes); it is called once per entry, when its
-   * session is first built. */
+   * `modelBytes` gives the .onnx bytes (Catalog.modelBytes); it is called when the entry's session is
+   * first built, and before that by outputActivation, at the file's first serve. */
   serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel>;
+  /** What the network of `entry`'s file ends in (shared/model-info.ts
+   * networkActivation), which serve puts in the served model's info: read
+   * from `modelBytes` once per file, the first time it is asked, so a model's
+   * start asks before its serve and the serve reads nothing again. Null when
+   * the graph does not say, or could not be read (said in the log): the
+   * manifest's text is read then. */
+  outputActivation(entry: ModelEntry, modelBytes: () => Promise<ArrayBuffer>): Promise<OutputActivation | null>;
   served(): ServedModel[];
   gpuLimits(): Promise<GpuLimits>;
   readonly stats: InferenceStats;
@@ -642,4 +737,8 @@ export interface PaintVolume {
   postprocess: Step[];
   created_at: string;
   resample?: boolean;
+  /** The volume that took this one's place (the browser's own field): Use
+   * this model carried this volume's paint to it, and this one is kept but
+   * no longer the session's (supersedeVolume). Absent on a current volume. */
+  superseded_by?: string;
 }

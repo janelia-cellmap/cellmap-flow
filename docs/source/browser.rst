@@ -15,11 +15,14 @@ shared::
 
     https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
 
-A model is named as the Models tab lists it (``setup_53``) or by its
-repository path (``cellmap/onnx-web-models/setup_53``). *Share* in the header
+A model is named as the Models tab lists it (``setup_53``), by its
+repository path (``cellmap/onnx-web-models/setup_53``), or, for a model of
+another Hugging Face repo, as ``<owner>/<repo>/<folder>``. A link may name
+models and no volume (``?model=<owner>/<repo>/<folder>``): they run on the
+first volume you open. *Share* in the header
 copies such a link to what you have open, with the view (position, zoom,
-each layer as shown) and the Input and Postprocess settings the models run
-with, for someone else to open. The address bar itself stays bare, so a new
+each layer as shown) and the Processing tab's steps the models run with, for
+someone else to open. The address bar itself stays bare, so a new
 tab starts fresh.
 
 How it works
@@ -33,8 +36,19 @@ chunk, as the viewer asks for them. The models are ONNX exports of cellmap's
 networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-models>`_
 on Hugging Face, cached in the browser after the first download.
 
-It is the same dashboard as the server's: the same Models, Input and
-Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
+Other models come in two ways, from the Models tab's *Add a model*. A
+public Hugging Face model repo laid out as cellmap/onnx-web-models is (a
+folder per model, holding its ``manifest.json`` and the ``.onnx`` files it
+names; a model published from the app is one) is added by its ref,
+``<owner>/<repo>/<folder>``, or ``<owner>/<repo>`` when it holds one model,
+or its huggingface.co URL. Its models are then listed under Hugging Face
+after cellmap's, on later visits too. A model sent as a file is opened with
+*Open an .onnx file…*: an ``.onnx`` the app downloaded carries its manifest,
+any other is picked with its ``manifest.json``. It is kept in the browser
+like a finetuned model (below), and nothing is uploaded.
+
+It is the same dashboard as the server's: the same Models and Processing
+tabs, the same normalizers and postprocessing steps, a Finetune
 tab that paints and trains in the browser, and a Run tab of its own that
 saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
@@ -76,9 +90,9 @@ tab runs the models served on the Models tab over a region, or the whole
 volume, on your GPU, and saves each one's predictions as an OME-Zarr in a
 folder on your machine, to open in the app again or to copy to the cluster.
 
-1. Tick the models (all are ticked at first). Each runs through the Input and
-   Postprocess steps it is served with, so what is saved is what its layer
-   shows.
+1. Tick the models (all are ticked at first). Each runs through the
+   Processing tab's steps it is served with, so what is saved is what its
+   layer shows.
 2. *Draw a box* adds a ``run_region`` layer to the viewer. Hold ``Ctrl``
    and click two opposite corners of the box in the viewer, scrolling
    between the two clicks to give it depth (a flat box is one chunk
@@ -132,8 +146,10 @@ On the tab's Training panel,
 convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
-is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer, with the form's values as they are then). Once the
+is trained. Paint where it is still wrong and train again (*Restart* trains
+again from the model's own weights on all the paint as it is then, with the
+form's values as they are then, as the server's does: a round never builds on
+the one before). Once the
 job waits for a restart, ``Shift+R`` over the viewer does the same without
 asking first, so painting and training again need not leave the viewer; it
 says in the tab's logs what it did, or why there was nothing to restart. A
@@ -155,9 +171,13 @@ model*: that copies the paint onto the chosen model's grid, and you train on
 the new volume.
 
 The training panel's controls are the server's where they mean something for
-one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
-margin; Dice scores whole patches and needs the server), label smoothing,
-class balance, and *Distillation Weight* and *Scope*, which keep the layer
+one layer: the epochs, the learning rate (1e-2 by default; type any number
+above 0 or pick a preset; with *Ease down to a tenth over the run* ticked,
+the default, each run eases it down along half a cosine to a tenth of it by
+its last step, as on the server, and unticked every step takes it), the loss
+(BCE by default, MSE or margin; Dice scores whole patches and needs the
+server), label smoothing, class balance, and *Distillation Weight* and
+*Scope*, which keep the layer
 close to the model's own output where you painted nothing: the loss adds the
 weight times the mean squared distance of the layer's logits from the
 original's, on the unpainted voxels of the painted chunks (or all of their
@@ -226,19 +246,29 @@ With paint on one object, scores a few points apart are as good as tied, and
 the list says so; a little paint in two or three places ranks them more
 clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
 voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
-model, which sees none of the dataset's nuclei, matched 50%. The box above
-the list filters it (``nuc``, ``16 nm``, ``affinities``, ``2d``), and only
-the ticked models it shows are ranked.
+model, which sees none of the dataset's nuclei, matched 50%. The models are
+listed as the Models tab lists them, in sections: the ones served, cellmap's
+(with that tab's search bar and Refresh: ``nuc``, ``16 nm``, ``2d``), those
+added by hand (*Add a model* under the sections) and your finetunes. The
+ticks are the ranking's own, and every ticked model is ranked: a ticked one
+stays in view whatever the search, and a section's header says how many it
+has ticked.
 
 *Use this model* makes a ranked model the one to finetune without painting
 again: it is loaded with its layer and picked under *Select Model*, a volume
 is made for it, the paint and the good regions are copied into that volume
-on the model's own grid, and its paint layer takes the old one's place (the
-old volume stays, under *Resume Existing Volume*). What its score chose comes
-with it: a stretched raw becomes the session's input normalization (the raw
-is the dataset's, so every model reads it so), and its cut-off becomes *Seed
-from Prediction*'s threshold, marked *set by ranking* beside the field until
-you change it; a line under *Label it*'s buttons says what was set. On the
+on the model's own grid, and its paint layer takes the old one's place. The
+old volume is kept in the browser but retired: *Resume Existing Volume* lists
+only the new one, and an old entry still on screen resumes the new one. What
+its score chose comes with it: the best channel of a model of several is the
+one its layer opens on, a stretched raw becomes the session's input
+normalization (the raw is the dataset's, so every model reads it so), its
+layer shows what was scored (the sigmoid its logits need, and a threshold at
+its cut-off: for an affinity model on each channel, whose objects the
+Processing tab then offers as an *Optional* chain into a segmentation that
+joins neighbours above the same cut-off), and its cut-off becomes *Seed from
+Prediction*'s threshold, marked *set by ranking* beside the field until you
+change it; a line under *Label it*'s buttons says what was set. On the
 same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted
@@ -265,7 +295,7 @@ network*: every weight of the model trains on your paint, with
 `TensorFlow.js <https://www.tensorflow.org/js>`_ on this machine's GPU
 (WebGPU), from a training graph Marwan Zouinkhi exported beside each model.
 The weights trained are written back into the model's ``.onnx``, which is
-then served, kept, downloaded and restarted from as a last-layer finetune
+then served, kept, downloaded and restarted as a last-layer finetune
 is; switching between the two needs a new *Start Finetuning*. A model served
 from an int8 file offers neither (its weights are quantized and cannot be
 written): serve its fp32 or fp16 file to finetune it.
@@ -274,8 +304,10 @@ A 2D model's whole network trains on square tiles cut from the painted
 slices, in the plane you painted in (x–y, or z–y and z–x where the raw data's
 voxels are cubes, as the server's 2D training does), with Adam; a 3D model's
 on cubes around the paint (below). Its controls are the
-epochs, its own learning rates (1e-4 by default, a hundredth of the last
-layer's), the server's *Batch Size*, in tiles per step (1 by default), *Tile
+epochs, its own learning rate (1e-4 by default, a hundredth of the last
+layer's) and *Ease down* box, which eases it down to a tenth of it over the
+run, or not, as the last layer's does,
+the server's *Batch Size*, in tiles per step (1 by default), *Tile
 Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
 balance fields, which it reads as the last layer does. Distillation holds the
 model to the starting network's output on the voxels its scope picks in each
@@ -392,8 +424,8 @@ lines' loss reads
 against two marks: 0.69 for the default class-balanced BCE is guessing, and
 about 0.20 with label smoothing of 0.1 is the paint fitted exactly.
 
-The *Patch on screen* tools label the box centred where the viewer looks, as
-on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
+The *Patch on screen* tools label the box centred where the viewer looks, or
+with *Field of view* what the viewer's panel shows, as on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
 *Seed from Prediction* copies a model's
 prediction into the unpainted voxels, an id per object and background 1, for
 you to fix with the brush; *All Background* labels them background; *Split
@@ -423,20 +455,59 @@ the page, for trying the panel without a key. The server's guide,
 has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
-Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. The ✕
+Existing Volume* lists the volumes painted here, newest first (one per
+session: a volume *Use this model* has taken the place of is not listed), and
+the Models tab lists the finetuned models under the Hugging Face ones. The ✕
 beside a finetuned model under *Loaded models* (see *Usage* on the
 :doc:`front page <index>`) stops serving it and keeps it, to tick again.
 *Download paint* saves the volume as a zarr (zipped, the server's layout, so a server
 session can train on it) and *Download finetuned model* the ``.onnx``, with
 its manifest (voxel sizes, block, channels, input normalization) written into
-the file's metadata, so that the server mode serves the file as it is.
-Nothing leaves your machine unless you download and share it.
+the file's metadata, so that the server mode serves the file as it is and
+another browser opens it with *Open an .onnx file…*.
+Nothing leaves your machine unless you download and share it. *Share* puts a
+finetuned model in its link as its last layer's numbers, rebuilt from its
+base where the link opens; one whose whole network was trained, or that was
+opened from a file, goes in a link only once it has been published to
+Hugging Face, where the link then names it.
 
 To run the same models on the cluster, *Export Config* (in the header) saves
 a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
 finetuned model's ``.onnx``, from *Download finetuned model*, goes beside it.
 See :ref:`onnx` for what the YAML holds and what to add for the cluster.
+
+Publishing a finetuned model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*Publish to Hugging Face*, beside *Download finetuned model*, puts the model
+(its last layer or its whole network finetuned) in a repository of your own
+Hugging Face account, uploaded from the page when you click *Publish*, where
+anyone can run it: in this app, in the server
+dashboard, or from the files. Sign in with Hugging Face, in a popup that
+closes itself (the page keeps everything it has open), or paste an access
+token with write access: at
+`huggingface.co/settings/tokens <https://huggingface.co/settings/tokens>`__,
+*Create new token* of type *Write* (or a fine-grained one that may write to
+your repositories). Either is kept in the page's memory only and sent only to
+Hugging Face; a reload asks again.
+
+The repository is ``<you>/<model name>`` unless you type another, yours or one
+of your organizations'. A new repository is **public** unless you tick
+*Private*; one that exists already gets the files as a new commit, its
+visibility as it was, so publishing a model again updates it. The upload is
+the model card (``README.md``: what the model predicts, at what voxel sizes,
+what it was finetuned from and how, and how to open it), the model's manifest
+(``<model>/manifest.json``, as cellmap-flow reads a model's geometry, channels
+and input normalization) and its ``.onnx``. The model card names the dataset
+it was trained on only when you tick *Name the dataset's URL in the model
+card*: a dataset's URL can be internal.
+
+When it is done the panel shows the model's Hugging Face page, its ref
+(``<you>/<repo>/<model>``, which *Add a model* takes in this app and on the
+server) and two links, each with *Copy*: *Try it in the browser* opens the
+app with the model chosen, for whatever volume one opens, and *Open on this
+dataset* opens it on the dataset you have open. The model card carries the
+first always, and the second only with the dataset named.
 
 Browsers and devices
 --------------------

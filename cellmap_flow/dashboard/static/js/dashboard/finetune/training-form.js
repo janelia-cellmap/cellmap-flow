@@ -1,9 +1,12 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
-// next to some of them, and the GPU queue picker.
+// next to some of them, the Learning Rates typed or picked from their
+// presets and eased down over the run or not, the Channel a model of
+// several channels trains, and the GPU queue picker.
+import { formatMb, formatMs } from "../../lib/format.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
-import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
+import { createQueuePicker, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
 const FINETUNE_STATE_KEY = "finetuneFormState";
@@ -14,7 +17,10 @@ const FINETUNE_STATE_KEY = "finetuneFormState";
 // - "blank": also when it is "", which is a choice of its own (keep the
 //   manifest's value), not a missing one;
 // - "checkbox": whenever it was saved.
-// The model picker's choice is saved with them, as selectedModelName.
+// The model picker's choice is saved with them, as selectedModelName, the
+// Channel picked for each model, as channelByModel (see setChannelChoice),
+// and the GPU queues ticked, as gpuQueues (none before a choice is made:
+// every queue).
 const SAVED_FIELDS = [
   ["outputPath", "outputPath", "value"],
   ["checkpointPath", "checkpointPath", "value"],
@@ -24,6 +30,7 @@ const SAVED_FIELDS = [
   ["patchesPerEpoch", "patchesPerEpoch", "blank"],
   ["rehearsalFraction", "rehearsalFraction", "blank"],
   ["learningRate", "learningRate", "value"],
+  ["learningRateEase", "learningRateEase", "checkbox"],
   ["lossType", "lossType", "value"],
   ["marginValue", "marginValue", "value"],
   ["labelSmoothing", "labelSmoothing", "blank"],
@@ -32,7 +39,6 @@ const SAVED_FIELDS = [
   ["balanceClasses", "balanceClasses", "checkbox"],
   ["augment", "augment", "checkbox"],
   ["autoServe", "autoServeCheck", "checkbox"],
-  ["gpuQueue", "gpuQueue", "value"],
 ];
 
 // The fields saved in this mode. The browser mode keeps the Loss Function
@@ -42,9 +48,10 @@ const SAVED_FIELDS = [
 // the browser's loss. Its batch, voxels per step, is a field of its own
 // (batchPixels, in the template's browser-only block). The whole network's
 // fields are browser-only too: the Training choice, the Tile Size (a 3D
-// model's Block Size) and the whole network's learning rate; and its batch,
-// the server's Batch Size, is kept under a key of its own (fullBatchSize)
-// for the same reason as the loss: every browser saved the hidden field's 8.
+// model's Block Size) and the whole network's learning rate and its Ease
+// down; and its batch, the server's Batch Size, is kept under a key of its
+// own (fullBatchSize) for the same reason as the loss: every browser saved
+// the hidden field's 8.
 function savedFields() {
   if (!isBrowserMode()) return SAVED_FIELDS;
   const renamed = { lossType: "headLossType", batchSize: "fullBatchSize" };
@@ -55,6 +62,7 @@ function savedFields() {
       ["finetuneMode", "finetuneMode", "value"],
       ["tileSize", "tileSize", "value"],
       ["fullLearningRate", "learningRateFull", "value"],
+      ["fullLearningRateEase", "learningRateFullEase", "checkbox"],
     ]);
 }
 
@@ -67,6 +75,9 @@ function saveFinetuneState() {
     state[key] = kind === "checkbox" ? el.checked : held ? el.dataset.kept : el.value;
   }
   state.selectedModelName = document.getElementById("modelSelect").value;
+  const channel = document.getElementById("trainChannel");
+  state.channelByModel = keptChannels(channel.dataset.model, channel.value);
+  state.gpuQueues = queuePicker.value();
   writeJSON(FINETUNE_STATE_KEY, state);
 }
 
@@ -84,6 +95,7 @@ function applySavedState(saved) {
       el.value = value;
     }
   }
+  queuePicker.setValue(saved.gpuQueues);
 }
 
 function readPatchesPerEpochOverride() {
@@ -94,6 +106,41 @@ function readPatchesPerEpochOverride() {
     throw new Error("Patches per epoch must be blank or a non-negative integer.");
   }
   return value;
+}
+
+// --- The Learning Rates ---------------------------------------------------
+//
+// A Learning Rate (learningRate: the server's, and the browser's last
+// layer's; learningRateFull: the browser's whole network's) takes any number
+// above 0, typed as 1e-4 or 0.0003, and has its presets beside it
+// (<id>Presets). Picking a preset types it in; the presets show the preset
+// typed, or Typed for any other rate. The field is what is saved and sent,
+// so a typed rate comes back as typed. Its Ease down box (<id>Ease) is the
+// schedule sent with it: ticked, the rate eases down to a tenth of it over
+// the run (cosine); unticked, every step takes it (constant).
+function rateFields() {
+  return isBrowserMode() ? ["learningRate", "learningRateFull"] : ["learningRate"];
+}
+
+// Field `id`'s presets show the rate typed in it, or Typed.
+function showRatePreset(id) {
+  const presets = document.getElementById(`${id}Presets`);
+  const typed = Number(document.getElementById(id).value);
+  const preset = Array.from(presets.options).find((option) => option.value !== "" && Number(option.value) === typed);
+  presets.value = preset ? preset.value : "";
+}
+
+// The rate in field `id`. Throws an Error, saying why, for anything but a
+// number above 0 (empty, 0 or less, not a number): the routes refuse it
+// too, but say less. Number, not parseFloat, which reads "1e-4x" as 1e-4.
+function readRate(id) {
+  const typed = document.getElementById(id).value.trim();
+  const rate = Number(typed);
+  if (!typed || !Number.isFinite(rate) || rate <= 0) {
+    const why = !typed ? "it is empty" : Number.isFinite(rate) ? `${typed} is not above 0` : `"${typed}" is not a number`;
+    throw new Error(`Learning Rate: ${why}. Type a number above 0, such as 1e-4 or 0.0003, or pick one of its presets.`);
+  }
+  return rate;
 }
 
 function readRehearsalFractionOverride() {
@@ -117,11 +164,14 @@ function readRehearsalFractionOverride() {
 function trainingParams() {
   const patchesPerEpoch = readPatchesPerEpochOverride();
   const rehearsalFraction = readRehearsalFractionOverride();
+  // The browser's whole network has a Learning Rate and an Ease down of its own.
+  const rate = isBrowserMode() && document.getElementById("finetuneMode").value === "full" ? "learningRateFull" : "learningRate";
   const params = {
     lora_r: parseInt(document.getElementById("loraRank").value),
     num_epochs: parseInt(document.getElementById("numEpochs").value),
     batch_size: parseInt(document.getElementById("batchSize").value),
-    learning_rate: parseFloat(document.getElementById("learningRate").value),
+    learning_rate: readRate(rate),
+    learning_rate_schedule: document.getElementById(`${rate}Ease`).checked ? "cosine" : "constant",
     loss_type: document.getElementById("lossType").value,
     distillation_lambda: parseFloat(document.getElementById("distillationLambda").value),
     distillation_scope: document.getElementById("distillationScope").value,
@@ -137,16 +187,16 @@ function trainingParams() {
   }
   // Browser mode: what trains (the Training field); for the head, its
   // batch in voxels per step, its own field; for the whole network, its
-  // learning rate, its tile side and the batch above, in tiles, and
-  // augmentation. The server-only fields above go too and the page's
-  // routes ignore them (web/src/backend/routes/finetune.ts readTraining).
+  // learning rate and schedule (read above), its tile side and the batch
+  // above, in tiles, and augmentation. The server-only fields above go too
+  // and the page's routes ignore them (web/src/backend/routes/finetune.ts
+  // readTraining).
   // The Loss Function offers the head's losses there (BCE, MSE, margin) and
   // is read as on the server, by both.
   if (isBrowserMode()) {
     const mode = document.getElementById("finetuneMode").value;
     params.finetune_mode = mode;
     if (mode === "full") {
-      params.learning_rate = parseFloat(document.getElementById("learningRateFull").value);
       const tile = parseInt(document.getElementById("tileSize").value, 10);
       if (Number.isInteger(tile)) params.tile_size = tile;
     } else {
@@ -157,7 +207,116 @@ function trainingParams() {
     const margin = parseFloat(document.getElementById("marginValue").value);
     if (Number.isFinite(margin)) params.margin = margin;
   }
+  // Nothing when the Channel is hidden (the model trains its channels
+  // together), and nothing when it is shown but not picked: the submit
+  // route refuses that, saying why, in both modes.
+  const channel = pickedChannel();
+  if (channel !== null) params.select_channel = channel;
   return params;
+}
+
+// --- The Channel ----------------------------------------------------------
+//
+// A model of several output channels whose target is not affinities or flows
+// (its /api/finetune/models entry's channel_choice) trains one channel at a
+// time: the one picked learns the paint, the others are held to what the
+// model predicted (select_channel). Its indices mean nothing for another
+// model, so the pick is kept per model (channelByModel in the saved state).
+// The select remembers the model it is filled for (data-model, absent while
+// hidden), and a pick is saved under that model: when the model picker
+// changes, saveFinetuneState runs before models.js fills the select for the
+// new model, and must not save the old model's pick as the new one's.
+let channelPlaceholder = null;  // the template's "Pick the channel..." option, kept to put first
+
+// The Channel kept for each model, with `value` as model `name`'s (when
+// `name` is given).
+function keptChannels(name, value) {
+  const kept = { ...((restoreFinetuneState() || {}).channelByModel || {}) };
+  if (name) kept[name] = value;
+  return kept;
+}
+
+// The Channel picked, as an index; null while it is hidden or nothing is
+// picked. What training sends as select_channel, and Seed from Prediction
+// too (label-it.js), so the seed reads the channel the paint is for.
+export function pickedChannel() {
+  const select = document.getElementById("trainChannel");
+  return select.dataset.model && select.value !== "" ? Number(select.value) : null;
+}
+
+// Shows the Channel for `model` (an entry of /api/finetune/models, or null)
+// when it trains one channel at a time, its options the channels by name
+// ("channel <i>" where the names are not known) after the template's
+// placeholder, and its pick the one kept for the model; hides it otherwise.
+// models.js calls it on every load of the list: the options are rebuilt only
+// for another model or other channels, so an open select is not reset under
+// the cursor.
+export function setChannelChoice(model) {
+  const group = document.getElementById("trainChannelGroup");
+  const select = document.getElementById("trainChannel");
+  const choice = Boolean(model && model.channel_choice);
+  group.hidden = !choice;
+  if (!choice) {
+    delete select.dataset.model;
+    return;
+  }
+  channelPlaceholder = channelPlaceholder ?? select.options[0];
+  const names = model.channels ? model.channels.map((name, i) => channelLabel(name, i, false))
+    : Array.from({ length: model.output_channels }, (_, i) => `channel ${i}`);
+  const options = [channelPlaceholder, ...names.map((name, i) => new Option(name, String(i)))];
+  const key = (opts) => opts.map((o) => `${o.value}|${o.text}`).join(",");
+  if (select.dataset.model === model.name && key(Array.from(select.options)) === key(options)) return;
+  select.replaceChildren(...options);
+  select.dataset.model = model.name;
+  const kept = String(keptChannels()[model.name] ?? "");
+  select.value = options.some((option) => option.value === kept) ? kept : "";
+  if (select.value !== "") showChannel(model.name, Number(select.value));
+}
+
+// A channel by name and number, the number the viewer's channel slider
+// (the layer's c') shows: "organelle (channel 1)", or "organelle (1)" short.
+export function channelLabel(name, index, long = true) {
+  return Number.isInteger(index) ? `${name} (${long ? "channel " : ""}${index})` : name;
+}
+
+// Model `name`'s layer in the viewer shows channel `index` (POST
+// /api/finetune/channel), now and whenever it is drawn again, and so do its
+// finetunes': the channel picked is the one to look at. Nothing is lost if
+// it fails: the viewer just shows the channel it showed.
+function showChannel(name, index) {
+  postAnswer("/api/finetune/channel", { model_name: name, select_channel: index }).catch(() => {});
+}
+
+// Makes channel `index` model `name`'s Channel: kept for it, and shown at
+// once when the select is filled for it, else when it is picked. For rank.js's
+// Use this model, the explicit "use what the ranking found": the channel that
+// matched the paint best, for the model it makes the one to finetune, before
+// the model picker has it.
+export function pickChannel(name, index) {
+  writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) });
+  const select = document.getElementById("trainChannel");
+  if (select.dataset.model === name) select.value = String(index);
+  showChannel(name, index);
+}
+
+// Whether the Channel is shown for model `name` with nothing picked.
+// Training it then first picks the channel that matches the paint best
+// (job-monitor.js), as a score of it does here (fillChannel).
+export function channelUnpicked(name) {
+  const select = document.getElementById("trainChannel");
+  return select.dataset.model === name && select.value === "";
+}
+
+// pickChannel, only when the Channel is shown for model `name` with nothing
+// picked and has channel `index`: what a score of the model does with the
+// channel that matched best (Fit to Paint's, Rank's for the model being
+// trained, Train's), which never overrides a channel the user picked.
+// Returns whether it set it.
+export function fillChannel(name, index) {
+  const select = document.getElementById("trainChannel");
+  const fills = channelUnpicked(name) && Array.from(select.options).some((option) => option.value === String(index));
+  if (fills) pickChannel(name, index);
+  return fills;
 }
 
 // Whether augmentation is worth enabling depends on how many times the run
@@ -229,18 +388,18 @@ function updateAugmentAdvice() {
   }
 }
 
-// The GPU queue picker shows what the queues look like right now. A training
-// job is not cycled onto another queue if the one picked is busy -- it just
-// waits -- so the only thing that helps is seeing the wait before submitting
-// rather than after. The answers come from the poller the Models tab's
-// pickers share.
+// The GPU queue picker shows what the queues look like right now; the job
+// goes to the freest of those ticked, and moves on to the next while it has
+// not started (submit.QueueFallback). The answers come from the poller the
+// Models tab's pickers share. Its own choice, not the Models tab's: a
+// training job may want other GPUs than a model's server.
+let queuePicker;
+
 function showGpuQueues(data) {
-  // An answer with no queues leaves the options (at first the template's)
-  // and the note as they are, rather than emptying the picker.
+  // An answer with no queues leaves the picker and the note as they are,
+  // rather than emptying them.
   if (!((data && data.queues) || []).length) return;
-  const select = document.getElementById("gpuQueue");
-  // The queue picked stays, even if LSF no longer lists it.
-  fillQueueSelect(select, data, { preferred: select.value, missingSuffix: " (selected)" });
+  queuePicker.render(data);
   document.getElementById("finetuneGpuQueueHint").textContent = queueHint(data);
 }
 
@@ -342,14 +501,6 @@ function updateTileHint() {
   hint.title = full.measured_on ? `Measured on ${full.measured_on}` : "";
 }
 
-function formatMs(ms) {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
-
-function formatMb(mb) {
-  return mb < 1000 ? `${Math.round(mb)} MB` : `${(mb / 1000).toFixed(1)} GB`;
-}
-
 // The pane's data-training and the notes, from the Training field.
 function applyTrainingMode() {
   const mode = trainingMode();
@@ -393,10 +544,16 @@ export function setBrowserTraining(model) {
   }
 }
 
-// Returns { saved, save(), trainingParams() }: saved is the state restored
-// at load (null if none); save() stores the form's state now.
+// Returns { saved, save(), trainingParams(), gpuQueues() }: saved is the
+// state restored at load (null if none); save() stores the form's state
+// now; gpuQueues() is the queues ticked ([] until the queues are listed,
+// while none has been chosen).
 export function initTrainingForm() {
   const outputPathInput = document.getElementById("outputPath");
+  queuePicker = createQueuePicker(document.getElementById("gpuQueue"), {
+    missingSuffix: " (selected)",
+    onChange: () => saveFinetuneState(),
+  });
 
   // Show the margin field only for the margin loss.
   const lossSel = document.getElementById("lossType");
@@ -438,8 +595,28 @@ export function initTrainingForm() {
   // A restored loss sets the field without a change event.
   updateMarginVisibility();
 
+  // A preset picked is typed into its Learning Rate; the presets follow
+  // what is typed, and what was restored.
+  for (const id of rateFields()) {
+    const presets = document.getElementById(`${id}Presets`);
+    presets.addEventListener("change", () => {
+      const field = document.getElementById(id);
+      if (presets.value === "") return field.focus();  // Typed: type one
+      field.value = presets.value;
+      saveFinetuneState();
+    });
+    document.getElementById(id).addEventListener("input", () => showRatePreset(id));
+    showRatePreset(id);
+  }
+
+  // A Channel picked by hand is the one the viewer shows too.
+  const channel = document.getElementById("trainChannel");
+  channel.addEventListener("change", () => {
+    if (channel.dataset.model && channel.value !== "") showChannel(channel.dataset.model, Number(channel.value));
+  });
+
   // Save the state on every change, and on every keystroke in text fields.
-  for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect"]) {
+  for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect", "trainChannel"]) {
     const el = document.getElementById(id);
     el.addEventListener("change", saveFinetuneState);
     if (el.type === "text" || el.type === "number") {
@@ -468,5 +645,6 @@ export function initTrainingForm() {
     saved,
     save: saveFinetuneState,
     trainingParams,
+    gpuQueues: () => queuePicker.value(),
   };
 }

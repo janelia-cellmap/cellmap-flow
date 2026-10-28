@@ -76,6 +76,20 @@ def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
         assert rebuilt.to_dict() == config.to_dict()
 
 
+def test_a_finetune_declares_its_bases_geometry_at_the_voxel_size_it_was_trained_at(monkeypatch):
+    """What the Finetune tab lists for it before its server is up: its base's
+    metadata.json, read without building either model."""
+    metadata = {"input_shape": [178] * 3, "output_shape": [56] * 3, "input_voxel_size": [16] * 3,
+                "output_voxel_size": [16] * 3, "out_channels": 3}
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
+    base = {"type": "huggingface", "repo": "cellmap/mito"}
+    assert FinetuneModelConfig(weights_path="/w.pt", base_model=base).declared_geometry() == {
+        "write_shape": [896] * 3, "output_voxel_size": [16] * 3, "output_channels": 3, "channels": None}
+    at_8 = FinetuneModelConfig(weights_path="/w.pt", base_model=base, input_voxel_size=8, output_voxel_size=8)
+    assert at_8.declared_geometry() == {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 3,
+                                        "channels": None}
+
+
 @pytest.mark.parametrize("config, env", [
     pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),

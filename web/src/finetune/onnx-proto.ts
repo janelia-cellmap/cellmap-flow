@@ -1,10 +1,13 @@
 // A field-level reader and writer of protobuf messages, and on top of it the
 // little of ONNX's schema that finetuning the head needs: the graph's nodes,
 // its initializers (where their bytes lie in the file) and its inputs and
-// outputs by name, and two edits, a graph output added and an initializer's
-// values replaced; and the model's metadata_props written, where a
-// finetuned model's download carries its manifest (routes/finetune.ts; the
-// server's onnx model type reads it, cellmap_flow/models/configs/onnx.py).
+// outputs by name (what a served model's network ends in is read from the
+// same: shared/model-info.ts networkActivation), and two edits, a graph
+// output added and an initializer's values replaced; and the model's
+// metadata_props written and read, where a finetuned model's download
+// carries its manifest (routes/finetune.ts; the server's onnx model type
+// reads it, cellmap_flow/models/configs/onnx.py; so does the Models tab's
+// Open an .onnx file…, src/model-file.ts).
 // Protobuf is a sequence of (field number, wire type) tags, each followed by
 // a varint, a fixed-size value or a length-prefixed run of bytes, and a
 // message is such a sequence inside a length-prefixed field; so a model is
@@ -326,6 +329,18 @@ export function withGraphOutput(modelBytes: Uint8Array, name: string, elemType: 
   const valueInfo = concatBytes([encodeLengthDelimited(1, utf8Encoder.encode(name)), encodeLengthDelimited(2, tensorType)]);
   const graphBytes = concatBytes([graph.value, encodeLengthDelimited(12, valueInfo)]);
   return concatBytes(fields.map((f) => (f === graph ? encodeLengthDelimited(7, graphBytes) : modelBytes.subarray(f.tagStart, f.end))));
+}
+
+/** The model's metadata_props (ModelProto field 14; each entry's field 1 is
+ * its key, 2 its value), by key. Throws as readModel does for bytes that
+ * are not an ONNX model. */
+export function readMetadata(modelBytes: Uint8Array): Record<string, string> {
+  const entries = readModel(modelBytes).fields.filter((f) => f.number === 14 && f.wireType === WIRE_LENGTH).map((f) => parseFields(f.value, f.start));
+  const value = (entry: Field[], number: number) => {
+    const field = entry.find((f) => f.number === number && f.wireType === WIRE_LENGTH);
+    return field ? text(field) : "";
+  };
+  return Object.fromEntries(entries.map((entry) => [value(entry, 1), value(entry, 2)]));
 }
 
 /** The model with `entries` in its metadata_props: an entry already there

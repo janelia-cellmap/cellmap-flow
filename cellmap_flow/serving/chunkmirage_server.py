@@ -14,8 +14,9 @@ layers sharing a server never share a chain. The array has one level, s0,
 with any channel axis first.
 
 ``/__control__/model_info`` (and its older name ``/output_probe``) report the
-model's geometry and output activation, and ``/__control__/restart`` asks a
-finetune job to train again. model_info says ``"engine": "chunkmirage"``: the
+model's geometry and output activation; ``/__control__/restart`` asks a
+finetune job to train again, and ``/__control__/stop`` to stop training
+after the epoch it is in. model_info says ``"engine": "chunkmirage"``: the
 release before this one had two engines, and its dashboard reads the field
 to tell their URLs apart.
 
@@ -103,8 +104,9 @@ class ChunkmirageServer:
     the data has none at it (``open_raw(..., resample=True)``, see
     ``cellmap_flow.io.raw``), instead of reading the nearest level as if it
     were at that size; ``cellmap_flow serve --resample``. ``restart_callback``
-    enables POST /__control__/restart, which then only accepts requests
-    carrying ``restart_token`` in the X-Restart-Token header.
+    enables POST /__control__/restart, and ``stop_callback`` POST
+    /__control__/stop, which then only accept requests carrying
+    ``restart_token`` in the X-Restart-Token header.
 
     ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) is how many chunks use the device
     at once (inference.runner.DeviceSlots); ``CELLMAP_FLOW_HALF_PRECISION=1``
@@ -115,10 +117,12 @@ class ChunkmirageServer:
     forward, before the server announces itself.
     """
 
-    def __init__(self, dataset_name, model_config, restart_callback=None, restart_token=None, resample=False):
-        if restart_callback is not None and not restart_token:
-            raise ValueError("restart_callback requires a restart_token")
+    def __init__(self, dataset_name, model_config, restart_callback=None, stop_callback=None, restart_token=None,
+                 resample=False):
+        if (restart_callback is not None or stop_callback is not None) and not restart_token:
+            raise ValueError("restart_callback and stop_callback require a restart_token")
         self.restart_callback = restart_callback
+        self.stop_callback = stop_callback
         self.restart_token = restart_token
         self.resample = resample
 
@@ -237,8 +241,8 @@ class ChunkmirageServer:
                     f"has no {ARGS_KEY} block. Raw voxel values go to the model "
                     "unmodified. If the model expects normalized input (e.g. [-1, 1]) "
                     "its output will be meaningless. Re-add the layer from the "
-                    "dashboard so the URL carries the current Input/Postprocess "
-                    "configuration."
+                    "dashboard so the URL carries the Processing tab's current "
+                    "steps."
                 )
         else:
             spec, extras = PipelineSpec.from_url_blob(blob)
@@ -295,10 +299,15 @@ class ChunkmirageServer:
         reported even when the warmup probe failed; script-defined models
         expose nothing else to the dashboard, which makes this the only place
         it can learn their shapes and channel names. The activation half is
-        measured once at warmup (Inferencer._warmup) and lets the dashboard
-        propose a postprocessing chain, or flag one that contradicts the
-        model. A resampled input really is at input_voxel_size; a relabelled
-        one is at the level's, which moves the output (see to_model_info).
+        read once, as the model is loaded (inference/runner.py), and lets the
+        dashboard propose a postprocessing chain, or flag one that
+        contradicts the model: ``output_class``, read off the network's graph
+        (``output_class_from`` "graph", with ``output_op``, the op that ends
+        it) or else from the warmup probe's range (``output_min``,
+        ``output_max``) on noise ("probe", a guess); None, from neither,
+        when the graph does not say and the probe's output was flat. A
+        resampled input really is at input_voxel_size; a relabelled one is
+        at the level's, which moves the output (see to_model_info).
         """
         raw = self.raw
         stored = raw.source_voxel_size
@@ -311,14 +320,19 @@ class ChunkmirageServer:
         info["input_relabelled_from"] = list(stored) if relabelled else None
         info["display_channel"] = getattr(self.inferencer.model_config, "display_channel", None)
         info["engine"] = ENGINE
-        output_class = getattr(self.inferencer, "output_class", None)
-        if output_class is None:
+        inferencer = self.inferencer
+        output_class = getattr(inferencer, "output_class", None)
+        output_range = getattr(inferencer, "output_range", None)
+        if output_class is None and output_range is None:
             info.update({"available": False, "reason": "output probe did not run"})
             return info
-        output_range = getattr(self.inferencer, "output_range", None)
+        # Available once the graph or the probe has had its say, even when
+        # neither knows (a flat probe): asking again would get the same.
         info.update({
             "available": True,
             "output_class": output_class,
+            "output_class_from": getattr(inferencer, "output_class_from", None),
+            "output_op": getattr(inferencer, "output_op", None),
             "output_min": output_range[0] if output_range else None,
             "output_max": output_range[1] if output_range else None,
         })
@@ -328,33 +342,40 @@ class ChunkmirageServer:
         async def model_info(request):
             return JSONResponse(self.model_info())
 
-        async def restart(request):
-            if self.restart_callback is None:
-                return JSONResponse({"success": False, "error": "Restart control not enabled"},
-                                    HTTPStatus.NOT_IMPLEMENTED)
-            # A restart can change what the job trains on, and this server
-            # listens on every interface, so only the job manager that wrote
-            # the job's token may trigger one.
-            if not tokens_match(self.restart_token, request.headers.get(TOKEN_HEADER)):
-                return JSONResponse({"success": False, "error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
-            try:
-                payload = await request.json()
-            except ValueError:
-                payload = {}
-            try:
-                accepted = await run_in_threadpool(self.restart_callback, payload or {})
-            except Exception as e:
-                logger.error(f"Failed to process restart control request: {e}", exc_info=True)
-                return JSONResponse({"success": False, "error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
-            if not accepted:
-                return JSONResponse({"success": False, "error": "Restart request rejected"}, HTTPStatus.CONFLICT)
-            return JSONResponse({"success": True})
+        def control(action, callback):
+            """POST /__control__/<action>: ``callback`` with the request's body."""
+
+            async def handle(request):
+                if callback is None:
+                    return JSONResponse({"success": False, "error": f"{action.capitalize()} control not enabled"},
+                                        HTTPStatus.NOT_IMPLEMENTED)
+                # A restart can change what the job trains on, and a stop ends
+                # its training, and this server listens on every interface, so
+                # only the job manager that wrote the job's token may ask.
+                if not tokens_match(self.restart_token, request.headers.get(TOKEN_HEADER)):
+                    return JSONResponse({"success": False, "error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
+                try:
+                    payload = await request.json()
+                except ValueError:
+                    payload = {}
+                try:
+                    accepted = await run_in_threadpool(callback, payload or {})
+                except Exception as e:
+                    logger.error(f"Failed to process {action} control request: {e}", exc_info=True)
+                    return JSONResponse({"success": False, "error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                if not accepted:
+                    return JSONResponse({"success": False, "error": f"{action.capitalize()} request rejected"},
+                                        HTTPStatus.CONFLICT)
+                return JSONResponse({"success": True})
+
+            return handle
 
         return [
             Route("/__control__/model_info", model_info, methods=["GET"]),
             # Older name, kept for dashboards from before the geometry fields.
             Route("/__control__/output_probe", model_info, methods=["GET"]),
-            Route("/__control__/restart", restart, methods=["POST"]),
+            Route("/__control__/restart", control("restart", self.restart_callback), methods=["POST"]),
+            Route("/__control__/stop", control("stop", self.stop_callback), methods=["POST"]),
         ]
 
     # --- running -------------------------------------------------------------

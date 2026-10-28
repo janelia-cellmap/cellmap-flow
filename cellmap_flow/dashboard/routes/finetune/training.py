@@ -1,7 +1,10 @@
 """Training jobs: submitting one, restarting it, and following it.
 
 Routes:
-- POST ``/api/finetune/submit``: a job for a model over a session's corrections;
+- POST ``/api/finetune/submit``: a job for a model over a session's corrections,
+  its paint first carried onto the model's grid when the session's volume
+  is on another (annotation_core.grid_change, carry_onto_model: what Use
+  this model does), which the answer says (``carried``, ``note``);
 - POST ``/api/finetune/job/<job_id>/restart``: the next iteration, with new settings;
 - GET ``/api/finetune/jobs``: every job, including those a dashboard before
   this one started (they are looked for first);
@@ -17,12 +20,10 @@ the viewer's status bar how it answered one (restart_key).
 """
 
 import os
-import json
 import logging
 import re
 import subprocess
 import time
-from datetime import datetime
 from pathlib import Path
 
 from flask import Response, jsonify, request
@@ -31,7 +32,13 @@ from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
 from cellmap_flow.dashboard.routes.finetune import restart_key
-from cellmap_flow.dashboard.routes.finetune.annotation_core import paint_first_refusal
+from cellmap_flow.dashboard.routes.finetune.annotation_core import (
+    carry_onto_model,
+    channel_pick_refusal,
+    grid_change,
+    paint_first_refusal,
+    volume_grid,
+)
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -45,12 +52,14 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     served_output_class,
     settings_note,
 )
+from cellmap_flow.dashboard.routes.logging_routes import requested_offset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
 from cellmap_flow.finetune.options import TrainingOptions
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import exists_now
+from cellmap_flow.portable import volume as portable_volume
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +252,25 @@ def get_job_logs(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _carried(model_name, model_config, geometry, from_id, from_volume):
+    """Submit's carry of the session volume ``from_id``'s paint onto
+    ``model_name``'s grid (annotation_core.carry_onto_model, as Use this model
+    carries it; ``geometry`` and the volume as grid_change found them), and
+    what the answer says of it: ``(carried, note)``. ``carried`` is
+    ``{"from_model", "from_volume", "volume_id", "chunks"}``, for the page to
+    follow the new volume (job-monitor.js); ``note`` names both grids and
+    where the old volume is kept (portable/volume.py carried_note), which
+    the page's log shows."""
+    moved = carry_onto_model(model_name, model_config, geometry, from_id, from_volume)
+    kept = moved["superseded"] or os.path.join(from_volume["corrections_dir"], "superseded")
+    note = portable_volume.carried_note(
+        from_volume.get("model_name"), volume_grid(from_volume), model_name, volume_grid(moved["volume"]), f"in {kept}"
+    )
+    carried = {"from_model": from_volume.get("model_name"), "from_volume": from_id,
+               "volume_id": moved["volume_id"], "chunks": moved["chunks"]}
+    return carried, note
+
+
 @finetune_bp.route("/api/finetune/submit", methods=["POST"])
 def submit_finetuning():
     body, refused = parse(FinetuneSubmit, request.get_json() or {})
@@ -267,6 +295,36 @@ def submit_finetuning():
         if paint_first is not None:
             return paint_first
 
+        # What the model trains on, and so whether it trains one channel at a
+        # time: a model of several channels that does is refused without the
+        # channel the paint is for (annotation_core.channel_pick_refusal).
+        # Both before the manifest is written, as a refused submit changes
+        # nothing.
+        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
+        no_pick = channel_pick_refusal(body.model_name, model_config, output_type, body.select_channel)
+        if no_pick is not None:
+            return no_pick
+        asked = body.options(
+            output_type=output_type, offsets=offsets, output_class=served_output_class(body.model_name),
+        )
+        if asked.mode == "head":
+            return jsonify({"success": False, "error": (
+                "The last layer (mode head) is trained in the browser; a training job trains "
+                "a LoRA adapter (lora) or every weight (full)."
+            )}), 400
+
+        # A model whose grid is not the session volume's (another model's,
+        # a 3D one's 178^3 at 8 nm for a 2D one's 1 x 556 x 556 at 16) has
+        # the paint carried onto its grid first, as Use this model carries
+        # it, and trains on that; the chain and the channel stay as the user
+        # set them. Its job read the volume's patches and torch.export
+        # refused them. The carry is the last thing before the manifest and
+        # the job, after every refusal, so a refused submit changes nothing.
+        carry, unknown = grid_change(body.model_name, model_config, actual_corrections_path)
+        if unknown is not None:
+            return unknown
+        carried, carried_note = _carried(body.model_name, model_config, *carry) if carry else (None, None)
+
         from cellmap_flow.finetune.session.manifest import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
@@ -282,8 +340,6 @@ def submit_finetuning():
                 actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
 
-        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
-
         # Whether the session is sparse is read from the volume on disk, which
         # lags the browser's strokes (they go straight to MinIO) by up to the
         # periodic sync's 30 s, or for good while that sync fails. So pull
@@ -293,16 +349,8 @@ def submit_finetuning():
         # minutes; it is only the chunk diff now.
         _pull_annotations("Submit pre-sync")
         has_sparse = detect_sparse_annotations(actual_corrections_path)
-        asked = body.options(
-            output_type=output_type, offsets=offsets, output_class=served_output_class(body.model_name),
-        )
-        if asked.mode == "head":
-            return jsonify({"success": False, "error": (
-                "The last layer (mode head) is trained in the browser; a training job trains "
-                "a LoRA adapter (lora) or every weight (full)."
-            )}), 400
         settings = asked.for_session(sparse=has_sparse)
-        note = settings_note(asked, settings)
+        note = " ".join(filter(None, (carried_note, settings_note(asked, settings))))
 
         session = get_session()
         # Before the job exists: submitting starts its monitor, which tells
@@ -333,6 +381,8 @@ def submit_finetuning():
         }
         if note:
             response["note"] = note
+        if carried:
+            response["carried"] = carried
         return jsonify(response)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
@@ -357,17 +407,6 @@ def _read_complete_lines(path, offset):
     return chunk[:cut].decode("utf-8", errors="replace"), offset + cut
 
 
-def _requested_offset(request):
-    """Where the client wants the log from: the SSE Last-Event-ID, else ?offset=."""
-    for raw in (request.headers.get("Last-Event-ID"), request.args.get("offset")):
-        try:
-            if raw not in (None, ""):
-                return max(0, int(raw))
-        except (TypeError, ValueError):
-            pass
-    return 0
-
-
 # Statuses in which the job can still write to its log.
 _LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
 
@@ -389,7 +428,7 @@ def stream_job_logs(job_id):
     the page stayed open.
     """
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
-    start_offset = _requested_offset(request)
+    start_offset = requested_offset(request)
 
     def iter_visible_lines(text):
         for line in text.splitlines():
@@ -552,40 +591,28 @@ def cancel_job(job_id):
 
 @finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
 def stop_training_early(job_id):
+    manager = get_session().finetune_job_manager
+    if job_id not in (getattr(manager, "jobs", {}) or {}):
+        return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
     try:
-        jobs = getattr(get_session().finetune_job_manager, "jobs", {}) or {}
-        job = jobs.get(job_id)
-        if job is None:
-            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
-
-        output_dir = Path(job.output_dir)
-        if not output_dir.exists():
-            return jsonify({"success": False, "error": f"Job output dir missing: {output_dir}"}), 400
-
-        signal_path = output_dir / "stop_signal.json"
-        with open(signal_path, "w") as f:
-            json.dump(
-                {
-                    "requested_at": datetime.now().isoformat(),
-                    "reason": "user_requested_stop_early",
-                },
-                f,
-                indent=2,
-            )
-
-        return jsonify(
-            {
-                "success": True,
-                "message": (
-                    "Stop requested. Training will exit after the current epoch; "
-                    "the inference server will then start so you can restart with "
-                    "updated parameters."
-                ),
-            }
-        )
+        # To the job's control endpoint as a restart goes, else as the run's
+        # stop_signal.json (job_manager.restart).
+        manager.stop_training_early(job_id)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error requesting stop-early: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify(
+        {
+            "success": True,
+            "message": (
+                "Stop requested. Training will exit after the current epoch; "
+                "the inference server will then start so you can restart with "
+                "updated parameters."
+            ),
+        }
+    )
 
 
 def _restart_training_settings(job, changes, corrections_dir):

@@ -18,6 +18,7 @@ from flask import jsonify, request
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session.manifest import trained_volume_name
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.viewer.layers import replace_layer
 
@@ -211,7 +212,8 @@ def _chunk_outside_all_bboxes(
 
 
 def refresh_annotated_regions_layer(corrections_path=None):
-    """Draw a box around every region that has annotations in it.
+    """Draw a box around every region that has annotations in it, in each
+    session's current volume.
 
     Only ever called for something the user just did: creating a volume,
     importing crops, resuming a session, clicking "Save Annotations to
@@ -246,7 +248,17 @@ def refresh_annotated_regions_layer(corrections_path=None):
     for corrections_dir in scan_dirs:
         if not os.path.isdir(corrections_dir):
             continue
-        for entry in sorted(os.listdir(corrections_dir)):
+        # A session's boxes are its current volume's, the one its manifest
+        # trains on: every volume in the directory drew its own, overlapping
+        # boxes on different grids for the one paint. A directory without a
+        # manifest (a volume painted before any model, instance corrections'
+        # volumes, one per ROI) draws every volume in it.
+        trained = trained_volume_name(corrections_dir)
+        entries = (
+            [trained] if trained and os.path.isdir(os.path.join(corrections_dir, trained))
+            else sorted(os.listdir(corrections_dir))
+        )
+        for entry in entries:
             # Per-imported-YAML-crop large boxes (one per crop, read from the
             # annotation_volume.zarr's root attrs that the YAML loader writes)
             # plus per-painted-chunk small boxes for any populated chunk that

@@ -78,6 +78,13 @@ export async function createFeatureRunner(options: FeatureRunnerOptions): Promis
       return exclusive(async (): Promise<ModelFeatures> => {
         const results = await s.run({ [input]: new ort.Tensor("float32", data, dims) }, [output, head.featureTensor]);
         const logits = results[output], features = results[head.featureTensor];
+        // The head makes the logits from the features voxel by voxel (a 1×1
+        // convolution, then ops that only move values), so the two hold the
+        // same voxels, its outChannels of them for its inChannels; the
+        // trainer checks the features against the chunk (chunkLayout).
+        if (logits.size * head.inChannels !== features.size * head.outChannels) {
+          throw new Error(`the logits ${logits.dims.join("×")} (${head.outChannels} channels) and the features ${features.dims.join("×")} (${head.inChannels}) hold different voxels`);
+        }
         return { logits: asFloat32(logits, output), logitsDims: [...logits.dims], features: asFloat32(features, head.featureTensor), featuresDims: [...features.dims] };
       });
     },

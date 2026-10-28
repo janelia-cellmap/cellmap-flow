@@ -164,13 +164,17 @@ export function predictionSource(url: string, overrideScales: readonly number[] 
   return { url, transform: { outputDimensions: dimensions, inputDimensions: { ...dimensions } } };
 }
 
-/** The channel a model's layer opens on (layers.py's display_channel): the
- * one the engine names (`display_channel`, a Cellpose model's cell
- * probability rather than its first flow), while the chain keeps the model's
- * channels; null otherwise (the first). */
-export function displayChannel(info: ModelInfo, postprocess: Step[]): number | null {
-  const channel = info.display_channel;
+/** The channel a model's layer opens on (layers.py's display_channel):
+ * `shown`, the one the session shows for the model (POST
+ * /api/finetune/channel; serving.ts shownChannel), when it is one of the
+ * model's channels; else the one the engine names (`display_channel`, a
+ * Cellpose model's cell probability rather than its first flow); either
+ * only while the chain keeps the model's channels, since a chain that
+ * changes their count (a ChannelSelection, a merge) numbers them anew, and
+ * only for an output with a channel axis. Null otherwise (the first). */
+export function displayChannel(info: ModelInfo, postprocess: Step[], shown: number | null = null): number | null {
   const channels = info.output_channels;
+  const channel = shown !== null && shown < channels ? shown : info.display_channel;
   if (channel === null || channel === undefined || !channels || info.has_channel === false) return null;
   if (outputChannels(postprocess, channels) !== channels) return null;
   return Math.trunc(channel);
@@ -182,10 +186,12 @@ export function displayChannel(info: ModelInfo, postprocess: Step[]): number | n
  * order) over the range the chain produces, with the user's `keep` shader
  * and controls instead when they left some. The source URL is the engine's
  * (`served.url`, zarr3://...), transformed when the output must be drawn at
- * another voxel size than declared. With a display channel, the layer opens
- * on it: Neuroglancer's channel axis is a local dimension whose position is
- * the channel shown, at the channel's centre as Neuroglancer places them. */
-export function predictionLayer(served: ServedModel, chain: Chain, color: string, keep?: KeptShader): LayerSpec {
+ * another voxel size than declared. With a display channel (displayChannel:
+ * `shown`, the channel the session shows for the model, or the engine's),
+ * the layer opens on it: Neuroglancer's channel axis is a local dimension
+ * whose position is the channel shown, at the channel's centre as
+ * Neuroglancer places them (channelPosition). */
+export function predictionLayer(served: ServedModel, chain: Chain, color: string, keep?: KeptShader, shown: number | null = null): LayerSpec {
   const { info } = served;
   const source = predictionSource(served.url, predictionVoxelOverride(info), info.has_channel ?? true);
   if (isSegmentation(chain.postprocess) === true) {
@@ -201,9 +207,18 @@ export function predictionLayer(served: ServedModel, chain: Chain, color: string
   const layer: LayerSpec = { type: "image", name: served.entry.name, source, shader };
   const controls = keptControls(keep);
   if (controls) layer.shaderControls = controls;
-  const channel = displayChannel(info, chain.postprocess);
-  if (channel !== null) layer.localPosition = [channel + 0.5];
+  const channel = displayChannel(info, chain.postprocess, shown);
+  if (channel !== null) layer.localPosition = channelPosition(channel);
   return layer;
+}
+
+/** A layer's `localPosition` showing `channel` of its channel axis: the
+ * channel's centre. The served array's OME translation is 0 on its channel
+ * axis, a voxel centre, so channel k lies over [k - 0.5, k + 0.5) and its
+ * centre is k (layers.py's channel_position): at k + 0.5 the layer showed
+ * the channel after the one picked. */
+export function channelPosition(channel: number): number[] {
+  return [channel];
 }
 
 // ---------------------------------------------------------------------------
@@ -414,44 +429,51 @@ export function paintLayer(url: string, volume: PaintVolume): LayerSpec {
 }
 
 // ---------------------------------------------------------------------------
-// The good regions: the boxes Mark as Good made, as the server's
-// refresh_good_regions_layer draws them (dashboard/routes/finetune/
-// good_regions.py), a local annotation layer of axis-aligned boxes in nm.
+// Boxes: a local annotation layer of axis-aligned boxes in nm, as the
+// server's LocalAnnotationLayer of AxisAlignedBoundingBoxAnnotation is built
+// for the good regions Mark as Good made (dashboard/routes/finetune/
+// good_regions.py's refresh_good_regions_layer) and for the annotated
+// regions, a box over each painted chunk (overlay.py's
+// refresh_annotated_regions_layer; finetune/volume.ts chunkBoxes).
 // ---------------------------------------------------------------------------
 
 /** The good regions' layer name (good_regions.GOOD_REGIONS_LAYER). */
 export const GOOD_REGIONS_LAYER = "good_regions";
 
-/** A region as the layer draws it: its box in nm, (z, y, x), and its label. */
+/** The annotated regions' layer name, as refresh_annotated_regions_layer names it. */
+export const ANNOTATED_REGIONS_LAYER = "annotated_regions";
+
+/** A box as the layer draws it: its lower corner and size in nm, (z, y, x), and its label. */
 export interface RegionBox {
   label: string;
   offset_nm: number[];
   shape_nm: number[];
 }
 
-/** The layer of `regions`: neuroglancer.LocalAnnotationLayer's JSON over a
+/** The layer of `boxes`: neuroglancer.LocalAnnotationLayer's JSON over a
  * coordinate space of `axes` (the viewer's dimension names, the raw's) at
- * 1 nm, one axis_aligned_bounding_box per region from its offset to its
+ * 1 nm, one axis_aligned_bounding_box per box from its offset to its
  * offset plus its shape, its id its place in the list and its description
- * its label, as the Python builds it. A point's coordinates follow the
- * names: z, y and x take the box's z, y and x wherever they are among the
- * axes (an axis by another name takes the box's coordinate in its place,
- * as pointerNm reads the viewer's). A null entry (one that is not a region)
- * is skipped and keeps its place, so the ids stay the regions' indices. */
-export function goodRegionsLayer(regions: readonly (RegionBox | null)[], axes: readonly string[] = ["z", "y", "x"]): LayerSpec {
+ * its label, as the Python builds both layers. A point's coordinates follow
+ * the names: z, y and x take the box's z, y and x wherever they are among
+ * the axes (an axis by another name takes the box's coordinate in its
+ * place, as pointerNm reads the viewer's). A null entry (an entry of the
+ * good regions that is not a region) is skipped and keeps its place, so the
+ * ids stay the regions' indices. */
+export function boxesLayer(boxes: readonly (RegionBox | null)[], axes: readonly string[] = ["z", "y", "x"]): LayerSpec {
   const zyx = ["z", "y", "x"];
   const names = axes.length === 3 ? axes : zyx;
   const order = names.map((name, k) => (zyx.includes(name) ? zyx.indexOf(name) : k));
   const annotations: Record<string, unknown>[] = [];
-  regions.forEach((region, index) => {
-    if (!region) return;
-    const hi = region.offset_nm.map((o, a) => o + region.shape_nm[a]);
+  boxes.forEach((box, index) => {
+    if (!box) return;
+    const hi = box.offset_nm.map((o, a) => o + box.shape_nm[a]);
     annotations.push({
       type: "axis_aligned_bounding_box",
-      pointA: order.map((a) => region.offset_nm[a]),
+      pointA: order.map((a) => box.offset_nm[a]),
       pointB: order.map((a) => hi[a]),
       id: String(index),
-      description: region.label,
+      description: box.label,
     });
   });
   const outputDimensions = Object.fromEntries(names.map((name) => [name, [nmToMetres(1), "m"]]));

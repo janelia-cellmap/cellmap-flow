@@ -2,6 +2,7 @@
 // dataset (the server's /api/bbx-generator, shown in a dialog), or loaded
 // from a JSON file, and the help dialog on that file's format.
 import { h } from "../lib/dom.js";
+import { poll } from "../lib/poll.js";
 import { renderCanvas } from "./canvas.js";
 import { closeDialog, openDialog, registerDialog } from "./dialogs.js";
 import { showMessage } from "./messages.js";
@@ -90,12 +91,13 @@ async function startBBXGeneration() {
   }
 }
 
-// The count of boxes drawn so far, every 2 s while the viewer is open.
+// The count of boxes drawn so far, every 2 s while the viewer is open, one
+// request at a time (the server reads them from the viewer's state).
 function pollBBXGeneration() {
-  bbxGeneratorState.pollInterval = setInterval(async () => {
+  bbxGeneratorState.poller = poll(async ({ stale }) => {
     try {
       const response = await fetch("/api/bbx-generator/status", { method: "GET" });
-      if (!response.ok) return;
+      if (!response.ok || stale()) return;
       const result = await response.json();
       if (result.bounding_boxes && result.bounding_boxes.length > 0) {
         document.getElementById("bbx-status").textContent =
@@ -104,14 +106,12 @@ function pollBBXGeneration() {
     } catch (err) {
       console.error("Poll error:", err);
     }
-  }, 2000);
+  }, { intervalMs: 2000, immediate: false, pauseWhenHidden: true });
 }
 
 // Closing the viewer (Cancel, ✕, or after saving) stops the poll.
 function onViewerClosed() {
-  if (bbxGeneratorState.pollInterval) {
-    clearInterval(bbxGeneratorState.pollInterval);
-  }
+  if (bbxGeneratorState.poller) bbxGeneratorState.poller.stop();
   bbxGeneratorState = { inputNodeId: null, numBoxes: 1 };
 }
 

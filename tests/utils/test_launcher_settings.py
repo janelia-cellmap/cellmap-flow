@@ -27,9 +27,10 @@ def config_file(tmp_path, monkeypatch):
 @pytest.mark.parametrize("saved, expected, cached", [
     pytest.param(None, {}, False, id="no-file-every-default"),
     pytest.param("", {}, False, id="an-empty-file-every-default"),
-    pytest.param(yaml.safe_dump({**WITHOUT_WALLTIME, "queue": "gpu_a100"}), {"queue": "gpu_a100"}, True,
+    # A file naming one queue, as each did before several could be ticked, names a list of one.
+    pytest.param(yaml.safe_dump({**WITHOUT_WALLTIME, "queue": "gpu_a100"}), {"queue": ["gpu_a100"]}, True,
                  id="saved-before-walltime-existed"),
-    pytest.param("queue: gpu_l4\nretired_key: 3\n", {"queue": "gpu_l4"}, True, id="an-unknown-key-is-ignored"),
+    pytest.param("queue: gpu_l4\nretired_key: 3\n", {"queue": ["gpu_l4"]}, True, id="an-unknown-key-is-ignored"),
 ])
 def test_the_settings_are_the_saved_file_over_the_defaults(config_file, saved, expected, cached):
     if saved is not None:

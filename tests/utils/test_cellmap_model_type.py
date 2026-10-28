@@ -74,6 +74,46 @@ def test_reads_at_the_shape_the_export_runs_at(monkeypatch, model, shapes, voxel
 
     model_config = CellMapModelConfig(folder_path="/models/liver_mito")
 
+    # What the dashboard lists before the server is up: the metadata's
+    # geometry only when it gives one shape, so that it is the one served.
+    declared = model_config.declared_geometry()
+
     assert model_config.geometry.input_shape == (voxels_in,) * 3
     assert model_config.geometry.output_shape == (voxels_out,) * 3
     assert list(model_config.config.block_shape) == [voxels_out] * 3 + [1]
+    config = model_config.config
+    served = {"write_shape": list(config.write_shape), "output_voxel_size": list(config.output_voxel_size),
+              "output_channels": config.output_channels, "channels": list(config.channels_names)}
+    assert declared == (None if shapes else served)
+
+
+@pytest.mark.parametrize("files, modes", [
+    (["model.pt", "model.ts"], ("full",)),
+    (["model.pt2", "model.ts"], ("lora", "full")),
+], ids=["torchscript-only", "with-an-export"])
+def test_lora_is_offered_only_when_the_export_can_take_an_adapter(monkeypatch, tmp_path, files, modes):
+    """fly_organelles' /nrs copies, model.pt and model.ts with no model.pt2,
+    were offered LoRA and failed at the job's start: cellmap_models' train()
+    gives the TorchScript then, which takes no adapter."""
+    cellmap_model = pytest.importorskip("cellmap_models.model_export.cellmap_model")
+    monkeypatch.setattr(cellmap_model, "CellmapModel", lambda folder_path: SimpleNamespace(folder_path=folder_path))
+    for name in files:
+        (tmp_path / name).write_bytes(b"")
+
+    assert CellMapModelConfig(folder_path=str(tmp_path)).finetune_modes() == modes
+
+
+@pytest.mark.parametrize("files, modes", [
+    (["metadata.json", "model.pt", "model.ts", "model.onnx"], ("full",)),
+    (["metadata.json", "model.pt2", "model.ts", "model.onnx"], ("lora", "full")),
+], ids=["torchscript-only", "with-an-export"])
+def test_lora_is_offered_for_a_hugging_face_export_only_when_it_has_a_model_pt2(monkeypatch, files, modes):
+    """cellmap/jrc_mus-livers_16nm_to_8nm_mito, model.pt, model.ts and
+    model.onnx, was offered LoRA and failed at the job's start, as the /nrs
+    folders without a model.pt2 did; read from the repo's file list."""
+    from cellmap_flow.models import resolve
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(resolve, "_hf_files", lambda repo, revision: files)
+
+    assert HuggingFaceModelConfig("cellmap/jrc_mus-livers_16nm_to_8nm_mito").finetune_modes() == modes

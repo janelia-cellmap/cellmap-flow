@@ -10,14 +10,18 @@
 // view with an onnxruntime-web session behind it (src/infer), so starting
 // one is Inference.serve and stopping one is ServedModel.dispose. A model's
 // start sets the input normalization it declares when the chain has none
-// (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm).
+// (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm), and
+// the postprocessing its output needs when the chain has none
+// (setNeededPostprocess).
 import { ARGS_KEY } from "../contracts";
 import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
 import { SUPPORTED_NORMALIZERS } from "../infer/norms";
-import { entryFor } from "../models";
+import { withVariant } from "../models";
+import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs } from "../shared/args";
+import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
-import { PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
+import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
 
 /** The dashboard's address as the Python routes put it in the blob
  * (request.host_url: the scheme, host and the page's base, with the
@@ -84,7 +88,7 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
  * postprocessing stays as it is; the chain is set through setChain, as PUT
  * /api/pipeline sets it, so the models served already are drawn through it
  * too. A chain that has input normalizers already is left alone, and after
- * this only the page's Apply changes it: the Input list shows the chain as
+ * this only the page's Apply changes it: the Processing tab shows the chain as
  * set (GET /api/models/loaded's `pipeline`, which the page reads after every
  * model change) and says where it came from. A model that declares nothing
  * changes nothing, and a declaration naming a step the browser cannot run
@@ -107,11 +111,92 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
   return null;
 }
 
+/** Set the postprocessing a model's output needs as the chain's, as part of
+ * starting it, when the chain has none (routes/pipeline.py's
+ * set_needed_postprocess, as a model's server first answers its probe).
+ * Returns the name of the model whose output it is for, or null when
+ * nothing changed.
+ *
+ * The Models tab's Submit and Add (routes/models.ts) call this with the
+ * models they are about to serve that are not served yet (`starting`) and
+ * every model they serve (`serving`, those among them), after
+ * setDeclaredInputNorm and before serving them. A model's output class is
+ * what its served ModelInfo will say (servedOutputClass: its network's, read
+ * from the bytes of the variant it is served in, else its manifest's), and
+ * what it needs is cellmap_flow/portable/rank.py's
+ * needed_postprocess on an empty chain with no threshold, the rule the
+ * ranking's rows follow too: a sigmoid for logits, affinities' included,
+ * nothing for an output that has its activation. The first of `starting`
+ * that needs steps gives them, unless they would show another of `serving`
+ * wrong (a sigmoid on an output that has one: the rule would take it away
+ * again), set through setChain so the models served already are drawn
+ * through them too, and remembered as the start's (the session's
+ * startPostprocess), so GET /api/models/loaded can say where they came
+ * from. A chain with postprocessing already is the user's (or a model's, or
+ * the ranking's) and is left alone. A start does not fail on this: when the
+ * Python cannot be called, the chain is left as it is, saying why. */
+export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
+  if (ctx.session.state.chain.postprocess.length) return null;
+  const needed = async (entry: ModelEntry, postprocess: Step[]) =>
+    ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: await servedOutputClass(ctx, entry), postprocess, threshold: null });
+  for (const entry of starting) {
+    let steps: Step[] | null;
+    const wrong: string[] = [];
+    try {
+      steps = await needed(entry, []);
+      if (!steps?.length) continue;
+      for (const other of serving) if (other.id !== entry.id && (await needed(other, steps)) !== null) wrong.push(other.name);
+    } catch (e) {
+      ctx.log(`The postprocessing ${entry.name}'s output needs was not set: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+    if (wrong.length) {
+      ctx.log(`${entry.name}'s output needs ${stepNames(steps).join(" → ")}, but it is not set: it would show ${wrong.join(", ")} wrong`);
+      return null;
+    }
+    await setChain(ctx, { input_norm: ctx.session.state.chain.input_norm, postprocess: steps });
+    await ctx.session.update({ startPostprocess: { model: entry.name, postprocess: steps } });
+    ctx.log(`Postprocessing set to what ${entry.name}'s output needs: ${stepNames(steps).join(" → ")}`);
+    return entry.name;
+  }
+  return null;
+}
+
+/** The output class `entry`'s served ModelInfo says, or will say once it
+ * is served (shared/model-info.ts outputClass): its network's, read from the
+ * bytes of the variant it is served in (servedVariant; Inference.
+ * outputActivation keeps it, so the serve that follows reads nothing again),
+ * else its manifest's text. */
+async function servedOutputClass(ctx: AppContext, entry: ModelEntry): Promise<string | null> {
+  const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (served) return served.info.output_class ?? null;
+  const tuned = await servedVariant(ctx, entry);
+  return outputClass(tuned.manifest, await ctx.infer.outputActivation(tuned, () => ctx.catalog.modelBytes(tuned))).output_class ?? null;
+}
+
+/** `entry` in the variant it is served in: the one it is served in already
+ * (through another chain: the same variant again, so the onnxruntime
+ * session is shared), else the one for this machine's GPU (the catalog's
+ * entries carry a default variant, fp32 and the smallest block, and
+ * Catalog.chooseVariant picks the precision and block size the GPU's
+ * limits allow). */
+async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelEntry> {
+  const previous = ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (previous) return previous.entry;
+  return withVariant(entry, ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()));
+}
+
+/** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
+export const PORTABLE = "cellmap_flow.portable.calls";
+
 /** The name of the first of `entries` whose declared input normalization is
  * `chain`'s input part, step for step; null when none is, or the chain has
- * no input normalizers (pipeline.py's input_norm_declared_by). GET
+ * no input normalizers (pipeline.py's input_norm_set_by). GET
  * /api/models/loaded answers it beside the chain, so the page can say where
- * an input normalization a model's start set came from. */
+ * an input normalization a model's start set came from. Every model here
+ * declares its own (its manifest), so the answer has no
+ * input_norm_declared, which the Flask dashboard's says false for a
+ * convention it set; the page reads none as declared. */
 export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
   if (!chain.input_norm.length) return null;
   const live = JSON.stringify(chain.input_norm);
@@ -140,17 +225,14 @@ export interface ServeOptions {
  * removed. Then the viewer shows one layer per entry, coloured by position.
  * Returns the served models in `entries` order.
  *
- * A model is served in the variant for this machine's GPU: the catalog's
- * entries carry a default variant (fp32, the smallest block), and
- * Catalog.chooseVariant picks the precision and block size the GPU's limits
- * allow, so the entry is tuned here, just before it is served. The session
- * keeps the entries as the catalog gave them, and tunes again on each load. */
+ * A model is served in the variant for this machine's GPU (servedVariant),
+ * so the entry is tuned here, just before it is served. The session keeps
+ * the entries as the catalog gave them, and tunes again on each load. */
 export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain: Chain, options: ServeOptions = {}): Promise<ServedModel[]> {
   const blob = options.blob ?? (await blobFor(chain)).blob;
   const before = ctx.infer.served();
   const kept = new Set<ServedModel>();
   const result: ServedModel[] = [];
-  let limits: Awaited<ReturnType<AppContext["infer"]["gpuLimits"]>> | null = null;
   for (const entry of entries) {
     const current = before.find((s) => s.entry.id === entry.id && blobOf(s) === blob);
     if (current) {
@@ -158,15 +240,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
       result.push(current);
       continue;
     }
-    // Served already through another chain: the same variant again, so the
-    // onnxruntime session is shared; else the variant for this GPU.
-    const previous = before.find((s) => s.entry.id === entry.id);
-    let tuned: ModelEntry;
-    if (previous) tuned = previous.entry;
-    else {
-      limits ??= await ctx.infer.gpuLimits();
-      tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
-    }
+    const tuned = await servedVariant(ctx, entry);
     ctx.log(`Serving ${tuned.name} (${tuned.variant.variant}, ${sizeLabel(tuned.variant.input_size)} voxels, ${tuned.variant.file_mb} MB)`);
     result.push(await ctx.infer.serve(tuned, chain, blob, () => ctx.catalog.modelBytes(tuned)));
   }
@@ -207,7 +281,8 @@ export async function stopServing(ctx: AppContext, name: string, views: readonly
  * set unless the postprocessing changed. Then the shader is dropped (its
  * contrast range belongs to the old chain) but its colour is kept, so the
  * layer the user knows by its colour stays that colour (pipeline.py's
- * previous_shader). */
+ * previous_shader). Each opens on the channel the session shows for it
+ * (shownChannel), which a new chain's source would otherwise lose. */
 export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain, postprocessChanged: boolean, replacing: Record<string, string> = {}): void {
   if (!served.length) return;
   const layers: Record<string, ReturnType<typeof predictionLayer>> = {};
@@ -215,9 +290,50 @@ export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain,
     const name = s.entry.name;
     const current = ctx.viewer.layerShader(name);
     const color = (postprocessChanged ? shaderColor(current?.shader) : null) ?? PREDICTION_COLORS[i % PREDICTION_COLORS.length];
-    layers[name] = predictionLayer(s, chain, color, postprocessChanged ? undefined : (current ?? undefined));
+    const shown = shownChannel(ctx.session.state.shownChannels, name)?.channel ?? null;
+    layers[name] = predictionLayer(s, chain, color, postprocessChanged ? undefined : (current ?? undefined), shown);
   });
   ctx.viewer.setLayers(layers, replacing);
+}
+
+/** The channel the session shows model `name`'s layer on (`shown`, the
+ * session's shownChannels, as POST /api/finetune/channel sets them), and
+ * the model it was picked for: `name`'s own pick, else the pick for the
+ * model it was finetuned from, whose channels are its own (models/
+ * finetuned.ts finetuneNumber; the server's view_labels._model_read_as),
+ * the latest of its series picked: `x-ft2` opens on what `x-ft1` shows,
+ * else on what `x` shows. Null when none is picked. */
+export function shownChannel(shown: Readonly<Record<string, number>>, name: string): { model: string; channel: number } | null {
+  if (Object.hasOwn(shown, name)) return { model: name, channel: shown[name] };
+  let found: { model: string; channel: number; number: number } | null = null;
+  for (const [model, channel] of Object.entries(shown)) {
+    if (finetuneNumber(name, model) === null) continue;
+    const number = Number(/-ft(\d+)$/.exec(model)?.[1] ?? 0);
+    if (!found || number > found.number) found = { model, channel, number };
+  }
+  return found && { model: found.model, channel: found.channel };
+}
+
+/** The channel picked for `model` (the session's shownChannels) shown now
+ * on the layers that open on it (shownChannel: the model's own, and those
+ * of its finetunes that follow its pick), each layer otherwise as it is:
+ * its position on its channel axis is all that changes. A segmentation
+ * layer, an output with no channel axis and a chain that changes the
+ * channel count show none (displayChannel). Answers whether a layer was
+ * changed. */
+export function showChannel(ctx: AppContext, model: string): boolean {
+  const { shownChannels, chain } = ctx.session.state;
+  let changed = false;
+  for (const s of ctx.infer.served()) {
+    const shown = shownChannel(shownChannels, s.entry.name);
+    const layer = shown?.model === model ? ctx.viewer.layer(s.entry.name) : null;
+    if (!shown || layer?.type !== "image") continue;
+    const channel = displayChannel(s.info, chain.postprocess, shown.channel);
+    if (channel === null) continue;
+    ctx.viewer.setLayers({ [s.entry.name]: { ...layer, localPosition: channelPosition(channel) } });
+    changed = true;
+  }
+  return changed;
 }
 
 /** "148" for a cubic block, "148x148x64" otherwise. */

@@ -34,7 +34,7 @@ def test_apply_finetune_folds_in_every_adapted_layer(tmp_path):
     x = torch.rand(1, 1, 8, 8, 8)
     with torch.no_grad():
         y_adapter = peft.eval()(x)
-        y_merged = apply_finetune(Mixed().eval(), lora_adapter_path=str(tmp_path / "adapter"))(x)
+        y_merged = apply_finetune(BatchLoopWrapper(Mixed()), lora_adapter_path=str(tmp_path / "adapter"))(x)
     assert (y_merged - y_adapter).abs().max() <= 1e-6 * y_adapter.abs().max()
 
 

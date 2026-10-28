@@ -1,10 +1,13 @@
-"""Infer what postprocessing a model's raw output needs, from the output itself.
+"""Infer what postprocessing a model's raw output needs, from what its output is.
 
-A model's output activation is observable: feed it extreme inputs and see
-whether the result stays bounded. That tells us what activation is *already*
-baked into the weights, which is enough to catch the common misconfigurations
-(a SigmoidPostprocessor stacked on a model that already ends in a sigmoid, or a
-tanh-range model served without the rescale it needs).
+A model's output activation is read off its network's graph where that
+says it (portable/activation.py: the op that ends it), and is otherwise
+observed: feed it extreme inputs and see whether the result stays bounded,
+a guess, as a network can answer noise with one value everywhere. Either
+tells us what activation is *already* baked into the model, which is enough
+to catch the common misconfigurations (a SigmoidPostprocessor stacked on a
+model that already ends in a sigmoid, or a tanh-range model served without
+the rescale it needs).
 
 Deliberately does NOT try to decide what unbounded output *means*. Raw logits
 and signed-distance predictions are both unbounded and want opposite treatment,
@@ -12,6 +15,7 @@ and nothing in the tensor distinguishes them -- see ``UNBOUNDED`` below.
 """
 
 import logging
+from typing import Optional
 
 # The activation classes and their reading of a range are written once in
 # cellmap_flow.portable, where the browser's Python (a seed's probability)
@@ -75,7 +79,7 @@ NEIGHBORHOOD_OFFSETS = [
 _CLASS_RANGE = {UNIT: (0.0, 1.0), SIGNED_UNIT: (-1.0, 1.0)}
 
 
-def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
+def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None) -> dict:
     """Parameter values for a suggested chain, from the range flowing into each step.
 
     The default parameters assume each step sees the range its most common
@@ -87,8 +91,13 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
     edge) comes out at -0.002 instead of -0.5. The mutex watershed is left with
     essentially no repulsive edges and merges everything.
 
+    ``bias`` is the AffinityPostprocessor's: the cut-off the ranking fitted
+    to the paint for the model (its row's threshold, a probability), or
+    None for the midpoint, 0.5.
+
     Returns ``{postprocessor_name: {param: value}}``, containing only the steps
-    whose defaults are wrong for this chain.
+    whose defaults are wrong for this chain, and the AffinityPostprocessor's
+    bias and neighborhood always.
     """
     params = {}
     rng = _CLASS_RANGE.get(output_class)  # None while the range is unknown
@@ -114,9 +123,11 @@ def suggest_postprocess_params(chain, output_class, out_channels=None) -> dict:
             rng = (0.0, 1.0)
         elif name == "AffinityPostprocessor":
             # It works in [0, 1] (integer 0-255 input is divided by 255); the
-            # mutex watershed needs the midpoint subtracted to get the signed
-            # affinities it is defined on.
-            affinity = {"bias": 0.5}
+            # mutex watershed needs a cut subtracted to get the signed
+            # affinities it is defined on: the midpoint, or the cut-off the
+            # ranking fitted, where its score called a painted pair joined,
+            # so the objects are cut where the score read the model.
+            affinity = {"bias": 0.5 if bias is None else float(bias)}
             if out_channels:
                 offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
                 affinity["neighborhood"] = str(offsets)
@@ -182,25 +193,70 @@ def output_display_range(postprocess_steps, output_class):
     return rng
 
 
+def activation_evidence(output_class_from=None, output_op=None, output_range=None) -> str:
+    """What says a model's output is what it is, in words for the advice
+    (the server's model_info: ``output_class_from``, ``output_op`` and the
+    probe's ``output_range``): its network's last op, which says it for
+    certain, or its output on noise, a guess; "" when nothing is known of
+    either."""
+    if output_class_from == "graph" and output_op:
+        return f"its network ends in {'an' if output_op[0] in 'AEIOU' else 'a'} {output_op}"
+    if output_range is None or None in tuple(output_range):
+        return ""
+    lo, hi = (float(v) for v in output_range)
+    seen = f"its output on noise was {lo:.4g} everywhere" if hi - lo <= 1e-4 else \
+        f"its output on noise ranged from {lo:.4g} to {hi:.4g}"
+    return seen + (": a guess, as its network does not say" if output_class_from == "probe" else "")
+
+
 def review_postprocess(
-    output_class: str,
+    output_class: Optional[str],
     postprocess_names,
     out_channels=None,
     model_name="",
     channels_names=None,
+    evidence="",
+    threshold=None,
 ) -> dict:
-    """Compare an observed output class against the configured postprocessors.
+    """Compare a model's output class against the configured postprocessors.
 
-    Returns ``{"level", "message", "suggest"}`` where ``level`` is one of
-    "ok" / "suggest" / "warn", and ``suggest`` is a list of postprocessor names
-    to apply (empty when the current configuration is already sensible).
+    Returns ``{"level", "message", "suggest", "params"}`` where ``level`` is
+    one of "ok" / "optional" / "suggest" / "warn" / "unknown", ``suggest`` is
+    a list of postprocessor names to apply (empty when the current
+    configuration is already sensible), and ``params`` their values
+    (suggest_postprocess_params).
 
     ``level == "warn"`` means the current chain is actively wrong, not merely
-    unconventional.
+    unconventional. ``"optional"`` offers a chain the model's output shows
+    right without: an affinity model's into a segmentation, once its
+    affinities show as probabilities. The page shows it as a quiet line
+    with its Apply: as a suggestion's banner, over the sigmoid a model's
+    start or the ranking set (portable/rank.py needed_postprocess, an
+    affinity model's logits' too), it read as though that were wrong. A
+    threshold is no fault either: the ranking sets one at the probability
+    the paint is fitted best at, an affinity model's too, so its layer shows
+    the painted pairs' decision the score read. Ahead of an
+    AffinityPostprocessor it is a "warn": the watershed then has no
+    affinities to join objects by.
+
+    ``evidence`` (``activation_evidence``'s) is what says the class, which
+    each message gives. ``output_class`` None, when neither the network nor
+    its output on noise says what the output is, is "unknown", with what
+    the probe saw.
+
+    ``threshold`` is the one the ranking fitted to the paint for this model
+    (its row's, Session.rank_fits), or None when it was not ranked: an
+    affinity chain suggested cuts its objects there (the watershed's bias),
+    where the score called a painted pair joined, and says so; at 0.5
+    without one.
     """
     names = list(postprocess_names or [])
+    said = f" ({evidence})" if evidence else ""
     has_sigmoid = "SigmoidPostprocessor" in names
     has_default = "DefaultPostprocessor" in names
+    has_threshold = "ThresholdPostprocessor" in names
+    # The affinity the watershed joins neighbours above, as the messages say it.
+    cut = "0.5" if threshold is None else f"{threshold} (fitted to your paint)"
 
     def verdict(level, message, suggest):
         """Attach parameter values to whatever chain we are proposing."""
@@ -208,48 +264,88 @@ def review_postprocess(
             "level": level,
             "message": message,
             "suggest": suggest,
-            "params": suggest_postprocess_params(suggest, output_class, out_channels),
+            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold),
         }
+
+    if output_class is None:
+        return verdict(
+            "unknown",
+            (
+                f"Neither this model's network nor its output on noise says what its output is{said}. "
+                "Set its postprocessing yourself: SigmoidPostprocessor if it gives logits, none if probabilities."
+            ),
+            [],
+        )
 
     if looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
-            if not (has_default or has_sigmoid or output_class == UNIT):
+            # Whether the affinities reach it in [0, 1], or the 0-255 of a
+            # DefaultPostprocessor.
+            scaled = has_default or has_sigmoid or output_class == UNIT
+            # The watershed joins neighbours by how far their affinity is
+            # above its bias: a threshold ahead of it leaves 0s and 1s, which
+            # it reads as DefaultPostprocessor's 0-255 and divides by 255, and
+            # no edge reaches the bias. The chain is suggested back without
+            # it, or as the whole affinity chain when nothing else ahead puts
+            # the affinities in [0, 1].
+            ahead = names.index("AffinityPostprocessor")
+            if "ThresholdPostprocessor" in names[:ahead]:
+                rest = [n for i, n in enumerate(names) if i > ahead or n != "ThresholdPostprocessor"]
+                return verdict(
+                    "warn",
+                    (
+                        "A ThresholdPostprocessor comes before the "
+                        "AffinityPostprocessor, so the watershed gets 0s and 1s "
+                        "instead of affinities and finds no objects: take the "
+                        f"threshold out, and neighbours join above {cut}."
+                    ),
+                    rest if scaled else suggest_affinity_chain(output_class),
+                )
+            if not scaled:
                 return verdict(
                     "warn",
                     (
                         "AffinityPostprocessor needs affinities in [0, 1] (or "
                         "the 0-255 that DefaultPostprocessor produces), but "
-                        "this model's output is not bounded to [0, 1] and "
+                        f"this model's output is not bounded to [0, 1]{said} and "
                         "nothing ahead of it rescales it, so the watershed "
                         "works on the wrong values."
                     ),
                     suggest_affinity_chain(output_class),
                 )
             return verdict("ok", "Affinity chain looks complete.", [])
-        return verdict(
-            "suggest",
-            (
-                f"This model has {out_channels} output channels and an affinity "
-                "name, so it probably predicts affinities. The chain below "
-                "converts them to a segmentation."
-            ),
-            suggest_affinity_chain(output_class),
-        )
+        # The chain into a segmentation, offered over whatever shows the
+        # affinities: the ranking's row among them, the sigmoid and the
+        # threshold fitted to the paint (only the threshold on a tanh's or a
+        # sigmoid's output). It replaces the threshold, which would leave the
+        # watershed 0s and 1s, and joins neighbours above the same cut-off.
+        # Unless the activation needs setting first, which the checks below
+        # suggest or warn of: the sigmoid logits with nothing set need, a
+        # second one taken away.
+        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, SIGNED_UNIT) and has_sigmoid)):
+            return verdict(
+                "optional",
+                (
+                    f"its {out_channels} channels look like affinities, which this "
+                    f"chain turns into a segmentation, joined above {cut}."
+                ),
+                suggest_affinity_chain(output_class),
+            )
 
     if output_class == UNIT:
         if has_sigmoid:
             return verdict(
                 "warn",
                 (
-                    "This model's output is already bounded to [0, 1], so it "
-                    "ends in a sigmoid. SigmoidPostprocessor would apply a "
-                    "second one, flattening the contrast."
+                    f"This model's output is already in [0, 1], a sigmoid's{said}. "
+                    "SigmoidPostprocessor would apply a second one, flattening "
+                    "the contrast."
                 ),
                 [n for n in names if n != "SigmoidPostprocessor"],
             )
         return verdict(
             "ok",
-            "Model output is already in [0, 1]; no activation needed.",
+            f"Model output is already in [0, 1]{said}; no activation needed.",
             [],
         )
 
@@ -258,23 +354,24 @@ def review_postprocess(
             return verdict(
                 "warn",
                 (
-                    "This model's output is bounded to [-1, 1] (a tanh head). "
+                    f"This model's output is bounded to [-1, 1], a tanh's{said}. "
                     "A sigmoid on top compresses it to roughly [0.27, 0.73], "
                     "which looks washed out. DefaultPostprocessor is the usual "
                     "choice for this range."
                 ),
                 ["DefaultPostprocessor"],
             )
-        if not has_default:
+        if not (has_default or has_threshold):
             return verdict(
                 "suggest",
                 (
-                    "Model output is in [-1, 1] (a tanh head). "
+                    f"Model output is in [-1, 1], a tanh's{said}. "
                     "DefaultPostprocessor rescales that to 0-255 for display."
                 ),
                 ["DefaultPostprocessor"],
             )
-        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output.", [])
+        return verdict("ok", "DefaultPostprocessor suits this [-1, 1] output." if has_default
+                       else "Model output is in [-1, 1]; the threshold is left as set.", [])
 
     # UNBOUNDED: logits and signed distances are indistinguishable here, so
     # suggest only when nothing at all is configured, and say why it's a guess.
@@ -282,14 +379,15 @@ def review_postprocess(
         return verdict(
             "suggest",
             (
-                "Model output is unbounded, so it has no activation. If these "
-                "are logits, SigmoidPostprocessor converts them to "
-                "probabilities. If they are distances or affinities, leave this "
-                "alone -- the output range cannot tell the two apart."
+                f"Model output has no activation{said}. If these are logits "
+                "(an affinity model's are), SigmoidPostprocessor converts them "
+                "to probabilities. If they are distances, leave this alone -- "
+                "neither the network's last op nor the output's range can tell "
+                "the two apart."
             ),
             ["SigmoidPostprocessor"],
         )
-    return verdict("ok", "Model output is unbounded; current postprocessing left as set.", [])
+    return verdict("ok", f"Model output has no activation{said}; current postprocessing left as set.", [])
 
 
 # --- input normalization -----------------------------------------------------
@@ -331,17 +429,78 @@ def _to_unit_range(lo, hi) -> dict:
 
 SHIFT_TO_SIGNED = {"name": "LambdaNormalizer", "expression": "x*2-1"}
 
+# The input_normalization values metadata_input_norm has logged as not read,
+# so the dashboard's polls do not log them again.
+_unread_logged = set()
+
+
+def metadata_input_norm(input_normalization, data_range):
+    """The input normalization a cellmap-models export's metadata.json
+    declares (its ``input_normalization``), as chain steps
+    (``[{"name", **params}]``), for raw data spanning ``data_range`` (lo,
+    hi); None when it declares none.
+
+    ``{"method": "min_max", "min": a, "max": b}`` says the model reads its
+    input scaled onto [a, b]: a MinMaxNormalizer from the raw data's range
+    onto [0, 1], as the convention's (_to_unit_range), then a
+    LambdaNormalizer onto [a, b], none for [0, 1]. [-1, 1] gives
+    SHIFT_TO_SIGNED's ``x*2-1``, so the declaration is the convention's
+    chain step for step, and a chain set from either matches the other.
+    Another method, or a min or max that is not a number, is not guessed at:
+    it is logged once and declares nothing, as a declaration does without
+    the data's range (no dataset open).
+    """
+    if not input_normalization:
+        return None
+    a = b = None
+    if isinstance(input_normalization, dict) and input_normalization.get("method") == "min_max":
+        try:
+            a, b = float(input_normalization["min"]), float(input_normalization["max"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    if a is None:
+        said = repr(input_normalization)
+        if said not in _unread_logged:
+            _unread_logged.add(said)
+            logger.warning(f"A model's metadata.json input_normalization {said} is not used: "
+                           "only the min_max method, with a number for min and max, is read")
+        return None
+    if data_range is None:
+        return None
+    lo, hi = (float(v) for v in data_range)
+    steps = [_to_unit_range(lo, hi)["MinMaxNormalizer"]]
+    if (a, b) != (0.0, 1.0):
+        steps.append({"name": "LambdaNormalizer", "expression": f"x*{b - a:g}" + (f"{a:+g}" if a else "")})
+    return steps
+
+
+# Where two expressions are compared: a declared "x*2-1" and a typed
+# "2*x-1" are one map, which the text alone did not say.
+EXPRESSION_SAMPLES = (-2.0, -1.0, -0.5, 0.0, 0.25, 0.5, 1.0, 2.0, 255.0)
+
 
 def same_value(configured, declared) -> bool:
     """Whether a configured parameter value is the declared one: numbers by
     value (the form sends "255.0" for a manifest's 255), anything else as
     text, trimmed and without regard to case (a form's "False", Python's
-    False and JSON's false are one value; an expression is compared as
-    written)."""
+    False and JSON's false are one value), and two expressions by what they
+    give at EXPRESSION_SAMPLES, each through the whitelist LambdaNormalizer
+    runs it through (compile_expression)."""
     try:
         return float(configured) == float(declared)
     except (TypeError, ValueError):
-        return str(configured).strip().lower() == str(declared).strip().lower()
+        pass
+    if str(configured).strip().lower() == str(declared).strip().lower():
+        return True
+    import numpy as np
+
+    from cellmap_flow.norm.safe_expression import compile_expression
+
+    try:
+        x = np.asarray(EXPRESSION_SAMPLES, dtype=np.float64)
+        return bool(np.allclose(compile_expression(str(configured))(x), compile_expression(str(declared))(x)))
+    except Exception:
+        return False
 
 
 def input_norm_differences(configured_steps, declared) -> list:

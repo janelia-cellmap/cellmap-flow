@@ -67,6 +67,9 @@ class FinetuneJob:
     latest_loss_epoch: Optional[int] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
+    # The network's parameters before any adapter (markers.NETWORK_PARAMETERS):
+    # the size of a published copy of its weights, which the Publish panel says.
+    network_parameters: Optional[int] = None
     # The corrections directory the job trains on. The restart route reads it
     # to refresh the manifest; it was never set, so a restart silently kept
     # the old patches_per_epoch, rehearsal fraction, input norm and
@@ -75,6 +78,10 @@ class FinetuneJob:
     # Set by cancel_job before it kills the job, so the monitor reports the
     # exit that follows as CANCELLED rather than FAILED.
     cancel_requested: bool = False
+    # The queues a job still waiting for a GPU moves on to
+    # (submit.QueueFallback), from its submission; None for a job found
+    # again by a dashboard started later, which waits where it is.
+    fallback: Optional[Any] = None
     _processed_iteration_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:

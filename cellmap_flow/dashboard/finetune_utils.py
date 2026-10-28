@@ -11,6 +11,7 @@ import shutil
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync as session_sync
+from cellmap_flow.finetune.session.store import SessionStore
 
 
 # ---------------------------------------------------------------------------
@@ -65,3 +66,12 @@ def sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None):
     return session_sync.sync_volume(
         volume_id, force, zarr_path, state=session.minio_state, volumes=session.annotation_volumes
     )
+
+
+def retire_annotation_volume(volume_id):
+    """``session.sync.retire_volume`` for the dashboard's MinIO and volume
+    registry: the volume's last strokes pulled, then out of the session and
+    moved to its corrections dir's ``superseded/``; returns where it went."""
+    session = get_session()
+    store = SessionStore(session.output_sessions, session.annotation_volumes)
+    return session_sync.retire_volume(volume_id, store, state=session.minio_state)

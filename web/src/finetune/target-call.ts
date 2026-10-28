@@ -12,11 +12,19 @@
 // the server's rule in autodetect_output_type: a model with a channel named
 // `*_aff*` is an affinity model, its first affinity channels along z, y and
 // x; every other model is a binary one, the one target broadcast to all its
-// channels). The server takes offsets from a model's script when it has
-// one; the browser has no script, and the manifests on Hugging Face say no
-// offsets (none of the seven did on 2026-10-21), so the names are all it
-// has, read by the one rule. The channels past the offsets (LSDs, say)
-// train nothing in both modes.
+// channels, or with a channel picked, that channel's alone). The server
+// takes offsets from a model's script when it has one; the browser has no
+// script, and the manifests on Hugging Face say no offsets (none of the
+// seven did on 2026-10-21), so the names are all it has, read by the one
+// rule. The channels past the offsets (LSDs, say) train nothing in both
+// modes.
+//
+// A binary model of several channels (fly_organelles' all_mem, organelle,
+// mito, er, ...) trains one channel at a time (channelChoice): the paint
+// says what one class is, and broadcast to every channel it taught each of
+// them that class. The run's channel (FinetuneOptions.selectChannel) is the
+// one its target is made for, as the server's select_channel makes a
+// one-channel target for the prediction sliced to that channel.
 //
 // A chunk is one sample without the batch axis: its labels are its voxels
 // in C order (z, y, x), and a target or mask is `channels × N` values with
@@ -24,23 +32,38 @@
 // server's (0, c, z, y, x) once the batch is gone.
 import type { Inference, ModelEntry } from "../contracts";
 import type { PaintedChunk, Targets, TargetTransform } from "./types";
+import { hasAffinityChannels } from "./volume";
 
 /** The portable Python's entry point for targets, by module path and name. */
 const TARGETS = "cellmap_flow.portable.targets_calls:targets";
 
+/** Whether `entry` trains one of its channels at a time, so that a run
+ * needs the channel its paint is for (the models route answers it as
+ * `channel_choice`, and submit refuses a run without the pick): more than
+ * one output channel, and not an affinity model, each of whose channels
+ * has a target of its own. The rule the targets are made by, which the
+ * browser's routes already read as hasAffinityChannels (the server's
+ * `*_aff*` test, the Python's label_it.affinity_offsets) rather than ask
+ * the Python on every poll of the models' list; the browser makes no flow
+ * targets (Cellpose has no web export), so flows need no test here. */
+export function channelChoice(entry: ModelEntry): boolean {
+  return entry.manifest.channels.length > 1 && !hasAffinityChannels(entry);
+}
+
 /** The transform a model's labels train it with, each chunk's targets made
  * by `infer`'s Python from the model's channel names: affinities for a
  * model with affinity channels, the binary target on every channel
- * otherwise. */
-export function targetTransformFor(entry: ModelEntry, infer: Pick<Inference, "python">): TargetTransform {
+ * otherwise, or with `channel` (an index into the model's channels, not for
+ * an affinity model) that channel's target alone, one channel. */
+export function targetTransformFor(entry: ModelEntry, infer: Pick<Inference, "python">, channel: number | null = null): TargetTransform {
   const channels = entry.manifest.channels;
   if (!channels.length) throw new Error(`${entry.name}'s manifest names no output channels to train`);
-  const C = channels.length;
+  const C = channel === null ? channels.length : 1;
   return async (chunk: PaintedChunk): Promise<Targets> => {
     const n = voxelsOf(chunk);
     const labels_dtype = chunk.labels instanceof Uint16Array ? "uint16" : "uint8";
     const { arrays } = await infer.python<{ value: { channels: number }; arrays: ArrayBuffer[] }>(
-      TARGETS, { shape: chunk.shape, labels_dtype, channels: C, channel_names: channels }, [bytesOf(chunk.labels)]);
+      TARGETS, { shape: chunk.shape, labels_dtype, channels: channels.length, channel_names: channels, select_channel: channel }, [bytesOf(chunk.labels)]);
     const target = new Float32Array(arrays[0]), mask = new Float32Array(arrays[1]);
     if (target.length !== C * n || mask.length !== C * n) throw new Error(`the Python's targets have ${target.length} and ${mask.length} values for ${C} channel(s) of ${n} voxels`);
     return { channels: C, target, mask };

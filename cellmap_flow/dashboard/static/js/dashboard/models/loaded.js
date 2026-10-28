@@ -8,7 +8,7 @@
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
-import { tag } from "./row.js";
+import { tag } from "../../shared/model-list.js";
 
 // The sources services/launch.SOURCES names, as the list labels them.
 const SOURCE_LABELS = {
@@ -46,7 +46,11 @@ export function init({ untick, log }) {
     // one wraps between its words.
     const name = h("span", { class: "loaded-model-name", title: model.name },
       model.name.split(/(?<=[_.-])/).flatMap((part, i) => (i ? [h("wbr"), part] : [part])));
-    const status = model.status && model.status !== "running" ? tag(model.status) : null;
+    // The browser mode's "waiting": no volume is open to run it on yet,
+    // said as what to do.
+    const status = model.status && model.status !== "running"
+      ? (model.status === "waiting" ? tag("needs a volume", "It runs on the volume you open in the viewer.") : tag(model.status))
+      : null;
     if (status) status.classList.add("loaded-model-status");
     const remove = h("button", {
       type: "button", class: "loaded-model-remove", "aria-label": "Remove " + model.name, disabled: !model.removable,
@@ -59,13 +63,14 @@ export function init({ untick, log }) {
         model.detail ? h("div", { class: "loaded-model-detail", title: model.detail }, model.detail) : null,
         model.note ? h("div", { class: "loaded-model-note" }, model.note) : null),
       // The title is on the span around the button: a disabled button gets
-      // no mouse events, so its own would never show.
+      // no mouse events, so its own would never show. A finetuned model's
+      // note says what its ✕ does, which the general line gets wrong.
       h("span", {
         class: "loaded-model-remove-wrap",
-        title: model.removable
+        title: model.note || (model.removable
           ? "Stop " + model.name + " and remove its layer; the other models stay as they are. "
             + "Tick it again and Submit to bring it back."
-          : (model.note || "This model cannot be removed here."),
+          : "This model cannot be removed here."),
       }, remove));
   }
 
@@ -73,14 +78,17 @@ export function init({ untick, log }) {
     list.replaceChildren(...models.map(row));
     document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
     const startingCount = models.filter((m) => m.status === "starting").length;
+    const waitingCount = models.filter((m) => m.status === "waiting").length;
     const counts = [];
-    if (models.length - startingCount) counts.push((models.length - startingCount) + " running");
+    if (models.length - startingCount - waitingCount) counts.push((models.length - startingCount - waitingCount) + " running");
     if (startingCount) counts.push(startingCount + " starting");
+    if (waitingCount) counts.push(waitingCount + " waiting for a volume");
     document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
     // The Cellpose panel's "N running", after a remove or a Submit as on load.
     const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
     document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
-    starting = startingCount > 0;
+    // Asked again while one waits too: opening a volume serves it.
+    starting = startingCount + waitingCount > 0;
   }
 
   // Quietly: a failed refresh leaves the list as it was.
@@ -92,6 +100,9 @@ export function init({ untick, log }) {
   }
 
   function removeLoaded(model, button) {
+    // When ✕ does more than stop the model (a finetune job's, which it
+    // cancels), the entry says what, to be asked first.
+    if (model.confirm && !confirm(model.confirm)) return;
     button.disabled = true;
     postJSON("/api/models/remove", { name: model.name })
       .then((data) => {

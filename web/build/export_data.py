@@ -3,9 +3,13 @@
 
 The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
-their parameters, the chain a fresh session starts with, the organelle
+their parameters, the chain a fresh session starts with, the offsets the
+model advice's affinity chain gives the mutex watershed, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
-ranking's constants, the finetune log's patterns and the unit table. This
+ranking's constants, the learning rate's floor, the finetune log's patterns,
+the unit table, the version a model published from the browser names, the
+query parameters of the app's links and the Hugging Face sign-in's client id
+and scopes. This
 script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
@@ -39,8 +43,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 WEB = Path(__file__).resolve().parents[1]
 OUT = WEB / "src" / "generated" / "python-data.json"
 
-# The chains a fresh browser session starts with, ticked on the Input and
-# Postprocess tabs with these values (build/render.py) and served by the app
+# The chains a fresh browser session starts with, ticked on the Processing
+# tab with these values (build/render.py) and served by the app
 # (web/src/state/index.ts). The six models in Hugging Face's
 # cellmap/onnx-web-models were trained on uint8 raw scaled to [-1, 1] and
 # output logits, so this is what every one of them wants: anything else gives
@@ -85,6 +89,7 @@ def python_data():
     ``_NM_PER_UNIT``): read here by name, so renaming one fails this export
     and its freshness test.
     """
+    import cellmap_flow
     from cellmap_flow.ai_annotate import config as ai_config
     from cellmap_flow.ai_annotate import geometry as ai_geometry
     from cellmap_flow.ai_annotate import images as ai_images
@@ -92,19 +97,44 @@ def python_data():
     from cellmap_flow.dashboard.routes.finetune import ai_annotate as ai_routes
     from cellmap_flow.dashboard.routes.finetune import view_labels
     from cellmap_flow.finetune import markers
-    from cellmap_flow.portable import rank
+    from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
+    from cellmap_flow.portable import publish, rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
     from cellmap_flow.post.postprocessors import get_postprocessors_list
+    from cellmap_flow.serving import probe
     from cellmap_flow.viewer import layers, raw
 
     return {
+        # The release, which a model published to Hugging Face from the
+        # browser names in its card and manifest (web/src/publish/model.ts
+        # hands it to cellmap_flow/portable/publish.py).
+        "version": cellmap_flow.__version__,
+        # The query parameters of the app's links, which a published model's
+        # card writes (portable/publish.py) and web/src/link.ts reads back.
+        "links": {"model_param": publish.MODEL_PARAM, "dataset_param": publish.DATASET_PARAM},
+        # Sign in with Hugging Face (web/src/publish/oauth.ts), as the
+        # server's sign-in asks for it too.
+        "huggingface": {
+            "oauth_client_id": publish.HF_OAUTH_CLIENT_ID,
+            "oauth_scopes": list(publish.HF_OAUTH_SCOPES),
+            # What both modes' publish routes answer in fixed words.
+            "sign_in_first": publish.SIGN_IN_FIRST,
+            "token_refused": publish.TOKEN_REFUSED,
+            "read_only": publish.READ_ONLY,
+            # A server's smaller copy's folder (web/src/models/index.ts).
+            "small_suffix": publish.SMALL_SUFFIX,
+        },
         "ops": {
             "input_norm": ops(get_input_normalizers()),
             "postprocess": ops(get_postprocessors_list()),
         },
         "default_chain": DEFAULT_CHAIN,
+        # The model advice's (serving/probe.py): the mutex watershed's
+        # offsets, cut to an affinity model's channels in the chain into a
+        # segmentation it offers.
+        "advice": {"neighborhood_offsets": probe.NEIGHBORHOOD_OFFSETS},
         "ai_annotate": {
             "organelles": [asdict(profile) for profile in organelles.ORGANELLES.values()],
             "aliases": organelles._ALIASES,
@@ -135,6 +165,8 @@ def python_data():
             "narrow_window": rank.NARROW_WINDOW,
             "window_margin": rank.WINDOW_MARGIN,
             "cutoffs": rank.CUTOFFS.tolist(),
+            # The share of the form's rate every run eases down to (options.py).
+            "learning_rate_floor": LEARNING_RATE_FLOOR,
             "job_statuses": [status.value for status in JobStatus],
             "terminal_statuses": sorted(status.value for status in TERMINAL_STATUSES),
             "epoch_start": regex(markers.EPOCH_START_RE),

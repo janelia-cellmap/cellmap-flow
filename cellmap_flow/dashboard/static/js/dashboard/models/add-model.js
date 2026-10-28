@@ -1,19 +1,13 @@
 // Add a model: resolve what was pasted (POST /api/models/resolve), ask for
-// what it still needs, and run it (POST /api/models/add). The model then
-// gets a ticked box among the catalog's (catalog.addedBox), so Submit keeps
-// it running.
+// what it still needs, and run it (POST /api/models/add), in the field every
+// model list's Add a model is (shared/model-list.js addModelField). The
+// model then gets a ticked box among the catalog's (catalog.addedBox), so
+// Submit keeps it running.
 import { ApiError, postJSON } from "../../lib/api.js";
-import { h } from "../../lib/dom.js";
 import { announce, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { isBrowserMode } from "../../lib/page-data.js";
+import { addModelField, neededField } from "../../shared/model-list.js";
 import { addedBox } from "./catalog.js";
-
-// How a needed value is asked for: its label and an example.
-const NEEDED = {
-  voxel_size: ["Voxel (nm)", "8, or 40,4,4"],
-  input_voxel_size: ["Input voxel (nm)", "8, or 40,4,4"],
-  channels: ["Channels", "mito, er"],
-  base_model: ["Base model", '{"type": ...}'],
-};
 
 // A typed value as the entry wants it: numbers and lists of numbers as
 // such, a JSON object (a finetune's base_model) parsed, else the text.
@@ -30,55 +24,56 @@ function typed(text) {
 
 // ``log(line)`` writes to the tab's submission log.
 export function init({ log }) {
-  const addRef = document.getElementById("addModelRef");
-  const addResult = document.getElementById("addModelResult");
-  const addFields = document.getElementById("addModelFields");
   let resolved = null;
+  // The browser's resolve (web/src/models/index.ts) reads Hugging Face refs
+  // only.
+  const field = addModelField({
+    id: "addModelRef", button: "Resolve",
+    ...(isBrowserMode() ? {
+      placeholder: "owner/repo/folder on Hugging Face, or setup_54...",
+      title: "A model folder of any public Hugging Face model repo laid out as cellmap/onnx-web-models is (owner/repo/folder, a folder with a manifest.json and its .onnx files), the repo alone when it holds one model, its huggingface.co URL, or a folder of cellmap/onnx-web-models (setup_54). The repo's models are listed under Hugging Face from then on.",
+    } : {
+      placeholder: "Hugging Face repo, zoo model, Cellpose model, path...",
+      title: "Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.",
+    }),
+    onSubmit: resolve,
+  });
+  // web/src/model-file.ts presses it once an opened file is kept.
+  field.button.id = "addModelResolveBtn";
+  // Before the browser's Open an .onnx file and the boxes of the models added.
+  document.getElementById("addModel").prepend(field.element);
 
-  function field(label, key, value, title, placeholder) {
-    const id = "addModel_" + key;
-    addFields.append(
-      h("label", { for: id }, label),
-      h("input", {
-        class: "form-control form-control-sm", id, dataset: { key }, value: value || "",
-        title: title || null, placeholder: placeholder || null,
-      }),
-    );
-  }
-
-  function showResolved(d) {
-    resolved = d;
-    addResult.hidden = false;
-    addFields.replaceChildren();
-    const env = d.env ? `runs in ${d.env}` : "runs in this environment";
-    document.getElementById("addModelSummary").textContent = `${d.type}: ${d.how} (${env})`;
-    document.getElementById("addModelNotes").textContent = (d.notes || []).join(" ");
-    field("Name", "name", d.name, "The model's name: its layer and job are called so.");
-    (d.needs || []).forEach((key) => {
-      const [label, example] = NEEDED[key]
-        || [key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, " "), ""];
-      field(label, key, "", "Not known from the reference: give it here (numbers as 8 or 40,4,4).", example);
-    });
-  }
-
-  document.getElementById("addModelResolveBtn").addEventListener("click", () => {
-    const ref = addRef.value.trim();
-    if (!ref) return;
+  function resolve(ref) {
     postJSON("/api/models/resolve", { ref })
-      .then(showResolved)
+      .then((d) => {
+        resolved = d;
+        const env = d.env ? `runs in ${d.env}` : "runs in this environment";
+        field.show({
+          summary: `${d.type}: ${d.how} (${env})`,
+          notes: (d.notes || []).join(" "),
+          fields: [
+            { key: "name", label: "Name", value: d.name, title: "The model's name: its layer and job are called so." },
+            ...(d.needs || []).map(neededField),
+          ],
+          action: "Run",
+          actionTitle: "Start its server now; it joins the models below, ticked, until unticked",
+          onAction: run,
+        });
+      })
       .catch((err) => {
-        addResult.hidden = true;
+        field.hide();
         alert("Could not resolve that model: " + (err instanceof ApiError ? err.message : err));
       });
-  });
+  }
 
-  document.getElementById("addModelRunBtn").addEventListener("click", () => {
+  // ``values``: the fields' text by key, the name and what it needs.
+  function run(values) {
     if (!resolved) return;
     const entry = { type: resolved.type, ...resolved.params, name: resolved.name };
     try {
-      addFields.querySelectorAll("input").forEach((input) => {
-        if (input.value.trim() !== "") entry[input.dataset.key] = typed(input.value);
-      });
+      for (const [key, text] of Object.entries(values)) {
+        if (text.trim() !== "") entry[key] = typed(text);
+      }
     } catch (e) {
       alert("Could not read a value: " + e.message);
       return;
@@ -91,11 +86,11 @@ export function init({ log }) {
     postJSON("/api/models/add", { entry })
       .then((d) => {
         addedBox(d.name);
-        addResult.hidden = true;
-        addRef.value = "";
+        field.hide();
+        field.input.value = "";
         log(`Added ${d.name}: starting its server`);
         announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
-  });
+  }
 }

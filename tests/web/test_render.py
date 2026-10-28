@@ -46,6 +46,7 @@ def test_the_page_renders_in_both_modes(page, dashboard):
     assert 'href="./static/css/dark.css"' in page
     assert not re.search(r"\burl_for\(|{[{%#]", page), "Jinja left in the page"
     assert "serverConfigModal" not in page, "the LSF first-run dialog is not on the page"
+    assert 'id="log-panel"' not in page, "no server logs: its stream is a route the browser cannot answer"
     # What only a server can serve is marked for browser.css to hide: the
     # Pipeline Builder, and the Local Catalog of cluster paths, say.
     assert re.search(r'<a class="[^"]*server-only[^"]*" href="/pipeline-builder"', page)
@@ -55,6 +56,7 @@ def test_the_page_renders_in_both_modes(page, dashboard):
     assert "data-mode" not in html and "src/main.ts" not in html and "browser.css" not in html
     assert re.search(r'<script type="module" src="/static/js/dashboard/main.js"></script>', html)
     assert _page_data(html)["mode"] == "server"
+    assert 'id="log-panel"' in html
 
     viewport = '<meta name="viewport" content="width=device-width, initial-scale=1" />'
     assert viewport in page and viewport in html
@@ -66,7 +68,7 @@ def test_the_page_data_island_parses(page):
 
 
 def _rows(html, row_class, checkbox_class):
-    """(name, checked, {param: value}) for each Input/Postprocess row, in page order."""
+    """(name, checked, {param: value}) for each row of a Processing tab list, in page order."""
     rows = []
     for block in re.split(rf'<div class="{row_class} ', html)[1:]:
         checkbox = re.search(rf'<input[^>]*class="form-check-input {checkbox_class}"[^>]*>', block, re.S).group(0)

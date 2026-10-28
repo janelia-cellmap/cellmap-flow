@@ -1,8 +1,9 @@
-// The Input and Postprocess lists (templates/_input_tab.html and
-// _output_tab.html), which the server renders: one row per op, the
-// configured chain first in the order it runs (an op used twice has two
-// rows), then every other op unticked. Each row has a drag handle, a
-// checkbox whose value is the op's name, and its parameter fields.
+// The Processing tab's two lists, its input normalizers and its
+// postprocessing (templates/_processing_tab.html), which the server renders:
+// one row per op, the configured chain first in the order it runs (an op
+// used twice has two rows), then every other op unticked. Each row has a
+// drag handle, a checkbox whose value is the op's name, and its parameter
+// fields.
 //
 // mountOpChain attaches their behaviour: dragging a row by its handle moves
 // it, ticking it shows its parameters, and getChain() reads the ticked rows
@@ -10,9 +11,9 @@
 //
 // It also keeps the chain the backend runs, as this list last sent it or
 // was shown it (markApplied), so pendingChanges() can say how far the list
-// has moved from it: the Apply bar at the top of each tab
-// (templates/_apply_bar.html, js/dashboard/main.js) shows that count, and
-// nothing reaches the backend until Apply is pressed.
+// has moved from it: the tab's Apply bar (js/dashboard/main.js) shows the
+// two lists' counts together, and nothing reaches the backend until Apply is
+// pressed.
 import { makeSortable } from "../lib/sortable.js";
 
 const KINDS = {

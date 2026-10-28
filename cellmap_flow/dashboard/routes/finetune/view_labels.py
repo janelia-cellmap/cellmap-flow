@@ -2,7 +2,8 @@
 
 Two buttons beside "Mark This View as Good", over the same box (one model
 output patch centred where the viewer looks, ``good_regions.view_box_nm``,
-or ``box_voxels`` annotation voxels when the request gives them):
+or ``box_voxels`` annotation voxels when the request gives them; with
+``field_of_view``, what the viewer's panel shows, ``_field_of_view_nm``):
 
 - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
   segmented into objects, each written with an id of its own (2 and up),
@@ -41,6 +42,7 @@ import tensorstore as ts
 import worldarray as wa
 from flask import jsonify, request
 
+from cellmap_flow.ai_annotate import geometry
 from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
@@ -59,6 +61,7 @@ from cellmap_flow.portable.label_it import SEED_METHODS, probability
 from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.viewer.layers import prediction_url, prediction_voxel_override
+from cellmap_flow.viewer.raw import view_of
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +104,12 @@ def _error(message, status, **extra):
 
 
 def _target_box(data):
-    """``(volume_id, volume, lo, hi)``: the session's volume and the box's voxels in it."""
+    """``(volume_id, volume, lo, hi)``: the session's volume and the box's voxels in it.
+
+    The box is centred where the viewer looks: ``size_nm``, or
+    ``box_voxels``, or one output patch; with ``field_of_view``, what the
+    viewer's panel shows, ``box_voxels`` saying only its depth.
+    """
     volume_id, volume = session_store().session_volume()
     if volume is None:
         raise _Refused("No annotation volume to label. Create or resume one first.", needs_volume=True)
@@ -111,8 +119,11 @@ def _target_box(data):
                        needs_volume=True)
     try:
         size_nm = data.get("size_nm")
-        if data.get("box_voxels") is not None:
-            size_nm = _box_nm(data["box_voxels"], volume)
+        box_nm = _box_nm(data["box_voxels"], volume) if data.get("box_voxels") is not None else None
+        if data.get("field_of_view"):
+            size_nm = _field_of_view_nm(data.get("viewer_px"), volume, box_nm)
+        elif box_nm is not None:
+            size_nm = box_nm
         centre_nm, size_nm = view_box_nm(size_nm)
     except ValueError as e:
         raise _Refused(str(e), 400)
@@ -139,6 +150,30 @@ def _box_nm(box_voxels, volume):
     if voxels.size not in (1, 3) or not np.all(np.isfinite(voxels)) or np.any(voxels < 1):
         raise ValueError(refusal)
     return (np.repeat(voxels, 3 // voxels.size) * np.asarray(volume["output_voxel_size"], dtype=float)).tolist()
+
+
+def _field_of_view_nm(viewer_px, volume, box_nm=None):
+    """The size in nm of what the viewer's panel shows, ``box_nm``'s depth
+    deep along the axis it looks along when the request gives a box, else
+    one voxel: ``label_it.field_of_view_nm``, as the browser's routes have
+    it, of the session viewer's state and ``viewer_px``, the size of the
+    page's frame of it, which only the page knows.
+
+    The panel's plane is the AI annotation's (``geometry.depth_axis_for_view``),
+    its zoom the raw's contrast reads (``view_of``'s pixel size). A
+    ValueError when there is no viewer or the view cannot be taken.
+    """
+    viewer = get_session().viewer
+    if viewer is None:
+        raise ValueError("Viewer not initialized")
+    state = viewer.state
+    view = view_of(state)
+    depth_axis = geometry.depth_axis_for_view(state)
+    return label_it.field_of_view_nm(
+        viewer_px, state.to_json(), view.pixel_nm if view else None, depth_axis,
+        geometry.display_dimensions_for_view(state), volume["output_voxel_size"],
+        None if box_nm is None else box_nm[depth_axis],
+    )
 
 
 def _confirmation_needed(data, lo, hi):
@@ -507,9 +542,13 @@ def segment_prediction(method, prediction, output_class, channels, offsets, thre
 def seed_view_from_prediction():
     """Fill the unannotated voxels of the box on screen from the model's prediction.
 
-    JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
+    JSON body, all optional: ``size_nm`` (as for mark-view) or
+    ``box_voxels``, ``field_of_view`` with ``viewer_px`` (the box is what
+    the viewer's panel shows, ``box_voxels`` its depth), ``confirm``
     (label a large box), ``select_channel`` (the channel the session
-    trains, when it trains one), ``model`` (a name from ``seed_sources``;
+    trains, when it trains one: an index into the volume's model's
+    channels, so read only from that model or one of its finetunes),
+    ``model`` (a name from ``seed_sources``;
     the latest finetune, else the base, when absent), ``method`` (one of
     the model's ``seed_sources`` methods; "components" when absent),
     ``threshold`` (probability, 0 to 1; the model's own boundary, 0.5, when
@@ -537,14 +576,17 @@ def seed_view_from_prediction():
                 "Pick the model to seed from under Prediction from: the volume was made before a model was chosen."
             )
         # The model read decides the channels: a finetune's are its base's.
-        channels, output_type, offsets = _seed_plan(
-            _model_read_as(model_name, base_model), data.get("select_channel")
-        )
+        read_as = _model_read_as(model_name, base_model)
+        # The session's channel (the training form's Channel) numbers the
+        # volume's model's channels, so only that model and its finetunes
+        # read it; any other seeds as it would without it (a one-channel
+        # model is not asked for the volume model's channel 2).
+        select_channel = data.get("select_channel") if read_as == base_model else None
+        channels, output_type, offsets = _seed_plan(read_as, select_channel)
         offered = seed_methods(model_name, host, base_model)
         if method not in offered:
             raise _Refused(f"{model_name} cannot seed by {method}; it offers {', '.join(offered)}", 400)
         info = fetch_model_info(host)
-        read_as = _model_read_as(model_name, base_model)
         cellpose_masks = method == "instances" and _serves_cellpose_flows(read_as)
         if cellpose_masks:
             # Its server makes Cellpose's masks of its flows on asking.
@@ -561,7 +603,7 @@ def seed_view_from_prediction():
         )
         # An instance target needs ids apart from its neighbours'; a selected
         # channel trains as a binary target.
-        instance_target = output_type in INSTANCE_TARGETS and data.get("select_channel") is None
+        instance_target = output_type in INSTANCE_TARGETS and select_channel is None
 
         def labels_for(existing):
             # Ids counting up need room: an instance target on a uint16/uint32
@@ -588,7 +630,8 @@ def seed_view_from_prediction():
 def label_view_background():
     """Label every unannotated voxel of the box on screen background (1).
 
-    JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+    JSON body, all optional: the box (``size_nm``, ``box_voxels``,
+    ``field_of_view``) and ``confirm``, as for seed.
     """
     data = request.get_json(silent=True) or {}
     try:
@@ -613,10 +656,12 @@ def split_view_objects():
     For a merge the model made: paint a background wall through the object,
     in every slice it spans, and click; the two sides get ids of their own
     (``fill.relabel_objects``). A stroke joining two objects merges them.
-    JSON body, all optional: ``size_nm`` and ``confirm``, as for seed;
-    ``connectivity`` and ``per_slice``, as for a seed's components (with
-    ``per_slice``, a wall in one slice is enough, and each slice of an
-    object gets an id of its own).
+    JSON body, all optional: the box (``size_nm``, ``box_voxels``,
+    ``field_of_view``) and ``confirm``, as for seed; ``connectivity`` and
+    ``per_slice``, as for a seed's components (with ``per_slice``, a wall
+    in one slice is enough, and each slice of an object gets an id of its
+    own). A field of view one slice deep is that slice alone, so a wall
+    there splits the object in it.
     """
     data = request.get_json(silent=True) or {}
     try:

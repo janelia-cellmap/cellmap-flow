@@ -107,10 +107,9 @@ def _merged(case, exported):
     from cellmap_flow.finetune.export_merged import apply_finetune
 
     kind, lora = CASES[case][:2]
-    eager = _net(kind).model.eval()
     if lora:
-        return apply_finetune(eager, lora_adapter_path=str(exported))
-    return apply_finetune(eager, weights_path=str(exported))
+        return apply_finetune(_net(kind), lora_adapter_path=str(exported))
+    return apply_finetune(_net(kind), weights_path=str(exported))
 
 
 @pytest.mark.parametrize("case", [

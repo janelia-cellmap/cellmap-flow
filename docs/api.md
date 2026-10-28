@@ -1,6 +1,6 @@
 # The dashboard's routes
 
-Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (47) the server dashboard and the browser app, **stub** (7) both, the browser with a fixed or empty answer in the server's shape, **server** (36) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (5) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
+Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (54) the server dashboard and the browser app, **stub** (6) both, the browser with a fixed or empty answer in the server's shape, **server** (36) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (5) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
 
 | Method | Path | Answered by | Body |
 |---|---|---|---|
@@ -63,7 +63,7 @@ Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m 
 | POST | `/api/finetune/load-existing-volume` | both |  |
 | GET | `/api/finetune/load-existing-volume-progress` | stub |  |
 | POST | `/api/finetune/sync-annotations` | stub |  |
-| POST | `/api/finetune/refresh-annotated-regions` | stub |  |
+| POST | `/api/finetune/refresh-annotated-regions` | both |  |
 | GET | `/api/finetune/session-volume` | browser |  |
 | GET | `/api/finetune/volume/<volume_id>/download` | browser |  |
 | POST | `/api/finetune/delete-volume` | browser |  |
@@ -79,13 +79,19 @@ Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m 
 | POST | `/api/finetune/job/<job_id>/stop-early` | both |  |
 | POST | `/api/finetune/job/<job_id>/restart` | both | `FinetuneRestart` |
 | GET | `/api/finetune/model/<name>/download` | browser |  |
+| GET | `/api/huggingface/credentials` | both |  |
+| POST | `/api/huggingface/credentials` | both | `HuggingFaceCredentials` |
+| POST | `/api/finetune/model/<name>/publish` | both | `FinetunePublish` |
+| GET | `/api/finetune/model/<name>/publish` | both |  |
 | GET | `/api/finetune/good-regions` | both |  |
 | POST | `/api/finetune/good-regions/mark-view` | both |  |
 | POST | `/api/finetune/good-regions/delete` | both |  |
 | GET | `/api/finetune/rank/candidates` | both |  |
+| POST | `/api/finetune/rank/add` | both | `ResolveModel` |
 | POST | `/api/finetune/rank/score` | both |  |
 | POST | `/api/finetune/rank/use` | both |  |
-| POST | `/api/finetune/rank/window` | both |  |
+| POST | `/api/finetune/rank/input-norm` | both |  |
+| POST | `/api/finetune/channel` | both |  |
 | GET | `/api/finetune/view-labels/sources` | both |  |
 | POST | `/api/finetune/view-labels/seed` | both |  |
 | POST | `/api/finetune/view-labels/background` | both |  |

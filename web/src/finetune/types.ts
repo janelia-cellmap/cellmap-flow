@@ -123,6 +123,12 @@ export type HeadLoss = "bce" | "mse" | "margin";
  * decide instead (the server's "anchor" scope): run.ts. */
 export type DistillationScope = "unlabeled" | "all";
 
+/** What the learning rate does over a run, as the form's Ease down box
+ * says it (the server's learning_rate_schedule): "cosine" eases it from the
+ * form's down to LEARNING_RATE_FLOOR of it by the last step, "constant"
+ * keeps the form's for every step (schedule.ts learningRateAt). */
+export type LearningRateSchedule = "cosine" | "constant";
+
 /** The training parameters, as the Finetune tab's form sends them to
  * /api/finetune/submit and the routes read them. */
 export interface FinetuneOptions {
@@ -131,7 +137,9 @@ export interface FinetuneOptions {
    * own batch and tile below, and augmentation, but not batchPixels. */
   mode: FinetuneMode;
   epochs: number;
+  /** The rate a run starts at, which learningRateSchedule then eases down or keeps (schedule.ts). */
   learningRate: number;
+  learningRateSchedule: LearningRateSchedule;
   /** The supervised loss on the painted voxels (HeadLoss). */
   lossType: HeadLoss;
   /** The margin loss's margin m: a foreground voxel costs nothing once its
@@ -162,6 +170,16 @@ export interface FinetuneOptions {
    * noise, flips and quarter turns, as the server's augmentation
    * (augment.ts); the head trains on features computed once, and ignores it. */
   augment: boolean;
+  /** The one output channel the paint is for, by index into the model's
+   * channels (the server's select_channel), or null to train every channel
+   * on the paint (one target for a model of one channel, each its own for
+   * an affinity model). A model of several channels that are not affinities
+   * trains one at a time (target-call.ts channelChoice), as the routes
+   * require: that channel gets the paint's target, and the others stay as
+   * the model had them, in the head by their rows of it left untouched
+   * (run.ts), in the whole network by a hold to the starting network's
+   * prediction (full/loss.ts lossTerms). */
+  selectChannel: number | null;
 }
 
 /** How a run speaks to the job that follows it: its log lines, in the words
@@ -223,10 +241,10 @@ export interface GoodRegion {
 
 /** One finetune of `entry` on the paint of `volume`: the samples read through
  * `infer` and `paint`, the features computed with the model's own bytes,
- * the head trained from `initialHead` (the model's own when absent; the
- * last run's for a restart) and written into a copy of the bytes. The
- * distillation teacher is always the head in `baseBytes`, the weights the
- * job started from, whichever head the run starts from (run.ts). The good
+ * the head trained from the model's own and written into a copy of the
+ * bytes. A restart is such a run too, from `baseBytes` again on the paint as
+ * it is then, as the server's restart starts from the model the job started
+ * from: one run's result never depends on the runs before it. The good
  * regions are the entries of the volume's good_regions.json as they are
  * when the run starts (good-regions.ts loadGoodRegions); one that is not a
  * region is skipped with a line in the log, as the server skips it. */
@@ -241,10 +259,6 @@ export interface FinetuneRun {
   paint: PaintStore;
   options: FinetuneOptions;
   report: RunReporter;
-  initialHead?: { weight: Float32Array; bias: Float32Array };
-  /** A whole-network run's start: the last run's model, for a restart
-   * (`baseBytes` otherwise). */
-  initialBytes?: ArrayBuffer;
   goodRegions?: readonly unknown[];
 }
 
@@ -282,6 +296,7 @@ export const DEFAULT_OPTIONS: FinetuneOptions = {
   epochs: FINETUNE_DEFAULTS.num_epochs,
   // The head's own rate: a few thousand weights take a step a hundred times LoRA's 1e-4 (the browser form offers 1e-2).
   learningRate: 0.01,
+  learningRateSchedule: FINETUNE_DEFAULTS.learning_rate_schedule,
   // BCE, the head's loss before there was a choice and the browser form's default; the server form picks margin.
   lossType: "bce",
   margin: FINETUNE_DEFAULTS.margin,
@@ -297,4 +312,5 @@ export const DEFAULT_OPTIONS: FinetuneOptions = {
   batchPatches: 1,
   tileSize: null,
   augment: FINETUNE_DEFAULTS.augment,
+  selectChannel: null,
 };

@@ -275,6 +275,36 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, place
     }
 
 
+@pytest.mark.parametrize("chain", [[], THRESHOLD], ids=["an-empty-chain-takes-a-sigmoid", "a-chain-with-steps-stays"])
+def test_a_model_whose_output_is_logits_starts_into_the_sigmoid_it_needs(servers, viewer, dashboard, monkeypatch, chain):
+    """mito_aff_resunet_setup_54_2d's logits showed as they were until
+    David set a sigmoid by hand. A model's start sets the one its server's
+    probe says its output needs into an empty chain, its layer is drawn
+    through it, and the page is told whose start it was; a chain with steps
+    is the user's, and stays."""
+    from cellmap_flow.dashboard.services import launch
+
+    def start_hosts(command, job_name, **_):
+        job = SimpleNamespace(model_name=job_name, host=f"http://{job_name}:8000")
+        get_session().jobs = get_session().jobs + [job]
+        return job
+
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
+    monkeypatch.setattr("cellmap_flow.serving.launch.server_command", lambda config, path, resample: "serve")
+    monkeypatch.setitem(MODEL_INFO, "http://aff:8000", {"output_voxel_size": [16, 16, 16], "output_class": "unbounded"})
+    session = get_session()
+    session.jobs = []
+    session.set_pipeline(PipelineSpec(CHAIN["input_norm"], chain))
+
+    launch.run_model(SimpleNamespace(name="aff"), session.layer_blob())
+
+    shown = chain or [{"name": "SigmoidPostprocessor"}]
+    assert session.pipeline_spec.to_json_data()["postprocess"] == shown
+    assert _viewer(viewer, ["aff"])["chain"]["postprocess"] == shown
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["postprocess_from"], loaded["postprocess_fitted"]) == ((None, None) if chain else ("aff", False))
+
+
 def test_submits_layers_carry_the_dashboards_address_and_the_chains_digest(servers, viewer, monkeypatch, placeholder_cellmap_folders):
     """As Submit's redraw gives them (test_submit): a merging postprocessor's
     server posts its merged ids to the dashboard from the start, and the

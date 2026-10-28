@@ -133,6 +133,7 @@ def detect_adaptable_layers(
 
 
 _CONV_CLASSES = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}
+_CONV_TRANSPOSE_CLASSES = {1: nn.ConvTranspose1d, 2: nn.ConvTranspose2d, 3: nn.ConvTranspose3d}
 
 
 def _tupled(value):
@@ -143,16 +144,21 @@ def _as_tuple(value):
     return tuple(value) if isinstance(value, (list, tuple)) else (value,)
 
 
-def _interpreter_layer_spec(module: nn.Module):
+def _interpreter_layer_spec(module: nn.Module, transposed: bool = False):
     """How to rebuild an unflattened leaf as a real layer, or None.
 
     torch.export's unflatten turns every nn.Conv3d/nn.Linear into an
     InterpreterModule that holds the weight and a one-op FX graph, e.g.
     ``aten.conv3d.default(x, weight, bias, stride, padding, dilation,
     groups)``. The stride, padding, dilation and groups live only in that
-    call, so they are read from it. Anything else -- a transposed conv, which
-    PEFT cannot adapt, or a module whose graph does more than one op -- gives
-    None and is left as it is.
+    call, so they are read from it. Anything else -- a module whose graph
+    does more than one op, or a transposed conv unless ``transposed`` --
+    gives None and is left as it is.
+
+    PEFT cannot adapt a transposed conv, so LoRA leaves those alone. The web
+    export (export_web) asks for them too: onnx_web rewrites a real
+    nn.ConvTranspose3d into ops onnxruntime-web's WebGPU can run, and does
+    not recognise an unflattened one.
 
     Returns ``(layer_class, kwargs)``.
     """
@@ -178,27 +184,31 @@ def _interpreter_layer_spec(module: nn.Module):
     if re.match(r"aten\.convolution\.", target):
         # convolution(input, weight, bias, stride, padding, dilation,
         #             transposed, output_padding, groups)
-        if len(args) < 9 or args[6]:
+        if len(args) < 9 or (args[6] and not transposed):
             return None
-        stride, padding, dilation, groups = args[3], args[4], args[5], args[8]
+        is_transposed = bool(args[6])
+        stride, padding, dilation, output_padding, groups = args[3], args[4], args[5], args[7], args[8]
     else:
         # conv{N}d(input, weight, bias=None, stride=1, padding=0, dilation=1,
-        # groups=1). conv_transpose{N}d does not match, and is left alone.
-        match = re.match(r"aten\.conv([123])d\.", target)
-        if match is None or weight.ndim != int(match.group(1)) + 2:
+        # groups=1), and conv_transpose{N}d(input, weight, bias=None,
+        # stride=1, padding=0, output_padding=0, groups=1, dilation=1).
+        match = re.match(r"aten\.conv(_transpose)?([123])d\.", target)
+        if match is None or weight.ndim != int(match.group(2)) + 2 or (match.group(1) and not transposed):
             return None
-        values = args + [None, None, None, 1, 0, 1, 1][len(args):]
-        for key, index in (("stride", 3), ("padding", 4), ("dilation", 5), ("groups", 6)):
-            if key in call.kwargs:
-                values[index] = call.kwargs[key]
-        stride, padding, dilation, groups = values[3:7]
+        is_transposed = bool(match.group(1))
+        defaults = (
+            {"stride": 1, "padding": 0, "output_padding": 0, "groups": 1, "dilation": 1}
+            if is_transposed else {"stride": 1, "padding": 0, "dilation": 1, "groups": 1}
+        )
+        values = {**defaults, **dict(zip(defaults, args[3:])),
+                  **{key: value for key, value in call.kwargs.items() if key in defaults}}
+        stride, padding, dilation, groups = (values[key] for key in ("stride", "padding", "dilation", "groups"))
+        output_padding = values.get("output_padding", 0)
     dims = weight.ndim - 2
     if dims not in _CONV_CLASSES:
         return None
     groups = int(groups)
-    return _CONV_CLASSES[dims], dict(
-        in_channels=weight.shape[1] * groups,
-        out_channels=weight.shape[0],
+    shared = dict(
         kernel_size=tuple(weight.shape[2:]),
         stride=_tupled(stride),
         padding=_tupled(padding),
@@ -206,9 +216,22 @@ def _interpreter_layer_spec(module: nn.Module):
         groups=groups,
         bias=has_bias,
     )
+    if is_transposed:
+        # A transposed conv's weight is (in, out / groups, *kernel).
+        return _CONV_TRANSPOSE_CLASSES[dims], dict(
+            in_channels=weight.shape[0],
+            out_channels=weight.shape[1] * groups,
+            output_padding=_tupled(output_padding),
+            **shared,
+        )
+    return _CONV_CLASSES[dims], dict(
+        in_channels=weight.shape[1] * groups,
+        out_channels=weight.shape[0],
+        **shared,
+    )
 
 
-def _replace_interpreter_modules(model: nn.Module) -> int:
+def _replace_interpreter_modules(model: nn.Module, transposed: bool = False) -> int:
     """Replace unflattened conv/linear leaves (InterpreterModule from torch.export
     unflatten) with real nn.Conv*/nn.Linear that share the same weight/bias tensors.
 
@@ -223,13 +246,15 @@ def _replace_interpreter_modules(model: nn.Module) -> int:
     conv built from the weight's shape alone: a real nn.ConvTranspose3d became
     a Conv3d with its channels swapped, and an unflattened strided or padded
     conv lost its stride and padding, so LoRA on a UNet with transposed-conv
-    upsampling died at the first forward pass.
+    upsampling died at the first forward pass. ``transposed`` replaces the
+    unflattened transposed convs too, with nn.ConvTranspose*
+    (``_interpreter_layer_spec``).
 
     Returns the number of modules replaced.
     """
     count = 0
     for name, module in list(model.named_modules()):
-        spec = _interpreter_layer_spec(module)
+        spec = _interpreter_layer_spec(module, transposed)
         if spec is None:
             continue
         layer_class, kwargs = spec

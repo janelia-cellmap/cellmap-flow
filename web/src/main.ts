@@ -33,6 +33,7 @@ import type { AppContext, Chain } from "./contracts";
 import { createInference } from "./infer";
 import { chainFromHash, linkedHash, type LinkedModels, linkNotes, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
+import { installOpenFileUi } from "./model-file";
 import { createCatalog } from "./models";
 import { installApiDownloads, installApiRebase } from "./rebase";
 import { installRunRegionUi } from "./run-region/panel";
@@ -107,7 +108,14 @@ async function boot() {
   const view = await linkedHash(location.hash, { served, renamed: linkedModels.renamed, paint, log });
   if (view.hash !== location.hash) history.replaceState(null, "", withHash(location.href, view.hash));
   const missing = linkedModels.leftOut.length + view.dropped.length > 0;
-  showLinkNotice(missing ? "Some of the link is not shown here." : "The link opened with a model renamed.", linkNotes(linkedModels, view.dropped), missing ? "warning" : "info");
+  const notes = linkNotes(linkedModels, view.dropped);
+  const title = missing ? "Some of the link is not shown here." : notes.length ? "The link opened with a model renamed." : "Open a volume to run the link's models.";
+  // A link with models and no dataset, as a published model's card has it:
+  // nothing shows until a volume is opened, so the page says what waits.
+  if (!session.state.datasetUrl && linkedModels.entries.length) {
+    notes.push(`${linkedModels.entries.map((m) => m.name).join(", ")} will run on the volume you open.`);
+  }
+  showLinkNotice(title, notes, missing ? "warning" : "info");
   const ctx: AppContext = { session, catalog, infer, viewer, paint, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
@@ -133,13 +141,16 @@ async function boot() {
   document.documentElement.dataset.dashboard = "loaded";
   log("dashboard loaded");
   // The page was rendered with the default chain ticked; when the session's
-  // is another (submitted before this reload, or a shared link's), the Input
-  // and Postprocess lists show that one, which is what the models run through.
+  // is another (submitted before this reload, or a shared link's), the
+  // Processing tab's lists show that one, which is what the models run through.
   const { chain } = session.state;
   if (JSON.stringify(chain) !== JSON.stringify(defaultChain())) dashboard.showChain?.(chain);
   // The connect panel's Browse button and drop target press Connect, which
   // connect.js (in the dashboard's script) now listens on.
   installLocalFolderUi({ log });
+  // The Models tab's Open an .onnx file… presses Add a model's Resolve,
+  // which add-model.js listens on.
+  installOpenFileUi({ catalog, log });
   installShareUi({ session, viewer, catalog, log });
   // The Run tab (src/run-region): its own DOM, the folder picker in its
   // clicks and the engine's materialize; nothing of the dashboard's script.

@@ -1,14 +1,20 @@
 // A link to the page that opens a volume and runs models on it: the query
 // ?dataset=<url>&model=<ref>&model=<ref> (a model's ref is a name such as
-// setup_53, or the repository path cellmap/onnx-web-models/setup_53), as the
-// README's example link has it. main.ts reads it once at boot, after the
-// service worker's first-visit reload (which keeps the URL): the dataset and
-// the models go into the tab's session, where Connect and Submit would have
-// put them, so the session's restore opens the volume and serves the models
-// as after any reload; and the query is taken off the address bar, so a
-// later tab completed from this URL starts fresh, as a `#!` state link's is
-// (viewer/index.ts). A model the catalog does not know is logged and left
-// out; the rest run.
+// setup_53, or the repository path cellmap/onnx-web-models/setup_53, or any
+// Hugging Face repo's `<owner>/<repo>/<folder>`, which the catalog looks up
+// there: models/index.ts resolve), as the README's example link has it.
+// main.ts reads it once at boot, after the service worker's first-visit
+// reload (which keeps the URL): the dataset and the models go into the tab's
+// session, where Connect and Submit would have put them, so the session's
+// restore opens the volume and serves the models as after any reload (a
+// link with models and no dataset, as a published model's card has it,
+// serves them once a volume is opened); and the query is taken off the
+// address bar, so a later tab completed from this URL starts fresh, as a
+// `#!` state link's is (viewer/index.ts). A model the catalog does not know
+// is logged and left out, and the page says which and why (linkNotes, in
+// the notice main.ts shows): the catalog's reason, such as a model
+// published from a server with no copy for the browser, and the smaller
+// copy to open instead where its repo has one; the rest run.
 //
 // A model finetuned in a browser is kept in that browser alone (IndexedDB,
 // models/finetuned.ts), so its name would mean nothing anywhere else; the
@@ -27,15 +33,19 @@ import { message } from "./backend/router";
 import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } from "./contracts";
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
+import { PYTHON } from "./generated/python-data";
 import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
-import { entryFor } from "./models/manifest";
+import { NoBrowserCopyError } from "./models/hf";
+import { hubName, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import { paintVolumeOf } from "./viewer/layers";
 import { decodeState, encodeState } from "./viewer/share";
 import { layersOf, type NgLayer, type NgState, sourceUrl } from "./viewer/state";
 
-export const DATASET_PARAM = "dataset";
-export const MODEL_PARAM = "model";
+// The query's parameters, as a published model's card writes them too
+// (cellmap_flow/portable/publish.py, exported by build/export_data.py).
+export const DATASET_PARAM = PYTHON.links.dataset_param;
+export const MODEL_PARAM = PYTHON.links.model_param;
 
 export interface LinkRequest {
   /** The volume to open, or null when the link names none. */
@@ -95,10 +105,12 @@ export function chainFromHash(hash: string): Chain | null {
 export const FINETUNED_SEPARATOR = "~";
 
 /** A finetuned model as a link carries it: its name; the Hugging Face model
- * it was finetuned from (`base`, its folder, as a plain ref names a model)
- * and the file of that model whose head was trained (`file`, the variant:
- * its precision and block); and the trained head, `weight` [outChannels ×
- * inChannels] as Head.weight has it, and `bias`, one per output channel. */
+ * it was finetuned from (`base`, its ref as a plain ref names a model: a
+ * folder of the built-in catalog, or `<owner>/<repo>/<folder>` of another
+ * repo, a model published from a browser among them) and the file of that
+ * model whose head was trained (`file`, the variant: its precision and
+ * block); and the trained head, `weight` [outChannels × inChannels] as
+ * Head.weight has it, and `bias`, one per output channel. */
 export interface LinkedFinetuned {
   name: string;
   base: string;
@@ -190,9 +202,11 @@ export type LinkCatalog = Pick<Catalog, "resolve" | "modelBytes" | "finetuned" |
 export interface LinkedModels {
   /** The catalog's entries, in the link's order, each once. */
   entries: ModelEntry[];
-  /** The link's names of the finetuned models served here under another
-   * name, to that name: this browser had a model of the link's name, with
-   * other weights. The linked view's layers are renamed with them. */
+  /** The link's names of the models served here under another name, to
+   * that name: this browser had a model of the link's name, with other
+   * weights (a finetuned one kept here; or a Hugging Face model whose name
+   * this list gives another, models/index.ts withUniqueNames). The linked
+   * view's layers are renamed with them. */
   renamed: Record<string, string>;
   /** What the link names that this browser does not run, and why, in words
    * that follow "is left out: ". */
@@ -239,13 +253,17 @@ export async function resolveLinkedModels(
       try {
         entry = await catalog.resolve(ref);
       } catch (e) {
-        leave(ref, `it could not be looked up (${message(e)})`);
+        // A repo that has no browser copy of the model says why itself, and what to open instead.
+        leave(ref, e instanceof NoBrowserCopyError ? e.message : `it could not be looked up (${message(e)})`);
         continue;
       }
       if (!entry) {
         leave(ref, "it is not a model this browser can run");
         continue;
       }
+      // Listed here under another name than its own, which the sender's
+      // view names its layer by.
+      if (!isFinetuned(entry) && hubName(entry.manifest) !== entry.name) linked.renamed[hubName(entry.manifest)] = entry.name;
     }
     if (!linked.entries.some((x) => x.id === entry.id)) linked.entries.push(entry);
   }
@@ -260,7 +278,9 @@ export async function resolveLinkedModels(
  * opening of a link that did (FinetunedRecord.from_link), is served as it
  * is; opening one link twice keeps one model. Else the base is looked up
  * (a Hugging Face model; a finetuned one would be this browser's own, not
- * the sender's), its bytes are fetched in the link's file when its manifest
+ * the sender's, unless the link names it by where it was published from
+ * here: those are the sender's bytes), its bytes are fetched in the link's
+ * file when its manifest
  * still has that file (else in the catalog's default, said in the log), the
  * link's numbers are written over its head, whose shape must be theirs, and
  * the result is kept as a finetuned model whose record says it came from a
@@ -295,10 +315,13 @@ export async function rebuildFinetuned(
   }
   const base = await catalog.resolve(model.base);
   if (!base) throw new Error(`${model.base} is not a model this browser can run`);
-  if (isFinetuned(base)) throw new Error(`${model.base} is a model finetuned in this browser, not one from Hugging Face`);
+  const published = records.find((r) => r.id === base.id)?.published;
+  if (isFinetuned(base) && (!published || `${published.repo}/${published.folder}` !== model.base)) {
+    throw new Error(`${model.base} is a model finetuned in this browser, not one from Hugging Face`);
+  }
   const variant = base.manifest.variants.find((v) => v.file === model.file);
   if (!variant) log(`The link's ${model.name} was finetuned on ${base.name}'s ${model.file}, which its manifest no longer lists; rebuilding it on ${base.variant.file}`);
-  const source = variant ? entryFor(base.folder, base.manifest, variant, base.repo) : base;
+  const source = variant ? withVariant(base, variant) : base;
   const bytes = await catalog.modelBytes(source);
   const head = headOf(bytes);
   const out = model.bias.length, inChannels = model.weight.length / out;

@@ -16,6 +16,7 @@ import type {
   ModelEntry,
   ModelInfo,
   ModelManifest,
+  OutputActivation,
   RegionStore,
   RegionWrite,
   RegionWritten,
@@ -24,7 +25,7 @@ import type {
   ViewerController,
 } from "../../src/contracts";
 import { entryFor } from "../../src/models";
-import { outputClassOf } from "../../src/shared/model-info";
+import { networkActivation, outputClass } from "../../src/shared/model-info";
 import { memorySession } from "../../src/state";
 import { MemoryPaintStore } from "../../src/state/paint-store";
 import { portablePython } from "./pyodide";
@@ -117,8 +118,8 @@ export class FakeInference implements Inference {
       has_channel: true,
       output_axes: ["c", "z", "y", "x"],
       available: true,
-      // As the real one reads it off the manifest (shared/model-info.ts).
-      output_class: outputClassOf(entry.manifest.output),
+      // As the real one reads it: off the network, else the manifest (shared/model-info.ts).
+      ...outputClass(entry.manifest, await this.outputActivation(entry, modelBytes)),
       engine: "browser",
     };
     const view = `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`;
@@ -138,6 +139,18 @@ export class FakeInference implements Inference {
 
   served(): ServedModel[] {
     return [...this.views];
+  }
+
+  /** What the network in the catalog's bytes ends in, as the engine reads
+   * it (shared/model-info.ts networkActivation, in node's Pyodide); null
+   * when the bytes are not an ONNX model (the fake catalog's 8 bytes) or
+   * there is no Pyodide. Not kept: the fake reads it every time. */
+  async outputActivation(entry: ModelEntry, modelBytes: () => Promise<ArrayBuffer>): Promise<OutputActivation | null> {
+    try {
+      return await networkActivation(await modelBytes(), entry.manifest.io?.output, this);
+    } catch {
+      return null;
+    }
   }
 
   async gpuLimits(): Promise<GpuLimits> {

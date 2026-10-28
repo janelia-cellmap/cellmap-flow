@@ -21,12 +21,26 @@ def targets(args, arrays):
     (``label_it.affinity_offsets``: a model with a ``*_aff*`` channel is an
     affinity model, its first affinity channels along z, y and x), so the
     browser, which has only its manifest's names, trains on what the server
-    would. ``arrays``: the chunk's labels (z, y, x). Answers the channels
+    would. ``select_channel`` (absent or null for every channel) is the one
+    channel of a binary model the paint is for: its target alone, one
+    channel, as the server's cli makes it for ``--select-channel`` (refused,
+    as there, for an affinity model, each of whose channels has a target of
+    its own). ``arrays``: the chunk's labels (z, y, x). Answers the channels
     with the target and the mask, each float32 (channels, z, y, x)."""
     labels = np.frombuffer(arrays[0], np.dtype(args["labels_dtype"])).reshape(tuple(args["shape"]))
     channels, offsets = int(args["channels"]), args.get("offsets")
     if offsets is None and args.get("channel_names"):
         offsets = affinity_offsets(args["channel_names"])
+    select_channel = args.get("select_channel")
+    if select_channel is not None:
+        if offsets is not None:
+            raise ValueError(
+                "select_channel cannot be combined with an affinity model: the target has a "
+                "channel of its own for each of the model's, and they train together"
+            )
+        if not 0 <= int(select_channel) < channels:
+            raise ValueError(f"select_channel {select_channel} is out of range for a model with {channels} output channel(s)")
+        channels = 1
     if offsets is None:
         target, mask = maths.binary(labels, channels)
     else:

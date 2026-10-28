@@ -393,7 +393,7 @@
     {
       "method": "POST",
       "path": "/api/finetune/refresh-annotated-regions",
-      "availability": "stub",
+      "availability": "both",
       "request": null
     },
     {
@@ -488,6 +488,30 @@
     },
     {
       "method": "GET",
+      "path": "/api/huggingface/credentials",
+      "availability": "both",
+      "request": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/huggingface/credentials",
+      "availability": "both",
+      "request": "HuggingFaceCredentials"
+    },
+    {
+      "method": "POST",
+      "path": "/api/finetune/model/<name>/publish",
+      "availability": "both",
+      "request": "FinetunePublish"
+    },
+    {
+      "method": "GET",
+      "path": "/api/finetune/model/<name>/publish",
+      "availability": "both",
+      "request": null
+    },
+    {
+      "method": "GET",
       "path": "/api/finetune/good-regions",
       "availability": "both",
       "request": null
@@ -512,6 +536,12 @@
     },
     {
       "method": "POST",
+      "path": "/api/finetune/rank/add",
+      "availability": "both",
+      "request": "ResolveModel"
+    },
+    {
+      "method": "POST",
       "path": "/api/finetune/rank/score",
       "availability": "both",
       "request": null
@@ -524,7 +554,13 @@
     },
     {
       "method": "POST",
-      "path": "/api/finetune/rank/window",
+      "path": "/api/finetune/rank/input-norm",
+      "availability": "both",
+      "request": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/finetune/channel",
       "availability": "both",
       "request": null
     },
@@ -671,6 +707,7 @@
       "num_epochs": 20,
       "batch_size": 8,
       "learning_rate": 0.0001,
+      "learning_rate_schedule": "cosine",
       "loss_type": "margin",
       "margin": 0.3,
       "label_smoothing": 0.1,
@@ -1133,7 +1170,13 @@
     "BlockwiseSettings": {
       "description": "The pipeline builder's blockwise settings. All three counts are\nrequired, as whole numbers; a missing one is reported as None.",
       "properties": {
-        "queue": {},
+        "queue": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "charge_group": {},
         "nb_cores_master": {
           "default": null,
@@ -1450,6 +1493,41 @@
       "title": "Equivalences",
       "type": "object"
     },
+    "FinetunePublish": {
+      "description": "Where to publish a finetuned model on Hugging Face: ``repo`` as\n``owner/name`` (blank: the signed-in user's, named after the model),\nwhether a repository made for it is ``private`` (a model repository is\npublic otherwise), whether its manifest and model card name the\ndataset it was trained on (``include_dataset``: off unless asked, since a\ndataset's URL can be internal), and, for a server's publish, whether its\ncopy of the network includes ``model.pt2`` (``lora_copy``): the program a\nLoRA finetune of the published model attaches to, as cellmap's own\nrepositories ship it, at the cost of uploading the weights a second time;\nand whether a smaller copy for the browser is trained (finetune.distill,\na cluster job of hours) and added to the repository once it is done\n(``small_copy``, off unless asked). A browser's publish has neither.",
+      "properties": {
+        "repo": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "private": {
+          "default": false,
+          "type": "boolean"
+        },
+        "include_dataset": {
+          "default": false,
+          "type": "boolean"
+        },
+        "lora_copy": {
+          "default": true,
+          "type": "boolean"
+        },
+        "small_copy": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "FinetunePublish",
+      "type": "object"
+    },
     "FinetuneRestart": {
       "additionalProperties": true,
       "description": "The next iteration of a job: the training settings to change, each checked as\nTrainingOptions checks it (``changes``; the trainer applies them, cli.apply_restart_params),\nand the manifest overrides. Nothing is required: the job's model and corrections\nstay as launched.",
@@ -1510,9 +1588,18 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "Learning rate (AdamW).",
+          "description": "The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "learning_rate_schedule": {
+          "default": "cosine",
+          "description": "What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.",
+          "enum": [
+            "cosine",
+            "constant"
+          ],
+          "type": "string"
         },
         "gradient_accumulation_steps": {
           "default": 1,
@@ -1643,7 +1730,7 @@
             }
           ],
           "default": null,
-          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+          "description": "The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target."
         },
         "offsets": {
           "anyOf": [
@@ -1764,9 +1851,18 @@
         },
         "learning_rate": {
           "default": 0.0001,
-          "description": "Learning rate (AdamW).",
+          "description": "The learning rate a run starts at (AdamW), which learning_rate_schedule then moves or keeps; a restart starts at it again.",
           "exclusiveMinimum": 0,
           "type": "number"
+        },
+        "learning_rate_schedule": {
+          "default": "cosine",
+          "description": "What the learning rate does over a run: 'cosine' eases it down along half a cosine to 0.1 times it at the run's last step (LEARNING_RATE_FLOOR), big steps while the model is far from the paint and small ones once it is close; 'constant' keeps it for every step, as every run did before the schedule.",
+          "enum": [
+            "cosine",
+            "constant"
+          ],
+          "type": "string"
         },
         "gradient_accumulation_steps": {
           "default": 1,
@@ -1897,7 +1993,7 @@
             }
           ],
           "default": null,
-          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+          "description": "The one channel of a multi-channel model to train on the paint (not with output_type affinities or flows, whose targets have a channel for each of the model's); every other channel is held to the starting model's prediction on every voxel, so it stays as it was. Blank trains every channel on the one target."
         },
         "offsets": {
           "anyOf": [
@@ -1978,14 +2074,10 @@
           "type": "boolean"
         },
         "queue": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "charge_group": {
           "anyOf": [
@@ -2002,16 +2094,54 @@
       "title": "FinetuneSubmit",
       "type": "object"
     },
+    "HuggingFaceCredentials": {
+      "description": "A Hugging Face access token to publish with (``token``, hf_...),\nwhich the server also saves when asked to ``remember`` it (where ``hf\nauth login`` saves one; the browser keeps a token in the page only);\n``device``: a sign-in with a code the user enters at huggingface.co, the\nserver's Sign in (the browser's is a popup); or ``forget`` the one in\nuse: signing out.",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "remember": {
+          "default": false,
+          "type": "boolean"
+        },
+        "device": {
+          "default": false,
+          "type": "boolean"
+        },
+        "forget": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "HuggingFaceCredentials",
+      "type": "object"
+    },
     "LoadCrops": {
-      "description": "Crops imported into the session's annotation volume for ``model_name``:\n``yaml`` is the YAML's text or its path, ``output_path`` as for\nCreateVolume, and ``load_id`` names the import's progress.",
+      "description": "Crops imported into the session's annotation volume: ``yaml`` is the\nYAML's text or its path, ``output_path`` as for CreateVolume, and\n``load_id`` names the import's progress. ``model_name``, the model\npicked, is only asked for when the session has no volume yet, to lay a\nnew one on its grid; without one the new volume is painted before any\nmodel, as New Volume makes one.",
       "properties": {
         "yaml": {
           "default": null,
           "type": "string"
         },
         "model_name": {
-          "default": null,
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "output_path": {},
         "load_id": {}
@@ -2159,6 +2289,15 @@
         "POST /api/finetune/job/<job_id>/restart": {
           "$ref": "#/$defs/FinetuneRestart"
         },
+        "POST /api/huggingface/credentials": {
+          "$ref": "#/$defs/HuggingFaceCredentials"
+        },
+        "POST /api/finetune/model/<name>/publish": {
+          "$ref": "#/$defs/FinetunePublish"
+        },
+        "POST /api/finetune/rank/add": {
+          "$ref": "#/$defs/ResolveModel"
+        },
         "POST /api/finetune/ai-annotate/settings": {
           "$ref": "#/$defs/AIAnnotateSettings"
         },
@@ -2246,8 +2385,15 @@
     },
     "ServerConfigUpdate": {
       "additionalProperties": true,
-      "description": "Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those\nsent change. The counts must be whole numbers; the rest are kept as sent,\nand keys that are not settings are ignored.",
+      "description": "Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those\nsent change. The counts must be whole numbers and the queue a list of at\nleast one queue; the rest are kept as sent, and keys that are not\nsettings are ignored.",
       "properties": {
+        "queue": {
+          "default": null,
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "nb_cores_master": {
           "default": null,
           "type": "integer"

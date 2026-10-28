@@ -22,6 +22,9 @@ message is pydantic's, after the field's name.
 - ``AIAnnotateSettings``, ``AIAnnotateRun``, ``AIAnnotateResend`` and
   ``AIAnnotateDecision``: POST /api/finetune/ai-annotate/{settings,run,resend},
   and accept and reject
+- ``FinetunePublish``: POST /api/finetune/model/<name>/publish, and
+  ``HuggingFaceCredentials``: POST /api/huggingface/credentials (both modes
+  answer them: routes/finetune/publish.py, web/src/backend/routes/publish.ts)
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
@@ -44,6 +47,7 @@ from pydantic import (
 
 from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.finetune.options import MANIFEST_FIELDS, MODES, OutputType, TrainingOptions
+from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.models import entry as model_entry
@@ -67,6 +71,19 @@ def _whole_number(value, info: ValidationInfo):
 
 
 WholeNumber = Annotated[int, BeforeValidator(_whole_number)]
+
+
+def _queues(value):
+    """The GPU queues ``value`` names (queues.queue_list: a list, or one
+    name), refused when it names none: a job needs somewhere to run."""
+    queues = queue_list(value)
+    if not queues:
+        raise ValueError("queue must name at least one GPU queue")
+    return queues
+
+
+# The GPU queues a job may run on, as the pickers send them: a list of names.
+Queues = Annotated[list[str], BeforeValidator(_queues)]
 
 
 def _required(name, strip=False, message=None):
@@ -104,11 +121,13 @@ def parse(model, body):
 
 class ServerConfigUpdate(BaseModel):
     """Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
-    sent change. The counts must be whole numbers; the rest are kept as sent,
-    and keys that are not settings are ignored."""
+    sent change. The counts must be whole numbers and the queue a list of at
+    least one queue; the rest are kept as sent, and keys that are not
+    settings are ignored."""
 
     model_config = ConfigDict(extra="allow")
 
+    queue: Queues = None
     nb_cores_master: WholeNumber = None
     nb_cores_worker: WholeNumber = None
     nb_workers: WholeNumber = None
@@ -123,7 +142,8 @@ class BlockwiseSettings(BaseModel):
     """The pipeline builder's blockwise settings. All three counts are
     required, as whole numbers; a missing one is reported as None."""
 
-    queue: Any = None
+    # The node's Queue field is text: "gpu_h100, gpu_h200" is two.
+    queue: Queues = None
     charge_group: Any = None
     nb_cores_master: WholeNumber = Field(None, validate_default=True)
     nb_cores_worker: WholeNumber = Field(None, validate_default=True)
@@ -300,7 +320,9 @@ class FinetuneSubmit(_FinetuneBody):
     )] = Field(None, validate_default=True)
     checkpoint_path: Optional[str] = None
     auto_serve: bool = True
-    queue: Optional[str] = Field(default_factory=lambda: current_site().default_queue)
+    # The GPU queues ticked; the job goes to the freest of them
+    # (FinetuneJobManager.submit_finetuning_job).
+    queue: Queues = Field(default_factory=lambda: current_site().default_queues)
     charge_group: Optional[str] = None
 
     def options(self, **resolved) -> TrainingOptions:
@@ -342,13 +364,15 @@ class CreateVolume(BaseModel):
 
 
 class LoadCrops(BaseModel):
-    """Crops imported into the session's annotation volume for ``model_name``:
-    ``yaml`` is the YAML's text or its path, ``output_path`` as for
-    CreateVolume, and ``load_id`` names the import's progress."""
+    """Crops imported into the session's annotation volume: ``yaml`` is the
+    YAML's text or its path, ``output_path`` as for CreateVolume, and
+    ``load_id`` names the import's progress. ``model_name``, the model
+    picked, is only asked for when the session has no volume yet, to lay a
+    new one on its grid; without one the new volume is painted before any
+    model, as New Volume makes one."""
 
     yaml: Annotated[str, _required("yaml", message="Missing 'yaml' field")] = Field(None, validate_default=True)
-    model_name: Annotated[str, _required("model_name", message="Missing 'model_name' field")] = Field(
-        None, validate_default=True)
+    model_name: Optional[str] = None
     output_path: Any = None
     load_id: Any = None
 
@@ -423,6 +447,41 @@ class AIAnnotateDecision(BaseModel):
 
     annotate_id: Annotated[_ANNOTATE_ID, _required("annotate_id")] = Field(None, validate_default=True)
     overwrite: bool = False
+
+
+class FinetunePublish(BaseModel):
+    """Where to publish a finetuned model on Hugging Face: ``repo`` as
+    ``owner/name`` (blank: the signed-in user's, named after the model),
+    whether a repository made for it is ``private`` (a model repository is
+    public otherwise), whether its manifest and model card name the
+    dataset it was trained on (``include_dataset``: off unless asked, since a
+    dataset's URL can be internal), and, for a server's publish, whether its
+    copy of the network includes ``model.pt2`` (``lora_copy``): the program a
+    LoRA finetune of the published model attaches to, as cellmap's own
+    repositories ship it, at the cost of uploading the weights a second time;
+    and whether a smaller copy for the browser is trained (finetune.distill,
+    a cluster job of hours) and added to the repository once it is done
+    (``small_copy``, off unless asked). A browser's publish has neither."""
+
+    repo: Optional[str] = Field(None, max_length=200)
+    private: bool = False
+    include_dataset: bool = False
+    lora_copy: bool = True
+    small_copy: bool = False
+
+
+class HuggingFaceCredentials(BaseModel):
+    """A Hugging Face access token to publish with (``token``, hf_...),
+    which the server also saves when asked to ``remember`` it (where ``hf
+    auth login`` saves one; the browser keeps a token in the page only);
+    ``device``: a sign-in with a code the user enters at huggingface.co, the
+    server's Sign in (the browser's is a popup); or ``forget`` the one in
+    use: signing out."""
+
+    token: Optional[str] = Field(None, max_length=4096)
+    remember: bool = False
+    device: bool = False
+    forget: bool = False
 
 
 # --- The pipeline builder's blockwise steps -----------------------------------------

@@ -1,17 +1,35 @@
 """``HuggingFaceModelConfig``: a cellmap_models export on the Hugging Face Hub.
 
-It is downloaded, then built as a ``CellMapModelConfig``. ``to_dict()``
-adds the repo's ``metadata.json`` for the pipeline builder; building a
-launch command never downloads it.
+It is the export at the repository's root, downloaded (``download_export``),
+then built as a ``CellMapModelConfig``. ``to_dict()`` adds the repo's
+``metadata.json`` for the pipeline builder; building a launch command never
+downloads it.
 """
 
 import logging
 import time
+from types import SimpleNamespace
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
-from cellmap_flow.models.configs.cellmap import CellMapModelConfig
+from cellmap_flow.models.configs.cellmap import CellMapModelConfig, metadata_geometry
+from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
+
+
+def download_export(repo, revision=None):
+    """The cellmap_models export at the root of the Hugging Face repository
+    ``repo``, downloaded: its CellmapModel.
+
+    The root's files only. A model a server published
+    (dashboard/routes/finetune/publish.py) has its ONNX web export in a
+    folder beside them, a model of its own (``<repo>/<folder>``, type
+    onnx) whose files are of no use here and can be gigabytes.
+    """
+    from cellmap_models.model_export.cellmap_model import CellmapModel
+    from huggingface_hub import snapshot_download
+
+    return CellmapModel(snapshot_download(repo, revision=revision, ignore_patterns="*/*"))
 
 
 class HuggingFaceModelConfig(ModelConfig):
@@ -38,6 +56,8 @@ class HuggingFaceModelConfig(ModelConfig):
         self.scale = scale
         self._metadata = None
         self._metadata_failed_at = None
+        self._files = None
+        self._files_failed_at = None
 
     def _load_metadata(self):
         """The repo's metadata.json, or {} when it cannot be had.
@@ -68,6 +88,49 @@ class HuggingFaceModelConfig(ModelConfig):
             return {}
         return self._metadata
 
+    def finetune_modes(self):
+        """LoRA and full when the repo has a ``model.pt2``, full only without
+        one, as for an export's folder (CellMapModelConfig.finetune_modes):
+        cellmap_models' ``train()`` then hands the trainer the TorchScript,
+        which takes no adapter. cellmap/jrc_mus-livers_16nm_to_8nm_mito has
+        model.pt, model.ts and model.onnx: offered LoRA, its job failed at
+        its start. The repo's file list is asked for, not the model, once for
+        the life of this config; when the Hub cannot say, both are offered,
+        and the job says which it takes."""
+        if self._files is None and (
+            self._files_failed_at is None
+            or time.monotonic() - self._files_failed_at >= self.METADATA_RETRY_SECONDS
+        ):
+            from cellmap_flow.models.resolve import _hf_files
+
+            try:
+                self._files = _hf_files(self.repo, self.revision)
+            except Exception as e:
+                self._files_failed_at = time.monotonic()
+                logger.warning(f"Could not list the files of {self.repo} ({e}); offering LoRA and full")
+        if self._files is not None and "model.pt2" not in self._files:
+            return ("full",)
+        return ("lora", "full")
+
+    def declared_geometry(self):
+        """Its metadata.json's, as a cellmap export's (``metadata_geometry``):
+        that file is downloaded, not the model."""
+        metadata = self._load_metadata()
+        return metadata_geometry(SimpleNamespace(**metadata)) if isinstance(metadata, dict) else None
+
+    def declared_input_norm(self, data_range=None):
+        """The input normalization the repo's metadata.json declares: its
+        ``input_norm``, cellmap-flow steps, which a model a server published
+        has (finetune.export_web); else a cellmap-models export's
+        ``input_normalization``, the range the model reads
+        (``metadata_input_norm``), for raw data spanning ``data_range``.
+        Downloaded as for declared_geometry; cheap after the first ask, as
+        ``_load_metadata`` is, and never raises."""
+        metadata = self._load_metadata()
+        if not isinstance(metadata, dict):
+            return None
+        return metadata.get("input_norm") or metadata_input_norm(metadata.get("input_normalization"), data_range)
+
     def _launch_params(self) -> dict:
         # Not to_dict(): that downloads metadata.json for the pipeline builder,
         # and launching a server needs only the constructor arguments.
@@ -79,9 +142,7 @@ class HuggingFaceModelConfig(ModelConfig):
         }
 
     def _get_config(self) -> Config:
-        from cellmap_models.model_export.cellmap_model import get_huggingface_model
-
-        cellmap_model = get_huggingface_model(self.repo, self.revision)
+        cellmap_model = download_export(self.repo, self.revision)
         config = CellMapModelConfig(folder_path=cellmap_model.folder_path)._get_config()
         return config
 

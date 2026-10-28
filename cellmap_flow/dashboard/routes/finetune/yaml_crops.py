@@ -34,6 +34,7 @@ from cellmap_flow.dashboard.progress import Progress
 from cellmap_flow.dashboard.requests import LoadCrops, parse
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
+    make_paint_volume,
     serve_new_volume,
 )
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
@@ -165,15 +166,7 @@ def load_crops_from_yaml():
             return jsonify({"success": False, "error": "No crops listed in YAML"}), 400
 
         n_crops = len(crops_config.crops)
-        step(
-            "setup",
-            f"Found {n_crops} crop{'' if n_crops == 1 else 's'}; resolving model "
-            f"{model_name}...",
-            n_crops=n_crops,
-        )
-        model_config, error_response = _get_selected_model_config(model_name)
-        if error_response is not None:
-            return error_response
+        step("setup", f"Found {n_crops} crop{'' if n_crops == 1 else 's'}...", n_crops=n_crops)
 
         raw_dataset_path = get_session().dataset_path
         if not raw_dataset_path:
@@ -185,9 +178,18 @@ def load_crops_from_yaml():
         # Reuse the session's annotation_volume if the user already created one
         # (via "New Volume" or "Resume Existing"). Otherwise spin up a fresh one
         # so the YAML import has a destination.
+        # The model is only needed for that: with a volume in the session
+        # the crops go into it whatever model is picked, and with neither the
+        # volume is painted before any model (make_paint_volume, as New
+        # Volume makes one without a model). The import used to refuse at
+        # once with no model picked, a volume or not.
         volume_id, volume_meta = session_store().session_volume(corrections_dir)
         created_volume = False
-        if volume_meta is None:
+        if volume_meta is None and model_name:
+            step("setup", f"Resolving model {model_name}...", n_crops=n_crops)
+            model_config, error_response = _get_selected_model_config(model_name)
+            if error_response is not None:
+                return error_response
             step(
                 "setup",
                 "Creating the annotation volume (asking the inference server "
@@ -202,6 +204,11 @@ def load_crops_from_yaml():
                 # server can supply them without building the model here.
                 config=resolve_model_geometry(model_name, model_config),
             )
+            created_volume = True
+        elif volume_meta is None:
+            step("setup", "Creating an annotation volume painted before any model...", n_crops=n_crops)
+            volume_id = make_paint_volume(None, corrections_dir)[0]
+            volume_meta = get_session().annotation_volumes[volume_id]
             created_volume = True
         step(
             "setup",
@@ -297,7 +304,11 @@ def load_crops_from_yaml():
                 "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
             },
         )
-        write_manifest(corrections_dir, manifest)
+        # A volume painted before any model is not trained on: it gets no
+        # training manifest (annotation_core.make_paint_volume). Use this
+        # model carries its crops onto a model's grid and writes that one's.
+        if volume_meta.get("model_name"):
+            write_manifest(corrections_dir, manifest)
 
         try:
             refresh_annotated_regions_layer(corrections_path=corrections_dir)

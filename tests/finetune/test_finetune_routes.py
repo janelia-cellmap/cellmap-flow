@@ -171,6 +171,15 @@ def test_submit_after_a_dashboard_restart_finds_the_session_on_disk(submit):
     assert job.sent["corrections_path"] == job.corrections
 
 
+@pytest.mark.parametrize("request_data, queues", [
+    pytest.param({"queue": ["gpu_h200", "gpu_a100"]}, ["gpu_h200", "gpu_a100"], id="the queues ticked"),
+    pytest.param({}, ["gpu_h100", "gpu_h200", "gpu_a100", "gpu_rtx6000"], id="none sent: every GPU queue"),
+])
+def test_submit_hands_the_job_manager_the_queues_ticked(submit, request_data, queues):
+    """The form's GPU Queue was one queue, which the job waited on however busy it was."""
+    assert submit(**request_data).sent["queue"] == queues
+
+
 @pytest.fixture
 def restart(client, local_jobs, session, monkeypatch):
     """``restart(pulled=0, **request)``: POST /api/finetune/job/<id>/restart for
@@ -217,32 +226,178 @@ def _zarr(path, **attrs):
     (path / ".zattrs").write_text(json.dumps(attrs))
 
 
-def test_resuming_offers_the_volume_the_session_trains_on_first(client, tmp_path):
+def test_a_session_is_listed_as_the_volume_it_trains_on_alone(client, tmp_path):
     """Resume took whichever zarr os.listdir() gave first, crop zarrs and legacy
     per-chunk extracts included, and counted the extracts' chunks: 0 for a
-    painted session."""
+    painted session. Then it counted every volume's: 50 chunks for 20
+    painted and carried onto three models' grids."""
     corrections = tmp_path / "out" / "20260101_000000" / "corrections"
     _zarr(corrections / "aaa_crop.zarr", dataset_path="/raw")  # a crop, listed first
-    _zarr(corrections / "vol-old.zarr", type="annotation_volume")
+    _zarr(corrections / "vol-old.zarr", type="annotation_volume", model_name="m")
     time.sleep(0.01)
-    _zarr(corrections / "vol-new.zarr", type="annotation_volume")
+    _zarr(corrections / "vol-new.zarr", type="annotation_volume", model_name=None)
     _zarr(corrections / "vol-x_chunk_1.zarr", type="annotation_volume")  # a legacy extract
-    s0 = corrections / "vol-new.zarr" / "annotation" / "s0"
-    s0.mkdir(parents=True)
-    for key in (".zarray", "0.0.0", "0.0.1"):
-        (s0 / key).write_bytes(b"x")
-    (corrections / "_virtual_sources.json").write_text(json.dumps({"volume_zarr_path": str(corrections / "vol-old.zarr")}))
+    for name, keys in (("vol-old", ("0.0.0",)), ("vol-new", ("0.0.0", "0.0.1"))):
+        s0 = corrections / f"{name}.zarr" / "annotation" / "s0"
+        s0.mkdir(parents=True)
+        for key in (".zarray", *keys):
+            (s0 / key).write_bytes(b"x")
+    manifest = corrections / "_virtual_sources.json"
+    manifest.write_text(json.dumps({"volume_zarr_path": str(corrections / "vol-old.zarr")}))
     _zarr(tmp_path / "out" / "20250101_000000" / "corrections" / "v_chunk_0_0_0.zarr", source="sparse_volume")
 
-    sessions = client.post("/api/finetune/list-existing-sessions", json={"output_path": str(tmp_path / "out")}
+    def listed():
+        return client.post("/api/finetune/list-existing-sessions", json={"output_path": str(tmp_path / "out")}
                            ).get_json()["sessions"]
+
+    sessions = listed()
     assert [s["session_id"] for s in sessions] == ["20260101_000000"], "extracts alone are nothing to resume"
-    assert [v["volume_id"] for v in sessions[0]["volumes"]] == ["vol-old", "vol-new"]
-    assert sessions[0]["chunk_count"] == 2
+    assert [v["volume_id"] for v in sessions[0]["volumes"]] == ["vol-old"]
+    assert (sessions[0]["chunk_count"], sessions[0]["model_name"]) == (1, "m")
+    # Without a manifest, the volume written last.
+    manifest.unlink()
+    (session,) = listed()
+    assert ([v["volume_id"] for v in session["volumes"]], session["chunk_count"], session["model_name"]) == (
+        ["vol-new"], 2, None)
+
+
+class _Declares:
+    """A model that says ``declared`` of its geometry, and that is never to be built."""
+
+    def __init__(self, name, declared=None):
+        self.name, self.declared = name, declared
+
+    def declared_geometry(self):
+        return self.declared
+
+    @property
+    def config(self):
+        raise AssertionError(f"{self.name} was built to read its geometry")
+
+
+def test_the_model_list_takes_what_a_model_declares_and_never_builds_it(client, monkeypatch):
+    """The Finetune tab asks every two seconds while a model's server is not
+    up, and each answer built the model in the dashboard to read its sizes:
+    25 s on its CPU for a 3 GB TorchScript."""
+    from cellmap_flow.dashboard.services import launch
+
+    declared = {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3}
+    monkeypatch.setattr(get_session(), "models_config",
+                        [_Declares("onnx", declared), _Declares("starting"), _Declares("stopped")])
+    monkeypatch.setattr(launch, "running_names", lambda: {"onnx", "starting"})
+    models = {m["name"]: m for m in client.get("/api/finetune/models").get_json()["models"]}
+    assert {k: models["onnx"][k] for k in declared} == declared
+    # Without a geometry, why not: its server is not up yet, or it is not running.
+    assert set(models["starting"]) == set(models["stopped"]) == {"name", "status", "finetune_modes"}
+    assert models["starting"]["status"] != models["stopped"]["status"]
+
+
+ORGANELLES = ["all_mem", "organelle", "mito", "er", "nucleus", "pm", "vs", "ld"]
+
+
+class _Organelles(_Declares):
+    """fly_organelles' eight channels, each a class the binary target trains:
+    declared, and named in its metadata.json, as a Hugging Face model's are."""
+
+    def __init__(self, name):
+        super().__init__(name, {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 8,
+                                "channels": ORGANELLES})
+
+    def _load_metadata(self):
+        return {"channels_names": ORGANELLES}
+
+
+def test_the_model_list_says_which_models_train_one_channel_at_a_time(client, monkeypatch):
+    """An affinity model trains every channel at once; the paint is about one
+    of fly_organelles' classes. Told without building either."""
+    affinities = {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3,
+                  "channels": ["mito_aff_z", "mito_aff_y", "mito_aff_x"]}
+    monkeypatch.setattr(get_session(), "models_config", [_Declares("setup_54", affinities), _Organelles("organelles")])
+    models = {m["name"]: m for m in client.get("/api/finetune/models").get_json()["models"]}
+    assert (models["setup_54"]["channel_choice"], models["organelles"]["channel_choice"]) == (False, True)
+    assert models["organelles"]["channels"] == ORGANELLES
+
+
+@pytest.mark.parametrize("pick, refused", [pytest.param({}, True, id="no channel: refused"),
+                                           pytest.param({"select_channel": 2}, False, id="a channel: trained")])
+def test_submit_asks_which_channel_a_model_of_classes_trains(submit, monkeypatch, pick, refused):
+    """Without one, each of the eight was taught the paint: er and nucleus learned "mito"."""
+    monkeypatch.setattr(get_session(), "models_config", [_Organelles("organelles")])
+    job = submit(model_name="organelles", **pick)
+    assert (job.status, job.sent is None) == ((400, True) if refused else (200, False))
+    if not refused:
+        assert job.sent["options"].select_channel == 2
+
+
+@pytest.mark.parametrize("answered", [pytest.param(True, id="carried onto its grid"),
+                                      pytest.param(False, id="its grid not known: refused")])
+def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp_path, ome_zarr, monkeypatch, answered):
+    """mito_aff_resunet_setup_54_2d (1 x 556 x 556 at 16 nm) was trained on a
+    volume made for a 3D model (178^3 at 8 nm): the job read 178^3 patches
+    and torch.export refused them. Here a volume made for "a" (8^3 in, 4^3
+    out) and "m", whose server answers with a 2D model's blocks, or has not
+    answered yet."""
+    from cellmap_flow.dashboard.routes.finetune import annotation_core, common, training
+    from cellmap_flow.finetune.session.manifest import read_manifest
+    from cellmap_flow.finetune.session.volume import create_volume_zarr, open_labels, plan_volume
+    from cellmap_flow.models import geometry_cache
+    from cellmap_flow.pipeline_spec import PipelineSpec
+    from cellmap_flow.serving.client import geometry_stand_in
+
+    session = get_session()
+    session.dataset_path = ome_zarr(tmp_path / "raw.zarr", ("s0", np.zeros((32,) * 3, np.uint8), 16.0, 8.0))
+    corrections = tmp_path / "base" / "20260101_120000" / "corrections"
+    corrections.mkdir(parents=True)
+    planned = plan_volume(session.dataset_path, SimpleNamespace(
+        input_voxel_size=[16] * 3, output_voxel_size=[16] * 3, input_shape=[8] * 3, output_shape=[4] * 3))
+    zarr_path = create_volume_zarr(str(corrections / "vol-a.zarr"), planned, dataset_path=session.dataset_path, model_name="a")
+    session.annotation_volumes["vol-a"] = planned.record(zarr_path, dataset_path=session.dataset_path, model_name="a",
+                                                         corrections_dir=str(corrections))
+    labels = open_labels(zarr_path, mode="r+")
+    labels.write_index([4, 4, 4], [8, 8, 8], np.full((4, 4, 4), 2, np.uint8))
+    labels.write_index([8, 8, 8], [12, 12, 12], np.ones((4, 4, 4), np.uint8))
+    chain = PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], [{"name": "SigmoidPostprocessor"}])
+    session.set_pipeline(chain)
+    common.write_volume_manifest(session.annotation_volumes["vol-a"])
+
+    two_d = {"read_shape": [16, 192, 192], "write_shape": [16, 128, 128], "input_voxel_size": [16] * 3,
+             "output_voxel_size": [16] * 3, "output_channels": 3}
+    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: geometry_stand_in(two_d) if answered else None)
+    monkeypatch.setattr(geometry_cache, "load_cached_geometry", lambda config: None)
+    monkeypatch.setattr(annotation_core, "ensure_minio_serving", lambda *args, **kwargs: "http://minio/volume.zarr")
+    monkeypatch.setattr(training, "sync_all_annotations_from_minio", lambda force=True: 0)
+    asked = []
+    session.finetune_job_manager = SimpleNamespace(
+        jobs={}, add_listener=lambda listener: None,
+        submit_finetuning_job=lambda **kw: asked.append(kw) or SimpleNamespace(job_id="j", output_dir=corrections, lsf_job=None))
+
+    response = client.post("/api/finetune/submit", json={"model_name": "m", "corrections_path": str(corrections)})
+    manifest = read_manifest(str(corrections))
+
+    if not answered:
+        # Nothing changed: the volume, the manifest and the job are as they were.
+        assert response.status_code == 400 and not asked
+        assert list(session.annotation_volumes) == ["vol-a"] and not (corrections / "superseded").exists()
+        assert manifest["volume_zarr_path"] == zarr_path
+        return
+    body = response.get_json()
+    assert response.status_code == 200, body
+    new_id = body["carried"]["volume_id"]
+    assert body["carried"]["from_volume"] == "vol-a" and body["note"]
+    # The paint on the 2D model's grid, the volume it trains on; the old one kept, out of the session.
+    assert list(session.annotation_volumes) == [new_id] and session.annotation_volumes[new_id]["model_name"] == "m"
+    assert (corrections / "superseded" / "vol-a.zarr").is_dir()
+    assert manifest["volume_zarr_path"].endswith(f"{new_id}.zarr")
+    assert (manifest["input_size_voxels"], manifest["output_size_voxels"]) == ([1, 12, 12], [1, 8, 8])
+    carried = np.asarray(open_labels(manifest["volume_zarr_path"]).read_index([0, 0, 0], [32, 32, 32]))
+    assert (carried == 2).sum() == (carried == 1).sum() == 64
+    # The chain stays as the user set it; the job trains the session's corrections, now on the new volume.
+    assert session.pipeline_spec.to_json_data() == chain.to_json_data()
+    assert asked[0]["corrections_path"] == corrections
 
 
 MINIO = "http://10.0.0.5:9000/annotations/vol-1.zarr"
-PROXY = "https://gateway.example.org/minio/annotations/vol-1.zarr"
+PROXY ="https://gateway.example.org/minio/annotations/vol-1.zarr"
 
 
 @pytest.mark.parametrize("template, headers, expected", [
@@ -316,6 +471,7 @@ STATUSES = [
     pytest.param("post", "/api/finetune/job/j/cancel", None, "on LSF", 200, id="cancel"),
     pytest.param("post", "/api/finetune/job/j/stop-early", None, None, 200, id="stop early"),
     pytest.param("post", "/api/finetune/job/nope/stop-early", None, None, 404, id="stop an unknown job early"),
+    pytest.param("post", "/api/finetune/job/j/stop-early", None, "waiting", 400, id="stop a job that is not training"),
     pytest.param("post", "/api/finetune/job/j/restart", {}, "waiting", 200, id="restart"),
     pytest.param("post", "/api/finetune/job/j/restart", {}, None, 409, id="restart a job that is not waiting"),
     pytest.param("post", "/api/finetune/submit", {}, None, 400, id="submit without a model"),

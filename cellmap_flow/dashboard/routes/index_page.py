@@ -36,7 +36,7 @@ def viewer_url_for(viewer_url, headers, scheme):
 
 
 def _form_value(value):
-    """A parameter as the Input/Postprocess form shows and sends it back.
+    """A parameter as the Processing tab's lists show and send it back.
 
     A flat list or tuple is comma-joined, the form the constructors parse
     ("0,2" for ChannelSelection): rendered as it stands it became "[0, 2]",
@@ -50,7 +50,7 @@ def _form_value(value):
 
 
 def chain_items(available, configured):
-    """The rows of an Input/Postprocess list, in the order to render them.
+    """The rows of one of the Processing tab's lists, in the order to render them.
 
     The configured steps come first, in the order they run, each with its own
     parameter values; a step configured twice is listed twice. Every other
@@ -140,6 +140,7 @@ def index():
 
     # The Hugging Face and zoo rows to tick: the loaded models', running or starting.
     from cellmap_flow.dashboard.services.launch import configs_by_name, loaded_models
+    from cellmap_flow.models.hf_catalog import folder_facts
 
     loaded, configs = loaded_models(), configs_by_name()
     default_hf_repos = [model["hf_id"] for model in loaded if model["hf_id"]]
@@ -156,7 +157,14 @@ def index():
         neuroglancer_url=viewer_url_for(session.neuroglancer_url, request.headers, request.scheme),
         input_norm_items=input_norm_items,
         postprocess_items=postprocess_items,
-        model_catalog=model_catalog,
+        # The Local Catalog's groups for the Models tab's script to list
+        # (js/dashboard/models/catalog.js), each with its models' names, in
+        # order: lists, as tojson sorts a mapping's keys; and what each
+        # model's folder holds, by name, for its row's tags
+        # (models/hf_catalog.py folder_facts: its files listed, nothing
+        # loaded). "User"'s running models have no folder here.
+        catalog_groups=[[group, list(models), {name: folder_facts(folder) for name, folder in models.items() if folder}]
+                        for group, models in model_catalog.items()],
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         default_bioimage_models=default_bioimage_models,

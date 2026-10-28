@@ -3,10 +3,12 @@
 // balanced or not, smoothed or not; checked by finite differences);
 // trainHead on separable data (a planted linear map plus noise) brings the
 // loss down and recovers the labels, its epoch line the one the dashboard's
-// loss plot parses; and with a distillation set and λ the head is held to
-// the teacher (the head it is given, whatever it starts from).
+// loss plot parses, its steps at the schedule's rates, the form's first and
+// the shared floor of it last; and with a distillation set and λ the head is
+// held to the teacher (the head it is given, whatever it starts from).
 import { describe, expect, it } from "vitest";
 
+import { PYTHON } from "../../src/generated/python-data";
 import { batchLoss, type DistillationSet, mulberry32, type PixelSet, trainHead } from "../../src/finetune/head-trainer";
 import { DEFAULT_OPTIONS, type FinetuneOptions, type Head, type RunReporter } from "../../src/finetune/types";
 
@@ -133,6 +135,25 @@ describe("trainHead", () => {
     const parsed = EPOCH_LOSS.exec(report.lines[29])!;
     expect([parsed[1], parsed[2], Number(parsed[3])]).toEqual(["30", "30", Number(trained.losses[29].toFixed(6))]);
   });
+
+  it("steps at the form's rate first and at the shared floor of it last, or at the form's to the last when constant", async () => {
+    // Nine copies of a voxel whose feature is 0: only the bias learns, and
+    // its gradient, σ(b) − 1, stays near −0.5 over steps this small, so each
+    // of Adam's steps moves it by that step's rate. A run is stopped after
+    // `steps` steps: cancelled() is asked before the epoch and after each.
+    const steps = 9, rate = 1e-3, floor = PYTHON.finetune.learning_rate_floor;
+    const pixels: PixelSet = { x: new Float32Array(steps), y: new Float32Array(steps).fill(1), m: new Float32Array(steps).fill(1), count: steps, inChannels: 1, outChannels: 1 };
+    const biasAfter = async (done: number, learningRateSchedule: FinetuneOptions["learningRateSchedule"] = "cosine") => {
+      let asked = 0;
+      const report = { log: () => {}, cancelled: () => asked++ === done };
+      const trained = await trainHead(pixels, head(1, 1), options({ epochs: 1, batchPixels: 1, learningRate: rate, learningRateSchedule, lossType: "bce", labelSmoothing: 0 }), report);
+      return trained.bias[0];
+    };
+    const lastStep = async (schedule: FinetuneOptions["learningRateSchedule"]) => (await biasAfter(steps, schedule)) - (await biasAfter(steps - 1, schedule));
+    expect((await biasAfter(1)) / rate).toBeCloseTo(1, 2);
+    expect((await lastStep("cosine")) / (rate * floor)).toBeCloseTo(1, 2);
+    expect((await lastStep("constant")) / rate).toBeCloseTo(1, 2);
+  });
 });
 
 /** `count` rows of `inChannels` standard normal features, every channel weighed 1. */
@@ -142,18 +163,17 @@ function heldRows(count: number, inChannels: number, outChannels: number, seed: 
 }
 
 describe("trainHead with distillation", () => {
-  it("holds the head to the teacher, the head it is given, wherever it starts from", async () => {
-    // Nothing supervised (every mask 0): distillation alone moves the head.
-    const pixels = { ...separable(400, 3, 1, 7), m: new Float32Array(400) };
+  it("holds the head to the teacher, the head it starts from, against the paint", async () => {
+    // The paint's planted map is another head than the teacher's: free, the
+    // head leaves the teacher for it; distilled, it stays near.
+    const pixels = separable(400, 3, 1, 7);
     const teacher = head(3, 1, [1, -2, 0.5], [0.25]);
-    const start = { weight: Float32Array.from([0, 0, 0]), bias: Float32Array.from([0]) };
     const held = heldRows(500, 3, 1, 8);
-    const trained = await trainHead(pixels, teacher, options({ epochs: 150, learningRate: 0.05, batchPixels: 100, distillationLambda: 1 }), reporter(), start, held);
-    Array.from(trained.weight).forEach((w, i) => expect(w).toBeCloseTo(teacher.weight[i], 2));
-    expect(trained.bias[0]).toBeCloseTo(0.25, 2);
-    expect(trained.supervised.every((loss) => loss === 0)).toBe(true);
-    // At λ 0 nothing moves it.
-    const still = await trainHead(pixels, teacher, options({ epochs: 5, distillationLambda: 0 }), reporter(), start, held);
-    expect(Array.from(still.weight)).toEqual([0, 0, 0]);
+    const away = (t: { weight: Float32Array; bias: Float32Array }) =>
+      Math.hypot(...Array.from(t.weight, (w, i) => w - teacher.weight[i]), t.bias[0] - teacher.bias[0]);
+    const train = (lambda: number) => trainHead(pixels, teacher, options({ epochs: 60, learningRate: 0.05, batchPixels: 100, distillationLambda: lambda }), reporter(), held);
+    const free = await train(0), distilled = await train(10);
+    expect(away(free)).toBeGreaterThan(0.5);
+    expect(away(distilled)).toBeLessThan(away(free) / 3);
   });
 });

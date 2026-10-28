@@ -73,7 +73,10 @@ export function initSessions({ log, addToViewer, volumeReady }) {
           opt.value = s.session_path;
           // The dataset it was painted on: a session resumes only over that one.
           const dataset = s.dataset_path ? ` — ${s.dataset_path.replace(/\/+$/, "").split("/").find(p => p.endsWith(".zarr") || p.endsWith(".n5")) || s.dataset_path}` : "";
-          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks${dataset} — ${volNames}`;
+          // The volume it resumes: a session has one, the model's it was
+          // last made for (Use this model retires the one before).
+          const model = s.model_name ? ` for ${s.model_name}` : "";
+          opt.textContent = `${s.session_id} — ${s.chunk_count} chunks${model}${dataset} — ${volNames}`;
           opt.disabled = s.volumes.length === 0;
           existingSessionsList.appendChild(opt);
         });

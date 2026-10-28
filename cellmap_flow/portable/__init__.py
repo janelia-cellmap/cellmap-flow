@@ -9,6 +9,9 @@ regions, ``volume.py`` and ``regions.py``). ``label_it.py`` is Label it's
 segmentation of a prediction, read by
 ``dashboard/routes/finetune/view_labels.py`` and, through
 ``label_it_calls.py``, by ``web/src/backend/routes/view-labels.ts``.
+``activation.py`` reads a model's output activation from its network's
+graph, for the inference server (inference/runner.py) and the browser's
+served model (web/src/finetune/onnx-proto.ts, through ``calls.py``).
 ``tests/portable/test_boundary.py`` holds every module here to that
 boundary. Nothing here reads a file, a zarr or the network: the callers do,
 around it (``finetune/session/volume.py``'s ``carry_paint`` and
@@ -21,4 +24,7 @@ AI-assisted annotation's plane, image, mask and labels are ``ai_annotate.py``
 (the browser calls ``ai_annotate_calls.py``), and the label decisions under
 it and the Finetune tab's box tools are ``fill.py`` (the browser's box tools
 call ``fill_calls.py``).
+A model published to Hugging Face, its card, its manifest's "published"
+block and the app's links to it, is ``publish.py``, which the server's
+publish route calls and the browser's through ``publish_calls.py``.
 """

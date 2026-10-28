@@ -30,7 +30,7 @@ def generate_finetuned_model_yaml(
     model_name: str = None,
     output_path: Path = None,
     data_path: str = None,
-    queue: str = None,
+    queue: list = None,
     charge_group: str = None,
     json_data: dict = None,
     scale: str = None,
@@ -54,7 +54,8 @@ def generate_finetuned_model_yaml(
         model_name: Name of the finetuned model
         output_path: Where to write the .yaml file
         data_path: Path to actual dataset (REQUIRED - no placeholders)
-        queue: LSF queue name; None is the site's default queue
+        queue: The LSF queues it may be served on; None is the site's
+            default queues
         charge_group: LSF charge group; None is the site's default one
         json_data: Optional dict with input_norm and postprocess from base model
         scale: The level of a multiscale ``data_path`` to serve ("s1"), or
@@ -74,7 +75,7 @@ def generate_finetuned_model_yaml(
     import yaml as yaml_lib
 
     site = current_site()
-    queue = site.default_queue if queue is None else queue
+    queue = site.default_queues if queue is None else queue
     charge_group = site.default_charge_group if charge_group is None else charge_group
 
     if not data_path or str(data_path) in PLACEHOLDER_DATA_PATHS:
@@ -147,7 +148,7 @@ def generate_finetuned_model_yaml(
 def generate_current_config_yaml(
     models: list,
     data_path: str,
-    queue: str = None,
+    queue: list = None,
     charge_group: str = None,
     walltime: str = None,
     json_data: dict = None,
@@ -167,7 +168,8 @@ def generate_current_config_yaml(
     Args:
         models: list of model entry dicts (each from ModelConfig.to_dict())
         data_path: current dataset path
-        queue: LSF queue name; None is the site's default queue
+        queue: The LSF queues the models may run on; None is the site's
+            default queues
         charge_group: LSF charge group; None is the site's default one
         walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
             the reloaded config falls back to the built-in default
@@ -176,8 +178,8 @@ def generate_current_config_yaml(
         resample: the dashboard's Resample setting, written either way
         cluster: whether this machine submits to LSF (has bsub). Without
             one, queue, charge_group and walltime are left out: nothing
-            read them where it was exported, and a Mac's export said
-            gpu_h100, the site's default queue, which it never used.
+            read them where it was exported, and a Mac's export named the
+            site's default queue, which it never used.
 
     Returns:
         YAML text (str) ready to write to a file.
@@ -185,7 +187,7 @@ def generate_current_config_yaml(
     import yaml as yaml_lib
 
     site = current_site()
-    queue = site.default_queue if queue is None else queue
+    queue = site.default_queues if queue is None else queue
     charge_group = site.default_charge_group if charge_group is None else charge_group
 
     yaml_dict = {"data_path": data_path}

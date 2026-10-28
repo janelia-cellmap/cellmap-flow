@@ -113,6 +113,18 @@ def test_a_finetuned_file_says_its_geometry_itself(finetuned, ort):
     assert model.declared_input_norm() == FINETUNED_MANIFEST["input_norm"]
 
 
+def test_what_its_output_is_is_read_off_the_files_graph_without_onnx(finetuned, ort, monkeypatch):
+    """head.onnx ends in a Conv, then an Unsqueeze: logits, as the exports
+    are, read off the file's graph without the onnx package. The stand-in
+    session answers zeros, which the output probe read as probabilities."""
+    from cellmap_flow.inference.runner import ModelRunner
+    from cellmap_flow.portable.label_it import UNBOUNDED
+
+    monkeypatch.setitem(sys.modules, "onnx", None)  # importing it fails
+    runner = ModelRunner(OnnxModelConfig(path=str(finetuned)))
+    assert (runner.output_class, runner.output_class_from, runner.output_op) == (UNBOUNDED, "graph", "Conv")
+
+
 # --- a Hugging Face folder ---------------------------------------------------------------------
 
 SETUP_54 = {
@@ -150,6 +162,10 @@ def hub(tmp_path, monkeypatch):
 def test_a_hub_folder_serves_fp32_at_its_largest_block_by_default(hub, ort):
     ort.graph = ([arg("input", [1, 1, 148, 148, 148])], [arg("output", [1, 3, 60, 60, 60])])
     model = registry.build_model({"type": "onnx", "folder": "setup_54"}, "mito")
+    # As the dashboard lists it before its server is up: from the manifest alone.
+    assert model.declared_geometry() == {"write_shape": [960] * 3, "output_voxel_size": [16] * 3, "output_channels": 3,
+                                         "channels": ["mito_aff_z", "mito_aff_y", "mito_aff_x"]}
+    assert hub == [("cellmap/onnx-web-models", "setup_54/manifest.json", None)] and not ort.sessions
     assert _geometry(model) == ((16, 16, 16), (16, 16, 16), (2368,) * 3, (960,) * 3,
                                 ["mito_aff_z", "mito_aff_y", "mito_aff_x"], [60, 60, 60, 3])
     assert hub == [("cellmap/onnx-web-models", "setup_54/manifest.json", None),

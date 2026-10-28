@@ -1,11 +1,11 @@
 """The supervised term of the training loss, and how the model's output is read for it.
 
 ``SupervisedLoss`` builds the criterion ``loss_type`` names and compares the
-model's output with the target where it is annotated. ``probe_output_class``
-reads what the output is -- a sigmoid baked in, a tanh, or logits -- when
+model's output with the target where it is annotated. ``output_class_of``
+says what the output is -- a sigmoid baked in, a tanh, or logits -- when
 nothing declared it, in the classes the model's server reports
-(``serving.probe``), so that training, ranking and seeding read one model
-the same way. The browser's twin is web/src/finetune/full/loss.ts.
+(``serving.probe``) and as the server finds it, off the network's graph
+first, so that training, ranking and seeding read one model the same way. The browser's twin is web/src/finetune/full/loss.ts.
 """
 
 import logging
@@ -29,6 +29,30 @@ from cellmap_flow.finetune.target_transforms import IntervalTargetTransform
 from cellmap_flow.serving.probe import UNBOUNDED, classify_output_range
 
 logger = logging.getLogger(__name__)
+
+
+def output_class_of(model_config, model, example, select_channel=None) -> str:
+    """What ``model``'s output is, as its inference server finds it: off
+    ``model_config``'s network graph (``ModelConfig.output_graph``,
+    ``portable.activation``: the op that ends it), else ``probe_output_class``.
+    The graph is the model the job was built from; an adapter or new
+    weights change neither the op its network ends in nor the channel read.
+
+    jrc_mus-livers' peroxisome model, a convolution at its end, answered the
+    probe with one value inside [-1, 1] and was read as a tanh's output.
+    """
+    from cellmap_flow.portable.activation import output_activation
+
+    try:
+        graph = model_config.output_graph()
+        found = output_activation(*graph) if graph is not None else None
+    except Exception as e:
+        logger.warning(f"Could not read the network's graph ({e}); probing its output instead.")
+        found = None
+    if found is not None:
+        logger.info(f"Model output from its network: {found['output_class']} (it ends in a {found['op']})")
+        return found["output_class"]
+    return probe_output_class(model, example, select_channel=select_channel)
 
 
 @torch.no_grad()
@@ -55,6 +79,10 @@ def probe_output_class(model, example, select_channel=None) -> str:
         if select_channel is not None:
             out = out[:, select_channel:select_channel + 1]
         output_class = classify_output_range(float(out.min()), float(out.max()))
+        if output_class is None:
+            # One value everywhere says nothing of its range (classify_output_range).
+            logger.warning("The model answered the probe with one value; reading its output as logits.")
+            output_class = UNBOUNDED
         logger.info(f"Model output on the probe: {output_class}")
     except Exception as e:
         logger.warning(f"Output probe failed ({e}); reading the output as logits.")

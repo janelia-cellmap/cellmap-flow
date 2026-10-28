@@ -1,4 +1,21 @@
 {
+  "version": "0.3.0",
+  "links": {
+    "model_param": "model",
+    "dataset_param": "dataset"
+  },
+  "huggingface": {
+    "oauth_client_id": "https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd",
+    "oauth_scopes": [
+      "openid",
+      "profile",
+      "contribute-repos"
+    ],
+    "sign_in_first": "Sign in with Hugging Face, or paste an access token with write access, first: the model is published under your own account.",
+    "token_refused": "Hugging Face does not accept this token: check that it was copied whole and has not expired or been revoked (https://huggingface.co/settings/tokens).",
+    "read_only": "This token can only read. Make one with write access at https://huggingface.co/settings/tokens (a Write token) and paste that instead.",
+    "small_suffix": "-small"
+  },
   "ops": {
     "input_norm": [
       {
@@ -157,6 +174,55 @@
       {
         "name": "SigmoidPostprocessor"
       }
+    ]
+  },
+  "advice": {
+    "neighborhood_offsets": [
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        3,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0
+      ],
+      [
+        0,
+        0,
+        3
+      ],
+      [
+        9,
+        0,
+        0
+      ],
+      [
+        0,
+        9,
+        0
+      ],
+      [
+        0,
+        0,
+        9
+      ]
     ]
   },
   "ai_annotate": {
@@ -413,6 +479,7 @@
       5.75,
       6.0
     ],
+    "learning_rate_floor": 0.1,
     "job_statuses": [
       "PENDING",
       "RUNNING",

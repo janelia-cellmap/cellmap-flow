@@ -38,7 +38,11 @@ A configuration file has the following top-level fields:
      - Project billing group.
    * - ``queue``
      - No
-     - Job queue (default: ``gpu_h100``).
+     - The GPU queue the jobs run on, or a list of them
+       (``[gpu_h100, gpu_h200]``): each job goes to the one with the most
+       free GPUs, and moves to the next if it has not started in 3 minutes
+       (``cycle_gpu_queues: false`` keeps it on the first). Default: the
+       dashboard's saved queues, else every GPU queue.
    * - ``models``
      - Yes
      - Dict or list of model entries (see below).
@@ -356,8 +360,8 @@ GPU when the job has one. The model is either
         path: mito_aff_setup54_16nm-ft1.onnx   # beside this YAML
 
 The browser's *Export Config* (in its header) writes such a YAML: the
-volume's URL as ``data_path``, the ``resample`` setting, the Input and
-Postprocess steps as ``json_data``, and each model it serves as a
+volume's URL as ``data_path``, the ``resample`` setting, the Processing
+tab's steps as ``json_data``, and each model it serves as a
 ``type: onnx`` entry, a Hugging Face export by ``repo``, ``folder`` and the
 ``file`` the page ran, a model finetuned there by ``path: <name>.onnx`` (the
 file *Download finetuned model* saves), with a comment saying to put that

@@ -109,10 +109,13 @@ jobs:
       - name: Assemble the site
         run: |
           cp -r web/dist site/app
+          # Sign in with Hugging Face's client metadata document, whose URL
+          # is the app's OAuth client id (cellmap_flow/portable/publish.py).
+          cp -r web/.well-known site/app/
           # Serve the files as they are: Jekyll would drop every path that
           # starts with an underscore, Sphinx's _static and _sources among them.
           touch site/.nojekyll
-          for f in index.html app/index.html app/sw.js app/ng/index.html; do
+          for f in index.html app/index.html app/sw.js app/ng/index.html app/.well-known/oauth-cimd; do
             [ -f "site/$f" ] || { echo "::error::site/$f is missing"; exit 1; }
           done
           [ -d site/app/static/js ] || { echo "::error::site/app/static/js is missing"; exit 1; }

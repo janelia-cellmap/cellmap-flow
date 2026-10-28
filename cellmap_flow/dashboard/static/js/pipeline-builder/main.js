@@ -10,8 +10,10 @@
 //   bbx.js        an INPUT node's bounding boxes
 //   output-channels.js, model-config-modal.js   the two other dialogs
 //   blockwise.js  the Blockwise bar
-//   log-panel.js  the Flow Logs panel
 //   dialogs.js, messages.js   the dialogs' backdrop, and toasts
+//
+// The log at the foot of the page is the dashboard page's too
+// (shared/log-panel.js), which its template (_log_panel.html) loads.
 //
 // The modules use each other's functions freely (the canvas draws nodes
 // whose buttons redraw the canvas). That is safe because importing one only
@@ -24,7 +26,6 @@ import { initBlockwise } from "./blockwise.js";
 import { autoLayoutNodes, initCanvas, renderCanvas } from "./canvas.js";
 import { initDialogs } from "./dialogs.js";
 import { initIo } from "./io.js";
-import { initLogPanel } from "./log-panel.js";
 import { initModelConfigModal } from "./model-config-modal.js";
 import { initOutputChannels } from "./output-channels.js";
 import { initPalette } from "./palette.js";
@@ -32,7 +33,6 @@ import { changed, loadPipeline, syncOnUnload } from "./state.js";
 
 const unplaced = loadPipeline();
 syncOnUnload();
-initLogPanel();
 initCanvas();
 initPalette();
 renderCanvas();

@@ -8,28 +8,55 @@
 // (a download, then a run over the painted chunks) and longer on a server for
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
-// each request, and one not running (cluster) starts unticked. A filter narrows the models listed; Rank scores the ticked ones it
-// shows. Each row gives what its score was read at, as the controls it sets
+// each request. In both modes only the models running and the ones added by
+// hand start ticked. They are
+// listed as the Models tab lists them, made of the same pieces
+// (shared/model-list.js): a section for each of the tab's sections a model
+// is under (its group), with the tab's rows, the Hugging Face and zoo
+// sections' search bar, Refresh and filters (a server's Hugging Face section
+// showing only the models with a browser copy to start, as the Models tab's
+// does, and both modes' in order of name or size), and its Add a model;
+// each row tagged with what the model is (shared/model-list.js factTags,
+// from the candidate's formats, finetune modes, size and browser copy). The
+// ticks are the ranking's own, not the Models tab's: a ticked model stays in
+// view whatever its section's search and filters, and Rank scores every
+// ticked one. Each
+// row of the ranking gives what its score was read at, as the controls it sets
 // take it (portable/rank.py score_row): the threshold, a probability, and
-// the raw's range read as 0 to 1. Show serves a model and adds its layer, as
-// the Models tab's Add does; Use this model (POST /api/finetune/rank/use)
-// makes one the model to finetune: served, a new volume made for it with the
-// paint carried onto its grid, that volume the session's and its paint layer
-// in the viewer. The model picker (models.js pickModel) and the Annotation
-// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow.
+// the input normalization it was read through (input_norm: the model's own,
+// or the session's when that matched better, maybe stretched to the raw
+// under the paint). Show serves a model and adds its layer, as the Models
+// tab's Add does; Use this model (POST /api/finetune/rank/use) makes one the
+// model to finetune: that input normalization the session's, the model
+// served, a new volume made for it with the paint carried onto its grid,
+// that volume the session's and its paint layer in the viewer. The model picker (models.js pickModel) and the Annotation
+// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow, and
+// a binary model's row's channel (channel_index, the channel that matched
+// best) becomes its Channel in the training form (training-form.js
+// pickChannel), shown once the model is picked if it trains one channel at
+// a time. Rank itself fills the Channel of the model the form shows, when
+// none is picked (fillChannel): that is the model painted for, which has no
+// Use this model.
 //
 // Fit to Paint, beside Seed from Prediction, does the same for the model
 // that seeds the paint (Label it's Prediction from) without a new volume:
 // it scores that model with the same route, and sets its threshold and,
-// when the stretch won, its window (POST /api/finetune/rank/window). Both
-// it and Use this model mark Seed from Prediction's threshold as set by
-// ranking, and say on the line under Label it's buttons what they set.
+// when it is not the session's as it stands, the input normalization its
+// score was read through (POST /api/finetune/rank/input-norm); its
+// Channel only when the form shows one for that model with nothing picked
+// (fillChannel), so a channel the user picked stays. Both it and Use this
+// model mark Seed from Prediction's threshold as set by ranking, and say on
+// the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
 import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { isBrowserMode } from "../../lib/page-data.js";
+import { searchText } from "../../lib/search.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
+import { addModelField, listControls, modelRow, modelSection, neededField, notice, zooRow } from "../../shared/model-list.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { channelLabel, fillChannel, pickChannel } from "./training-form.js";
 
 // A score this close to the best one is marked about as good as it: two
 // points of matching are not worth choosing a model by.
@@ -55,29 +82,42 @@ export function rankResults(answers) {
   return { rows, littlePaint: Boolean(best) && best.scored_voxels < LITTLE_PAINT };
 }
 
-// Whether `candidate` shows under the filter typed: every word of it is in
-// the model's name, task, channels or a voxel size ("16 nm" or "16nm"), or
-// is its "2d" or "3d", or "finetuned", whatever the case. Blank shows all.
-export function matchesFilter(candidate, query) {
-  const words = query.toLowerCase().replace(/(\d)\s+nm\b/g, "$1nm").split(/[\s,]+/).filter(Boolean);
-  const text = [
+// The text a section's search reads in `candidate`'s row (lib/search.js,
+// the rule every model list's search follows): the model's name, task,
+// channels and voxel size ("16nm", which "16 nm" finds too), its "2d" or
+// "3d", and "finetuned" for a finetune. A zoo model's row is searched as
+// the Models tab's zoo list searches it (shared/model-list.js zooRow).
+export function candidateText(candidate) {
+  return searchText(
     candidate.name, candidate.task, ...(candidate.channels || []),
     ...(candidate.voxel_size_nm || []).map((size) => `${size}nm`),
     candidate.dims && `${candidate.dims}d`, candidate.finetuned && "finetuned",
-  ].filter(Boolean).join(" ").toLowerCase();
-  return words.every((word) => text.includes(word));
+  );
 }
 
 function isScored(answer) {
   return Boolean(answer.success) && Number.isFinite(answer.matches);
 }
 
-// A scored row's two settings, as columns (each a fixed width, so they line
+// Where a score's input normalization came from (portable/rank.py
+// norm_tries's `from`), in the row's words.
+const NORM_FROM = {
+  declared: "its own",
+  convention: "CellMap convention",
+  assumed: "assumed [−1, 1]",
+  session: "yours",
+  none: "none",
+};
+
+// A scored row's settings, as columns (each a fixed width, so they line
 // up from row to row): the threshold Seed from Prediction takes, 0.5 when
 // the model's own boundary fits the paint best, else with the match at 0.5;
-// and the raw's range the model reads as 0 to 1, its normalizer's own
-// unless the raw under the paint stretched scored clearly better, then with
-// the match unstretched (cellmap_flow/portable/rank.py score_row).
+// the input normalization it was read through, where it came from and its
+// steps, stretched to the raw under the paint when that scored clearly
+// better, then with the match unstretched, and what the others tried
+// matched (cellmap_flow/portable/rank.py score_row); and the postprocessing
+// its layer needs, when it needs any: the sigmoid added or taken away and
+// the threshold the paint is fitted best at (needed_postprocess).
 function settingsCells(row) {
   const own = row.cutoff === 0;
   const stretched = Array.isArray(row.window);
@@ -85,9 +125,71 @@ function settingsCells(row) {
     h("span", { style: { minWidth: "11rem" }, title: "The probability above which the prediction fits your paint best, as Seed from Prediction's threshold takes it; 0.5 is the model's own boundary" },
       "Threshold ", h("strong", {}, String(row.threshold)),
       own ? h("span", { class: "text-muted" }, " (model's own)") : h("span", { class: "text-muted" }, ` (${percent(row.matches_at_zero)} at 0.5)`)),
-    h("span", { title: "The raw's grey levels the model reads as 0 to 1: its normalizer's own, or the raw under your paint stretched, when that matched clearly better" },
-      "Input ", h("strong", {}, Array.isArray(row.input_window) ? levels(row.input_window) : "as normalized"),
-      stretched ? h("span", { class: "text-muted" }, ` stretched (${percent(row.matches_without_window)} unstretched)`) : ""));
+    h("span", { title: "The input normalization the model was read through: its own (what it declares, or the CellMap convention for a CellMap model), or yours from the Processing tab when that matched better; Use this model sets it" },
+      "Input ", h("strong", {}, NORM_FROM[row.input_norm_from] || "as normalized"),
+      Array.isArray(row.input_norm) && row.input_norm.length ? h("span", { class: "text-muted" }, ` ${stepsText(row.input_norm)}`) : "",
+      stretched ? h("span", { class: "text-muted" }, `, stretched (${percent(row.matches_without_window)} unstretched)`) : "",
+      (row.input_norm_others || []).length ? h("span", { class: "text-muted" }, `; ${othersText(row.input_norm_others)}`) : ""),
+    Array.isArray(row.postprocess) && h("span", { title: `The postprocessing the model's output needs to show right, which Use this model sets: a sigmoid added for an output with no activation (logits) or taken away from one that has one already, and the threshold your paint is fitted best at. ${activationText(row)}` },
+      "Output ", h("strong", {}, outputWords(row.postprocess))));
+}
+
+// Where the output activation a row was read by came from (the score's
+// output_class_from and output_op, its server's model_info's): the
+// network's last op, which says it for certain, or a guess from the model's
+// output on noise (the browser: its manifest's words).
+function activationText(row) {
+  const op = row.output_op;
+  if (row.output_class_from === "graph" && op) return `Its network ends in ${/^[AEIOU]/.test(op) ? "an" : "a"} ${op}.`;
+  if (row.output_class_from === "probe") return "Its network does not say what its output is: read off its output on noise, a guess.";
+  if (row.output_class_from === "manifest") return "Its network does not say what its output is: read from its manifest's words, a guess.";
+  return "What its output is, neither its network nor its output on noise says.";
+}
+
+// What a score that is right on one class only does, in words: a model
+// that calls (almost) everything object finds every painted object and
+// matches about as well as guessing (objects 99%, background 34%: 66%), and
+// "objects 99%" alone read as good. Null when both are right at least half
+// the time.
+function lopsided(row) {
+  if (Number.isFinite(row.background_right) && row.background_right < 0.5) return "calls most of your background object too";
+  if (Number.isFinite(row.objects_found) && row.objects_found < 0.5) return "misses most of your objects";
+  return null;
+}
+
+// What the other input normalizations tried matched: "none 51%".
+function othersText(others) {
+  return others.map((o) => `${NORM_FROM[o.from] || o.from} ${percent(o.matches)}`).join(", ");
+}
+
+// A row's postprocessing (needed_postprocess's), in short: "+ sigmoid, cut
+// at 0.731", "cut at 0.731" for an output that has its activation, or "no
+// second sigmoid" when the steps are the chain's with its sigmoid taken away.
+function outputWords(steps) {
+  const cut = steps.find((step) => step.name === "ThresholdPostprocessor");
+  const words = [steps.some((step) => step.name === "SigmoidPostprocessor") && "+ sigmoid", cut && `cut at ${cut.threshold}`].filter(Boolean);
+  return words.length ? words.join(", ") : "no second sigmoid";
+}
+
+// The rest of a binary model's channels beside its best (channel_matches,
+// the best first): the two closest, by name, number and match ("next: mito
+// (2) 85%, er (3) 60%"), or that none does better than guessing.
+function runnersUp(row) {
+  const others = (row.channel_matches || []).slice(1);
+  if (!others.length) return "";
+  if (others[0].matches <= 0.505) return "every other channel 50% or less";
+  return `next: ${others.slice(0, 2).map((c) => `${channelLabel(c.channel, c.channel_index, false)} ${percent(c.matches)}`).join(", ")}`;
+}
+
+// Normalizer steps in a few words each: a MinMaxNormalizer as the raw's
+// range it reads as 0 to 1, a LambdaNormalizer as its expression, any other
+// by its name.
+function stepsText(steps) {
+  return steps.map((step) => {
+    if (step.name === "MinMaxNormalizer") return `${levels([Number(step.min_value ?? 0), Number(step.max_value ?? 255)])} to 0–1`;
+    if (step.name === "LambdaNormalizer") return step.expression;
+    return step.name.replace(/Normalizer$/, "");
+  }).join(" → ");
 }
 
 // A raw window [lo, hi] as grey levels: whole ones for a raw of hundreds of
@@ -113,6 +215,28 @@ function describe(candidate) {
     .filter(Boolean).join(", ");
 }
 
+// The ranking's sections, one for each group the candidates are under (the
+// routes' RUNNING, HUGGING_FACE, ZOO and ADDED, a server's Local Catalog
+// groups, and the browser's GROUPS), in the Models tab's order, which the
+// routes list the candidates in; null is where the groups named nowhere
+// else go, in the order listed: a server's Local Catalog's. `hf` is the
+// group of the Models tab's Hugging Face list, whose section has its search
+// bar and Refresh: the browser's is cellmap's own repo, where a server's
+// "cellmap" is a Local Catalog group. That section and the zoo's show even
+// while they list nothing, for their Refresh.
+const ZOO_GROUP = "BioImage Zoo";
+const SERVER_GROUPS = { order: ["Running", null, "Hugging Face", ZOO_GROUP, "Added"], hf: "Hugging Face" };
+const BROWSER_GROUPS = { order: ["Running", "cellmap", "Added", "Finetuned", null], hf: "cellmap" };
+// The Models tab's Hugging Face and zoo lists (GET, and POST .../refresh to
+// fetch them again), which a listing of the candidates reads only as those
+// cached them: a server's ranking never waits on the Hub or bioimage.io.
+const LISTS = { hf: "/api/huggingface-models", zoo: "/api/bioimage-models" };
+// What their sections say until then, as the Models tab's do.
+const NOT_LOADED = { hf: "Click to load Hugging Face models...", zoo: "Click to load BioImage Model Zoo models..." };
+// What rank/add takes as voxel_size of what a model needs (the route's
+// VOXEL_NEEDS); anything else only the Models tab's Add a model asks for.
+const VOXEL_NEEDS = ["voxel_size", "input_voxel_size"];
+
 // Whether the card is open, kept in this browser as the patch tools'
 // sections are (index.js rememberOpenSections); closed until opened.
 const OPEN_KEY = "finetuneRankOpen";
@@ -120,12 +244,18 @@ const OPEN_KEY = "finetuneRankOpen";
 // model: {threshold, model}, kept in this browser for the field's mark.
 const MARK_KEY = "cellmap_flow.seed_threshold_by_ranking";
 
-export function initRank() {
+// form: the training form (training-form.js), for its GPU queues.
+export function initRank({ form }) {
   const section = document.getElementById("rankSection");
-  const filter = document.getElementById("rankFilter");
   const tickAll = document.getElementById("rankTickAll");
   const tickNone = document.getElementById("rankTickNone");
-  const candidateList = document.getElementById("rankCandidates");
+  // The sections, and Add a model under them.
+  const sectionList = document.getElementById("rankSections");
+  const groups = isBrowserMode() ? BROWSER_GROUPS : SERVER_GROUPS;
+  // Ticked only shows the models Rank scores, and the count beside it says
+  // how many. Tick none unticks every one, in every section.
+  const tickedOnly = document.getElementById("rankTickedOnly");
+  const tickedCount = document.getElementById("rankTickedCount");
   const rankBtn = document.getElementById("rankBtn");
   const stopBtn = document.getElementById("rankStopBtn");
   const status = document.getElementById("rankStatus");
@@ -147,6 +277,17 @@ export function initRank() {
   // later starts as its listing says.
   const unticked = new Set();
   const seen = new Set();
+  // A section for each group, made once and kept, so it stays open or closed
+  // as it was left and its search keeps what was typed while the list is
+  // shown again: {section, controls, list, kind}, kind "hf" or "zoo" for the
+  // Models tab's lists of those, with their controls. Each model's row as
+  // shown last, by name. Whether the listing had the Models tab's Hugging
+  // Face and zoo lists cached (a browser's always has its catalog), and why
+  // one could not be fetched.
+  const sections = new Map();
+  let rowsByName = new Map();
+  let cached = { hf: true, zoo: true };
+  const listErrors = {};
   // The ranking shown: its score answers in the order they came, the models
   // it scores by name (for Show), the volume it was painted on, and its
   // status line ({ text, tone }), which stays while its table does.
@@ -180,13 +321,67 @@ export function initRank() {
   }
 
   // What Use this model or Fit to Paint set from `row`, the model's score:
-  // the threshold, and the input normalization, stretched to `window` (the
-  // route that set it answered it) or left as it was.
-  function fittedText(name, row, window) {
-    const input = Array.isArray(window)
-      ? `the input normalization now stretches the raw from ${levels(window)} to 0–1, for every model`
-      : `the input normalization is left as it was${Array.isArray(row.input_window) ? `, the raw read from ${levels(row.input_window)}` : ""}`;
-    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}, and ${input}.`;
+  // the threshold, the channel when one was set (`channel`, its name), and
+  // the input normalization the score was read through (inputText).
+  function fittedText(name, row, channel) {
+    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}${channel ? `, ${channelSet(channel)}` : ""}${changesOutput(row) ? `, ${outputText(row)}` : ""}, and ${inputText(row)}.`;
+  }
+
+  // Whether `row` carries postprocessing to set: the sigmoid its layer needs
+  // added or taken away, and the threshold (portable/rank.py
+  // needed_postprocess).
+  function changesOutput(row) {
+    return Array.isArray(row.postprocess);
+  }
+
+  // The postprocessing a score set, in words: the sigmoid its output needs
+  // (or a second one taken away), and the threshold the paint is fitted
+  // best at, in its output's units after that (portable/rank.py
+  // needed_postprocess: on a tanh's [-1, 1], 2p - 1 for the row's p).
+  function outputText(row) {
+    const cut = row.postprocess.find((step) => step.name === "ThresholdPostprocessor");
+    const sigmoid = row.postprocess.some((step) => step.name === "SigmoidPostprocessor");
+    if (cut) return `its layer shows ${sigmoid ? "the sigmoid of its output" : "its output"} cut at ${cut.threshold}`;
+    return sigmoid ? "a sigmoid turns its output into probabilities" : "the second sigmoid on its output is taken away";
+  }
+
+  // The chain parts a score sets, as Use this model and Fit to Paint send them.
+  function chainParts(row) {
+    return { ...(changesInput(row) ? { input_norm: row.input_norm } : {}), ...(changesOutput(row) ? { postprocess: row.postprocess } : {}) };
+  }
+
+  // Whether setting `row`'s input normalization changes the session's: it
+  // does unless the score was read through the session's as it stands (or
+  // through none, with none set).
+  function changesInput(row) {
+    return Array.isArray(row.input_norm) && (Array.isArray(row.window) || !["session", "none"].includes(row.input_norm_from));
+  }
+
+  // The input normalization a score set, in words, for every model, or that
+  // it was left as it was.
+  function inputText(row) {
+    if (!changesInput(row)) return "the input normalization is left as it was";
+    const from = { declared: "its declared one", convention: "the CellMap convention", assumed: "the assumed [−1, 1]", session: "yours" }[row.input_norm_from] || "the one it was read through";
+    return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
+  }
+
+  // Why a score's model fits the paint, in words: how much of it it gets
+  // right, on which channel ahead of which, through which normalization
+  // ahead of which.
+  function whyText(row) {
+    const channel = row.channel ? ` on its ${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
+    const others = (row.input_norm_others || []).length ? ` (${othersText(row.input_norm_others)})` : "";
+    return `${percent(row.matches)} of your paint right${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
+  }
+
+  // A channel set from a score, in words: a binary model's score is read on
+  // its best channel (channel_index), which Use this model makes the model's
+  // Channel (pickChannel) and Fit to Paint fills in when none is picked
+  // (fillChannel): the channel it trains and Seed from Prediction reads. A
+  // model of one channel trains that one anyway; an affinity model's
+  // channels are scored together, and set none.
+  function channelSet(channel) {
+    return `the channel it trains and seeds from is ${channel}`;
   }
 
   // The threshold a score fitted, made Seed from Prediction's (label-it.js
@@ -223,6 +418,7 @@ export function initRank() {
     if (!d.success) return { ready: false, message: `Could not list the models: ${d.error}`, tone: "danger" };
     listed = true;
     candidates = d.candidates || [];
+    cached = { hf: d.hf_cached !== false, zoo: d.zoo_cached !== false };
     for (const candidate of candidates) {
       if (!seen.has(candidate.name) && candidate.ticked === false) unticked.add(candidate.name);
       seen.add(candidate.name);
@@ -266,27 +462,208 @@ export function initRank() {
     return refreshing;
   }
 
-  // The models the filter shows.
-  function shown() {
-    return candidates.filter((candidate) => matchesFilter(candidate, filter.value));
+  // A listing begun after what was just changed (a model added, a list
+  // fetched): one under way may have begun before it.
+  async function relist() {
+    if (refreshing) await refreshing;
+    return refresh();
   }
 
+  function isTicked(candidate) {
+    return !unticked.has(candidate.name);
+  }
+
+  // Whether `candidate`'s row (`row`, its data the section's controls
+  // match) shows: it is ticked (a ticked one stays in view, as the Models
+  // tab's zoo list keeps it, so nothing is ranked unseen), or, but under
+  // Ticked only, it passes its section's search and filters when the
+  // section has them (the Hugging Face and zoo sections).
+  function visible(candidate, row) {
+    if (isTicked(candidate)) return true;
+    if (tickedOnly.checked) return false;
+    const { controls } = sections.get(candidate.group) || {};
+    return !controls || controls.matches(row.dataset);
+  }
+
+  // The models shown: their rows in view, in a section open.
+  function shown() {
+    return candidates.filter((candidate) => {
+      const row = rowsByName.get(candidate.name);
+      const { section: shownIn } = sections.get(candidate.group) || {};
+      return row && !row.hidden && shownIn && !shownIn.item.hidden && shownIn.isOpen();
+    });
+  }
+
+  // The groups to show a section for, in the Models tab's order: each one a
+  // candidate is under, and the Hugging Face and zoo lists' even when they
+  // list nothing yet.
+  function groupsShown() {
+    const listed = [...new Set(candidates.map((candidate) => candidate.group))];
+    const others = listed.filter((group) => !groups.order.includes(group));
+    return groups.order.flatMap((group) => (group === null ? others : [group]))
+      .filter((group) => listed.includes(group) || group === groups.hf || group === ZOO_GROUP);
+  }
+
+  // `group`'s section, made the first time: open when a model in it is
+  // ticked, so the ones Rank scores are in view; for the Models tab's
+  // Hugging Face and zoo lists, with their search bar and Refresh, and the
+  // zoo's filters, and opening it fetches the list when the listing had it
+  // not cached, as opening it on the Models tab does.
+  function sectionFor(group) {
+    if (sections.has(group)) return sections.get(group);
+    const kind = group === groups.hf ? "hf" : group === ZOO_GROUP ? "zoo" : null;
+    const made = modelSection({
+      id: `rank_${sections.size}`, title: group,
+      open: candidates.some((candidate) => candidate.group === group && isTicked(candidate)),
+      onOpen: kind && (() => {
+        if (!cached[kind]) fetchList(kind, false);
+      }),
+    });
+    const controls = kind === "hf"
+      ? listControls({
+        id: "rankHf", placeholder: "Search: mito aff, 16 nm, 2d", title: "Every word typed, in the model's name, task, channels, voxel size or its 2D/3D",
+        refreshTitle: "Refresh from Hugging Face", onRefresh: () => fetchList("hf", true), onChange: showCandidates,
+        browser: !isBrowserMode(), sort: true,
+      })
+      : kind === "zoo"
+        ? listControls({
+          id: "rankZoo", zoo: true, placeholder: "Search models...", title: "Every word typed, in the name, description, tags or 2D/3D",
+          refreshTitle: "Refresh from bioimage.io", onRefresh: () => fetchList("zoo", true), onChange: showCandidates,
+        })
+        : null;
+    const list = h("div", { class: kind === "zoo" ? "zoo-model-list" : null });
+    made.body.append(...(controls ? [controls.element] : []), list);
+    sections.set(group, { section: made, controls, list, kind });
+    return sections.get(group);
+  }
+
+  // A model's row, as the Models tab's: a zoo model's as its zoo list has it,
+  // with why it cannot be ranked under it when nothing says its voxel size;
+  // any other's its name, with what it predicts at what voxel size beside
+  // and what it is as tags (the candidate's facts). The volume's model says
+  // it is the one painted for.
+  function candidateRow(candidate, id) {
+    const paintedFor = candidate.volume_model ? " (painted for)" : "";
+    const options = {
+      id, checked: isTicked(candidate), disabled: running,
+      onTick: (on) => {
+        if (on) unticked.delete(candidate.name);
+        else unticked.add(candidate.name);
+        showCandidates();
+      },
+    };
+    if (candidate.zoo) {
+      return zooRow(candidate.zoo, {
+        ...options, name: candidate.zoo.name + paintedFor,
+        below: candidate.error ? h("div", { class: "zoo-trained" }, candidate.error) : null,
+      });
+    }
+    return modelRow({
+      ...options, value: candidate.name, name: candidate.name + paintedFor, note: describe(candidate),
+      title: candidate.source || `${candidate.repo}/${candidate.folder}`, search: candidateText(candidate), facts: candidate,
+    });
+  }
+
+  // The sections, each with its models' rows, in the order its controls
+  // choose: the rows not shown hidden, the count of those ticked in its
+  // header, the count of those shown in its controls (and of those hidden
+  // for having no browser copy), and under Ticked only the sections with
+  // none ticked hidden. A section is put back in its place only when the
+  // order changed: moved, its search bar would lose what is being typed.
   function showCandidates() {
     tickAll.disabled = tickNone.disabled = running;
-    const none = candidates.length && !shown().length
-      && h("small", { class: "text-muted" }, "No model matches the filter.");
-    candidateList.replaceChildren(none || "", ...candidates.map((candidate, i) => {
-      const id = `rankCandidate${i}`;
-      return h("div", { class: "form-check", hidden: !matchesFilter(candidate, filter.value) },
-        h("input", {
-          type: "checkbox", class: "form-check-input", id, value: candidate.name,
-          checked: !unticked.has(candidate.name), disabled: running,
-          onChange: (e) => (e.target.checked ? unticked.delete(candidate.name) : unticked.add(candidate.name)),
-        }),
-        h("label", { class: "form-check-label", for: id, title: candidate.source || `${candidate.repo}/${candidate.folder}` },
-          candidate.name, candidate.volume_model ? " (painted for)" : "", " ",
-          h("small", { class: "text-muted" }, describe(candidate))));
-    }));
+    tickedCount.textContent = `${candidates.filter(isTicked).length} ticked`;
+    const shownGroups = groupsShown().map(sectionFor);
+    const items = shownGroups.map(({ section: made }) => made.item);
+    if (items.length !== sectionList.children.length || items.some((item, i) => sectionList.children[i] !== item)) {
+      sectionList.replaceChildren(...items);
+    }
+    rowsByName = new Map();
+    candidates.forEach((candidate, i) => rowsByName.set(candidate.name, candidateRow(candidate, `rankCandidate${i}`)));
+    for (const [group, { section: made, controls, list, kind }] of sections) {
+      const members = candidates.filter((candidate) => candidate.group === group);
+      const listed = members.map((candidate) => {
+        const row = rowsByName.get(candidate.name);
+        row.hidden = !visible(candidate, row);
+        return row;
+      });
+      const rows = controls ? controls.sorted(listed) : listed;
+      const ticked = members.filter(isTicked).length;
+      const inView = rows.filter((row) => !row.hidden).length;
+      made.count(ticked ? `${ticked} ticked` : "");
+      if (controls) controls.count(inView, rows.length, rows.filter((row) => row.hidden && !tickedOnly.checked && controls.noCopy(row.dataset)).length);
+      made.item.hidden = tickedOnly.checked && !ticked;
+      const empty = !rows.length && (listErrors[kind] ? notice(listErrors[kind], true)
+        : notice(kind && !cached[kind] ? NOT_LOADED[kind] : "No models found."));
+      const none = rows.length && !inView && notice("No model matches the search.");
+      list.replaceChildren(...rows, ...[empty, none].filter(Boolean));
+    }
+  }
+
+  // Add a model, as the Models tab's does, to this list (POST
+  // /api/finetune/rank/add resolves the reference and keeps the model in the
+  // session's list), ticked, without starting it. One whose voxel size
+  // nothing says is asked for it, as the Models tab's asks, and added with
+  // it (`voxelSize`); one that needs more is the Models tab's to add.
+  const addField = addModelField({
+    id: "rankAddRef", button: "Add",
+    placeholder: isBrowserMode() ? "Hugging Face repo: owner/repo, owner/repo/folder" : "Hugging Face repo, zoo model, path...",
+    title: "Any model the Models tab's Add a model takes but a Cellpose model; it joins the list, ticked, without starting",
+    onSubmit: (ref) => addModel(ref),
+  });
+  document.getElementById("rankAdd").append(addField.element);
+
+  async function addModel(ref, voxelSize) {
+    if (running) return;
+    setBusy(addField.button, true, "Adding...");
+    try {
+      const d = await postAnswer("/api/finetune/rank/add", { ref, ...(voxelSize ? { voxel_size: voxelSize } : {}) });
+      if (!d.success) {
+        const needs = d.needs || [];
+        if (needs.length && needs.every((key) => VOXEL_NEEDS.includes(key))) {
+          addField.show({
+            summary: d.error, fields: [neededField(needs[0])], action: "Add",
+            actionTitle: "Add it with this voxel size, ticked, without starting it",
+            onAction: (values) => addModel(ref, values[needs[0]].trim()),
+          });
+          return;
+        }
+        addField.hide();
+        say(`Could not add ${ref}: ${d.error || "not a model reference"}`, "danger");
+        return;
+      }
+      const name = (d.candidate || d).name;
+      unticked.delete(name);
+      addField.hide();
+      addField.input.value = "";
+      await relist();
+      say(`Added ${name}, ticked: Rank scores it with the others.`, "success");
+    } catch (e) {
+      say(`Could not add ${ref}: ${e.message || e}`, "danger");
+    } finally {
+      setBusy(addField.button, false);
+    }
+  }
+
+  // The Models tab's Hugging Face or zoo list (`kind`) fetched as that tab's
+  // section fetches it, from its cache or, `fresh` (its Refresh), from the
+  // Hub or bioimage.io again (the same routes in both modes), then this
+  // list, which lists what it fetched.
+  async function fetchList(kind, fresh) {
+    if (running) return;
+    const { section: made } = [...sections.values()].find((s) => s.kind === kind);
+    made.loading(true);
+    try {
+      const d = await (fresh ? postAnswer(`${LISTS[kind]}/refresh`) : getAnswer(LISTS[kind]));
+      listErrors[kind] = d && d.error ? `Could not list them: ${d.error}` : null;
+    } catch (e) {
+      listErrors[kind] = `Could not list them: ${e.message || e}`;
+    }
+    try {
+      await relist();
+    } finally {
+      made.loading(false);
+    }
   }
 
   function showResults() {
@@ -305,7 +682,7 @@ export function initRank() {
     const candidate = ranked.get(row.name);
     const scored = isScored(row);
     const details = [
-      row.channel && `${row.channel} channel`,
+      row.channel && `${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` · ${runnersUp(row)}` : ""}`,
       scored && `${Number(row.scored_voxels || 0).toLocaleString()} voxels (${row.object_voxels} object, ${row.background_voxels} background)`,
       row.note,
       Number.isFinite(row.seconds) && `${row.seconds.toFixed(1)} s`,
@@ -322,11 +699,12 @@ export function initRank() {
           training && training.name === row.name && h("span", { class: "badge bg-info ms-1" }, "training this")),
         // The buttons go under the name when the column is too narrow for both.
         h("div", { class: "d-flex gap-1 flex-shrink-0 ms-auto" },
-          candidate && scored && !candidate.volume_model && useButton(candidate, row),
+          candidate && scored && (candidate.volume_model ? settingsButton(candidate, row) : useButton(candidate, row)),
           candidate && showButton(candidate))),
       scored
         ? h("div", {}, h("strong", {}, `${percent(row.matches)} match`),
-          ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`)
+          ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`,
+          lopsided(row) && h("span", { class: "text-warning" }, ` · ${lopsided(row)}`))
         : h("div", { class: "small text-danger" }, row.error || "No score in the answer"),
       scored && settingsCells(row),
       details && h("small", { class: "d-block text-muted" }, details));
@@ -370,9 +748,63 @@ export function initRank() {
     return button;
   }
 
+  // The row of the model the volume is painted for has no Use this model
+  // (there is no other volume to make): this sets what its score was read
+  // at instead, as Use this model would (applyRow).
+  function settingsButton(candidate, row) {
+    const button = h("button", {
+      type: "button", class: `btn btn-sm ${row.best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null || fitting,
+      title: "Set what this model was scored at: its input normalization, the sigmoid its output needs, Seed from Prediction's threshold and its Channel. Your volume is painted for it already",
+    }, "Use these settings");
+    button.addEventListener("click", async () => {
+      if (running || switching !== null || fitting) return;
+      fitting = true;
+      showResults();
+      try {
+        await applyRow(candidate.name, row, true);
+      } catch (e) {
+        sayFit(`Could not set ${candidate.name}'s settings: ${e.message || e}`, "danger");
+      } finally {
+        fitting = false;
+        showResults();
+      }
+    });
+    return button;
+  }
+
+  // Sets what `row` (model `name`'s score) was read at, with no new volume:
+  // the input normalization and the sigmoid first (POST
+  // /api/finetune/rank/input-norm, when they are not the session's as they
+  // stand), then the threshold, which was fitted under them, and the
+  // Channel: made the row's channel when `explicit` (Use these settings, a
+  // click on that row), else filled only when none is picked (Fit to
+  // Paint's). Says what it set on the line under Label it's buttons;
+  // whether it could.
+  async function applyRow(name, row, explicit) {
+    if (changesInput(row) || changesOutput(row)) {
+      const set = await postAnswer("/api/finetune/rank/input-norm", { input_norm: row.input_norm, ...chainParts(row) });
+      if (!set.success) {
+        sayFit(`Could not set the input normalization that fits ${name} to your paint: ${set.error}`, "danger");
+        return false;
+      }
+      // The Processing tab's input normalization shows it as it now runs
+      // (main.js reads the chain again), so a later Apply keeps it.
+      announce(CHAIN_CHANGED_EVENT);
+    }
+    installThreshold(name, row.threshold);
+    let channel = null;
+    if (Number.isInteger(row.channel_index)) {
+      if (explicit) pickChannel(name, row.channel_index);
+      if (explicit || fillChannel(name, row.channel_index)) channel = channelLabel(row.channel, row.channel_index);
+    }
+    sayFit(fittedText(name, row, channel), "success");
+    return true;
+  }
+
   // Makes `candidate` the model to finetune, as its score (`row`) found it
-  // best: the raw's window, if one was chosen, as the session's normalizer,
-  // and its threshold as Seed from Prediction's, marked as set by ranking.
+  // best: the input normalization it was read through as the session's
+  // (before the model is served, so it is served through it), and its
+  // threshold as Seed from Prediction's, marked as set by ranking.
   // The ranking stays: the new volume holds the same paint, on the model's
   // grid.
   async function useModel(candidate, row) {
@@ -384,7 +816,12 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...(Array.isArray(row.window) ? { window: row.window } : {}) });
+      // The channel too, so the model's layer opens on it rather than on
+      // Neuroglancer's middle channel until the page's pick reaches it.
+      d = await postAnswer("/api/finetune/rank/use", {
+        ...request(candidate), ...chainParts(row),
+        ...(Number.isInteger(row.channel_index) ? { select_channel: row.channel_index } : {}),
+      });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
@@ -393,6 +830,12 @@ export function initRank() {
       rankBtn.disabled = false;
       showResults();
       say(d.error || `Could not make ${candidate.name} the model to finetune.`, "danger");
+      // The route may have done part of it before failing, or before its
+      // answer was lost ("Failed to fetch"): the input normalization and
+      // sigmoid set, the model started. Read the chain, the models and this
+      // list again, so the Processing tab and the lists show what is so.
+      announce(CHAIN_CHANGED_EVENT);
+      announce(MODELS_CHANGED_EVENT);
       return;
     }
     training = { name: d.name, volumeId: d.volume_id };
@@ -401,13 +844,21 @@ export function initRank() {
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
     installThreshold(d.name, row.threshold);
-    sayFit(fittedText(d.name, row, d.window), "success");
+    const channel = Number.isInteger(row.channel_index) ? channelLabel(row.channel, row.channel_index) : null;
+    // Before the pick below, which shows it.
+    if (channel !== null) pickChannel(d.name, row.channel_index);
+    sayFit(fittedText(d.name, row, channel), "success");
+    // The Processing tab's input normalization shows it as it now runs
+    // (main.js reads the chain again), so a later Apply keeps it.
+    if (Array.isArray(d.input_norm) || Array.isArray(d.postprocess)) announce(CHAIN_CHANGED_EVENT);
     const set = [
-      Array.isArray(d.window) && `the input normalization stretches the raw from ${levels(d.window)}`,
+      changesInput(row) && inputText(row),
+      changesOutput(row) && outputText(row),
       Number.isFinite(row.threshold) && `Seed from Prediction's threshold is ${row.threshold}`,
+      channel && channelSet(channel),
     ].filter(Boolean);
     summary = {
-      text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
+      text: `${d.name} is the model to finetune now, ${whyText(row)}: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
       tone: "success",
     };
     rankBtn.disabled = false;
@@ -421,9 +872,13 @@ export function initRank() {
     announce(MODELS_CHANGED_EVENT);
   }
 
-  // What names `candidate` to the routes: its name, and how to build it.
+  // What names `candidate` to the routes: its name, how to build it, and
+  // the GPU queues ticked at the top of the tab, where a model not running
+  // starts (none before LSF lists them, nor in the browser: the routes then
+  // use the Models tab's).
   function request(candidate) {
-    return { name: candidate.name, ...(candidate.entry ? { entry: candidate.entry } : {}) };
+    const queue = form.gpuQueues();
+    return { name: candidate.name, ...(candidate.entry ? { entry: candidate.entry } : {}), ...(queue.length ? { queue } : {}) };
   }
 
   // One model's score answer, with its name; a request that failed is an
@@ -440,12 +895,14 @@ export function initRank() {
     setBusy(rankBtn, true, "Ranking...");
     // A volume made, or a model added, since the list was shown is in this one.
     const state = await listCandidates();
-    const chosen = shown().filter((candidate) => !unticked.has(candidate.name));
+    // Every ticked model, which visible() keeps in view: one the filter hid
+    // used to be left out of the ranking though it was ticked.
+    const chosen = candidates.filter(isTicked);
     if (!state.ready || !chosen.length) {
       running = false;
       setBusy(rankBtn, false);
       showCandidates();
-      if (state.ready) say("Tick at least one of the models shown to rank.", "warning");
+      if (state.ready) say("Tick at least one model to rank.", "warning");
       else showReadiness(state);
       return;
     }
@@ -459,10 +916,18 @@ export function initRank() {
     showCandidates();
     showResults();
     const started = performance.now();
+    // The model the training form's Channel is shown for (the one painted
+    // for, which has no Use this model) gets the channel that matched best,
+    // when none is picked (fillChannel).
+    let filled = null;
     for (let i = 0; i < chosen.length && !stopping; i++) {
       const starting = chosen[i].cluster && !chosen[i].served ? ", starting it on the cluster first" : "";
       say(`Scoring ${chosen[i].name} (${i + 1} of ${chosen.length})${starting}...`);
-      answers.push(await score(chosen[i]));
+      const answer = await score(chosen[i]);
+      answers.push(answer);
+      if (isScored(answer) && Number.isInteger(answer.channel_index) && fillChannel(answer.name, answer.channel_index)) {
+        filled = ` ${answer.name}'s Channel is now ${channelLabel(answer.channel, answer.channel_index)}, the one that matched best.`;
+      }
       showResults();
     }
     running = false;
@@ -479,7 +944,7 @@ export function initRank() {
     summary = best && best.best
       ? {
         text: `${done} in ${seconds} s: ${best.name} matches your paint best, ${percent(best.matches)}` +
-              (tied ? `; ${tied} more ${tied === 1 ? "is" : "are"} about as good.` : "."),
+              (tied ? `; ${tied} more ${tied === 1 ? "is" : "are"} about as good.` : ".") + (filled || ""),
         tone: "muted",
       }
       : { text: `${done} in ${seconds} s: none could be scored (each row says why).`, tone: "danger" };
@@ -488,9 +953,10 @@ export function initRank() {
 
   // Fit to Paint: the model seeding the paint scored on it, as a ranking
   // scores one, and what fits it best set as Use this model sets it, with
-  // no new volume: the window first (POST /api/finetune/rank/window, when
-  // the stretched raw won), then the threshold, which was fitted under that
-  // window and so is set only once the window is.
+  // no new volume: the input normalization first (POST
+  // /api/finetune/rank/input-norm, when it is not the session's as it
+  // stands), then the threshold, which was fitted under it and so is set
+  // only once it is.
   async function fitToPaint() {
     if (running || switching !== null || fitting) return;
     const name = seedModel.value;
@@ -510,20 +976,7 @@ export function initRank() {
         if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
         return;
       }
-      let window = null;
-      if (Array.isArray(d.window)) {
-        const set = await postAnswer("/api/finetune/rank/window", { window: d.window });
-        if (!set.success) {
-          sayFit(`Could not set the input window that fits ${name} to your paint: ${set.error}`, "danger");
-          return;
-        }
-        window = set.window;
-        // The Input tab's list shows the stretched normalizer as it now runs
-        // (main.js reads the chain again), so a later Apply keeps it.
-        announce(CHAIN_CHANGED_EVENT);
-      }
-      installThreshold(name, d.threshold);
-      sayFit(fittedText(name, d, window), "success");
+      await applyRow(name, d, false);
     } catch (e) {
       sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");
     } finally {
@@ -539,14 +992,15 @@ export function initRank() {
   seedThreshold.addEventListener("input", showMark);
   seedThreshold.addEventListener("change", showMark);
   showMark();
-  filter.addEventListener("input", showCandidates);
-  // Tick or untick the models shown; the hidden ones keep their ticks.
+  tickedOnly.addEventListener("change", showCandidates);
+  // Tick the models shown, the hidden ones keeping their ticks; or untick
+  // every one.
   tickAll.addEventListener("click", () => {
     for (const candidate of shown()) unticked.delete(candidate.name);
     showCandidates();
   });
   tickNone.addEventListener("click", () => {
-    for (const candidate of shown()) unticked.add(candidate.name);
+    for (const candidate of candidates) unticked.add(candidate.name);
     showCandidates();
   });
   stopBtn.addEventListener("click", () => {

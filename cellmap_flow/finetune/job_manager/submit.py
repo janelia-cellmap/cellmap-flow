@@ -13,7 +13,11 @@ run's directory; this module answers the questions on the way:
   serves;
 - ``build_command``: the trainer's shell command line, which LSF runs on a
   GPU node (``python -m cellmap_flow.finetune.finetune_cli``);
-- ``launch``: that command on LSF, or here when there is no bsub.
+  ``module_command``: such a line for any module, in the model's
+  environment (the web export's, finetune/export_web.py, too);
+- ``launch``: that command on LSF, or here when there is no bsub;
+  ``QueueFallback``: the job moved to the next of its queues when it has
+  not started on one.
 """
 
 import functools
@@ -21,8 +25,9 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.site import current_site
@@ -281,7 +286,7 @@ def extract_data_path_from_corrections(corrections_path: Path) -> str:
 
 
 _TRAINER_MODULE = "cellmap_flow.finetune.finetune_cli"
-# The tee the trainer's output goes through (see build_command), and the
+# The tee the trainer's output goes through (see module_command), and the
 # interpreter it runs with: this process's, as it starts, since the tee needs
 # only the standard library, whichever environment the trainer runs in.
 SYNCED_TEE = str(Path(__file__).resolve().parents[2] / "jobs" / "synced_tee.py")
@@ -296,21 +301,22 @@ def _model_env(model_config):
     return envs.model_env(model_config)
 
 
-def _trainer_argv(model_config) -> List[str]:
-    """``python -P -m`` the trainer: this interpreter, or the model's environment's.
+def _python_argv(model_config, module: str) -> List[str]:
+    """``python -P -m module``: this interpreter, or the model's environment's.
 
     A model that is served from an environment of its own is trained there
-    too, since the trainer builds it. A pixi environment that cannot import
-    the trainer is refused here (ValueError) rather than as a job that dies
-    on its first import.
+    too, since the trainer builds it, and exported there, since the export
+    builds it the same way. A pixi environment that cannot import the
+    trainer is refused here (ValueError) rather than as a job that dies on
+    its first import.
     """
     env = _model_env(model_config)
     if not env:
-        return [sys.executable, "-P", "-m", _TRAINER_MODULE]
+        return [sys.executable, "-P", "-m", module]
     from cellmap_flow.models import envs
 
     _check_env_can_finetune(model_config)
-    return envs.python_argv(env, _TRAINER_MODULE)
+    return envs.python_argv(env, module)
 
 
 def _check_env_can_finetune(model_config) -> None:
@@ -325,8 +331,8 @@ def _check_env_can_finetune(model_config) -> None:
         raise ValueError(f"Cannot finetune {model_config.name}: {problem}")
 
 
-def _trainer_lib_dir(model_config) -> str:
-    """The lib directory of the environment ``_trainer_argv`` runs in."""
+def _env_lib_dir(model_config) -> str:
+    """The lib directory of the environment ``_python_argv`` runs in."""
     env = _model_env(model_config)
     if not env:
         return os.path.join(sys.prefix, "lib")
@@ -350,7 +356,7 @@ def build_command(
     auto_serve: bool,
     serve_data_path: Optional[str],
     models_dir: Optional[Path] = None,
-    queue: Optional[str] = None,
+    queue: Optional[List[str]] = None,
     charge_group: Optional[str] = None,
 ) -> str:
     """Build the shell command used to launch finetuning, for ``bash -c``.
@@ -361,11 +367,7 @@ def build_command(
     # Here, not at the top: cli imports this module for the model types.
     from cellmap_flow.finetune.cli import training_flags
 
-    # -P: without it `python -m` puts the job's working directory first on
-    # sys.path, so a job started from inside another cellmap-flow checkout
-    # ran that checkout's trainer instead of the installed one (and failed on
-    # the flags it did not know).
-    command_parts = [*_trainer_argv(model_config), "--model-type", model_type]
+    command_parts = ["--model-type", model_type]
 
     entry = model_entry(model_config, model_type, checkpoint_path)
     if entry is not None:
@@ -397,13 +399,25 @@ def build_command(
     if models_dir is not None:
         command_parts += ["--models-dir", str(models_dir)]
     # Only written into the serving YAMLs, so a model served from one runs
-    # where this job did rather than on hard-coded defaults.
+    # on the queues this job could rather than on hard-coded defaults.
     if queue:
-        command_parts += ["--queue", str(queue)]
+        command_parts += ["--queue", *map(str, queue)]
     if charge_group:
         command_parts += ["--charge-group", str(charge_group)]
+    return module_command(model_config, _TRAINER_MODULE, command_parts, log_file)
 
-    command = shell_join(command_parts)
+
+def module_command(model_config, module: str, args: List[str], log_file: Path) -> str:
+    """``python -P -m <module> <args>`` in the environment ``model_config``
+    trains in (``_python_argv``), as a shell line for ``bash -c`` that writes
+    its output to ``log_file`` and exits as the module does: the trainer's
+    (build_command), and the web export's (finetune/export_web.py).
+    """
+    # -P: without it `python -m` puts the job's working directory first on
+    # sys.path, so a job started from inside another cellmap-flow checkout
+    # ran that checkout's trainer instead of the installed one (and failed on
+    # the flags it did not know).
+    command = shell_join([*_python_argv(model_config, module), *args])
 
     # Put this interpreter's own lib directory first on the loader path.
     #
@@ -416,7 +430,7 @@ def build_command(
     # with "version `CXXABI_1.3.15' not found" even though the
     # environment ships a libstdc++ that has it. Seen with scipy pulled in
     # via cellpose on a GCC 13+ build.
-    env_lib = _trainer_lib_dir(model_config)
+    env_lib = _env_lib_dir(model_config)
     loader_path = (
         f"LD_LIBRARY_PATH={shell_quote(env_lib)}"
         '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
@@ -490,3 +504,51 @@ def launch(job_name: str, command: str, queue: Optional[str], charge_group: Opti
             logger.error(f"Failed to start local job: {e}")
             raise RuntimeError(f"Local job execution failed: {e}")
     return lsf_job
+
+
+class QueueFallback:
+    """Moving a training job that has not started to the next of its queues.
+
+    start_hosts does this for a server, while it waits for the server's
+    address. A training job is not waited on but followed, by its monitor,
+    which calls ``move`` at each poll at which LSF says the job is PENDING.
+    Once the job has been pending the site's pending_fallback_seconds on one
+    queue, it is submitted to the next of ``queues`` (those after the first
+    in queues.candidates' order, so only queues the job may run on) and the
+    waiting one is killed; on the last queue it waits however long that
+    takes. A queue that refuses the submission is not asked again, and the
+    next one is asked at once.
+
+    ``submit`` is ``launch`` with the job's name and command: a queue in, the
+    job submitted there out.
+    """
+
+    def __init__(self, queues: List[str], submit: Callable[[str], object]):
+        self.queues = list(queues)
+        self.submit = submit
+        self.since = time.monotonic()
+
+    def move(self, job) -> bool:
+        """Move ``job``, a FinetuneJob LSF says is pending, to the next queue
+        if it has waited long enough on this one; whether it was moved."""
+        wait = current_site().pending_fallback_seconds
+        if time.monotonic() - self.since < wait:
+            return False
+        while self.queues:
+            queue = self.queues.pop(0)
+            try:
+                moved = self.submit(queue)
+            except Exception as e:
+                logger.error(f"Job {job.job_id} could not be moved to {queue}: {e}")
+                continue
+            waiting, job.lsf_job = job.lsf_job, moved
+            waiting.kill()
+            # A cancel that came while this was being submitted killed the
+            # job waiting, not this one, which would train with nothing
+            # following it.
+            if job.cancel_requested:
+                moved.kill()
+            self.since = time.monotonic()
+            logger.warning(f"Job {job.job_id} had not started after {wait}s; moved to {queue}")
+            return True
+        return False

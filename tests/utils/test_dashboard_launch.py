@@ -121,7 +121,7 @@ def test_a_model_started_without_input_normalization_sets_the_one_it_declares(da
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     model = build_model({"type": "script", "script_path": str(script)}, "mine")
-    model.declared_input_norm = lambda: DECLARED  # as an onnx model's manifest declares them
+    model.declared_input_norm = lambda data_range=None: DECLARED  # as an onnx model's manifest declares them
     drawn_through = []
     monkeypatch.setattr(launch, "run_model",
                         lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
@@ -153,7 +153,7 @@ def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(
 
     def declaring(entry, name):
         model = built(entry, name)
-        model.declared_input_norm = lambda: DECLARED
+        model.declared_input_norm = lambda data_range=None: DECLARED
         return model
 
     monkeypatch.setattr(registry, "build_model", declaring)
@@ -173,6 +173,48 @@ def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(
     assert answer.status_code == 200
     assert session.pipeline_spec == PipelineSpec(DECLARED, postprocess)
     assert drawn_through == [PipelineSpec(DECLARED, postprocess)]
+
+
+# What cellmap-models' newer exports declare in metadata.json
+# (cellmap/mito-aff-unetiso-setup-53), and uint8 raw scaled onto it: the
+# CellMap convention's chain, which a CellMap model declaring none gets.
+MIN_MAX = {"method": "min_max", "min": -1.0, "max": 1.0}
+SIGNED = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False},
+          {"name": "LambdaNormalizer", "expression": "x*2-1"}]
+
+
+@pytest.mark.parametrize("metadata, declared", [
+    ({"framework": "torch", "input_normalization": MIN_MAX}, True),
+    ({"framework": "torch"}, False),  # cellmap/mito-aff-unet-setup-16's: nothing declared
+], ids=["declared in metadata.json", "the CellMap convention"])
+def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one_to_one(dashboard, monkeypatch,
+                                                                                       metadata, declared):
+    """A cellmap-models export's metadata.json declares the range the model
+    reads, [-1, 1]; a CellMap model that declares none was trained on it too,
+    by convention. Either's start sets the raw scaled onto it before its
+    layer is drawn, and the page is told which of the two it was."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = get_session()
+    postprocess = [{"name": "SigmoidPostprocessor"}]
+    session.set_pipeline(PipelineSpec([], postprocess))
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": ["cellmap/mito-aff-unetiso-setup-53"]})
+    assert answer.status_code == 200
+    assert session.pipeline_spec == PipelineSpec(SIGNED, postprocess)
+    assert drawn_through == [PipelineSpec(SIGNED, postprocess)]
+    (name,) = [model.name for model in session.models_config]
+    session.jobs = [_Job(name)]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):
@@ -209,17 +251,23 @@ def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dash
 
 def _finetune_jobs_model(monkeypatch, status):
     """A finetune job serving mito_finetuned_1 (add_finetuned_layer's job and
-    layer), the job ``status`` (a JobStatus), in the session's job manager."""
+    layer), the job ``status`` (a JobStatus), in the session's job manager.
+    Its LSF job is a _Job, killed by a cancel."""
     from cellmap_flow.dashboard import finetune_layers
+    from cellmap_flow.finetune.job_manager.manager import FinetuneJobManager
 
     monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda url: {})
     monkeypatch.setattr(finetune_layers, "prediction_layer",
                         lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
-    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
-                               model_name="mito", finetuned_model_name=None, params={}, status=status, job_id="ft-1")
+    lsf_job = _Job("finetune_mito")
+    lsf_job.job_id = "4242"
+    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=lsf_job, model_name="mito",
+                               finetuned_model_name=None, params={}, status=status, job_id="ft-1",
+                               output_dir="/runs/mito_1", cancel_requested=False)
     finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
     training.finetuned_model_name = "mito_finetuned_1"
-    get_session().finetune_job_manager = SimpleNamespace(jobs={"ft-1": training})
+    get_session().finetune_job_manager = FinetuneJobManager()
+    get_session().finetune_job_manager.jobs["ft-1"] = training
     return training
 
 
@@ -256,7 +304,7 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
         "affable_shark": ("bioimage", "affable-shark", "running", True),
         "cellpose_sam_v2_probability": ("cellpose", "cpsam_v2, probability", "running", True),
         "mine": ("added", "script", "running", True),
-        "mito_finetuned_1": ("finetuned", "from mito", "running", False),
+        "mito_finetuned_1": ("finetuned", "from mito", "running", True),
         "nuc": ("catalog", "Nuclei", "starting", True),
     }
     assert list(models) == ["mito", "fly_organelles_run08_438000", "affable_shark", "cellpose_sam_v2_probability",
@@ -266,8 +314,23 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     assert models["cellpose_sam_v2_probability"]["cellpose"] == {"model": "cpsam_v2", "output": "probability",
                                                                   "do_3d": False}
     assert "Finetune tab" in models["mito_finetuned_1"]["note"]
-    assert all(m["note"] is None for name, m in models.items() if name != "mito_finetuned_1")
+    assert all(m["note"] is None and m["confirm"] is None for name, m in models.items() if name != "mito_finetuned_1")
     assert {m["source"] for m in models.values()} == set(launch.SOURCES)  # the keys models-tab.js labels
+
+
+def test_removing_a_finetune_jobs_model_cancels_the_job(viewer, dashboard, monkeypatch):
+    """Its server is the training job itself. Its ✕ was disabled while the
+    job was alive, with a note to Cancel it on the Finetune tab; it asks
+    first now (``confirm``), then cancels the job as that Cancel does."""
+    from cellmap_flow.finetune.job_manager.state import JobStatus
+
+    training = _finetune_jobs_model(monkeypatch, JobStatus.WAITING_FOR_RESTART)
+    entry = dashboard.get("/api/models/loaded").get_json()["models"][0]
+    assert entry["name"] == "mito_finetuned_1" and entry["removable"] and entry["confirm"]
+
+    assert dashboard.post("/api/models/remove", json={"name": "mito_finetuned_1"}).status_code == 200
+    assert training.lsf_job.killed and training.status == JobStatus.CANCELLED
+    assert get_session().jobs == [] and "mito_finetuned_1" not in [layer.name for layer in viewer.state.layers]
 
 
 def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(

@@ -11,17 +11,18 @@ between profiles once there is more than one.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import List, Tuple
 
 
 @dataclass(frozen=True)
 class SiteProfile:
     # (queue, label, LSF host group backing it). The only GPU types offered:
-    # Janelia has others (gpu_l4, gpu_rtx8000), but they are not what anyone
-    # wants for inference or finetuning here, and a shorter list is easier to
-    # choose from than a complete one.
+    # Janelia has others (gpu_l4, gpu_b300), but they are not what anyone
+    # wants for inference or finetuning here (the L4s are small and the most
+    # contended, the B300s more than these jobs need), and a shorter list is
+    # easier to choose from than a complete one. The RTX 6000s (Blackwell,
+    # sm_120, which the pixi torch builds for) often have the shortest wait.
     gpu_queues: Tuple[Tuple[str, str, str], ...]
-    default_queue: str = "gpu_h100"
     # Who a job is billed to when neither the request nor the dashboard's
     # settings say.
     default_charge_group: str = "cellmap"
@@ -51,12 +52,21 @@ class SiteProfile:
     # after the client has given up; see lsf.BsubTimeoutError.
     bsub_timeout_seconds: int = 30
 
+    @property
+    def default_queues(self) -> List[str]:
+        """The queues a job may run on when nothing says which: every GPU
+        queue offered. The dashboard's GPU pickers start with all of them
+        ticked, and a job goes to whichever has the most free GPUs
+        (queues.candidates); a job pinned to one GPU model says so."""
+        return [queue for queue, _, _ in self.gpu_queues]
+
 
 JANELIA = SiteProfile(
     gpu_queues=(
         ("gpu_h100", "H100", "h100s"),
         ("gpu_h200", "H200", "h200s"),
         ("gpu_a100", "A100", "a100s"),
+        ("gpu_rtx6000", "RTX 6000", "rtx6000s"),
     ),
 )
 

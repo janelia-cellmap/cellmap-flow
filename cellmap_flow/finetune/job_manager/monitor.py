@@ -9,6 +9,8 @@ trainer has added to its log (tailer.LogTailer):
   as ``on_server_ready``;
 - each finished iteration's model, their ``on_iteration_complete``;
 - the status markers (state.on_status_marker).
+While the job waits for a GPU, it may move it to the next of its queues
+(submit.QueueFallback), and records the new LSF job id.
 
 It records each change of status in the run's metadata.json, and, when the
 job ends, its final status, model and serving YAML, once it has read the
@@ -27,6 +29,7 @@ from cellmap_flow.finetune.job_manager import persistence, state
 from cellmap_flow.finetune.job_manager.listener import Listeners
 from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, FinetuneJob, JobStatus
 from cellmap_flow.finetune.job_manager.tailer import Iterations, LogTailer
+from cellmap_flow.jobs.spec import JobStatus as LSFJobStatus
 from cellmap_flow.jobs.spec import exists_now
 
 logger = logging.getLogger(__name__)
@@ -63,9 +66,17 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
             # === Check LSF job status ===
 
             if finetune_job.lsf_job:
-                ended = state.on_scheduler_status(finetune_job, finetune_job.lsf_job.get_status())
+                lsf_status = finetune_job.lsf_job.get_status()
+                ended = state.on_scheduler_status(finetune_job, lsf_status)
                 if ended:
                     break
+                # The new job id is what a dashboard started later finds
+                # the job by (persistence.rehydrate).
+                fallback = finetune_job.fallback
+                if lsf_status == LSFJobStatus.PENDING and fallback and fallback.move(finetune_job):
+                    persistence.update_metadata(
+                        finetune_job.output_dir, lsf_job_id=finetune_job.to_dict()["lsf_job_id"]
+                    )
 
             # === Tail log file for progress updates ===
 
@@ -129,7 +140,8 @@ def monitor_job(finetune_job: FinetuneJob, listeners: Listeners):
 
 def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
     """
-    Parse log content for training progress (epoch, loss).
+    Parse log content for training progress (epoch, loss), and the
+    network's size.
 
     Args:
         finetune_job: Job to update
@@ -144,6 +156,10 @@ def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
     #
     # "Starting epoch N of M" is read too, so the epoch counter advances
     # as soon as an epoch begins rather than when it ends.
+    parameters = markers.NETWORK_PARAMETERS_RE.findall(log_content)
+    if parameters:
+        finetune_job.network_parameters = int(parameters[-1])
+
     for cur, total in markers.EPOCH_START_RE.findall(log_content):
         finetune_job.current_epoch = int(cur)
         finetune_job.total_epochs = int(total)

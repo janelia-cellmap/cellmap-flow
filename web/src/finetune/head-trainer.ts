@@ -1,6 +1,7 @@
 // The head trained on the painted voxels: their features gathered from each
 // chunk's feature map into one matrix (gatherPixels), then the head's
-// weights fitted to their targets with Adam on a masked, class-balanced
+// weights fitted to their targets with Adam, its rate eased down over the
+// run as the server's is (schedule.ts), on a masked, class-balanced
 // loss (trainHead): BCE-with-logits by default, label-smoothed, or the
 // server's MSE on probabilities or margin loss (batchLoss), each the server
 // trainer's (cellmap_flow/finetune/lora_trainer.py with losses.py's
@@ -19,6 +20,7 @@
 // reaches the job card as the epochs end, and a cancel gets through.
 // Everything is deterministic for a seed: the shuffles are mulberry32's,
 // the arithmetic doubles in one order.
+import { learningRateAt } from "./schedule";
 import type { FinetuneOptions, Head, HeadLoss, ModelFeatures, RunReporter, Targets } from "./types";
 
 /** The painted voxels of one or more chunks: `count` rows of the head's
@@ -61,7 +63,10 @@ const prod = (shape: readonly number[]) => shape.reduce((a, b) => a * b, 1);
 
 /** The voxel count of a chunk and the spatial size of its feature map's
  * batch slices, once `features` and `targets` are checked to describe the
- * chunk's voxels by the layout rule (see gatherPixels). */
+ * chunk's voxels by the layout rule (see gatherPixels). `head` is the head
+ * trained, which for a run of one channel is its row alone (run.ts), so the
+ * targets have its channels; the logits, the model's every channel, are
+ * checked against the features by the feature runner (features.ts). */
 export function chunkLayout(features: ModelFeatures, targets: Targets, head: Head, chunkShape: number[]): { n: number; spatial: number } {
   const n = prod(chunkShape);
   const { inChannels, outChannels } = head;
@@ -74,8 +79,6 @@ export function chunkLayout(features: ModelFeatures, targets: Targets, head: Hea
   if (features.features.length !== prod(fd) || prod(fd) !== inChannels * n) {
     throw new Error(`the feature map ${fd.join("×")} holds ${prod(fd) / inChannels} voxels, the chunk ${chunkShape.join("×")} has ${n}`);
   }
-  const ld = features.logitsDims;
-  if (prod(ld) !== outChannels * n) throw new Error(`the logits ${ld.join("×")} hold ${prod(ld) / outChannels} voxels, the chunk ${chunkShape.join("×")} has ${n}`);
   return { n, spatial: prod(fd.slice(2)) };
 }
 
@@ -95,8 +98,8 @@ export function copyFeatures(features: ModelFeatures, inChannels: number, spatia
  * voxels in C order. That covers the 2D exports' `[1, C, y, x]` and the 3D
  * exports' `[z, C, y, x]` (their final Conv runs with z as the batch axis)
  * alike: voxel v = n × spatial + s has channel c at (n × C + c) × spatial +
- * s. The logits are checked to the same rule, so the features gathered
- * belong to the voxels the targets describe. */
+ * s. The feature map is checked to hold the chunk's voxels, so the features
+ * gathered belong to the voxels the targets describe. */
 export function gatherPixels(features: ModelFeatures, targets: Targets, head: Head, chunkShape: number[]): PixelSet {
   const { inChannels, outChannels } = head;
   const { n, spatial } = chunkLayout(features, targets, head, chunkShape);
@@ -254,11 +257,19 @@ function teacherLogits(held: DistillationSet, teacher: { weight: Float32Array; b
  * it did before there was any. */
 const DISTILLATION_STREAM = 0x9e3779b9;
 
-/** The head fitted to `pixels` from `initial`'s weights (the head's own
- * when absent): `options.epochs` passes over the rows in a seeded shuffle,
- * `options.batchPixels` rows per Adam step (lr `options.learningRate`,
- * betas 0.9 and 0.999, eps 1e-8, PyTorch's defaults), the loss of
- * `batchLoss`.
+/** The Adam steps trainHead takes on `count` painted voxels: an epoch's
+ * batches of `options.batchPixels` (its last one short), times the epochs.
+ * The learning rate's schedule runs over them (schedule.ts). */
+export function headSteps(count: number, options: Pick<FinetuneOptions, "epochs" | "batchPixels">): number {
+  return options.epochs * Math.ceil(count / Math.min(options.batchPixels, count));
+}
+
+/** The head fitted to `pixels` from its own weights: `options.epochs` passes over the rows in a seeded shuffle,
+ * `options.batchPixels` rows per Adam step (betas 0.9 and 0.999, eps 1e-8,
+ * PyTorch's defaults), from `options.learningRate`, eased down to
+ * LEARNING_RATE_FLOOR of it by the last step or kept, as
+ * `options.learningRateSchedule` says (schedule.ts learningRateAt, over
+ * headSteps), the loss of `batchLoss`.
  *
  * With `distillation` and λ (`options.distillationLambda`) above 0, each
  * step's loss adds λ × distillationTerm on a share of the distillation
@@ -266,10 +277,8 @@ const DISTILLATION_STREAM = 0x9e3779b9;
  * out over the epoch's steps in equal slices, so every row is seen once an
  * epoch whatever the batch, as the server's patches bring their unlabeled
  * voxels along with their painted ones. The teacher is `head`, the weights
- * the job started from (FinetuneRun), not `initial`: the server's teacher
- * is the model before any iteration of the job changed it
- * (adaptation.py's teacher), so a restart does not distil toward what an
- * earlier run already moved.
+ * the job started from, as the server's teacher is the model before any
+ * iteration of the job changed it (adaptation.py's teacher).
  *
  * After each epoch one line to `report`, in the words the dashboard's job
  * card and loss plot parse: `Epoch i/N - Loss: 0.012345`, with distillation
@@ -283,7 +292,7 @@ const DISTILLATION_STREAM = 0x9e3779b9;
  * so far come back, with the losses of the epochs that completed: a cancel
  * right after an epoch's line (the job's Stop Early) returns that epoch's
  * head exactly. */
-export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneOptions, report: RunReporter, initial?: { weight: Float32Array; bias: Float32Array }, distillation?: DistillationSet | null): Promise<TrainedHead> {
+export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneOptions, report: RunReporter, distillation?: DistillationSet | null): Promise<TrainedHead> {
   const { count, inChannels: cin, outChannels: cout } = pixels;
   if (count === 0) throw new Error("no painted voxels to train on");
   if (!(options.epochs >= 1) || !Number.isInteger(options.epochs)) throw new Error(`epochs must be a whole number of 1 or more, not ${options.epochs}`);
@@ -293,17 +302,17 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
   if (!HEAD_LOSSES.includes(options.lossType)) throw new Error(`the head trains with the ${HEAD_LOSSES.join(", ")} losses, not ${options.lossType}`);
   if (!(options.margin >= 0 && options.margin <= 0.5)) throw new Error(`the margin is from 0 to 0.5, not ${options.margin}`);
   if (!(options.distillationLambda >= 0 && Number.isFinite(options.distillationLambda))) throw new Error(`the distillation weight is a number of 0 or more, not ${options.distillationLambda}`);
-  const start = initial ?? head;
-  if (start.weight.length !== cout * cin || start.bias.length !== cout) throw new Error(`initial weights of ${start.weight.length} and ${start.bias.length} values for a ${cout} × ${cin} head`);
+  if (head.weight.length !== cout * cin || head.bias.length !== cout) throw new Error(`a head of ${head.weight.length} and ${head.bias.length} values for ${cout} × ${cin} channels`);
   const lambda = options.distillationLambda;
   const held = distillation && distillation.count > 0 && lambda > 0 ? distillation : null;
   if (held && (held.inChannels !== cin || held.outChannels !== cout)) throw new Error(`a distillation set of ${held.inChannels} → ${held.outChannels} channels for a ${cin} → ${cout} head`);
 
   // The parameters and Adam's moments, doubles; the weights go back to float32 at the end.
-  const w = Float64Array.from(start.weight), b = Float64Array.from(start.bias);
+  const w = Float64Array.from(head.weight), b = Float64Array.from(head.bias);
   const mw = new Float64Array(w.length), vw = new Float64Array(w.length), mb = new Float64Array(b.length), vb = new Float64Array(b.length);
   const gw = new Float64Array(w.length), gb = new Float64Array(b.length);
-  const beta1 = 0.9, beta2 = 0.999, eps = 1e-8, lr = options.learningRate;
+  const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
+  const runSteps = headSteps(count, options);
   let step = 0;
 
   const batch = Math.min(options.batchPixels, count);
@@ -378,7 +387,8 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
           }
         }
       }
-      // Adam, as torch.optim.Adam steps it.
+      // Adam, as torch.optim.Adam steps it, at this step's rate.
+      const lr = learningRateAt(options.learningRate, step, runSteps, options.learningRateSchedule);
       step++;
       const correction1 = 1 - beta1 ** step, correction2 = 1 - beta2 ** step;
       adam(w, gw, mw, vw, lr, beta1, beta2, eps, correction1, correction2);

@@ -48,7 +48,8 @@ export function isFinetuned(entry: ModelEntry): boolean {
  * The variant keeps none of the base's fidelity numbers (max_abs and the
  * rest measure the base export against its PyTorch model), and the manifest
  * says in `checkpoint` where the weights came from, since the base's
- * checkpoint name no longer describes them. */
+ * checkpoint name no longer describes them; a published base's `published`
+ * block is not this model's and is left out. */
 export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number): ModelEntry {
   const variant: ModelVariant = {
     variant: base.variant.variant,
@@ -60,8 +61,9 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
     // bytes keep: what the manifest's finetune block names (modes.ts).
     source: sourceOf(base),
   };
+  const { published: _published, ...inherited } = base.manifest;
   const manifest: ModelManifest = {
-    ...base.manifest,
+    ...inherited,
     model: name,
     checkpoint: `finetuned in the browser from ${base.manifest.checkpoint || base.name}`,
     variants: [variant],
@@ -96,6 +98,23 @@ export function nextFinetunedName(base: ModelEntry, existing: FinetunedRecord[],
     if (match) highest = Math.max(highest, Number(match[1]));
   }
   return `${series}-ft${highest + 1}`;
+}
+
+/** Whether `name` is a model finetuned in this browser from `base`, or a
+ * later one of its series (nextFinetunedName: `x-ft1`, then `x-ft2` from
+ * either), and how late: its number, or null. Such a model's channels are
+ * `base`'s: a Seed from Prediction reads it with the base's channel pick
+ * (routes/view-labels.ts), and its layer opens on the channel shown for the
+ * base (backend/serving.ts shownChannel). */
+export function finetuneNumber(name: string, base: string): number | null {
+  const series = base.replace(/-ft\d+$/, "");
+  const after = /-ft(\d+)$/.exec(base);
+  const baseNumber = after ? Number(after[1]) : 0;
+  if (!name.startsWith(`${series}-ft`)) return null;
+  const rest = name.slice(series.length + 3);
+  if (!/^\d+$/.test(rest)) return null;
+  const n = Number(rest);
+  return n > baseNumber ? n : null;
 }
 
 function escapeRegExp(text: string): string {

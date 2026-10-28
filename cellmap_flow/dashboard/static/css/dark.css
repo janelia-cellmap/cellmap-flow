@@ -87,6 +87,14 @@ small, .text-muted {
   border-bottom-width: 3px;
 }
 
+/* A tab's own sub-tabs (the Processing tab's two lists, the Finetune tab's
+   crops and training): smaller than the dashboard's tabs, so both fit the
+   dashboard column on one row, with the Processing tab's badges. */
+.tab-pane .nav-tabs .nav-link {
+  padding: 8px 8px;
+  font-size: 13px;
+}
+
 /* ---------- Tab Panes ---------- */
 .tab-pane {
   background: transparent;
@@ -236,17 +244,42 @@ small, .text-muted {
   border: 1px solid transparent;
 }
 
+/* Buttons, one look across the page: a section's one main action is
+   .btn-primary (the accent), every other action .btn-outline-secondary,
+   stopping or deleting .btn-outline-danger, and text-like actions .btn-link.
+   Through Bootstrap's own variables, so a disabled or pressed main action
+   stays the accent: overriding background-color alone left Bootstrap's blue
+   on a disabled one ("Applying…"). */
 .btn-primary {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--accent);
+  --bs-btn-border-color: var(--accent);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--accent-hover);
+  --bs-btn-hover-border-color: var(--accent-hover);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--accent-hover);
+  --bs-btn-active-border-color: var(--accent-hover);
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: var(--accent);
+  --bs-btn-disabled-border-color: var(--accent);
+  --bs-btn-focus-shadow-rgb: 16, 185, 129;
+  /* .btn's "border: 1px solid transparent" above would hide it. */
+  border-color: var(--bs-btn-border-color);
 }
 
-.btn-primary:hover,
-.btn-primary:focus {
-  background-color: var(--accent-hover);
-  border-color: var(--accent-hover);
-  box-shadow: 0 0 0 2px var(--accent-muted);
+.btn-outline-danger {
+  --bs-btn-color: var(--danger);
+  --bs-btn-border-color: var(--danger);
+  --bs-btn-hover-color: var(--bg-base);
+  --bs-btn-hover-bg: var(--danger);
+  --bs-btn-hover-border-color: var(--danger);
+  --bs-btn-active-color: var(--bg-base);
+  --bs-btn-active-bg: var(--danger);
+  --bs-btn-active-border-color: var(--danger);
+  --bs-btn-disabled-color: var(--danger);
+  --bs-btn-disabled-border-color: var(--danger);
+  border-color: var(--bs-btn-border-color);
 }
 
 .btn-outline-secondary {
@@ -571,6 +604,53 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* The Publish to Hugging Face panel's fields, the label beside its field. */
+.publish-fields {
+  grid-template-columns: auto 1fr;
+}
+
+/* A publish's progress and links, on the Training Status card whether its
+   panel is open or not. Its repository's name and its lines, which name
+   files, wrap anywhere, and a failed job's log keeps its lines. */
+.publish-progress {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.publish-progress .publish-result-head strong,
+.publish-progress > .small {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* A publish's links, each under its name and Copy, wrapping anywhere. */
+.publish-result {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.publish-result a,
+.publish-result code {
+  overflow-wrap: anywhere;
+}
+
+.publish-result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  color: var(--text-muted);
+}
+
+.publish-result-head .btn {
+  margin-left: auto;
+  padding: 0;
+  font-size: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* The AI panel's API key and access token: text fields shown as dots, so a
    browser's password manager does not offer to save them as it does a
    password field's (_finetune_tab.html says why). */
@@ -868,19 +948,48 @@ textarea.form-control[readonly] {
   color: var(--text-muted);
 }
 
-/* The Apply bar at the top of the Input and Postprocess tabs
-   (templates/_apply_bar.html): its pending count and its notice are shown
-   and hidden with the `hidden` attribute, so their display is set here, not
-   with Bootstrap's d-block/d-flex, whose !important would override it. */
+/* The Processing tab (templates/_processing_tab.html): its Apply bar's
+   pending count and its notices are shown and hidden with the `hidden`
+   attribute, so their display is set here, not with Bootstrap's
+   d-block/d-flex, whose !important would override it. */
 .apply-pending {
   display: block;
 }
 
-.apply-notice {
+.chain-notice {
   display: flex;
 }
 
 .apply-pending[hidden],
-.apply-notice[hidden] {
+.chain-notice[hidden] {
   display: none;
+}
+
+/* The GPU queue pickers (shared/gpu-queues.js): a dropdown of checkboxes.
+   The button looks like the selects beside it; its text, the queues
+   ticked, is cut short rather than wrapped. The list is as wide as its
+   longest "label — what LSF says" line. */
+.gpu-queue-picker > .form-select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpu-queue-picker .dropdown-menu {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.gpu-queue-picker .dropdown-item {
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.gpu-queue-picker .dropdown-item:hover,
+.gpu-queue-picker .dropdown-item:focus {
+  background: var(--bg-muted);
+  color: var(--text-primary);
 }

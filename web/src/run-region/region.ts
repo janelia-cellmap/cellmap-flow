@@ -28,7 +28,7 @@ import { outputChannels, outputDtype } from "../infer/post";
 import { servedLevel } from "../label-it/prediction";
 import { decodeArgs } from "../shared/args";
 import { count, formatBytes, formatDuration } from "../shared/format";
-import { goodRegionsLayer } from "../viewer/layers";
+import { boxesLayer } from "../viewer/layers";
 import { coordsFromNm, pointerNm } from "../viewer/state";
 
 /** A box in the viewer's coordinates, nm, z, y, x: its lower corner and its
@@ -231,10 +231,10 @@ export const RUN_REGION_COLOR = "#f59e0b";
 
 /** The run_region layer, empty: a local annotation layer over `axes` (the
  * viewer's dimension names) at 1 nm, as the good regions' layer is built
- * (viewer/layers.ts goodRegionsLayer), so a box drawn in it is stored in
+ * (viewer/layers.ts boxesLayer), so a box drawn in it is stored in
  * nm, with the bounding-box tool as its tool (Ctrl+click two corners). */
 export function runRegionLayer(axes?: readonly string[]): LayerSpec {
-  return { ...goodRegionsLayer([], axes), tool: BOX_TOOL, annotationColor: RUN_REGION_COLOR };
+  return { ...boxesLayer([], axes), tool: BOX_TOOL, annotationColor: RUN_REGION_COLOR };
 }
 
 type Dimensions = Record<string, [number, string]>;

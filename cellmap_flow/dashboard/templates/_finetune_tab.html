@@ -75,11 +75,11 @@
       <button type="button" class="btn btn-primary" id="createVolumeBtn">
         New Volume
       </button>
-      <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
+      <button type="button" class="btn btn-outline-secondary" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
         Resume Existing Volume
       </button>
       {# server-only: the crops are zarrs on the server's disks. #}
-      <button type="button" class="btn btn-secondary server-only" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
+      <button type="button" class="btn btn-outline-secondary server-only" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
         Load Crops from YAML
       </button>
     </div>
@@ -124,7 +124,7 @@
   <div class="patch-tools mb-3">
     <div class="patch-tools-title">Patch on screen</div>
 
-    <details class="patch-tools-group patch-tools-section" id="labelItSection" open>
+    <details class="patch-tools-group patch-tools-section" id="labelItSection">
       <summary><span class="patch-tools-label">Label it</span></summary>
       <div class="d-flex align-items-center gap-2 mb-2">
         <label class="text-muted mb-0 text-nowrap" for="seedModel" style="font-size: 0.85rem;">Prediction from</label>
@@ -165,7 +165,10 @@
         <div class="patch-tools-fields">
           <label for="seedBox">Box (voxels)</label>
           <input type="text" class="form-control form-control-sm" id="seedBox" placeholder="one patch" inputmode="numeric"
-                 title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown.">
+                 title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown. With Field of view, only its depth along the axis the panel looks along counts (one number: that depth); blank is the slice on screen.">
+          <label for="seedFieldOfView">Field of view</label>
+          <input type="checkbox" class="form-check-input" id="seedFieldOfView"
+                 title="Seed from Prediction, All Background and Split Objects cover what the viewer's panel shows, at the zoom you see, rather than a box around its centre: in the four-panel layout the top-left panel, the one AI annotate reads. One slice deep, the slice on screen, unless Box gives a depth; one slice deep, a wall painted in that slice is enough for Split Objects. A view too large to label is refused, saying how far to zoom in.">
           <label for="seedThreshold">Threshold
             <span class="badge bg-info ms-1" id="seedThresholdByRanking" hidden
                   title="Fit to Paint or Use this model set this threshold: the one that fits your paint best. Changing it takes the mark away.">set by ranking</span></label>
@@ -294,7 +297,7 @@
 
           <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
             <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateRunBtn"
-                    title="Sends the plane you are looking at (XY, XZ or YZ, from the viewer's layout), centred on the view, to the model. Nothing is written until you accept the result.">
+                    title="Sends the plane you are looking at (XY, XZ or YZ, from the viewer's layout), centred on the view, to the model. Nothing is written until you accept the result; a result still waiting for review is rejected first.">
               Annotate at View Centre
             </button>
             <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateKeyHint">or hover over the viewer and press Shift+G</span>
@@ -315,7 +318,7 @@
         </div>
     </details>
 
-    <details class="patch-tools-group patch-tools-section" id="goodRegionsSection" open>
+    <details class="patch-tools-group patch-tools-section" id="goodRegionsSection">
       <summary><span class="patch-tools-label">Good regions</span></summary>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="markGoodRegionBtn"
@@ -331,7 +334,7 @@
 
   <!-- Save action. server-only: MinIO and the disk are the server's. -->
   <div class="mb-2 server-only">
-    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+    <button type="button" class="btn btn-outline-secondary" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
       Save Annotations to Disk
     </button>
     <small class="form-text text-muted d-block mt-1">Copies the annotations from MinIO to disk.</small>
@@ -408,7 +411,7 @@
                   title="Asks the model again about the same plane, with the prompt above.">Resend</button>
           <button type="button" class="btn btn-outline-danger" id="aiAnnotateRejectBtn"
                   title="Discards the result; nothing is written.">Reject</button>
-          <button type="button" class="btn btn-success" id="aiAnnotateAcceptBtn"
+          <button type="button" class="btn btn-primary" id="aiAnnotateAcceptBtn"
                   title="Writes the mask into the annotation volume: an id per object, background 1. Undo takes it back. The viewer reloads to show it.">Accept</button>
         </div>
       </div>
@@ -462,7 +465,7 @@
           <div id="loadCropsStatus" class="text-muted small"></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" class="btn btn-primary" id="loadCropsSubmitBtn">Load Crops</button>
         </div>
       </div>
@@ -513,7 +516,7 @@
           <div id="loadExistingStatus" class="text-muted small mt-2"></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" class="btn btn-primary" id="loadExistingConfirmBtn" disabled>Load Selected</button>
         </div>
       </div>
@@ -547,6 +550,18 @@
    and training-form.js sets it. #}
 <div class="tab-pane fade" id="training" role="tabpanel"{% if mode == "browser" %} data-training="head"{% endif %}>
 
+{# The GPU queues everything this tab starts on the cluster may run on: a
+   model Rank scores or Use this model serves (rank.js sends them), and the
+   training job and the server of its finetune (job-monitor.js). A dropdown
+   of checkboxes (shared/gpu-queues.js), made by training-form.js. #}
+<div class="mb-3 server-only">
+  <span class="form-label d-block" title="A job goes to whichever of the queues ticked has the most free GPUs, and moves to the next if it has not started in 3 minutes. The Models tab's GPUs are for the models it starts.">
+    GPU Queues <small class="text-muted">for Rank, Use this model and training</small>
+  </span>
+  <div id="gpuQueue" style="max-width: 24rem"></div>
+  <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
+</div>
+
 {# Which model to start from (rank.js), the models the page can run ranked
    by how well each one's prediction already matches the session volume's
    paint (web/src/backend/routes/rank.ts in the browser,
@@ -566,28 +581,43 @@
       <h5 class="d-inline" style="border-bottom: 0;">Which model to start from</h5>
     </summary>
     <div class="card-body" style="border-top: 1px solid var(--border);">
-      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.</p>
-      <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
-             placeholder="Filter: nuc, 16 nm, mito_aff"
-             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito_aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
-      <small class="d-block text-muted mb-1">Tick
-        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
-        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone">none</button>
-        (shown)</small>
-      <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
+      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.
+        {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
+      {# The models as the Models tab lists them, made of the same pieces
+         (js/shared/model-list.js): rank.js puts each in a section for the
+         Models tab section it is under (the candidates' group), the
+         running ones' first, with the tab's rows; the Hugging Face and zoo
+         sections with the tab's search bar and Refresh, and the zoo's with
+         its EM only, 2D and 3D (the zoo is server-only); and under them the
+         tab's Add a model (POST /api/finetune/rank/add resolves a reference
+         as POST /api/models/resolve does). The ticks are the ranking's own,
+         the models Rank scores: a ticked model stays in view whatever its
+         section's search, and a section's header says how many it has
+         ticked. #}
+      <small class="d-flex flex-wrap align-items-baseline column-gap-2 text-muted mb-1">
+        <span>Tick
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll" title="Tick every model shown in the sections open">all (shown)</button> /
+          <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone" title="Untick every model, in every section">none</button></span>
+        <span class="form-check mb-0"><input class="form-check-input" type="checkbox" id="rankTickedOnly">
+          <label class="form-check-label" for="rankTickedOnly" title="Show only the models ticked, the ones Rank scores">Ticked only</label></span>
+        <span id="rankTickedCount"></span>
+      </small>
+      <div class="accordion mb-2" id="rankSections"></div>
+      <div class="add-model mb-1" id="rankAdd"></div>
+      <small class="d-block text-muted mb-2">Cellpose models are not ranked: they predict flows, not objects and background.</small>
       <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
         <button type="button" class="btn btn-primary" id="rankBtn" disabled
-                title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each; only the running ones start ticked{% endif %}; the Models tab and the viewer are left as they were.">
+                title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each{% endif %}; only the running ones and the ones added start ticked; the Models tab and the viewer are left as they were.">
           Rank models
         </button>
-        <button type="button" class="btn btn-secondary" id="rankStopBtn" hidden
+        <button type="button" class="btn btn-outline-danger" id="rankStopBtn" hidden
                 title="Stop once the model being scored now is done; its score and the ones before it stay.">
           Stop
         </button>
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, as Fit to Paint does for the model seeding the paint.</small>
+        <small class="d-block text-muted mb-1">Match: how much of your paint the model already gets right, objects and background counting equally (50% is guessing, 100% is all of it). Use this model makes it the model to finetune, with the row's threshold, input normalization and channel.</small>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
         <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
       </div>
@@ -620,6 +650,26 @@
        per Step (head-only).
        web/src/browser.css
        gives the fields the full row. #}
+    {# The Channel, in both modes: which of the model's output channels the
+       paint trains, for a model of several that trains one at a time (its
+       /api/finetune/models entry's channel_choice: a binary target, which
+       would otherwise teach every channel the paint; an affinity or flow
+       model's channels each have a target of their own, and it has no
+       Channel). models.js shows it for such a model, its options the
+       channels by name and its pick the one kept for that model
+       (training-form.js setChannelChoice); training sends it as
+       select_channel, Seed from Prediction reads the same channel, Use this
+       model sets it to the channel that matched the paint best, and Rank,
+       Fit to Paint and Train fill that in only when nothing is picked: Train
+       scores the model on the paint first (job-monitor.js). Left unpicked
+       still, the submit route refuses, saying so. #}
+    <div class="mb-3" id="trainChannelGroup" hidden>
+      <label for="trainChannel" class="form-label" title="This model has several output channels, and trains one at a time on your paint: the one your paint is for. Left on the best match, Train (and Rank, and Fit to Paint) picks the channel that matches your paint best and says which. That channel learns the paint; every other channel is held to what the model predicted before, so the channels that were already good stay as they were. Seed from Prediction reads the channel picked too.">Channel</label>
+      <select id="trainChannel" class="form-select">
+        <option value="" selected>Best match for your paint</option>
+      </select>
+      <small class="text-muted d-block">The channel picked learns your paint; the others are held to what the model predicted.</small>
+    </div>
     {% if mode == "browser" %}
     <div class="mb-3" id="finetuneModeGroup" hidden>
       <label for="finetuneMode" class="form-label" title="What trains on the paint. Last layer: the model's output convolution, on the features the rest of the network already computes; seconds, on any machine. Whole network: every weight, with TensorFlow.js on this machine's GPU; minutes, and it can learn what the features miss. The model's manifest says which it offers.">Training</label>
@@ -703,28 +753,48 @@
         </div>
       </div>
       {% endif %}
+      {# Each Learning Rate takes any number above 0, typed (1e-4, 0.0003),
+         and has its presets beside it (<id>Presets): picking one types it
+         in, and they show the one typed, or Typed for any other
+         (training-form.js). The field is what is saved and sent. The rate is
+         where a run starts. Its Ease down box (<id>Ease), ticked as the page
+         starts, is the run's learning_rate_schedule: ticked, every trainer
+         eases the rate down along half a cosine to a tenth of it
+         (finetune/options.py LEARNING_RATE_FLOOR) by the run's last step
+         (cosine); unticked, every step takes the rate (constant), as runs did
+         before the schedule. It is saved and sent with its field. #}
+      {% set rate_title = "The learning rate a run starts at, and with Ease down unticked every step's. A restart starts at it again. Type any number above 0 (1e-4, 0.0003, ...) or pick a preset." %}
+      {% set ease_title = "Ticked, the rate eases down along half a cosine from the one above to a tenth of it at the run's last step: big steps while the model is far from your paint, small ones once it is close. Unticked, every step takes the rate above, as runs did before: for a run you steer yourself, restarting it at a smaller rate. The run's log says which at its start." %}
       <div class="col-md-6 head-only">
         <div class="mb-3">
-          <label for="learningRate" class="form-label">Learning Rate</label>
-          <select id="learningRate" class="form-select">
-            {# The browser trains the last layer alone, a few thousand weights
-               started from the model's own, which takes a step a hundred
-               times LoRA's: its own three rates, 1e-2 chosen. Flask passes no
-               mode and keeps the LoRA rates below as they were. #}
-            {% if mode == "browser" %}
-            <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
-            <option value="0.003">3e-3 (Gentler)</option>
-            <option value="0.001">1e-3 (Gentle)</option>
-            {% else %}
-            <option value="0.0000001">1e-7 (Ultra Conservative)</option>
-            <option value="0.000001">1e-6 (Very Conservative)</option>
-            <option value="0.00001">1e-5 (Conservative)</option>
-            <option value="0.0001" selected>1e-4 (Standard)</option>
-            <option value="0.001">1e-3 (Aggressive)</option>
-            <option value="0.01">1e-2 (Very Aggressive)</option>
-            <option value="0.1">1e-1 (Extremely Aggressive)</option>
-            {% endif %}
-          </select>
+          <label for="learningRate" class="form-label" title="{{ rate_title }}">Learning Rate</label>
+          {# The browser trains the last layer alone, a few thousand weights
+             started from the model's own, which takes a step a hundred
+             times LoRA's: its own three rates, 1e-2 the default. Flask passes
+             no mode and keeps the LoRA rates below as they were. #}
+          <div class="input-group">
+            <input type="text" inputmode="decimal" id="learningRate" class="form-control" value="{{ '0.01' if mode == 'browser' else '0.0001' }}" title="{{ rate_title }}">
+            <select id="learningRatePresets" class="form-select" aria-label="Learning rate presets">
+              <option value="">Typed</option>
+              {% if mode == "browser" %}
+              <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
+              <option value="0.003">3e-3 (Gentler)</option>
+              <option value="0.001">1e-3 (Gentle)</option>
+              {% else %}
+              <option value="0.0000001">1e-7 (Ultra Conservative)</option>
+              <option value="0.000001">1e-6 (Very Conservative)</option>
+              <option value="0.00001">1e-5 (Conservative)</option>
+              <option value="0.0001" selected>1e-4 (Standard)</option>
+              <option value="0.001">1e-3 (Aggressive)</option>
+              <option value="0.01">1e-2 (Very Aggressive)</option>
+              <option value="0.1">1e-1 (Extremely Aggressive)</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="learningRateEase" checked>
+            <label class="form-check-label" for="learningRateEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
+          </div>
           {% if mode == "browser" %}
           <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
           {% else %}
@@ -734,17 +804,25 @@
       </div>
       {# The whole network's rates: two million weights started from the
          model's own take a hundredth of the head's step (Adam at 1e-4, as
-         Marwan measured it), so it has a select of its own and its own saved value. #}
+         Marwan measured it), so it has a field of its own and its own saved value. #}
       {% if mode == "browser" %}
       <div class="col-md-6 full-only">
         <div class="mb-3">
-          <label for="learningRateFull" class="form-label">Learning Rate</label>
-          <select id="learningRateFull" class="form-select">
-            <option value="0.0003">3e-4 (Faster)</option>
-            <option value="0.0001" selected>1e-4 (Standard)</option>
-            <option value="0.00003">3e-5 (Gentle)</option>
-            <option value="0.00001">1e-5 (Very gentle)</option>
-          </select>
+          <label for="learningRateFull" class="form-label" title="{{ rate_title }}">Learning Rate</label>
+          <div class="input-group">
+            <input type="text" inputmode="decimal" id="learningRateFull" class="form-control" value="0.0001" title="{{ rate_title }}">
+            <select id="learningRateFullPresets" class="form-select" aria-label="Learning rate presets">
+              <option value="">Typed</option>
+              <option value="0.0003">3e-4 (Faster)</option>
+              <option value="0.0001" selected>1e-4 (Standard)</option>
+              <option value="0.00003">3e-5 (Gentle)</option>
+              <option value="0.00001">1e-5 (Very gentle)</option>
+            </select>
+          </div>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="learningRateFullEase" checked>
+            <label class="form-check-label" for="learningRateFullEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
+          </div>
           <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
         </div>
       </div>
@@ -932,20 +1010,6 @@
       </div>
     </div>
 
-    <div class="row server-only">
-      <div class="col-md-6">
-        <div class="mb-3">
-          <label for="gpuQueue" class="form-label">GPU Queue</label>
-          <select id="gpuQueue" class="form-select">
-            <option value="gpu_h100" selected>H100</option>
-            <option value="gpu_a100">A100</option>
-            <option value="gpu_h200">H200</option>
-          </select>
-          <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
-        </div>
-      </div>
-    </div>
-
     <!-- Auto-serve checkbox -->
     <div class="form-check mb-3">
       <input class="form-check-input" type="checkbox" id="autoServeCheck" checked>
@@ -974,14 +1038,14 @@
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5>Training Status</h5>
     <div>
-      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;"
+      <button type="button" class="btn btn-primary btn-sm me-2" id="restartJobBtn" style="display: none;"
               title="Train this job again, on the paint as it is now, with the Training Configuration's current settings. Shift+R over the viewer does the same without asking first.">
         🔄 Restart Training
       </button>
-      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">
+      <button type="button" class="btn btn-outline-danger btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">
         ⏸ Stop Early
       </button>
-      <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
+      <button type="button" class="btn btn-outline-danger btn-sm" id="cancelJobBtn">
         ❌ Cancel
       </button>
     </div>
@@ -1029,6 +1093,141 @@
       Download finetuned model
     </a>
     {% endif %}
+    {# Publish to Hugging Face, in both modes, shown for the model a status
+       answer says is served (finetune/publish.js): the model, its manifest
+       and a model card uploaded to a repository of the user's own Hugging
+       Face account, with the links that open it. The browser's model is
+       uploaded from the page; the server's is exported by a cluster job
+       first (TorchScript for servers, and ONNX for the browser where the
+       model fits one), then uploaded from the server. The user signs in (in a
+       popup in the browser; with a code entered at huggingface.co on a
+       server) or pastes an access token with write access. The browser
+       keeps either in the page's memory only; the server in its memory,
+       unless the token is remembered there, and a server signed in with
+       `hf auth login` uses that. The token field is masked by CSS and kept
+       from password managers as the AI panel's are (see there). #}
+    <button type="button" class="btn btn-outline-secondary btn-sm mt-3{% if mode == "browser" %} ms-2{% endif %}" id="publishFinetunedBtn" style="display: none;"
+            aria-expanded="false" aria-controls="publishPanel"
+            title="Upload the finetuned model to a repository of your own Hugging Face account, and get the links that open it in cellmap-flow">
+      Publish to Hugging Face
+    </button>
+    <div class="mt-2" id="publishPanel" hidden>
+      <div class="d-flex align-items-baseline gap-2 flex-wrap">
+        <span class="text-muted" style="font-size: 0.85rem;" id="hfAccount">Not signed in to Hugging Face</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="hfSignInBtn" hidden
+                {% if mode == "browser" %}title="Opens Hugging Face in a popup; it closes itself once you are signed in. This page keeps its state."{% else %}title="Gives a code to enter at huggingface.co, in any browser; the dashboard is signed in once you have."{% endif %}>Sign in with Hugging Face</button>
+        <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="hfSignOutBtn" hidden
+                title="Forgets the Hugging Face token signed in here.">Sign out</button>
+      </div>
+      {# What Sign in and a pasted token came to, where they were clicked
+         and pasted: a sign-in that could not start, or a token refused. #}
+      <div class="small mt-1" id="hfSignInStatus" role="status" hidden></div>
+      {# A sign-in with a code (the server's): the code, and where to enter it. #}
+      <div class="small mt-1" id="hfDevice" hidden>
+        Enter <code id="hfDeviceCode"></code> at <a id="hfDeviceLink" target="_blank" rel="noopener"></a>
+      </div>
+      <div class="patch-tools-fields publish-fields" id="hfTokenFields">
+        <label for="hfToken">Access token</label>
+        <input type="text" class="form-control form-control-sm credential-secret" id="hfToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore
+               placeholder="hf_… with write access"
+               {% if mode == "browser" %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in this page only: paste it again after a reload."{% else %}title="A Hugging Face access token with write access (huggingface.co/settings/tokens). Used as soon as it is pasted, kept in the dashboard's memory only (paste it again after a restart) unless you tick Remember on this server first."{% endif %}>
+      </div>
+      {# Shown when the credentials answer says a token can be saved where
+         it is used (can_remember: the server's, in huggingface_hub's own
+         file). Ticked before the token is pasted, as it is sent at once. #}
+      <div class="form-check mt-1" id="hfRememberField" hidden
+           title="Saves the token where hf auth login saves it, in your home directory: the dashboard is signed in after a restart, and other Hugging Face tools you run use it too. hf auth logout removes it.">
+        <input class="form-check-input" type="checkbox" id="hfRemember" autocomplete="off">
+        <label class="form-check-label small" for="hfRemember">Remember on this server</label>
+      </div>
+      <div class="text-muted small mt-1" id="hfTokenHint">
+        {% if mode == "browser" %}Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.{% else %}Make one at huggingface.co/settings/tokens (a Write token). It is sent only to Hugging Face.{% endif %}
+      </div>
+      <div class="patch-tools-fields publish-fields">
+        <label for="publishRepo">Repository</label>
+        <input type="text" class="form-control form-control-sm" id="publishRepo" autocomplete="off" spellcheck="false" maxlength="200"
+               placeholder="you/model-name"
+               title="owner/name: your account or one of your organizations, and the repository's name. One that exists already gets the files as a new commit.">
+      </div>
+      <div class="form-check mt-1">
+        <input class="form-check-input" type="checkbox" id="publishPrivate" autocomplete="off">
+        <label class="form-check-label small" for="publishPrivate">Private (its links will not open it: the app reads public repositories only)</label>
+      </div>
+      <div class="form-check" title="The model card is public with the repository, and a dataset's URL can be an internal one (a cluster path, a private bucket), so it is left out unless you ask for it.">
+        <input class="form-check-input" type="checkbox" id="publishIncludeDataset" autocomplete="off">
+        <label class="form-check-label small" for="publishIncludeDataset">Add an <em>Open on this dataset</em> link to the model card</label>
+      </div>
+      {# Server mode only: a server's publish uploads the network as
+         cellmap's own repositories hold one, and model.pt2 in it is what a
+         LoRA finetune of the published model attaches to (TorchScript takes
+         none). It is the weights again, 4 bytes a parameter, so it is a
+         choice with its cost said. #}
+      {% if mode != "browser" %}
+      <div class="form-check" title="model.pt2 is the network as torch.export saves it, which a LoRA finetune attaches to. Without it the published model still runs anywhere, and can still be finetuned whole.">
+        <input class="form-check-input" type="checkbox" id="publishLoraCopy" autocomplete="off" checked>
+        <label class="form-check-label small" for="publishLoraCopy">Also upload <code>model.pt2</code>, so it can be LoRA-finetuned on a server</label>
+        <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
+      </div>
+      {# A smaller copy for the browser (finetune.distill): a funlib UNet with
+         a tenth of the model's parameters or fewer, trained on a cluster GPU
+         to reproduce its output, and added to the repository when it is
+         done. The model is published without waiting for it. #}
+      <div class="form-check" title="Worth it for a model too big for the browser (the 800M-parameter UNets) or slow in it. The small copy is a funlib UNet trained to reproduce this model's output on the data it was finetuned on; the card says how close it came.">
+        <input class="form-check-input" type="checkbox" id="publishSmallCopy" autocomplete="off">
+        <label class="form-check-label small" for="publishSmallCopy">Also publish a smaller copy for the browser</label>
+        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU, for up to 3 hours when the model is a funlib UNet (it starts from the model's own channels) and 8 otherwise (from scratch), then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
+      </div>
+      {% endif %}
+      <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+        <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
+        <small class="text-muted" id="publishStatus"></small>
+      </div>
+    </div>
+    {# The publish of this page's model, outside the panel so that it
+       shows with the panel closed: where it has got (the export's cluster
+       job, each file's upload, the smaller copy's training), why it failed,
+       and once done its links. Hide closes it until the panel is opened or
+       another publish starts (publish.js). #}
+    <div class="publish-progress mt-2" id="publishProgress" role="status" hidden>
+      <div class="publish-result-head"><strong id="publishProgressRepo"></strong><button type="button" class="btn btn-link btn-sm" id="publishProgressClose" title="Hide this until the panel is opened again">Hide</button></div>
+      <div class="small" id="publishStage"></div>
+      <div class="small mt-1" id="publishSmallStage" hidden></div>
+      {# One row per link, its name and Copy above the link itself, which
+         wraps: the panel is as narrow as the sidebar. A row the answer
+         gives nothing for is hidden (publish.js): the server ref is a
+         server's publish's, and the folder's ref and the app's links are
+         a browser form's. #}
+      <div class="publish-result mt-2" id="publishResult" hidden>
+        <div>
+          <div class="publish-result-head"><span>Hugging Face</span><button type="button" class="btn btn-link btn-sm" data-copy="publishUrl">Copy</button></div>
+          <a id="publishUrl" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>On a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishServerRef">Copy</button></div>
+          <code id="publishServerRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>In the browser or on a server, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishRef">Copy</button></div>
+          <code id="publishRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try it in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishTryLink">Copy</button></div>
+          <a id="publishTryLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Open on this dataset</span><button type="button" class="btn btn-link btn-sm" data-copy="publishDatasetLink">Copy</button></div>
+          <a id="publishDatasetLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>The smaller copy, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallRef">Copy</button></div>
+          <code id="publishSmallRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try the smaller copy in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishSmallTryLink">Copy</button></div>
+          <a id="publishSmallTryLink" target="_blank" rel="noopener"></a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

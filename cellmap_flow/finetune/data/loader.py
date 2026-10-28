@@ -20,6 +20,7 @@ from cellmap_flow.finetune.session.manifest import (
     load_good_regions_for,
     read_manifest,
 )
+from cellmap_flow.portable.volume import grid_text
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,38 @@ def training_patch_voxels(model_config) -> Optional[PatchVoxels]:
             return own()
         model_config = getattr(model_config, "base_model_config", None)
     return None
+
+
+def patch_refusal(corrections_dir, model_config) -> Optional[str]:
+    """Why ``model_config``'s model cannot train on the patches of
+    ``corrections_dir``'s manifest, or None when it can, or when nothing
+    says (a manifest without its grid, a model that trains on a patch of its
+    own, ``training_patch_voxels``).
+
+    It cannot when the manifest's input block in voxels is not the model's
+    (its ``geometry``'s input shape): the volume was made for another model.
+    A 2D model of 1 x 556 x 556 at 16 nm was given a 3D model's 178^3 at 8
+    nm, and torch.export refused the patches ("Expected input at
+    *args[0].shape[2] to be equal to 1, but got 178"), the FP16 probe first
+    blaming the precision. The sentence names both grids
+    (portable/volume.py grid_text) and the way out: Use this model, and
+    training's submit with the model in the form, carry the paint onto the
+    model's grid.
+    """
+    manifest = read_manifest(corrections_dir) or {}
+    keys = ("input_size_voxels", "output_size_voxels", "input_voxel_size_nm", "output_voxel_size_nm")
+    if not all(manifest.get(key) for key in keys) or training_patch_voxels(model_config) is not None:
+        return None
+    geometry = model_config.geometry
+    if [int(v) for v in manifest["input_size_voxels"]] == list(geometry.input_shape):
+        return None
+    paint = dict(zip(("input_size", "output_size", "input_voxel_size", "output_voxel_size"), (manifest[key] for key in keys)))
+    model = {"input_size": geometry.input_shape, "output_size": geometry.output_shape,
+             "input_voxel_size": geometry.input_voxel_size, "output_voxel_size": geometry.output_voxel_size}
+    name = getattr(model_config, "name", None) or "the model"
+    return (f"The paint is on another model's grid ({grid_text(paint)}) than {name}'s ({grid_text(model)}), so {name} "
+            "cannot train on it. Use this model carries the paint onto a model's grid (Which model to start from, "
+            f"in the Finetune tab), and so does pressing Train with {name} in the training form.")
 
 
 def dataset_from_manifest(

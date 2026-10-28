@@ -119,20 +119,24 @@ def test_the_model_form_parses_and_rejects_the_same_way(dashboard, type_name, pa
 
 
 def test_the_blockwise_settings_are_kept_and_read_back(dashboard, tmp_path):
-    sent = {"queue": "gpu_l4", "charge_group": "grp", "nb_cores_master": 2, "nb_cores_worker": 8, "nb_workers": 5,
-            "tmp_dir": str(tmp_path / "progress"), "blockwise_tasks_dir": str(tmp_path / "tasks")}
-    assert dashboard.post("/api/blockwise-config", json=sent).get_json() == {"success": True, "config": sent}
-    assert dashboard.get("/api/blockwise-config").get_json() == sent
+    """The builder's Queue is a text field: two queues in it are a list of two."""
+    sent = {"queue": "gpu_l4, gpu_h100", "charge_group": "grp", "nb_cores_master": 2, "nb_cores_worker": 8,
+            "nb_workers": 5, "tmp_dir": str(tmp_path / "progress"), "blockwise_tasks_dir": str(tmp_path / "tasks")}
+    kept = {**sent, "queue": ["gpu_l4", "gpu_h100"]}
+    assert dashboard.post("/api/blockwise-config", json=sent).get_json() == {"success": True, "config": kept}
+    assert dashboard.get("/api/blockwise-config").get_json() == kept
     session = get_session()
-    assert (session.queue, session.tmp_dir, session.tasks_dir()) == ("gpu_l4", sent["tmp_dir"], sent["blockwise_tasks_dir"])
+    assert (session.queue, session.tmp_dir, session.tasks_dir()) == (
+        ["gpu_l4", "gpu_h100"], sent["tmp_dir"], sent["blockwise_tasks_dir"])
 
 
 def test_a_package_log_record_reaches_the_log_panel(dashboard):
-    """Into the buffer a late panel replays, and to each open stream."""
+    """Into the buffer a late panel replays, numbered, and to each open stream."""
     stream = queue.Queue()
     get_session().log_clients.append(stream)
     logging.getLogger("cellmap_flow.jobs.launch").info("model mito started")
-    assert get_session().log_buffer[-1].endswith("INFO cellmap_flow.jobs.launch: model mito started")
+    _, line = get_session().log_buffer[-1]
+    assert line.endswith("INFO cellmap_flow.jobs.launch: model mito started")
     assert stream.get_nowait() == get_session().log_buffer[-1]
 
 
@@ -140,15 +144,36 @@ def test_the_log_stream_survives_a_record_logged_as_it_replays_and_sends_every_l
     """It iterated the buffer while records were appended to it, and died
     ("deque mutated during iteration"); and a traceback's lines after the
     first, sent without "data: ", were dropped by the browser."""
-    get_session().log_buffer.extend(["one", 'Traceback (most recent call last):\n  File "x.py"\nValueError: bad'])
+    get_session().log_buffer.extend([(1, "one"), (2, 'Traceback (most recent call last):\n  File "x.py"\nValueError: bad')])
     response = dashboard.get("/api/logs/stream", buffered=False)
     events = iter(response.response)
-    assert next(events) == b"data: one\n\n"
+    assert next(events) == b"id: 1\ndata: one\n\n"
     logging.getLogger("cellmap_flow.jobs.launch").info("logged while replaying")
-    assert next(events) == b'data: Traceback (most recent call last):\ndata:   File "x.py"\ndata: ValueError: bad\n\n'
+    assert next(events) == b'id: 2\ndata: Traceback (most recent call last):\ndata:   File "x.py"\ndata: ValueError: bad\n\n'
     assert next(events).decode().endswith("logged while replaying\n\n")
     response.close()
     assert get_session().log_clients == [], "a closed stream stops getting records"
+
+
+def test_a_log_stream_that_reconnects_is_sent_only_what_it_has_not_shown(dashboard):
+    """The panel's EventSource reconnects by itself, with the last id it was
+    sent, and the panel opens a new stream with ?offset= after an error answer;
+    a stream that sent its whole buffer every time would show it twice. An id
+    from an earlier run of the dashboard is below every one of this run's."""
+    log = logging.getLogger("cellmap_flow.jobs.launch")
+    for word in ("one", "two", "three"):
+        log.info(word)
+    ids = [record_id for record_id, _ in get_session().log_buffer]
+
+    def first_line(**kw):
+        response = dashboard.get("/api/logs/stream", buffered=False, **kw)
+        event = next(iter(response.response)).decode()
+        response.close()
+        return event
+
+    assert first_line(headers={"Last-Event-ID": str(ids[0])}).startswith(f"id: {ids[1]}\n")
+    assert first_line(query_string={"offset": ids[1]}).startswith(f"id: {ids[2]}\n")
+    assert first_line(headers={"Last-Event-ID": "12"}).startswith(f"id: {ids[0]}\n")
 
 
 def test_a_count_sent_as_a_string_is_a_number(dashboard):

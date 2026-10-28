@@ -52,8 +52,8 @@ WEB = HERE.parent
 sys.path.insert(1, str(HERE))
 import export_data  # noqa: E402
 
-# The chains a fresh browser session starts with, ticked on the Input and
-# Postprocess tabs with these values (the app's session starts with the same).
+# The chains a fresh browser session starts with, ticked on the Processing
+# tab with these values (the app's session starts with the same).
 DEFAULT_CHAIN = export_data.DEFAULT_CHAIN
 
 # The page's module script and where the dashboard's static files are served,
@@ -132,7 +132,7 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
         postprocess_items=chain_items(in_browser(get_postprocessors_list()), postprocess),
         # The Local Catalog lists paths on the cluster's file systems, which a
         # browser cannot read; the browser's models come from Hugging Face.
-        model_catalog={},
+        catalog_groups=[],
         default_models=[],
         default_hf_repos=[],
         default_bioimage_models=[],

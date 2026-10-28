@@ -62,9 +62,9 @@ def test_run_serves_the_model_as_a_yaml_would(served):
     assert result.exit_code == 0, result.output + repr(result.exception)
     (models, data_path, project, queue), kwargs = served[0]
     assert [(type(m).__name__, m.name) for m in models] == [("ScriptModelConfig", "fake_model_script")]
-    assert (data_path, project, queue, kwargs) == (RAW, "grp", "gpu_h200", {"resample": True})
+    assert (data_path, project, queue, kwargs) == (RAW, "grp", ["gpu_h200"], {"resample": True})
     assert get_session().models_config == models and get_session().resample is True
-    assert settings.launcher_settings().queue == "gpu_h200"
+    assert settings.launcher_settings().queue == ["gpu_h200"]
 
 
 @pytest.mark.parametrize("args, message", [

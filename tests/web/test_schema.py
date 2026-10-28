@@ -99,7 +99,7 @@ class _Form(HTMLParser):
 # The Finetune tab's fields, by element id, and the FinetuneSubmit field each is sent as.
 FORM_FIELDS = {
     "loraRank": "lora_r", "numEpochs": "num_epochs", "batchSize": "batch_size", "learningRate": "learning_rate",
-    "lossType": "loss_type", "marginValue": "margin", "labelSmoothing": "label_smoothing",
+    "learningRateEase": "learning_rate_schedule", "lossType": "loss_type", "marginValue": "margin", "labelSmoothing": "label_smoothing",
     "distillationLambda": "distillation_lambda", "distillationScope": "distillation_scope",
     "balanceClasses": "balance_classes", "augment": "augment",
 }
@@ -116,6 +116,8 @@ def test_the_server_form_shows_what_a_blank_field_trains_with():
     form.feed(app.jinja_env.get_template("_finetune_tab.html").render())  # no mode: the server's page
     defaults = {field: FinetuneSubmit.model_fields[field].default for field in FORM_FIELDS.values()}
     shown = {field: form.values[element] for element, field in FORM_FIELDS.items()}
+    # Ease down to a tenth, ticked, sends the cosine schedule; unticked, constant.
+    shown["learning_rate_schedule"] = "cosine" if shown["learning_rate_schedule"] else "constant"
     as_sent = {field: value if isinstance(value, bool) else type(defaults[field])(value) for field, value in shown.items()}
     assert as_sent == defaults
     assert set(FORM_FIELDS.values()) == set(schema.FINETUNE_FORM_FIELDS), "the fields exported to the browser"

@@ -60,7 +60,7 @@ def submission_metadata(
     channels: List[str],
     input_voxel_size: List[int],
     output_voxel_size: List[int],
-    queue: str,
+    queue: List[str],
     charge_group: str,
     command: str,
 ) -> dict:
@@ -68,8 +68,8 @@ def submission_metadata(
 
     ``params`` holds every training setting (finetune/options.py; the
     manifest's two live in the session's manifest instead) with the model's
-    geometry and the job's queue: what the dashboard's job card shows and a
-    restart starts from.
+    geometry and the queues the job may run on: what the dashboard's job
+    card shows and a restart starts from.
     """
     return {
         "job_id": str(uuid.uuid4()),

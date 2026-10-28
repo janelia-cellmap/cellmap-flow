@@ -98,26 +98,25 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
     monkeypatch.setattr(launch, "is_bsub_available", lambda: bsub)
     monkeypatch.setattr(launch, "submit_bsub_job", submit)
     monkeypatch.setattr(launch, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
-    monkeypatch.setattr(launch, "gpu_queue_candidates",
-                        lambda preferred, cycle=True: [preferred] + [q for q in QUEUES if q != preferred])
+    monkeypatch.setattr(launch, "gpu_queue_candidates", lambda queues, cycle=True: list(queues))
     settings = launcher_settings()
-    settings.queue, settings.charge_group = "gpu_h100", "saved_group"
+    settings.queue, settings.charge_group = ["gpu_h100"], "saved_group"
 
     with caplog.at_level(logging.ERROR, logger=launch.logger.name):
         if isinstance(result, tuple):
             with pytest.raises(result[0], match=result[1]) as raised:
-                start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
+                start_hosts("serve", queue=list(QUEUES), charge_group=None, job_name="m", **kwargs)
             assert started_jobs() == []
             if result[0] is JobStartError:  # a dashboard thread's exception only reaches stderr
                 assert str(raised.value) in caplog.text
         else:
-            job = start_hosts("serve", queue="gpu_h100", charge_group=None, job_name="m", **kwargs)
+            job = start_hosts("serve", queue=list(QUEUES), charge_group=None, job_name="m", **kwargs)
             expected = local if result == "local" else jobs[result]
             assert job is expected and job.host and started_jobs() == [job]
             assert job.queue == (None if result == "local" else result)
     assert calls == submitted + (["local"] if result == "local" or "local" in killed else [])
     assert [j.job_id for j in [*jobs.values(), local] if isinstance(j, FakeJob) and j.killed] == killed
-    assert (settings.queue, settings.charge_group) == ("gpu_h100", "saved_group")
+    assert (settings.queue, settings.charge_group) == (["gpu_h100"], "saved_group")
     if case == "running-but-still-loading":
         assert jobs["gpu_h100"].waits == 2, "it was given time to load its model"
 
@@ -132,7 +131,7 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
         return "Job <4242> is submitted to queue <gpu_h100>.\n"
 
     fake_lsf.answers.update(bjobs=[(255, "", "Job <m> is not found\n")], bsub=bsub)
-    job = start_hosts("serve", queue="gpu_h100", job_name="m", cycle_queues=False)
+    job = start_hosts("serve", queue=["gpu_h100"], job_name="m", cycle_queues=False)
     assert job.host == "http://10.1.2.3:8123" and started_jobs() == [job]
     assert fake_lsf.commands() == ["which", "bjobs", "bsub"], "no bpeek, and no bjobs for the job itself"
 
@@ -165,8 +164,8 @@ def test_the_cleanup_handler_kills_a_job_still_waiting_to_start(monkeypatch):
     job = Queued("1")
     monkeypatch.setattr(launch, "is_bsub_available", lambda: True)
     monkeypatch.setattr(launch, "submit_bsub_job", lambda *a, **kw: job)
-    monkeypatch.setattr(launch, "gpu_queue_candidates", lambda preferred, cycle=True: [preferred])
-    starting = threading.Thread(target=lambda: start_hosts("serve", queue="gpu_h100", job_name="m"))
+    monkeypatch.setattr(launch, "gpu_queue_candidates", lambda queues, cycle=True: list(queues))
+    starting = threading.Thread(target=lambda: start_hosts("serve", queue=["gpu_h100"], job_name="m"))
     starting.start()
     assert waiting.wait(5)
     try:

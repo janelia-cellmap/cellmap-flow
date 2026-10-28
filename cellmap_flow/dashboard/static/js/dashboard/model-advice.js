@@ -1,11 +1,15 @@
-// The model-advice banner above the dashboard tabs.
+// The model advice: what the server makes of each model's input and output
+// handling. The suggestions for the chain (the input normalization, the
+// postprocessing) are in the Processing tab, above its lists; how a model
+// reads the data's scale is in the banner above the dashboard tabs, on every
+// tab, as it is about the Models tab's Resample.
 //
 // Asks the server what activation the model's output actually has (see
 // cellmap_flow/serving/probe.py) and compares it against the chain
 // currently configured. Only renders when there is something to say.
 import { getJSON } from "../lib/api.js";
 import { esc } from "../lib/dom.js";
-import { listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
+import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { poll } from "../lib/poll.js";
 
 // A confirmation needs no decision from anyone, so it should not sit at the
@@ -14,67 +18,90 @@ const CONFIRM_BANNER_MS = 8000;
 
 // The probe is collected during inference-server startup, and models are
 // launched on background threads that the submit request does not wait for,
-// so right after a submit there is usually nothing to report yet. Keep
-// checking until every job has answered, rather than taking one shot at a
-// fixed delay and silently giving up.
-const ADVICE_POLL_INTERVAL_MS = 5000;
-const ADVICE_POLL_MAX_ATTEMPTS = 60;  // ~5 min, enough for a queued job
+// so right after a submit there is usually nothing to report yet, and a job
+// queued on the cluster can wait many minutes. So the advice is asked for
+// until every model's probe has answered, however long that takes: every few
+// seconds at first, then less often (lib/poll.js maxIntervalMs).
+const ADVICE_POLL_INTERVAL_MS = 3000;
+const ADVICE_POLL_MAX_INTERVAL_MS = 30000;
 
-// The Input and Postprocess chains (shared/op-chain.js) the Apply buttons
-// change, from initModelAdvice.
-let chains = null;
+// The Processing tab's two lists (shared/op-chain.js) a suggestion's Apply
+// fills in, and its Apply bar's apply (main.js initApply), from
+// initModelAdvice.
+let processing = null;
 
-export function initModelAdvice({ input, postprocess }) {
-  chains = { input, postprocess };
+export function initModelAdvice({ input, postprocess, apply }) {
+  processing = { input, postprocess, apply };
   // Loading a model, not only Submit All, is when advice is most useful.
   listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
+  // So is a chain the backend set itself with no model change (Fit to
+  // Paint, Use these settings: finetune/rank.js): an affinity model's chain
+  // into a segmentation is then offered cut at the threshold the ranking
+  // fitted, where the line shown, once every probe had answered and the
+  // poll stopped, still cut at 0.5.
+  listen(CHAIN_CHANGED_EVENT, () => refreshModelAdvice());
+  // The poll waits while the page is hidden, and may have stopped: a tab
+  // shown again asks at once.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshModelAdvice();
+  });
+  // The models running when the page loaded: a YAML's, or a reload's.
+  refreshModelAdvice();
 }
 
-// Tick exactly the suggested steps, fill in their parameters, and move them
-// to the top in the suggested order: steps are applied top to bottom.
-// Defaults assume each step sees the range its usual predecessor produces;
-// where this chain differs, the server says what to use.
-function applyPostprocessSuggestion(names, params) {
-  chains.postprocess.apply(names, params);
+// A suggestion's Apply: make `list` exactly the suggested steps, in the
+// suggested order (steps run top to bottom), each with the parameters the
+// server gives (a normalizer's values; a postprocessor's where this chain
+// needs other than its defaults), and apply the chain as the Apply bar does,
+// with any other edit of the two lists not applied yet.
+function applySuggestion(list, names, params) {
+  list.apply(names, params);
+  processing.apply();
 }
 
-// Same idea for the input side. Normalizers carry parameter values, not just
-// a name, so this fills those in as well as ticking the box.
-function applyInputNormSuggestion(norms, order) {
-  chains.input.apply(order || Object.keys(norms || {}), norms);
-}
-
-// The server repeats the same advice on every poll until the configured
-// chain changes, so the banner cannot simply be redrawn each time: a
-// suggestion the user dismissed or applied came back five seconds later, and
-// a confirmation that had timed out reappeared. Each piece of advice is keyed
-// by what it says, including the chain it was about; once hidden, that key
-// stays hidden, while advice about a changed chain has a new key and shows.
+// The server repeats its advice on every poll, so the advice cannot simply
+// be redrawn each time: a suggestion the user dismissed or applied would come
+// back a few seconds later, and a confirmation that had timed out reappear.
+// So each piece of advice has a key, and once it is hidden (dismissed,
+// applied, or a confirmation's time up) that key stays hidden while the page
+// is open.
+//
+// The key is the model, the kind of advice and what the advice is about for
+// that model (the steps and values a suggestion proposes, what a warning
+// found), and never the chain configured now. A suggestion the user turned
+// down stays down when the chain changes, by their Apply, an edit, or the
+// backend; it comes back only when the advice is about something new for the
+// model, as another suggestion or another finding (a probe that answered,
+// other data). A suggestion itself can name the chain ("currently set: ..."),
+// so `says` is what it says now, and it is rebuilt, under the same key, when
+// that changes.
 const hiddenAdvice = new Set();
-const shownAdvice = new Map();  // key -> element currently in the banner
+const shownAdvice = new Map();  // key -> {div, says}: what is on the page now
 
-function adviceKey(kind, m, what) {
-  return JSON.stringify([kind, m.model || "", what]);
+function adviceKey(kind, m, about) {
+  return JSON.stringify([kind, m.model || "", about]);
 }
 
 function hideAdvice(key) {
   hiddenAdvice.add(key);
-  const div = shownAdvice.get(key);
+  const shown = shownAdvice.get(key);
   shownAdvice.delete(key);
-  if (div) div.remove();
+  if (shown) shown.div.remove();
 }
 
-// Put the advice for `key` in the banner, building it only the first time,
+// Put the advice for `key` in `box`, building it the first time and
+// again when what it says changes (`says`, by default nothing beyond the key),
 // and record it in `wanted` so renderModelAdvice keeps it.
-function showAdvice(box, wanted, key, build) {
+function showAdvice(box, wanted, key, build, says = "") {
   if (hiddenAdvice.has(key)) return;
   wanted.add(key);
-  let div = shownAdvice.get(key);
-  if (!div) {
-    div = build();
-    shownAdvice.set(key, div);
+  let shown = shownAdvice.get(key);
+  if (!shown || shown.says !== says) {
+    if (shown) shown.div.remove();
+    shown = { div: build(), says };
+    shownAdvice.set(key, shown);
   }
-  box.appendChild(div);  // (re)appending keeps the banner in poll order
+  box.appendChild(shown.div);  // (re)appending keeps the box in poll order
 }
 
 function adviceButton(className, text, onclick) {
@@ -85,7 +112,7 @@ function adviceButton(className, text, onclick) {
   return btn;
 }
 
-// Model names reach this banner from HuggingFace repo ids and from user YAML,
+// Model names reach the advice from HuggingFace repo ids and from user YAML,
 // and the HF catalogue is third-party data we render verbatim. None of it is
 // trusted markup, so everything interpolated into innerHTML below is escaped.
 function renderInputNormAdvice(m, box, wanted) {
@@ -103,12 +130,28 @@ function renderInputNormAdvice(m, box, wanted) {
   // expression edited): [{step, param, configured, declared}], from the
   // backend, which compares the values as the chain carries them.
   const differences = m.input_norm_differences || [];
-  const key = adviceKey("input", m, [
-    !!m.input_norm_matches, names, sug.input_norm, m.configured_input_norm || [], differences,
-  ]);
+  if (m.input_norm_fitted) {
+    // The steps the Finetune tab's ranking fitted to the paint for this
+    // model (Use this model, Fit to Paint, Use these settings): a
+    // confirmation too, never the declared steps suggested back over them,
+    // whose Apply undid the ranking.
+    const configured = m.configured_input_norm || [];
+    const key = adviceKey("input-fitted", m, configured);
+    showAdvice(box, wanted, key, function () {
+      const div = document.createElement("div");
+      div.className = "alert alert-success py-1 px-2";
+      div.innerHTML = "<small><strong>Input normalization fitted to your paint</strong> for <code>"
+                    + esc(m.model || "model") + "</code> by the ranking: " + esc(configured.join(" → ")) + ".</small>";
+      setTimeout(function () { hideAdvice(key); }, CONFIRM_BANNER_MS);
+      return div;
+    });
+    return;
+  }
   if (m.input_norm_matches) {
     // Confirmation, not a prompt: when the norms came from a yaml there is
-    // no other way to tell whether they suit the model.
+    // no other way to tell whether they suit the model. Shown once for these
+    // steps and values, as a suggestion is.
+    const key = adviceKey("input-matches", m, [names, sug.input_norm]);
     showAdvice(box, wanted, key, function () {
       const div = document.createElement("div");
       div.className = "alert py-1 px-2 " + (assumed ? "alert-secondary" : "alert-success");
@@ -121,6 +164,11 @@ function renderInputNormAdvice(m, box, wanted) {
     });
     return;
   }
+  // The suggestion is the steps and values to set, whether the chain has
+  // other steps or the same ones with other values: one key for both, so a
+  // suggestion turned down is not offered again for a chain edited since.
+  const key = adviceKey("input", m, [names, sug.input_norm]);
+  const says = JSON.stringify([m.configured_input_norm || [], differences]);
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
@@ -144,12 +192,45 @@ function renderInputNormAdvice(m, box, wanted) {
                     + "</small>";
     }
     div.appendChild(document.createElement("br"));
-    // Fills the Input list in; the Apply bar then counts the change, and
-    // the user's Apply sends it.
-    div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
+    div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
       differences.length ? "Apply the declared values" : "Apply: " + names.join(" → "),
-      function () { applyInputNormSuggestion(sug.input_norm, names); hideAdvice(key); }));
-    div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
+      function () { applySuggestion(processing.input, names, sug.input_norm); hideAdvice(key); }));
+    div.appendChild(adviceButton("btn btn-sm btn-link mt-2", "Dismiss",
+      function () { hideAdvice(key); }));
+    return div;
+  }, says);
+}
+
+// A chain the model's output shows right without (an affinity model's into
+// a segmentation): one quiet line with its Apply, not a suggestion's banner,
+// which over the sigmoid a start or the ranking set read as though that
+// were wrong.
+function renderOptionalPostprocess(m, rev, box, wanted) {
+  const suggest = rev.suggest || [];
+  if (!suggest.length) return;
+  const key = adviceKey("post-optional", m, [rev.message, suggest]);
+  showAdvice(box, wanted, key, function () {
+    const div = document.createElement("div");
+    div.className = "small text-muted mb-2";
+    div.innerHTML = "Optional for <code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline me-2", "Apply: " + suggest.join(" → "),
+      function () { applySuggestion(processing.postprocess, suggest, rev.params); hideAdvice(key); }));
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
+      function () { hideAdvice(key); }));
+    return div;
+  }, JSON.stringify(rev.params || {}));
+}
+
+// A served model whose output neither its network's graph nor its probe on
+// noise says (a flat probe: model_info's output_class null), so nothing
+// sets its postprocessing: one quiet line saying so, and what the probe saw.
+function renderUnknownOutput(m, rev, box, wanted) {
+  const key = adviceKey("post-unknown", m, [rev.message]);
+  showAdvice(box, wanted, key, function () {
+    const div = document.createElement("div");
+    div.className = "small text-muted mb-2";
+    div.innerHTML = "<code>" + esc(m.model || "model") + "</code>: " + esc(rev.message) + " ";
+    div.appendChild(adviceButton("btn btn-link btn-sm p-0 align-baseline text-muted", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
   });
@@ -157,21 +238,29 @@ function renderInputNormAdvice(m, box, wanted) {
 
 function renderPostprocessAdvice(m, box, wanted) {
   const rev = m.postprocess_review || {};
+  if (rev.level === "optional") {
+    renderOptionalPostprocess(m, rev, box, wanted);
+    return;
+  }
+  // "unknown" with no answer from the server is a server not up yet.
+  if (rev.level === "unknown" && m.probe_available) {
+    renderUnknownOutput(m, rev, box, wanted);
+    return;
+  }
   if (rev.level !== "suggest" && rev.level !== "warn") return;
   const warn = rev.level === "warn";
-  const key = adviceKey("post", m, [
-    rev.level, rev.message, rev.suggest || [], rev.params || {}, m.configured_postprocess || [],
-  ]);
+  // Keyed by the finding (the level and the message, which name nothing of
+  // the chain), not by the steps proposed: a warning can propose the chain
+  // itself less a step (the second sigmoid), which changes with every edit.
+  const key = adviceKey("post", m, [rev.level, rev.message]);
+  const says = JSON.stringify([rev.suggest || [], rev.params || {}]);
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (warn ? "alert-warning" : "alert-info");
+    // The message says what the output is and what says so: the network's
+    // last op, or the range its output on noise had (a guess).
     let html = "<strong>" + (warn ? "Check postprocessing" : "Suggested postprocessing")
              + "</strong> for <code>" + esc(m.model || "model") + "</code><br>";
-    if (m.output_min !== null && m.output_min !== undefined) {
-      html += "<small>Observed output range ["
-           + Number(m.output_min).toPrecision(4) + ", "
-           + Number(m.output_max).toPrecision(4) + "]</small><br>";
-    }
     html += esc(rev.message);
     const tuned = Object.keys(rev.params || {});
     if (tuned.length) {
@@ -185,14 +274,14 @@ function renderPostprocessAdvice(m, box, wanted) {
     div.innerHTML = html;
     if ((rev.suggest || []).length) {
       div.appendChild(document.createElement("br"));
-      div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
+      div.appendChild(adviceButton("btn btn-sm btn-primary mt-2 me-2",
         "Apply: " + rev.suggest.join(" → "),
-        function () { applyPostprocessSuggestion(rev.suggest, rev.params); hideAdvice(key); }));
+        function () { applySuggestion(processing.postprocess, rev.suggest, rev.params); hideAdvice(key); }));
     }
-    div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
+    div.appendChild(adviceButton("btn btn-sm btn-link mt-2", "Dismiss",
       function () { hideAdvice(key); }));
     return div;
-  });
+  }, says);
 }
 
 function nm(voxelSize) {
@@ -230,37 +319,54 @@ function renderVoxelSizeAdvice(m, box, wanted) {
 }
 
 function renderModelAdvice(models) {
-  const box = document.getElementById("modelAdviceBanner");
-  if (!box) return;
+  const banner = document.getElementById("modelAdviceBanner");
+  const chainBox = document.getElementById("processingAdvice");
+  if (!banner || !chainBox) return;
   const wanted = new Set();
   (models || []).forEach(function (m) {
-    renderVoxelSizeAdvice(m, box, wanted);
-    renderInputNormAdvice(m, box, wanted);
-    renderPostprocessAdvice(m, box, wanted);
+    renderVoxelSizeAdvice(m, banner, wanted);
+    renderInputNormAdvice(m, chainBox, wanted);
+    renderPostprocessAdvice(m, chainBox, wanted);
   });
-  // Drop what the server no longer says (the chain or the probe moved on).
+  // Drop what the server no longer says (the chain or the probe moved on);
+  // advice not hidden shows again if the server comes back to it.
   Array.from(shownAdvice.keys()).forEach(function (key) {
     if (wanted.has(key)) return;
-    shownAdvice.get(key).remove();
+    shownAdvice.get(key).div.remove();
     shownAdvice.delete(key);
   });
 }
 
-// One poll of /api/model_advice. Resolves to false to stop polling: every
-// job has answered, the server has nothing to say, or it is unreachable.
+// The chain's digest the last answer of the server's gave (the browser's
+// backend answers none): a model's start sets the postprocessing its output
+// needs once its server answers (routes/pipeline.py
+// set_needed_postprocess), after the Submit that started it, so when the
+// digest moves the Processing tab reads the chain again (main.js, on
+// CHAIN_CHANGED_EVENT).
+let adviceDigest;
+
+// One poll of /api/model_advice. Resolves to false to stop polling once
+// every model's probe has answered and no model's start is on its way
+// (`starting`); until then, and after a request that failed (a server slow
+// to answer, or restarting), it asks again. No models yet is a submit whose
+// jobs have not started.
 async function checkAdvice({ stale }) {
   let d;
   try {
     d = await getJSON("/api/model_advice");
   } catch (e) {
     console.log("model advice unavailable", e);
-    return false;
+    return undefined;
   }
   if (stale()) return undefined;  // a newer refresh replaced this one
-  if (!d || !d.success) return false;
+  if (!d || !d.success) return undefined;
   renderModelAdvice(d.models);
+  if (d.digest !== undefined && d.digest !== adviceDigest) {
+    adviceDigest = d.digest;
+    announce(CHAIN_CHANGED_EVENT);
+  }
   const models = d.models || [];
-  const pending = models.length === 0 || models.some(function (m) {
+  const pending = models.length === 0 || d.starting === true || models.some(function (m) {
     return !m.probe_available;
   });
   return pending ? undefined : false;
@@ -277,6 +383,7 @@ export function refreshModelAdvice() {
   }
   advicePoller = poll(checkAdvice, {
     intervalMs: ADVICE_POLL_INTERVAL_MS,
-    maxTicks: ADVICE_POLL_MAX_ATTEMPTS + 1,  // the first check, then the retries
+    maxIntervalMs: ADVICE_POLL_MAX_INTERVAL_MS,
+    pauseWhenHidden: true,
   });
 }

@@ -3,14 +3,14 @@ runs through chunkmirage's ``Engine.call("cellmap_flow.portable.calls:<name>",
 args, arrays)`` (``chunkmirage.calls`` says the shape: ``fn(args, arrays)``,
 ``args`` the JSON arguments, ``arrays`` the bytes sent beside them, in order;
 a JSON value, bytes, or a pair of JSON and arrays back). Each decodes its
-arrays, calls the maths in ``rank.py`` or ``carry.py`` and encodes the
-answer; the maths is not here. The workers take turns, so what a call needs
+arrays, calls the maths in ``rank.py``, ``carry.py`` or ``activation.py``
+and encodes the answer; the maths is not here. The workers take turns, so what a call needs
 from the one before (the rank's tallies) travels in its JSON.
 """
 
 import numpy as np
 
-from cellmap_flow.portable import rank
+from cellmap_flow.portable import activation, rank
 from cellmap_flow.portable.carry import Grid, carry as carry_core, parts
 
 _BINS = ("object_bins", "background_bins")
@@ -49,12 +49,41 @@ def windowed(args, arrays):
     return rank.windowed(args["norm"], float(args["lo"]), float(args["hi"]))
 
 
+def norm_tries(args, arrays):
+    """``rank.norm_tries``: the input normalizations a model is scored
+    through, from ``own`` (its declaration, ``own_from``) and ``session``."""
+    return rank.norm_tries(args["own"], args["own_from"], args["session"])
+
+
+def best_try(args, arrays):
+    """``rank.best_try``: the index of the best of ``scores``, or null."""
+    return rank.best_try(args["scores"])
+
+
+def needed_postprocess(args, arrays):
+    """``rank.needed_postprocess``: the postprocessing a model of
+    ``output_class`` needs instead of ``postprocess`` to show a good
+    prediction, with a ThresholdPostprocessor at ``threshold`` (a
+    probability) when that is given, or null."""
+    return rank.needed_postprocess(args.get("output_class"), args["postprocess"], args.get("threshold"))
+
+
+def output_activation(args, arrays):
+    """``activation.output_activation``: the output activation of a served
+    model's graph, ``nodes`` (each ``{"op", "inputs", "outputs"}``, a clip's
+    ``min`` and ``max`` where read) read back from its value ``output``, as
+    ``{"output_class", "op"}``; null when the graph does not say."""
+    return activation.output_activation(args["nodes"], args["output"])
+
+
 def rank_row(args, arrays):
     """``rank.score_row``: the ranking's row from ``base`` (the score read
-    through ``norm``), ``stretched`` (the score read through ``norm``
-    stretched to ``raw``, or null) and ``raw`` (the raw's window, or null);
-    null when ``base`` is null."""
-    return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"))
+    through ``norm``, which came from ``norm_from``), ``stretched`` (the
+    score read through ``norm`` stretched to ``raw``, or null), ``raw`` (the
+    raw's window, or null) and ``others`` (what the other normalizations
+    tried matched); null when ``base`` is null."""
+    return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"),
+                          args.get("norm_from", "session"), args.get("others") or ())
 
 
 def carry_paint(args, arrays):

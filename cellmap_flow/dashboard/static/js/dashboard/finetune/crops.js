@@ -258,14 +258,14 @@ export function initCrops({ log, picker, form, grid }) {
     }
   });
 
-  // Submit: send pasted YAML if present, else send the path (server parses both).
+  // Submit: send pasted YAML if present, else send the path (server parses
+  // both). The model picked, if any, is sent too: the route needs one only to
+  // lay a new volume on its grid when the session has none (with none
+  // picked, it makes the volume painted before any model, as New Volume
+  // does).
   const loadCropsSubmitBtn = document.getElementById("loadCropsSubmitBtn");
   loadCropsSubmitBtn.addEventListener("click", function() {
     const selectedModel = picker.selected();
-    if (!selectedModel) {
-      alert("No model selected");
-      return;
-    }
     const yamlText = loadCropsYaml.value.trim();
     const yamlPath = loadCropsYamlPath.value.trim();
     const yamlPayload = yamlText || yamlPath;
@@ -285,7 +285,7 @@ export function initCrops({ log, picker, form, grid }) {
     });
 
     postAnswer("/api/finetune/load-crops", {
-      model_name: selectedModel.name,
+      ...(selectedModel ? { model_name: selectedModel.name } : {}),
       output_path: outputPath,
       yaml: yamlPayload,
       load_id: progress.loadId,

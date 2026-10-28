@@ -41,6 +41,42 @@ def read_manifest(corrections_dir: str) -> Optional[dict]:
         return json.load(f)
 
 
+def remove_manifest(corrections_dir: str) -> bool:
+    """Remove the session's manifest from ``corrections_dir``; whether there was one.
+
+    For a session whose volume is now one no manifest can name (a volume
+    painted before any model): a manifest left naming the volume before it
+    kept that one the session's (trained_volume_name), so Rank, Seed and Use
+    this model read the old paint while the user painted the new volume. The
+    manifest is derived (write_volume_manifest builds it again from a volume
+    record), and the volume it named stays where it is.
+    """
+    path = os.path.join(str(corrections_dir), VIRTUAL_MANIFEST_FILENAME)
+    if not os.path.exists(path):
+        return False
+    os.remove(path)
+    return True
+
+
+def trained_volume_name(corrections_dir) -> Optional[str]:
+    """The directory name (``<id>.zarr``) of the volume the session in
+    ``corrections_dir`` trains on, its manifest's ``volume_zarr_path``: the
+    session's current volume, which every route and both modes mean by "the
+    session's volume". None without a manifest, or one that names none or
+    cannot be read.
+
+    By name, not by path: a resumed session's manifest names its own copy,
+    and the corrections dir may be spelled another way (a symlink, a
+    trailing slash) by whoever asks.
+    """
+    try:
+        path = (read_manifest(str(corrections_dir)) or {}).get("volume_zarr_path")
+    except (OSError, ValueError) as e:
+        logger.warning(f"Could not read the manifest in {corrections_dir}: {e}")
+        return None
+    return os.path.basename(str(path).rstrip("/")) if path else None
+
+
 def good_regions_path(corrections_dir: Optional[str]) -> Optional[str]:
     """Where the good regions of the session owning ``corrections_dir`` live:
     beside it, in the session directory. None without a corrections dir."""

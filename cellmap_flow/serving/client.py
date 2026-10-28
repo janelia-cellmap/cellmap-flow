@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import requests
 
 from cellmap_flow.jobs.launch import started_jobs
-from cellmap_flow.models.geometry import number
+from cellmap_flow.models.geometry import channel_names_of, number
 
 logger = logging.getLogger(__name__)
 
@@ -59,22 +59,40 @@ def fetch_model_info(host: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> dic
 
 
 def model_geometry(info: dict):
-    """Pull the finetune tab's geometry out of a model_info payload.
+    """Pull the finetune tab's geometry out of a model_info payload (or a
+    model's declared geometry, which has its keys).
 
-    Returns None when the payload has no geometry -- an older server, which
-    reported only the output activation.
+    ``channels`` is the output channel names (``output_channel_names``), or
+    None when the payload has none to give. Returns None when the payload
+    has no geometry -- an older server, which reported only the output
+    activation.
     """
     if not info or not info.get("write_shape"):
         return None
     try:
+        output_channels = int(info.get("output_channels", 1))
         return {
             "write_shape": [number(v) for v in info["write_shape"]],
             "output_voxel_size": [number(v) for v in info["output_voxel_size"]],
-            "output_channels": int(info.get("output_channels", 1)),
+            "output_channels": output_channels,
+            "channels": output_channel_names(info, output_channels),
         }
     except Exception as e:
         logger.debug(f"Malformed model geometry {info}: {e}")
         return None
+
+
+def output_channel_names(fields: dict, output_channels: int):
+    """The output channel names ``fields`` gives, a list of one per channel, or None.
+
+    ``fields`` is a model_info payload, a declared geometry or a model
+    entry, read as ``channel_names_of`` reads a config. None when it names
+    no channel, or a number of them other than ``output_channels``: the
+    Finetune tab shows each channel by its name, and a list that is not one
+    name per channel would put a name on the wrong one.
+    """
+    names = channel_names_of(SimpleNamespace(**fields))
+    return list(names) if names and len(names) == output_channels else None
 
 
 def running_job_host(model_name):
