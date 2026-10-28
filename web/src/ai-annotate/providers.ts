@@ -10,12 +10,15 @@ import type { Provider } from "./types";
  * page's ImageCodec, how retries wait, a clock); the fake needs nothing. */
 export type ProviderDeps = GeminiDeps;
 
-/** The provider the panel starts on (config.py default_provider: the first). */
-export const DEFAULT_PROVIDER = "gemini";
+/** The provider the panel starts on (config.py default_provider: the first).
+ * Vertex AI, as the server's example config has it: Google does not use
+ * what is sent to it to improve its products, as it may on the Gemini API's
+ * free tier. */
+export const DEFAULT_PROVIDER = "vertex";
 
-/** gemini (the Gemini API with a key), vertex (Vertex AI with a project and
- * an access token) and fake (runs here), keyed by id, in that order. */
+/** vertex (Vertex AI with a project and an access token), gemini (the
+ * Gemini API with a key) and fake (runs here), keyed by id, in that order. */
 export function createProviders(deps: ProviderDeps): Map<string, Provider> {
-  const providers = [createGeminiProvider("gemini_api", deps), createGeminiProvider("vertex_gemini", deps), createFakeProvider()];
+  const providers = [createGeminiProvider("vertex_gemini", deps), createGeminiProvider("gemini_api", deps), createFakeProvider()];
   return new Map(providers.map((provider) => [provider.info.id, provider]));
 }

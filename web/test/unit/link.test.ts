@@ -1,4 +1,5 @@
-// A link that opens a volume and runs models (src/link.ts): its query
+// A link that opens a volume and runs models (src/link.ts): from the first
+// paint, the page saying the volume is opening; its query
 // parsed and its models resolved through the catalog; a finetuned model's
 // ref (its base and its head's numbers) written, read back and rebuilt in a
 // browser that never trained it, without replacing a model of that name kept
@@ -11,13 +12,14 @@ import { describe, expect, it } from "vitest";
 import { createBackend, restoreSession } from "../../src/backend";
 import { ARGS_KEY, type FinetunedRecord, type ModelEntry } from "../../src/contracts";
 import { headOf, withHead } from "../../src/finetune/onnx-head";
-import { chainFromHash, finetunedRef, type LinkCatalog, type LinkedFinetuned, linkedView, parseLink, resolveLinkedModels, sameHead } from "../../src/link";
+import { chainFromHash, DATASET_PARAM, finetunedRef, type LinkCatalog, type LinkedFinetuned, linkedView, parseLink, resolveLinkedModels, sameHead } from "../../src/link";
 import { createCatalog, NoBrowserCopyError } from "../../src/models";
 import { MemoryByteCache } from "../../src/models/byte-cache";
 import { finetunedEntry, MemoryFinetunedRegistry } from "../../src/models/finetuned";
 import { MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { entryFor } from "../../src/models/manifest";
 import { encodeArgs } from "../../src/shared/args";
+import { DATASET_FLAG } from "../../src/state";
 import { paintLayerUrl } from "../../src/viewer/layers";
 import { encodeState } from "../../src/viewer/share";
 import type { NgState } from "../../src/viewer/state";
@@ -32,6 +34,42 @@ describe("parseLink", () => {
     expect(parseLink("?model=setup_53&model=setup_54,setup_53&dataset=")).toEqual({ datasetUrl: null, models: ["setup_53", "setup_54"] });
     expect(parseLink("")).toEqual({ datasetUrl: null, models: [] });
     expect(parseLink("?other=1")).toEqual({ datasetUrl: null, models: [] });
+  });
+});
+
+describe("the page's first paint", () => {
+  // index.html's inline script, which runs before the page is first drawn:
+  // with a volume about to open it marks the viewer pending, so the connect
+  // panel says the volume is opening (browser.css) instead of asking for one.
+  const template = readFileSync(resolvePath(import.meta.dirname, "../../../cellmap_flow/dashboard/templates/index.html"), "utf8");
+  const script = /<script>\s*(\(function \(\) \{[\s\S]*?\}\)\(\);)\s*<\/script>/.exec(template)![1]
+    .replace("{{ dataset_param | tojson }}", JSON.stringify(DATASET_PARAM));
+  const APP = "https://janelia-cellmap.github.io/cellmap-flow/app/";
+
+  /** data-viewer after the script runs on `href`, with the session's flag
+   * set (`"1"`), unset (null), or its storage refusing to be read. */
+  function firstPaint(href: string, flag: string | null | "refused"): string | null {
+    const { search, hash } = new URL(href);
+    const dataset: Record<string, string> = {};
+    const sessionStorage = {
+      getItem(key: string) {
+        if (flag === "refused") throw new Error("SecurityError");
+        return key === DATASET_FLAG ? flag : null;
+      },
+    };
+    new Function("location", "sessionStorage", "document", script)({ search, hash }, sessionStorage, { documentElement: { dataset } });
+    return dataset.viewer ?? null;
+  }
+
+  it.each([
+    ["a link naming a volume", `${APP}?dataset=${DATASET}&model=setup_53`, null, "pending"],
+    ["a link naming a volume, storage refused", `${APP}?dataset=${DATASET}`, "refused", "pending"],
+    ["a shared view", APP + encodeState({ layers: [] }), null, "pending"],
+    ["a reload with a volume open", APP, "1", "pending"],
+    ["a link naming models alone", `${APP}?model=setup_53`, null, null],
+    ["a bare page", APP, null, null],
+  ])("%s", (_, href, flag, viewer) => {
+    expect(firstPaint(href, flag)).toBe(viewer);
   });
 });
 

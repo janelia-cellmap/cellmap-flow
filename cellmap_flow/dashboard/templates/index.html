@@ -224,13 +224,20 @@
     }
   </style>
   {% if mode == "browser" %}
-  {# Before the first paint: a dataset is open in this browser's session
-     (web/src/state keeps the flag), so hide the connect panel until the
-     viewer is back, instead of flashing it on the reload after Connect. #}
+  {# Before the first paint: a volume is about to open, because the page is a
+     link naming one (?dataset=, or a shared #! view) or a dataset is open in
+     this browser's session (web/src/state keeps the flag). The connect panel
+     then says it is opening one until the viewer replaces it, instead of
+     asking for a URL the page already has. #}
   <script>
-    try {
-      if (sessionStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
-    } catch (e) { /* no storage: the panel shows until the viewer is restored */ }
+    (function () {
+      var linked = new URLSearchParams(location.search).get({{ dataset_param | tojson }}) || location.hash.indexOf("#!") === 0;
+      var open = false;
+      try {
+        open = !!sessionStorage.getItem("cellmap-flow:dataset");
+      } catch (e) { /* no storage: only a link counts */ }
+      if (linked || open) document.documentElement.dataset.viewer = "pending";
+    })();
   </script>
   {% endif %}
 </head>
@@ -279,6 +286,11 @@
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
             </svg>
           </div>
+          {% if mode == "browser" %}
+          {# Shown instead of the rest of the panel while a volume opens
+             (data-viewer="pending", web/src/browser.css); main.ts names it. #}
+          <div id="viewerOpening" class="no-data-desc" role="status">Opening the volume&hellip;</div>
+          {% endif %}
           <div class="no-data-title">No Viewer Connected</div>
           {# In the browser mode (mode == "browser", set by web/build/render.py) the
              data is read from a URL, not a path on a file system. Flask passes no

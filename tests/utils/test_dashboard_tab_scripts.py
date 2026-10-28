@@ -12,8 +12,8 @@ the browser build's (web/build/render.py), and each page has elements the
 others do not: the browser's Download and Delete buttons, say,
 are in its browser-mode blocks only. So an id must be on one of the pages;
 which page a lookup runs on is the script's own business (finetune/index.js
-starts each part in its mode). The browser's Run tab is TypeScript, and
-tests/web/test_render.py checks its ids.
+starts each part in its mode). The browser's Save predictions tab is
+TypeScript, and tests/web/test_render.py checks its ids.
 """
 
 import importlib.util

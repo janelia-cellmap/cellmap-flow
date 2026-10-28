@@ -115,11 +115,11 @@ def test_the_browser_page_keeps_the_ai_annotation_keys_out_of_password_managers(
 
 
 def test_the_run_tab_has_every_element_its_script_looks_up(page, dashboard):
-    """The Run tab's script is TypeScript (web/src/run-region/panel.ts), not
-    a dashboard module, so tests/utils/test_dashboard_tab_scripts.py does not
-    see it: its IDS table must name elements of the browser page, each one
-    once, or a button does nothing. The tab is the browser's alone, so none
-    is on the Flask page."""
+    """The Save predictions tab's script is TypeScript
+    (web/src/run-region/panel.ts), not a dashboard module, so
+    tests/utils/test_dashboard_tab_scripts.py does not see it: its IDS table
+    must name elements of the browser page, each one once, or a button does
+    nothing. The tab is the browser's alone, so none is on the Flask page."""
     ids = re.findall(r'^\s+\w+: "([\w-]+)",$', re.search(r"export const IDS = \{(.*?)\} as const;", RUN_PANEL_TS.read_text(), re.S).group(1), re.M)
     assert ids, "web/src/run-region/panel.ts no longer declares its IDS table as one id a line"
     counts = {i: len(re.findall(rf'\bid="{re.escape(i)}"', page)) for i in ids}

@@ -49,8 +49,8 @@ like a finetuned model (below), and nothing is uploaded.
 
 It is the same dashboard as the server's: the same Models and Processing
 tabs, the same normalizers and postprocessing steps, a Finetune
-tab that paints and trains in the browser, and a Run tab of its own that
-saves the predictions over a region to a folder (both below). What is missing
+tab that paints and trains in the browser, and a Save predictions tab of
+its own that saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
 TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model's whole
 network (the 2D models' can train in the browser), crops imported from disk,
@@ -85,10 +85,11 @@ on ``http://localhost`` (below) is not gated.
 Running the models over a region
 --------------------------------
 
-The viewer computes the chunks it shows, and keeps none of them. The *Run*
-tab runs the models served on the Models tab over a region, or the whole
-volume, on your GPU, and saves each one's predictions as an OME-Zarr in a
-folder on your machine, to open in the app again or to copy to the cluster.
+The viewer computes the chunks it shows, and keeps none of them. The *Save
+predictions* tab runs the models served on the Models tab over a region, or
+the whole volume, on your GPU, and saves each one's predictions as an
+OME-Zarr in a folder on your machine, to open in the app again or to copy to
+the cluster.
 
 1. Tick the models (all are ticked at first). Each runs through the
    Processing tab's steps it is served with, so what is saved is what its
@@ -109,8 +110,8 @@ folder on your machine, to open in the app again or to copy to the cluster.
    and your home folder ("it contains system files"): make a new folder
    inside one (the picker has a *New Folder* button) and choose that. The
    folder is remembered, and after a reload the browser asks again when you
-   click *Run*.
-4. *Run* writes each model to ``<folder>/<model>.zarr`` with a progress bar
+   click *Save*.
+4. *Save* writes each model to ``<folder>/<model>.zarr`` with a progress bar
    (chunks, megabytes, time left) and *Cancel*, which keeps what was written.
    The run goes on while you move around the viewer or use the other tabs,
    and the viewer stays responsive: its chunks go first; reloading the page
@@ -442,14 +443,16 @@ AI-assisted annotation is in the tab too, under *Patch on screen*: hover over
 a structure and press ``Shift+G`` (or click *Annotate at View Centre*), and
 one plane of raw EM goes to a Gemini image model asked to paint it; the
 review opens over the page, *Accept* writes the mask into the paint volume as
-an object per piece, and the tools' *Undo* takes it back. The page calls Google itself, with
-credentials you give it in the panel: a Gemini API key, or a Google Cloud
-project and an access token for Vertex AI (``gcloud auth print-access-token``,
-good for about an hour). They stay in this browser and go to Google alone,
+an object per piece, and the tools' *Undo* takes it back. The page calls
+Google itself, with credentials you give it in the panel: a Google Cloud
+project and an access token for Vertex AI, the provider the panel starts on
+(``gcloud auth print-access-token``, good for about an hour), or a Gemini API
+key. They stay in this browser and go to Google alone,
 with each plane, and are kept in the page's memory only, never in the
-browser's storage, so a reload asks for them again. On the Gemini API's free tier Google may use what is
-sent to improve its products, on its paid tier and on Vertex AI it does not;
-the server mode uses Vertex AI for that reason. A *fake* provider paints in
+browser's storage, so a reload asks for them again. On the Gemini API's free
+tier Google may use what is sent to improve its products, on its paid tier
+and on Vertex AI it does not; the panel starts on Vertex AI, and the server
+mode uses it, for that reason. A *fake* provider paints in
 the page, for trying the panel without a key. The server's guide,
 `docs/ai_annotate.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md>`_,
 has the details under "In the browser".
