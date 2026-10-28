@@ -48,6 +48,20 @@ function appendChildren(el, children) {
   }
 }
 
+// Help text that shows one line and keeps the rest a click away: ``short``,
+// then ``more`` (text, nodes or an array of them) under an "i" beside it, the
+// markup the templates write (css/dark.css details.more). No ``more``: the
+// line alone.
+export function hint(short, more) {
+  if (!more || (Array.isArray(more) && !more.length)) return [short];
+  return [short, " ", h("details", { class: "more" }, h("summary", { "aria-label": "More" }, "i"), h("span", { class: "more-body" }, more))];
+}
+
+// ``el``'s content made hint()'s.
+export function setHint(el, short, more) {
+  el.replaceChildren(...hint(short, more));
+}
+
 const savedLabels = new WeakMap();
 
 // Disable a button while its request runs. With a busyLabel, the label is a

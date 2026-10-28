@@ -3,6 +3,7 @@
 // next to some of them, the Learning Rates typed or picked from their
 // presets and eased down over the run or not, the Channel a model of
 // several channels trains, and the GPU queue picker.
+import { setHint } from "../../lib/dom.js";
 import { formatMb, formatMs } from "../../lib/format.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
@@ -507,11 +508,14 @@ function applyTrainingMode() {
   document.getElementById("training").dataset.training = mode;
   const note = document.getElementById("browserFinetuneNote");
   if (note) {
-    headNote = headNote ?? note.textContent;
+    headNote = headNote ?? Array.from(note.childNodes, (n) => n.cloneNode(true));
     const pieces = trainsBlocks() ? "in blocks around the voxels you paint" : "in tiles cut in the plane you paint in";
-    note.textContent = mode === "full"
-      ? `In the browser, this model can train its whole network: every weight, on the voxels you paint, with TensorFlow.js on this machine's GPU, ${pieces}. It takes minutes where the last layer takes seconds, and can learn what the model's features miss. Paint some background and some objects on a few slices, then train.`
-      : headNote;
+    if (mode === "full") {
+      setHint(note, "Trains every weight of the model on your paint, on this machine's GPU.",
+        `In the browser, this model can train its whole network: every weight, on the voxels you paint, with TensorFlow.js on this machine's GPU, ${pieces}. It takes minutes where the last layer takes seconds, and can learn what the model's features miss. Paint some background and some objects on a few slices, then train.`);
+    } else {
+      note.replaceChildren(...headNote.map((n) => n.cloneNode(true)));
+    }
   }
   updateTileHint();
 }

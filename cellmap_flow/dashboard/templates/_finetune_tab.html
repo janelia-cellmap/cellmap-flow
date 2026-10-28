@@ -50,7 +50,7 @@
     {# Browser mode only: what trains here (web/src/finetune), since it is not
        the server's LoRA finetune of the whole network. #}
     {% if mode == "browser" %}
-    <small class="form-text d-block mt-1" id="browserFinetuneNote">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint, on this machine; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</small>
+    <div class="form-text d-block mt-1" id="browserFinetuneNote">Trains the model's last layer on your paint, on this machine. <details class="more"><summary aria-label="More">i</summary><span class="more-body">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</span></details></div>
     {% endif %}
   </div>
 
