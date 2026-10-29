@@ -5,6 +5,7 @@ the dashboard's dataset field and a YAML's data_path."""
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,7 +28,10 @@ def test_the_dashboards_dataset_field_opens_a_path_pasted_from_neuroglancer(dash
     from cellmap_flow.dashboard.routes import index_page
 
     opened = []
-    monkeypatch.setattr(index_page, "new_viewer", lambda path, scales: opened.append(path))
+    # A stand-in viewer: the route only watches it for layers the person
+    # deletes (services.launch.watch_layer_deletes).
+    viewer = SimpleNamespace(shared_state=SimpleNamespace(raw_state={}, add_changed_callback=lambda callback: None))
+    monkeypatch.setattr(index_page, "new_viewer", lambda path, scales: opened.append(path) or viewer)
     monkeypatch.setattr(index_page, "viewer_url", lambda viewer: "http://viewer/")
     assert dashboard.post("/api/set-data", json={"dataset_path": PASTED}).status_code == 200
     assert (opened, get_session().dataset_path) == ([PATH], PATH)
