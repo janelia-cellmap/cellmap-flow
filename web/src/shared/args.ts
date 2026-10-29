@@ -90,14 +90,20 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** The engine view (and URL path segment) of a model served through `blob`. */
-export function viewName(modelName: string, blob: string): string {
-  return `${modelName}${ARGS_KEY}${blob}${ARGS_KEY}`;
+/** The engine view (and URL path segment) of a model served through `blob`,
+ * and run at `runVoxelSize` when it is not run at its own voxel size
+ * (ModelEntry.runVoxelSize): then `~<z>x<y>x<x>nm` follows the blob. The
+ * model computes other chunks at another voxel size, and the viewer and the
+ * service worker keep chunks by URL, so the two must not share one; the
+ * name before the markers stays the model's, which is its layer's name. */
+export function viewName(modelName: string, blob: string, runVoxelSize?: readonly number[]): string {
+  return `${modelName}${ARGS_KEY}${blob}${ARGS_KEY}${runVoxelSize ? `~${runVoxelSize.join("x")}nm` : ""}`;
 }
 
 /** The model name and blob of a view name (protocol.split_dataset_url): the
  * blob is null when the name carries none, and any other number of markers
- * than two is a malformed name. The name is percent-decoded in case the viewer
+ * than two is a malformed name; what follows the second marker (viewName's
+ * run voxel size) is neither. The name is percent-decoded in case the viewer
  * encoded it on the way. */
 export function parseViewName(view: string): { name: string; blob: string | null } {
   const parts = view.split(ARGS_KEY);

@@ -139,6 +139,9 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
         # browser cannot read; the browser's models come from Hugging Face.
         catalog_groups=[],
         default_models=[],
+        # No catalog rows, so none runs at another voxel size; the Hugging
+        # Face rows say theirs in the listing (run_voxel_size).
+        run_voxel_sizes={},
         default_hf_repos=[],
         default_bioimage_models=[],
         cellpose_panel={"models": [], "running": []},

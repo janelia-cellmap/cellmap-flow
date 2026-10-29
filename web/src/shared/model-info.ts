@@ -12,9 +12,11 @@
 //                               they are the variant's sizes times the voxel
 //                               size, not something to derive;
 //   output_voxel_size, input_voxel_size, effective_output_voxel_size
-//                               nm; effective equals output here because the
-//                               browser reads the raw at the model's own
-//                               voxel size (no relabelled level);
+//                               nm, the ones the model runs at (geometryOf:
+//                               its own, or scaled to its run voxel size);
+//                               effective equals output here, and the
+//                               engine's serve says otherwise when the raw
+//                               has no level at the input voxel size;
 //   has_channel, output_axes    channels first, as chunkmirage serves them;
 //   output_class                the output activation's class in the Python
 //                               vocabulary (serving/probe.py: "unit",
@@ -34,6 +36,7 @@
 //   available                   true: the geometry is known without a probe.
 import type { Inference, ModelEntry, ModelInfo, ModelManifest, OutputActivation } from "../contracts";
 import { readGraph, readModel } from "../finetune/onnx-proto";
+import { geometryOf } from "../infer/geometry";
 
 /** The portable rule a graph's nodes go to (cellmap_flow/portable/calls.py, over portable/activation.py). */
 const OUTPUT_ACTIVATION = "cellmap_flow.portable.calls:output_activation";
@@ -44,18 +47,17 @@ const SPATIAL_AXES = ["z", "y", "x"];
  * (networkActivation), or null when that was not read or does not say. */
 export function modelInfo(entry: ModelEntry, activation: OutputActivation | null = null): ModelInfo {
   const m = entry.manifest;
-  const v = entry.variant;
-  const spatial = SPATIAL_AXES.slice(SPATIAL_AXES.length - m.input_voxel_size_nm.length);
+  const g = geometryOf(entry);
   return {
     output_channels: m.channels.length,
     channels: m.channels.slice(),
-    write_shape: v.output_size.map((n, a) => n * m.output_voxel_size_nm[a]),
-    read_shape: v.input_size.map((n, a) => n * m.input_voxel_size_nm[a]),
-    output_voxel_size: m.output_voxel_size_nm.slice(),
-    input_voxel_size: m.input_voxel_size_nm.slice(),
-    effective_output_voxel_size: m.output_voxel_size_nm.slice(),
+    write_shape: g.write_shape,
+    read_shape: g.read_shape,
+    output_voxel_size: g.output_voxel_size,
+    input_voxel_size: g.input_voxel_size,
+    effective_output_voxel_size: g.output_voxel_size.slice(),
     has_channel: true,
-    output_axes: ["c", ...spatial],
+    output_axes: ["c", ...SPATIAL_AXES],
     available: true,
     ...outputClass(m, activation),
     output_min: null,

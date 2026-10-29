@@ -13,7 +13,7 @@
 // volume's layout".
 import { volumeCornerNm } from "../ai-annotate/fill";
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
-import { chooseRawLevel, geometryOf } from "../infer/geometry";
+import { chooseRawLevel, geometryOf, sameVoxelSize } from "../infer/geometry";
 import { stamp } from "../shared/format";
 import type { RegionBox } from "../viewer/layers";
 import { decodeState } from "../viewer/share";
@@ -164,6 +164,16 @@ function volumeOf(plan: Plan, dataset: DatasetInfo, entry: ModelEntry | null, ch
     postprocess: chain.postprocess.map((step) => ({ ...step })),
     created_at: (options.now ?? new Date()).toISOString(),
   };
+}
+
+/** Whether `volume` was planned for `entry` as it runs now: for its model,
+ * and at the voxel size it reads (the model's sizes the plan was given, its
+ * claimed ones), so a model run at another voxel size since lies on another
+ * grid, and its paint is carried onto that one, as onto another model's. A
+ * volume that does not say its claimed sizes is its model's at any. */
+export function plannedFor(volume: PaintVolume, entry: ModelEntry): boolean {
+  if (volume.model_id !== entry.id) return false;
+  return !volume.claimed_input_voxel_size || sameVoxelSize(volume.claimed_input_voxel_size, geometryOf(entry).input_voxel_size);
 }
 
 /** Whether a model's channels are affinities (`mito_aff_z`, `mito_aff_y`,

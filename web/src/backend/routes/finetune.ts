@@ -69,8 +69,9 @@ import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
+import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, plannedFor, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
+import { parseVoxelSize } from "../../infer/geometry";
 import { ANNOTATED_REGIONS_LAYER, boxesLayer, dimensionsOf, PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
@@ -272,8 +273,12 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
     const name = typeof body.model_name === "string" ? body.model_name.trim() : "";
-    const size = voxelSizeOf(body.voxel_size);
-    if (size === undefined) return badRequest(`voxel_size must be one positive number or three (z, y, x), not ${JSON.stringify(body.voxel_size)}`);
+    let size: number[] | null;
+    try {
+      size = parseVoxelSize(body.voxel_size, "voxel_size");
+    } catch (e) {
+      return badRequest(message(e));
+    }
     if (name && size) return badRequest(`voxel_size is for a volume made without a model; ${name}'s volume lies on its own grid`);
     const dataset = ctx.infer.dataset();
     let volume: PaintVolume;
@@ -475,9 +480,11 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
     // The volume the model trains on: the session's, or, for a model on
-    // another grid, a new one with the paint carried onto it.
+    // another grid (another model's volume, or the model's own planned at
+    // another voxel size than it runs at now), a new one with the paint
+    // carried onto it.
     let trained = volume, chunks = painted, carried: Record<string, unknown> | null = null, carryNote: string | null = null;
-    if (volume.model_id !== model.entry.id) {
+    if (!plannedFor(volume, model.entry)) {
       let to: PaintVolume;
       try {
         to = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
@@ -624,16 +631,6 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   return jobs;
-}
-
-/** create-volume's voxel_size: null when not given (or blank), three
- * numbers from three or from one (every axis's), and undefined for anything
- * else. Whether they are positive and the raw's axes is the plan's to say. */
-function voxelSizeOf(value: unknown): number[] | null | undefined {
-  if (value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) return null;
-  const numbers = (Array.isArray(value) ? value : [value]).map((v) => (typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN));
-  if (numbers.some((v) => !Number.isFinite(v)) || (numbers.length !== 1 && numbers.length !== 3)) return undefined;
-  return numbers.length === 1 ? [numbers[0], numbers[0], numbers[0]] : numbers;
 }
 
 /** The volume's URLs as the Python answers them: `minio_url` names the

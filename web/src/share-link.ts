@@ -24,11 +24,14 @@
 // keeps its layer, which opens only in this browser, and the page says so
 // beside the button, with the Finetune tab's download that gives the paint
 // as a file. The page that opens the link leaves out what it cannot show
-// and says so in the same notice (showLinkNotice, called by main.ts).
+// and says so in the same notice (showLinkNotice, called by main.ts). A
+// model run at another voxel size than its ref gives it has that size after
+// its ref (link.ts runAtRef), whichever way it is named.
 import { message } from "./backend/router";
 import { type Catalog, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
 import { headOf } from "./finetune/onnx-head";
-import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn } from "./link";
+import { modelVoxelSizes, sameVoxelSize } from "./infer/geometry";
+import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn, runAtRef } from "./link";
 import { isFinetuned, lineage, publishedRef } from "./models/finetuned";
 import { HF_REPO } from "./models/hf";
 import { type Hint, hint, hintText } from "./shared/hint";
@@ -89,13 +92,18 @@ function hubLinkRef(entry: ModelEntry): string {
  * the way there that was published. A finetuned model that cannot be put
  * so (its bytes gone, or the record of a model in its lineage; a whole
  * network trained, or a file opened, on the way) is named by its folder,
- * which opens it only in this browser, and said so. */
+ * which opens it only in this browser, and said so. Each is followed by
+ * the voxel size the model runs at when its ref does not give it that by
+ * itself (runAtRef): the run voxel size of a model named as it is, and for
+ * a finetunedRef the voxel size it runs at when that is not the one of the
+ * model it is rebuilt on (a finetune trained at another voxel size). */
 export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Catalog, "finetuned" | "modelBytes" | "resolve">): Promise<LinkRefs> {
   const linked: LinkRefs = { refs: [], rebuilt: [], unlinked: [] };
   let records: FinetunedRecord[] | null = null;
   for (const model of models) {
+    const runAt = model.runVoxelSize ?? null;
     if (!isFinetuned(model)) {
-      linked.refs.push(hubLinkRef(model));
+      linked.refs.push(runAtRef(hubLinkRef(model), runAt));
       continue;
     }
     try {
@@ -103,7 +111,7 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
       const record = records.find((r) => r.id === model.id);
       if (!record) throw new Error("its record is not in this browser's catalog");
       if (record.published) {
-        linked.refs.push(publishedRef(record.published));
+        linked.refs.push(runAtRef(publishedRef(record.published), runAt));
         continue;
       }
       const { ancestry, base, published, kept } = lineage(record, records);
@@ -115,22 +123,27 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
         throw new Error("its whole network was trained in this browser, millions of weights where a link carries a last layer's few dozen; publish it to Hugging Face (the Finetune tab) to put it in a link, or send the .onnx file the Finetune tab's Download finetuned model saves");
       }
       const head = headOf(await catalog.modelBytes(model));
-      linked.refs.push(finetunedRef({ name: model.name, base: published ?? (await hubBaseRef(base, catalog)), file: base.file, weight: head.weight, bias: head.bias }));
+      // The model it is rebuilt on: the published one on the way, as its
+      // record here says it, or the Hugging Face model at the root.
+      const on = published ? records.find((r) => r.published && publishedRef(r.published) === published)!.entry : await hubBase(base, catalog);
+      const ref = finetunedRef({ name: model.name, base: published ?? hubLinkRef(on), file: base.file, weight: head.weight, bias: head.bias });
+      const runs = modelVoxelSizes(model).input;
+      linked.refs.push(runAtRef(ref, sameVoxelSize(runs, modelVoxelSizes(on).input) ? null : runs));
       linked.rebuilt.push({ name: model.name, base: base.name });
     } catch (e) {
-      linked.refs.push(model.folder);
+      linked.refs.push(runAtRef(model.folder, runAt));
       linked.unlinked.push({ name: model.name, why: message(e) });
     }
   }
   return linked;
 }
 
-/** The ref in a link of `base`, the Hugging Face model a lineage ends at,
- * looked up in the catalog (which says when it is gone). */
-async function hubBaseRef(base: FinetunedRecord["base"], catalog: Pick<Catalog, "resolve">): Promise<string> {
+/** `base`, the Hugging Face model a lineage ends at, looked up in the
+ * catalog (which says when it is gone). */
+async function hubBase(base: FinetunedRecord["base"], catalog: Pick<Catalog, "resolve">): Promise<ModelEntry> {
   const entry = await catalog.resolve(base.id);
   if (!entry) throw new Error(`${base.name}, the model it was finetuned from, is not in the model catalog`);
-  return hubLinkRef(entry);
+  return entry;
 }
 
 /** What the sender is told about a link beside its having been copied: a

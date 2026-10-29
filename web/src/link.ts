@@ -29,14 +29,21 @@
 // the browser that painted it. A link's `#!` view is opened without the
 // layers this browser cannot show (linkedView), the page saying which and
 // why (linkNotes), rather than with layers whose sources never answer.
+//
+// A model run at another voxel size than the one its ref gives it (the
+// Models tab's Run at (nm): ModelEntry.runVoxelSize) has that size after its
+// ref (runAtRef: `setup_54@32nm`), and runs at it where the link opens; so
+// does a finetuned model trained at another voxel size than its base's own,
+// which is rebuilt as a model of that size.
 import { message } from "./backend/router";
 import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } from "./contracts";
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
 import { PYTHON } from "./generated/python-data";
+import { parseVoxelSize, withRunVoxelSize } from "./infer/geometry";
 import { finetunedRecord, isFinetuned, nextFinetunedName, publishedRef } from "./models/finetuned";
 import { NoBrowserCopyError } from "./models/hf";
-import { hubName, withVariant } from "./models/manifest";
+import { hubName, voxelLabel, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import type { Hint } from "./shared/hint";
 import { paintVolumeOf } from "./viewer/layers";
@@ -93,6 +100,31 @@ export function chainFromHash(hash: string): Chain | null {
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// The voxel size a model of the link runs at
+// ---------------------------------------------------------------------------
+
+/** What follows a ref whose model runs at another voxel size: `@<z>x<y>x<x>nm`,
+ * one number for a cube (voxelLabel). An "@" before a revision (hubRef's
+ * `@main`) is never numbers and "nm", and no other part of a ref holds an
+ * "@", so the two are told apart. */
+const RUN_AT = /@(\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)*)nm$/;
+
+/** `ref` for a model run at `size` (nm, z, y, x): `setup_54@32nm`,
+ * "setup_54 at 32 nm"; `ref` itself for null, its own. */
+export function runAtRef(ref: string, size: readonly number[] | null): string {
+  return size ? `${ref}@${voxelLabel([...size])}nm` : ref;
+}
+
+/** The ref a link's model ref is without its voxel size (runAtRef), and that
+ * size (null when it has none); an Error for a size that is not one or
+ * three positive numbers. */
+export function splitRunAt(linked: string): { ref: string; runAt: number[] | null } {
+  const match = RUN_AT.exec(linked);
+  if (!match) return { ref: linked, runAt: null };
+  return { ref: linked.slice(0, match.index), runAt: parseVoxelSize(match[1].split("x"), `the voxel size ${match[1]}nm`) };
 }
 
 // ---------------------------------------------------------------------------
@@ -215,9 +247,10 @@ export interface LinkedModels {
 }
 
 /** The catalog's entries for `refs`, in their order and each once: a plain
- * ref looked up, a finetuned one rebuilt (rebuildFinetuned). A ref the
- * catalog does not know, cannot look up, cannot read or cannot rebuild is
- * logged and left out, with why; the rest run. */
+ * ref looked up, a finetuned one rebuilt (rebuildFinetuned), each run at
+ * the voxel size after it (splitRunAt), or at its own. A ref the catalog
+ * does not know, cannot look up, cannot read or cannot rebuild is logged
+ * and left out, with why; the rest run. */
 export async function resolveLinkedModels(
   catalog: LinkCatalog,
   refs: string[],
@@ -233,7 +266,14 @@ export async function resolveLinkedModels(
   // The link's own names for its finetuned models: one renamed here takes
   // none of them, so that each of the others keeps its own where it can.
   const reserved = refs.filter(isFinetunedRef).map((ref) => ref.split(FINETUNED_SEPARATOR)[0]);
-  for (const ref of refs) {
+  for (const linkedRef of refs) {
+    let ref: string, runAt: number[] | null;
+    try {
+      ({ ref, runAt } = splitRunAt(linkedRef));
+    } catch (e) {
+      leave(linkedRef, `its voxel size cannot be read (${message(e)})`);
+      continue;
+    }
     let entry: ModelEntry | null;
     if (isFinetunedRef(ref)) {
       let model: LinkedFinetuned;
@@ -244,7 +284,7 @@ export async function resolveLinkedModels(
         continue;
       }
       try {
-        entry = await rebuildFinetuned(catalog, model, { reserved, claimed: linked.entries, log, now });
+        entry = await rebuildFinetuned(catalog, model, { reserved, claimed: linked.entries, runAt, log, now });
       } catch (e) {
         leave(model.name, `it could not be rebuilt from ${model.base} (${message(e)})`);
         continue;
@@ -266,7 +306,7 @@ export async function resolveLinkedModels(
       // view names its layer by.
       if (!isFinetuned(entry) && hubName(entry.manifest) !== entry.name) linked.renamed[hubName(entry.manifest)] = entry.name;
     }
-    if (!linked.entries.some((x) => x.id === entry.id)) linked.entries.push(entry);
+    if (!linked.entries.some((x) => x.id === entry.id)) linked.entries.push(withRunVoxelSize(entry, runAt));
   }
   return linked;
 }
@@ -289,12 +329,14 @@ export async function resolveLinkedModels(
  * browser is never replaced, and the new one is the next of the base's
  * series instead (nextFinetunedName), passing over `reserved`, the link's
  * names for its other finetuned models. `claimed`, the entries resolved for
- * the link so far, are not served twice. Throws what went wrong; nothing is
- * kept then. */
+ * the link so far, are not served twice. With `runAt`, the voxel size after
+ * the link's ref, the model was trained at that size, and is kept as a
+ * model of that size (models/finetuned.ts finetunedEntry, on the base run
+ * there). Throws what went wrong; nothing is kept then. */
 export async function rebuildFinetuned(
   catalog: LinkCatalog,
   model: LinkedFinetuned,
-  opts: { reserved: readonly string[]; claimed: readonly ModelEntry[]; log: (line: string) => void; now: () => Date },
+  opts: { reserved: readonly string[]; claimed: readonly ModelEntry[]; runAt?: number[] | null; log: (line: string) => void; now: () => Date },
 ): Promise<ModelEntry> {
   const { log } = opts;
   const records = await catalog.finetuned();
@@ -335,7 +377,7 @@ export async function rebuildFinetuned(
   const holder = await catalog.resolve(model.name).catch(() => null);
   const taken = holder !== null || records.some((r) => r.name === model.name);
   const name = taken ? nextFinetunedName(source, records, opts.reserved) : model.name;
-  const record = finetunedRecord(source, name, data.byteLength, { volume: "", created_at: opts.now().toISOString(), params: {}, epochs: 0, final_loss: null, from_link: { name: model.name } });
+  const record = finetunedRecord(withRunVoxelSize(source, opts.runAt ?? null), name, data.byteLength, { volume: "", created_at: opts.now().toISOString(), params: {}, epochs: 0, final_loss: null, from_link: { name: model.name } });
   await catalog.addFinetuned(record, data);
   log(taken
     ? `The link's ${model.name} is kept in this browser as ${name}, rebuilt from ${source.name}: this browser has a model named ${model.name} already, with other weights, and keeps it`

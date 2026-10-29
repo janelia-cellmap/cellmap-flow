@@ -63,7 +63,17 @@ const prod = (shape: readonly number[]) => shape.reduce((a, b) => a * b, 1);
  * output whatever their postprocessing, and another normalizer is another
  * key. The steps as the dashboard sent them (strings), canonically ordered;
  * the Python server builds the steps first so "0.0" and 0 agree, which the
- * blob does for a layer's URL (shared/args.ts) and would do here too. */
+ * blob does for a layer's URL (shared/args.ts) and would do here too.
+ *
+ * The voxel size the model is run at (ModelEntry.runVoxelSize) is not in
+ * it, and need not be: the engine keys a stage's output by the level's
+ * voxel size and the box as well, and what the model computes depends on
+ * nothing else of it. Its voxel counts and its halo in voxels are its own at
+ * every voxel size, and so is the ratio of its output to its input voxel
+ * size, so two run voxel sizes reading the same raw level compute the same
+ * blocks on the same grid, and two reading different levels serve levels
+ * of different voxel sizes. The view's name carries it (shared/args.ts
+ * viewName), for the caches that go by URL. */
 export function modelStageKey(entry: ModelEntry, chain: Chain): string {
   return `${entry.id}|${entry.variant.file}|norm:${canonicalJson(chain.input_norm)}|model`;
 }

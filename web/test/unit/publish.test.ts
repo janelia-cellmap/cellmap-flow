@@ -13,6 +13,7 @@ import { createRouter } from "../../src/backend";
 import { SIGN_IN_EVENT } from "../../src/backend/routes/publish";
 import type { ApiResponse, ModelEntry } from "../../src/contracts";
 import { PYTHON } from "../../src/generated/python-data";
+import { withRunVoxelSize } from "../../src/infer/geometry";
 import { finetunedRecord } from "../../src/models/finetuned";
 import { parseManifest } from "../../src/models/manifest";
 import { finetunedFrom } from "../../src/publish/model";
@@ -91,10 +92,11 @@ function fakeHub(users: Record<string, string>, refuse: number | null = null) {
   return { fetch, committed };
 }
 
-/** A context with the dataset open and one model finetuned from setup_54 in its catalog. */
-async function withFinetuned(): Promise<{ ctx: FakeContext; base: ModelEntry }> {
+/** A context with the dataset open and one model finetuned from setup_54 in
+ * its catalog, setup_54 run at `runAt` (nm, z, y, x; null: its own). */
+async function withFinetuned(runAt: number[] | null = null): Promise<{ ctx: FakeContext; base: ModelEntry }> {
   const ctx = fakeContext({ state: { datasetUrl: RAW } });
-  const base = ctx.catalog.entries[0];
+  const base = withRunVoxelSize(ctx.catalog.entries[0], runAt);
   const record = finetunedRecord(base, NAME, ONNX.byteLength, {
     volume: "vol-0000abcd-20261026-100000",
     created_at: "2026-10-26T10:00:00.000Z",
@@ -180,6 +182,18 @@ describe.skipIf(!python)("publishing a model finetuned in the browser", () => {
     const again = JSON.parse(new TextDecoder().decode(hub.committed[1].get(`${NAME}/manifest.json`)));
     expect(again.published).not.toHaveProperty("dataset");
     expect(new TextDecoder().decode(hub.committed[1].get("README.md"))).not.toContain(RAW);
+  });
+
+  it("declares the voxel size a model run at another one was finetuned at, so it runs there wherever it is opened", async () => {
+    const hub = fakeHub({ hf_alice: "alice" });
+    vi.stubGlobal("fetch", hub.fetch);
+    const { ctx } = await withFinetuned([32, 32, 32]);
+    const router = createRouter({ publish: { now: () => new Date("2026-10-26T12:00:00.000Z") } });
+    await router.handle(request("POST", "/api/huggingface/credentials", { token: "hf_alice" }), ctx);
+    await router.handle(request("POST", `/api/finetune/model/${NAME}/publish`, {}), ctx);
+    expect(await settled(router, ctx)).toMatchObject({ status: "done" });
+    const manifest = parseManifest(JSON.parse(new TextDecoder().decode(hub.committed[0].get(`${NAME}/manifest.json`))));
+    expect([manifest.input_voxel_size_nm, manifest.output_voxel_size_nm]).toEqual([[32, 32, 32], [32, 32, 32]]);
   });
 
   it("refuses without a token, a token Hugging Face does not take, and an owner that is not the user", async () => {

@@ -310,9 +310,11 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
  * another name than hubName's, to keep the list's names unique). Serving
  * re-tunes an entry so, with the variant chosen for the GPU (backend/
  * serving.ts), and a finetuned manifest has one variant, so a finetuned
- * entry comes through unchanged. */
+ * entry comes through unchanged. The voxel size it is run at stays too
+ * (ModelEntry.runVoxelSize): the variant is how it runs on this GPU, not
+ * at what scale. */
 export function withVariant(entry: ModelEntry, variant: ModelVariant): ModelEntry {
-  return { ...entryFor(entry.folder, entry.manifest, variant, entry.repo), name: entry.name };
+  return { ...entryFor(entry.folder, entry.manifest, variant, entry.repo), name: entry.name, ...(entry.runVoxelSize ? { runVoxelSize: entry.runVoxelSize } : {}) };
 }
 
 /** The byte-cache key a finetuned entry's bytes are kept under, and so its

@@ -18,7 +18,7 @@ import type { AppContext, Chain, DatasetInfo, ModelEntry, ServedModel, Step } fr
 import { selectedChannel, SUPPORTED_NORMALIZERS, withChannelPick, withoutChannelPick } from "../infer/norms";
 import { withVariant } from "../models";
 import { finetuneNumber } from "../models/finetuned";
-import { chainDigest, encodeArgs } from "../shared/args";
+import { chainDigest, encodeArgs, viewName } from "../shared/args";
 import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
 import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer, RAW_LAYER_NAME, rawChannelShown } from "../viewer/layers";
@@ -45,11 +45,17 @@ export function blobOf(served: ServedModel): string {
   return served.view.split(ARGS_KEY)[1] ?? "";
 }
 
+/** Whether `served` is `entry` served through `blob`, at the voxel size
+ * `entry` is run at (its view's name says both: shared/args.ts viewName). */
+export function servesAs(served: ServedModel, entry: ModelEntry, blob: string): boolean {
+  return served.entry.id === entry.id && served.view === viewName(entry.name, blob, entry.runVoxelSize);
+}
+
 /** Whether every one of `entries` is served through `blob` already: then a
  * redraw would show nothing new (pipeline.py's _shows). */
 export function allServed(ctx: AppContext, entries: ModelEntry[], blob: string): boolean {
   const served = ctx.infer.served();
-  return entries.every((e) => served.some((s) => s.entry.id === e.id && blobOf(s) === blob));
+  return entries.every((e) => served.some((s) => servesAs(s, e, blob)));
 }
 
 /** Make `chain` the session's and draw its models' layers through it
@@ -179,15 +185,14 @@ async function servedOutputClass(ctx: AppContext, entry: ModelEntry): Promise<st
 }
 
 /** `entry` in the variant it is served in: the one it is served in already
- * (through another chain: the same variant again, so the onnxruntime
- * session is shared), else the one for this machine's GPU (the catalog's
- * entries carry a default variant, fp32 and the smallest block, and
- * Catalog.chooseVariant picks the precision and block size the GPU's
- * limits allow). */
+ * (through another chain, or at another voxel size: the same variant again,
+ * so the onnxruntime session is shared), else the one for this machine's
+ * GPU (the catalog's entries carry a default variant, fp32 and the smallest
+ * block, and Catalog.chooseVariant picks the precision and block size the
+ * GPU's limits allow). Either way at the voxel size `entry` is run at. */
 async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelEntry> {
   const previous = ctx.infer.served().find((s) => s.entry.id === entry.id);
-  if (previous) return previous.entry;
-  return withVariant(entry, ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()));
+  return withVariant(entry, previous ? previous.entry.variant : ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()));
 }
 
 /** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
@@ -224,8 +229,9 @@ export interface ServeOptions {
 }
 
 /** Serve `entries` through `chain`, in their order, and nothing else: a
- * model already served through this chain is kept as it is; one served
- * through another chain is served anew and the old view disposed of (after
+ * model already served through this chain, at the voxel size its entry is
+ * run at (servesAs), is kept as it is; one served through another chain, or
+ * at another voxel size, is served anew and the old view disposed of (after
  * the new one exists, so the two share the onnxruntime session rather than
  * rebuilding it); one no longer in `entries` is disposed of and its layer
  * removed. Then the viewer shows one layer per entry, coloured by position.
@@ -240,7 +246,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
   const kept = new Set<ServedModel>();
   const result: ServedModel[] = [];
   for (const entry of entries) {
-    const current = before.find((s) => s.entry.id === entry.id && blobOf(s) === blob);
+    const current = before.find((s) => servesAs(s, entry, blob));
     if (current) {
       kept.add(current);
       result.push(current);
