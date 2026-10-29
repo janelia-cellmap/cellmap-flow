@@ -57,13 +57,14 @@
 // the session chain's alone, with no model served and no volume made: Fit to
 // paint's, for the model already seeding the paint.
 //
-// The list offers the models the Models tab does, found the same way: each
-// candidate is under the tab's section it would be listed in (GROUPS:
-// Running, cellmap, Added, Finetuned), the tab's Refresh (POST
-// /api/huggingface-models/refresh) reads the catalog again and the next
-// listing is of what it read, and POST /api/finetune/rank/add {ref} adds a
-// model by hand, by any ref the tab's Add a model takes, to every listing
-// after, without serving it.
+// The list offers the models the Models tab does, found the same way (those
+// finetuned in this browser only while they are this tab's: src/kept
+// listedInTab): each candidate is under the tab's section it would be
+// listed in (GROUPS: Running, cellmap, Added, Finetuned), the tab's Refresh
+// (POST /api/huggingface-models/refresh) reads the catalog again and the
+// next listing is of what it read, and POST /api/finetune/rank/add {ref}
+// adds a model by hand, by any ref the tab's Add a model takes, to every
+// listing after, without serving it.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { percentile } from "../../ai-annotate/mask";
@@ -76,6 +77,7 @@ import { hasAffinityChannels, paintedChunkIndices, plannedFor, planVolume, readP
 import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, modelVoxelSizes, outputShape, ratio } from "../../infer/geometry";
 import { selectedChannel } from "../../infer/norms";
+import { listedInTab } from "../../kept";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
 import { HF_REPO, type ListFacts, listFacts } from "../../models";
@@ -97,7 +99,7 @@ export function rankRoutes(router: Router): void {
   router.get("/api/finetune/rank/candidates", async (_req, _params, ctx) => {
     const volume = await sessionVolume(ctx);
     const listing = listingOf(ctx, volume);
-    const candidates = (await ctx.catalog.list()).map((e) => listing(asRun(ctx, e)));
+    const candidates = (await ctx.catalog.list()).filter((e) => listedInTab(ctx.session.state, e)).map((e) => listing(asRun(ctx, e)));
     return json(200, {
       success: true,
       volume: volume ? { id: volume.id, model_name: volume.model_name, painted_chunks: (await paintedChunkIndices(ctx.paint, volume.id)).length } : null,

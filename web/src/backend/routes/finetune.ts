@@ -72,6 +72,7 @@ import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
 import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, plannedFor, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { parseVoxelSize } from "../../infer/geometry";
+import { inTab, volumeGroups } from "../../kept";
 import { ANNOTATED_REGIONS_LAYER, boxesLayer, dimensionsOf, PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
@@ -340,20 +341,21 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     return json(200, { success: true, message: "Layer added to viewer", layer_name: name });
   });
 
-  // POST /api/finetune/list-existing-sessions: the sessions in the paint
-  // store, newest first, each its one current volume: the server's sessions
-  // are directories of volumes, listed by the one their manifest trains on;
-  // here a volume is the unit, and one Use this model superseded
-  // (supersedeVolume) is not listed, since its paint is the current one's
-  // too. In the shape sessions.js lists: the volume's id as session_id and
-  // session_path, the volume, its painted chunks, the model it is for
-  // (model_name, null for one painted before any model), the dataset it was
-  // painted on.
+  // POST /api/finetune/list-existing-sessions: the tab's sessions in the
+  // paint store (src/kept: the volumes it painted into, or a link's, or one
+  // brought back with Kept in this browser), newest first, each its one
+  // current volume: the server's sessions are directories of volumes,
+  // listed by the one their manifest trains on; here a volume is the unit,
+  // and one Use this model superseded (supersedeVolume) is not listed, since
+  // its paint is the current one's too. In the shape sessions.js lists: the
+  // volume's id as session_id and session_path, the volume, its painted
+  // chunks, the model it is for (model_name, null for one painted before any
+  // model), the dataset it was painted on.
   router.post("/api/finetune/list-existing-sessions", async (_req, _params, ctx) => {
     const sessions: Record<string, unknown>[] = [];
-    for (const id of await ctx.paint.volumes()) {
-      const volume = await readVolume(ctx.paint, id);
-      if (!volume || volume.superseded_by) continue;
+    for (const group of await volumeGroups(ctx.paint)) {
+      const { volume } = group, { id } = volume;
+      if (volume.superseded_by || !inTab(ctx.session.state, group)) continue;
       sessions.push({
         session_id: id,
         session_path: id,
@@ -364,7 +366,6 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
         created_at: volume.created_at,
       });
     }
-    sessions.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || String(b.session_id).localeCompare(String(a.session_id)));
     return json(200, { success: true, sessions });
   });
 

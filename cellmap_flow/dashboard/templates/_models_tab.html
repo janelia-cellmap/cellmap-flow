@@ -50,6 +50,25 @@
     <h5>Hugging Face</h5>
     <div class="accordion" id="hfModelAccordion"></div>
 
+    {# Browser mode only: the finetuned models and paint volumes this browser
+       keeps from earlier tabs and visits, which this tab does not list until
+       one is brought into it. web/src/kept/panel.ts fills it and shows it
+       while there are any. #}
+    {% if mode == "browser" %}
+    <section class="kept-earlier mt-2" id="keptEarlier" hidden>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="small text-muted" id="keptEarlierSummary"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="keptEarlierToggle"
+                aria-expanded="false" aria-controls="keptEarlierBody">Show</button>
+      </div>
+      <div id="keptEarlierBody" hidden>
+        <ul class="list-unstyled mt-2 mb-2" id="keptEarlierList"></ul>
+        <div class="kept-item-actions" id="keptEarlierDeleteAll"></div>
+        <div class="small mt-1" id="keptEarlierStatus" aria-live="polite"></div>
+      </div>
+    </section>
+    {% endif %}
+
     <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's,
          from the zoo's index. server-only: the zoo's weights are not web
          (ONNX) exports. -->

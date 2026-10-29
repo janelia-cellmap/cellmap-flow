@@ -15,10 +15,11 @@
 // the tab shows it as any other resolved model and Run serves it, as the
 // connect panel's Browse button (src/local-folder) fills the dataset field
 // and presses Connect.
-import { type Catalog, FINETUNED_REPO, type FinetunedRecord, MANIFEST_METADATA_KEY, type ModelEntry, type ModelManifest, type ModelVariant } from "./contracts";
+import { type Catalog, FINETUNED_REPO, type FinetunedRecord, MANIFEST_METADATA_KEY, type ModelEntry, type ModelManifest, type ModelVariant, type SessionStore } from "./contracts";
 import { readMetadata } from "./finetune/onnx-proto";
 import { entryFor, entryName, freeName, isLayerName, parseManifest } from "./models/manifest";
 import { message } from "./shared/message";
+import { keepInTab } from "./state";
 
 /** The browser-only block's ids, and Add a model's (add-model.js looks those up). */
 const OPEN_ID = "openModelFileBtn";
@@ -112,10 +113,11 @@ function sameBytes(a: ArrayBuffer, b: ArrayBuffer): boolean {
 }
 
 /** The Open button: a file picker for the .onnx and, when it carries no
- * manifest, its manifest.json; the model kept (openModelFile) and handed to
+ * manifest, its manifest.json; the model kept (openModelFile), made the
+ * tab's (src/kept: listed here from now on, served or not) and handed to
  * Add a model, or why not in an alert, as add-model.js says a ref it cannot
  * resolve. Nothing on a page without the block (the Flask page). */
-export function installOpenFileUi(opts: { catalog: FileCatalog; log: (line: string) => void }): void {
+export function installOpenFileUi(opts: { catalog: FileCatalog; session: SessionStore; log: (line: string) => void }): void {
   const button = document.getElementById(OPEN_ID);
   const input = document.getElementById(INPUT_ID) as HTMLInputElement | null;
   if (!button || !input) return;
@@ -132,6 +134,7 @@ export function installOpenFileUi(opts: { catalog: FileCatalog; log: (line: stri
     try {
       const read = async (file: File): Promise<PickedFile> => ({ name: file.name, bytes: await file.arrayBuffer() });
       const entry = await openModelFile(opts.catalog, await read(onnx[0]), json.length ? await read(json[0]) : null);
+      await keepInTab(opts.session, { finetuned: [entry.id] });
       opts.log(`${onnx[0].name} opened as ${entry.name}, kept in this browser`);
       const ref = document.getElementById(REF_ID) as HTMLInputElement | null;
       if (ref) ref.value = entry.name;

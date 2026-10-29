@@ -14,6 +14,9 @@
 // (cosine ticked, constant not) and put back as it was left. And Restart's
 // confirm (job-monitor.js restartSummary), which lists what the run reads:
 // in the browser's runs the loss and distillation too, and the channel picked.
+// And where the form is kept: the tab's in the browser mode, whose origin is
+// the same on every visit, so an old experiment's settings do not come back
+// in a new tab.
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -46,6 +49,7 @@ class FakeElement {
   dataset: Record<string, string> = {};
   style: Record<string, string> = {};
   options: FakeOption[] = [];
+  childNodes: FakeOption[] = [];  // the browser mode's notes, read before they are rewritten
   private current = "";
 
   get value(): string {
@@ -64,23 +68,24 @@ class FakeElement {
   addEventListener(): void {}
 }
 
-async function setUp() {
+async function setUp(mode: "server" | "browser" = "server") {
   const elements = new Map<string, FakeElement>();
   const element = (id: string): FakeElement => {
     if (!elements.has(id)) elements.set(id, new FakeElement());
     return elements.get(id)!;
   };
-  element("page-data").textContent = JSON.stringify({ mode: "server" });
+  element("page-data").textContent = JSON.stringify({ mode });
   element("trainChannel").options = [new FakeOption("Best match for your paint", "")];
   element("learningRate").value = "0.0001";  // the template's
   element("learningRateEase").checked = true;  // the template's
-  const stored = new Map<string, string>();
-  vi.stubGlobal("window", { localStorage: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) } });
+  const storage = (items: Map<string, string>) => ({ getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => items.set(k, v) });
+  const stores = { local: new Map<string, string>(), session: new Map<string, string>() };
+  vi.stubGlobal("window", { localStorage: storage(stores.local), sessionStorage: storage(stores.session) });
   vi.stubGlobal("document", { getElementById: element, hidden: false, addEventListener: () => {}, removeEventListener: () => {} });
   vi.stubGlobal("Option", FakeOption);
   vi.stubGlobal("fetch", async () => ({ ok: true, status: 200, json: async () => ({}) }));
   const module = (await import(/* @vite-ignore */ TRAINING_FORM)) as TrainingForm;
-  return { element, module, form: module.initTrainingForm() };
+  return { element, module, stores, form: module.initTrainingForm() };
 }
 
 afterEach(() => {
@@ -163,5 +168,17 @@ it("sends the Learning Rate typed and its Ease down, puts both back on the next 
   for (const bad of ["", "0", "-1e-4", "fast"]) {
     rate.value = bad;
     expect(() => form.trainingParams()).toThrow(/Learning Rate/);
+  }
+});
+
+it("keeps the form in the tab's sessionStorage in the browser mode, so a new tab starts at the defaults, and in localStorage on a server", async () => {
+  for (const mode of ["browser", "server"] as const) {
+    vi.resetModules();  // the page's mode is read once per page load (lib/page-data.js)
+    const { element, stores, form } = await setUp(mode);
+    element("learningRate").value = "3e-4";
+    form.save();
+    const [kept, other] = mode === "browser" ? [stores.session, stores.local] : [stores.local, stores.session];
+    expect(JSON.parse(kept.get("finetuneFormState")!)).toMatchObject({ learningRate: "3e-4" });
+    expect(other.size).toBe(0);
   }
 });

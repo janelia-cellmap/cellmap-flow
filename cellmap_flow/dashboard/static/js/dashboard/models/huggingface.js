@@ -10,6 +10,7 @@
 // selected_hf_models, and the voxel sizes typed as run_voxel_sizes.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
+import { listen, MODEL_LIST_CHANGED_EVENT } from "../../lib/events.js";
 import { isBrowserMode, pageData } from "../../lib/page-data.js";
 import { dimsWord, searchText } from "../../lib/search.js";
 import { listControls, modelRow, modelSection, notice, runAtField, runVoxelSizes, untickBox } from "../../shared/model-list.js";
@@ -85,6 +86,21 @@ function load(url) {
     });
 }
 
+// Rows for the models listed now that the list has none for (the browser
+// mode's Kept in this browser brought one into the tab), the rows there left
+// as they are, with their ticks and the voxel sizes typed under them.
+function addListed() {
+  getJSON("/api/huggingface-models")
+    .then((data) => {
+      const shown = new Set([...list.querySelectorAll(".hf-model-checkbox")].map((box) => box.value));
+      const rows = Object.keys(data).filter((modelId) => !shown.has(modelId)).map((modelId) => row(modelId, data[modelId]));
+      if (!rows.length) return;
+      list.append(...rows);
+      filter();
+    })
+    .catch((err) => console.warn("Could not list the Hugging Face models again:", err));
+}
+
 // The search and Runs in the browser: a row shows when it has every word
 // typed and, while that is ticked, a browser copy. A ticked row stays in
 // view, as the zoo's does, so nothing is submitted unseen: the models
@@ -122,6 +138,13 @@ export function init() {
   list = h("div");
   section.body.append(controls.element, placeholder, list);
   document.getElementById("hfModelAccordion").append(section.item);
+  // A list not loaded yet lists it when it opens; one with no rows (an
+  // error, or none found) is loaded again whole.
+  listen(MODEL_LIST_CHANGED_EVENT, () => {
+    if (!loaded) return;
+    if (list.querySelector(".hf-model-checkbox")) addListed();
+    else load("/api/huggingface-models");
+  });
 }
 
 // POST /api/models' part: the repos ticked, and the voxel sizes typed under them.

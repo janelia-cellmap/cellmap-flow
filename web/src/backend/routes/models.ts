@@ -17,6 +17,7 @@ import { PYTHON } from "../../generated/python-data";
 import { compileExpression } from "../../infer/expression";
 import { modelVoxelSizes, parseVoxelSize, withRunVoxelSize } from "../../infer/geometry";
 import { withoutChannelPick } from "../../infer/norms";
+import { listedInTab } from "../../kept";
 import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
@@ -34,7 +35,10 @@ import { serverParams } from "./config";
  * has no such field, so its rows start unticked as before. One the session
  * runs at another voxel size than its own has it as `run_voxel_size`
  * ([z, y, x] nm, as the server's listing says it), which the row's Run at
- * (nm) shows; the metadata's voxel sizes stay the model's own. `refresh`
+ * (nm) shows; the metadata's voxel sizes stay the model's own. A model
+ * finetuned or opened from a file in this browser is listed only while it
+ * is this tab's (src/kept listedInTab); the others are under Kept in this
+ * browser, below the list. `refresh`
  * reads the repository again instead of the cached listing. A listing that
  * fails is {error} with a 500, as the Flask route answers; the tab shows the
  * message. */
@@ -42,7 +46,7 @@ async function listModels(ctx: AppContext, refresh: boolean) {
   try {
     const entries = refresh ? await ctx.catalog.refresh() : await ctx.catalog.list();
     const serving = new Map(ctx.session.state.models.map((m) => [m.id, m]));
-    return json(200, Object.fromEntries(entries.map((e) => {
+    return json(200, Object.fromEntries(entries.filter((e) => listedInTab(ctx.session.state, e)).map((e) => {
       const served = serving.get(e.id);
       const runAt = served?.runVoxelSize ? { run_voxel_size: served.runVoxelSize } : {};
       return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(served ? { selected: true, ...runAt } : {}) }];
