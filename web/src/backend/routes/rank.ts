@@ -72,9 +72,9 @@ import { FINETUNED_REPO } from "../../contracts";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
 import { targetTransformFor } from "../../finetune/target-call";
-import { hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
+import { hasAffinityChannels, paintedChunkIndices, plannedFor, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { RANK_BLOCKS } from "../../generated/cellmap-flow";
-import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
+import { chooseRawLevel, geometryOf, modelVoxelSizes, outputShape, ratio } from "../../infer/geometry";
 import { selectedChannel } from "../../infer/norms";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
@@ -96,7 +96,8 @@ const RAW_SAMPLE = 1_000_000;
 export function rankRoutes(router: Router): void {
   router.get("/api/finetune/rank/candidates", async (_req, _params, ctx) => {
     const volume = await sessionVolume(ctx);
-    const candidates = (await ctx.catalog.list()).map(listingOf(ctx, volume));
+    const listing = listingOf(ctx, volume);
+    const candidates = (await ctx.catalog.list()).map((e) => listing(asRun(ctx, e)));
     return json(200, {
       success: true,
       volume: volume ? { id: volume.id, model_name: volume.model_name, painted_chunks: (await paintedChunkIndices(ctx.paint, volume.id)).length } : null,
@@ -119,7 +120,7 @@ export function rankRoutes(router: Router): void {
     const { entry } = resolved;
     const { rankAdded } = ctx.session.state;
     if (!rankAdded.includes(entry.id)) await ctx.session.update({ rankAdded: [...rankAdded, entry.id] });
-    return json(200, { success: true, candidate: listingOf(ctx, await sessionVolume(ctx))(entry) });
+    return json(200, { success: true, candidate: listingOf(ctx, await sessionVolume(ctx))(asRun(ctx, entry)) });
   });
 
   // POST /api/finetune/rank/score {name}: the model's row of the ranking
@@ -142,7 +143,7 @@ export function rankRoutes(router: Router): void {
     if (!volume) return json(400, { success: false, error: "No annotation volume in this session: create one (New Volume) or resume one, and paint on it, first.", needs_volume: true });
     const indices = await paintedChunkIndices(ctx.paint, volume.id);
     if (!indices.length) return badRequest(`Nothing is painted in ${volume.id} yet: paint background (1) and objects (2 and up) first.`);
-    const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
+    const entry = await candidateNamed(ctx, name);
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
 
     const started = performance.now();
@@ -258,9 +259,9 @@ export function rankRoutes(router: Router): void {
     if (!dataset) return badRequest(NO_DATASET);
     const from = await sessionVolume(ctx);
     if (!from) return json(400, { success: false, error: "No annotation volume in this session to carry paint from.", needs_volume: true });
-    const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
+    const entry = await candidateNamed(ctx, name);
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
-    if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
+    if (plannedFor(from, entry)) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
     const pick = readSelectChannel(body.select_channel);
     if ("error" in pick) return badRequest(pick.error);
     const past = notAChannel(entry, pick.channel);
@@ -633,10 +634,25 @@ function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEn
   };
   return (e) => ({
     name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,
-    voxel_size_nm: e.manifest.output_voxel_size_nm, dims: readsOneSlice(e) ? 2 : 3, group: group(e),
+    voxel_size_nm: modelVoxelSizes(e).output, dims: readsOneSlice(e) ? 2 : 3, group: group(e),
     finetuned: e.repo === FINETUNED_REPO, served: served.has(e.id), ticked: served.has(e.id) || added.has(e.id),
-    volume_model: volume?.model_id === e.id, ...listFacts(e),
+    volume_model: volume ? plannedFor(volume, e) : false, ...listFacts(e),
   });
+}
+
+/** `entry` as the session runs it: the session's own entry of the model
+ * when it serves it, at the voxel size it is run at (ModelEntry.
+ * runVoxelSize), else the catalog's, at its own. A model is listed, scored
+ * and used as its layer shows it. */
+function asRun(ctx: AppContext, entry: ModelEntry): ModelEntry {
+  return ctx.session.state.models.find((m) => m.id === entry.id) ?? entry;
+}
+
+/** The candidate named `name`, as the session runs it (asRun): the
+ * catalog's model of that name, or one the catalog resolves it to. */
+async function candidateNamed(ctx: AppContext, name: string): Promise<ModelEntry | null> {
+  const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
+  return entry && asRun(ctx, entry);
 }
 
 async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {

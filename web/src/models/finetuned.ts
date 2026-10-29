@@ -19,6 +19,7 @@ import { FINETUNED_REPO } from "../contracts";
 import type { FinetunedRecord, ModelEntry, ModelManifest, ModelVariant } from "../contracts";
 
 import { sourceOf } from "../finetune/modes";
+import { modelVoxelSizes } from "../infer/geometry";
 import { MODEL_DB_NAME, ModelDatabase } from "./byte-cache";
 import { entryFor } from "./manifest";
 
@@ -76,7 +77,14 @@ export function lineage(record: FinetunedRecord, records: readonly FinetunedReco
  * rest measure the base export against its PyTorch model), and the manifest
  * says in `checkpoint` where the weights came from, since the base's
  * checkpoint name no longer describes them; a published base's `published`
- * block is not this model's and is left out. */
+ * block is not this model's and is left out.
+ *
+ * A base run at another voxel size than its own (ModelEntry.runVoxelSize)
+ * was trained at that size, so the manifest declares the voxel sizes it
+ * ran at (modelVoxelSizes), as the server's finetune declares the ones it
+ * was trained at (trained_at_geometry): a model run at 32 nm and finetuned
+ * there is a 32 nm model, which runs there wherever its manifest goes (its
+ * download, its publish, a link that rebuilds it) without being told. */
 export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number): ModelEntry {
   const variant: ModelVariant = {
     variant: base.variant.variant,
@@ -89,8 +97,11 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
     source: sourceOf(base),
   };
   const { published: _published, ...inherited } = base.manifest;
+  const trainedAt = modelVoxelSizes(base);
   const manifest: ModelManifest = {
     ...inherited,
+    input_voxel_size_nm: trainedAt.input,
+    output_voxel_size_nm: trainedAt.output,
     model: name,
     checkpoint: `finetuned in the browser from ${base.manifest.checkpoint || base.name}`,
     variants: [variant],

@@ -205,7 +205,7 @@ export class InferenceEngine implements Inference {
     const dtype = outputDtype(chain.postprocess, "float32");
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
-    const view = viewName(entry.name, blob);
+    const view = viewName(entry.name, blob, entry.runVoxelSize);
 
     // One level at the output voxel size, as the Python server serves it, in
     // the source's units and axes (the engine reads the raw level at the

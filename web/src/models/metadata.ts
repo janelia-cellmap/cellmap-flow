@@ -46,6 +46,9 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     in_channels: 1,
     out_channels: m.channels.length,
     iteration: checkpointIteration(m.checkpoint),
+    // The model's own, declared: the Models tab's Run at (nm) shows them as
+    // its placeholder, and the listing says beside them the voxel size a
+    // model is served at when it is another (routes/models.ts listModels).
     input_voxel_size: m.input_voxel_size_nm,
     output_voxel_size: m.output_voxel_size_nm,
     channels_names: m.channels,

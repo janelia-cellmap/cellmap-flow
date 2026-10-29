@@ -35,11 +35,52 @@ export function asTriple(value: number | number[], what: string): number[] {
   return out.map(Number);
 }
 
+/** A voxel size as it is typed or sent, as the server reads one
+ * (models/entry.py voxel_size, through dashboard/requests.py): one number
+ * for every axis, or three (z, y, x), from a number, a list, or text ("32",
+ * "32,16,16", "32 16 16", "[32, 16, 16]"). Null when it says nothing (null,
+ * blank text, an empty list); an Error naming `what` for anything else,
+ * and for a size that is not positive. */
+export function parseVoxelSize(value: unknown, what: string): number[] | null {
+  if (value === undefined || value === null || (typeof value === "string" && !value.trim()) || (Array.isArray(value) && !value.length)) return null;
+  const items = typeof value === "string" ? value.trim().replace(/^[[(]|[\])]$/g, "").split(/[\s,]+/).filter(Boolean) : Array.isArray(value) ? value : [value];
+  const sizes = items.map((v) => (typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN));
+  if ((sizes.length !== 1 && sizes.length !== AXES) || sizes.some((v) => !Number.isFinite(v) || v <= 0)) {
+    throw new Error(`${what} must be one positive number or three (z, y, x), not ${JSON.stringify(value)}`);
+  }
+  return sizes.length === 1 ? [sizes[0], sizes[0], sizes[0]] : sizes;
+}
+
+/** The voxel sizes `entry` runs at, in nm: its manifest's, or with a run
+ * voxel size (ModelEntry.runVoxelSize) that as its input voxel size and its
+ * output voxel size scaled by the same factor, run / declared input, per
+ * axis: the server's rule for a model run at another voxel size
+ * (cellmap_flow/models/geometry.py run_voxel_sizes, which run_at_geometry
+ * applies with trained_at_geometry's arithmetic), in its order. The voxel
+ * counts of its blocks are the variant's either way, so the blocks in nm
+ * scale with these (geometryOf). Every reader of a model's geometry reads
+ * its voxel sizes here. */
+export function modelVoxelSizes(entry: ModelEntry): { input: number[]; output: number[] } {
+  const { input_voxel_size_nm: input, output_voxel_size_nm: output } = entry.manifest;
+  const run = entry.runVoxelSize;
+  if (!run) return { input: input.slice(), output: output.slice() };
+  return { input: run.slice(), output: output.map((o, a) => o * (run[a] / input[a])) };
+}
+
+/** `entry` run at `size` (ModelEntry.runVoxelSize), or at its own voxel
+ * size when `size` is null or is its own: a run voxel size that changes
+ * nothing is not kept, so the model is served, listed and linked as it is. */
+export function withRunVoxelSize(entry: ModelEntry, size: number[] | null): ModelEntry {
+  const { runVoxelSize: _previous, ...own } = entry;
+  return size && !sameVoxelSize(size, entry.manifest.input_voxel_size_nm) ? { ...own, runVoxelSize: size.slice() } : own;
+}
+
 /** The geometry of a served model: the variant's block sizes in voxels times
- * the manifest's voxel sizes. */
+ * the voxel sizes it runs at (modelVoxelSizes). */
 export function geometryOf(entry: ModelEntry): BlockGeometry {
-  const ivs = asTriple(entry.manifest.input_voxel_size_nm, `${entry.name}: input_voxel_size_nm`);
-  const ovs = asTriple(entry.manifest.output_voxel_size_nm, `${entry.name}: output_voxel_size_nm`);
+  const voxel = modelVoxelSizes(entry);
+  const ivs = asTriple(voxel.input, `${entry.name}: input_voxel_size_nm`);
+  const ovs = asTriple(voxel.output, `${entry.name}: output_voxel_size_nm`);
   const input = asTriple(entry.variant.input_size, `${entry.name}: input_size`);
   const output = asTriple(entry.variant.output_size, `${entry.name}: output_size`);
   return {

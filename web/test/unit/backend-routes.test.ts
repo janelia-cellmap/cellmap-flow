@@ -187,6 +187,43 @@ describe("POST /api/models", () => {
     expect(body(res).error).toContain("cellmap/some-pytorch-model");
     expect(ctx.infer.serves).toEqual([]);
   });
+
+  it("runs a ticked model at the voxel size typed beside it, which the listing and the export say, until a Submit leaves it blank", async () => {
+    const ctx = fakeContext({ state: { datasetUrl: "https://example.org/em.zarr" } });
+    const backend = createBackend(ctx);
+    const listed = async () => body(await backend.handle(request("GET", "/api/huggingface-models")));
+    expect((await backend.handle(submit([HF54, HF56], { run_voxel_sizes: { [HF54]: "32", [HF56]: "" } }))).status).toBe(200);
+    const [at32, own] = ctx.infer.served();
+    expect(at32.entry.runVoxelSize).toEqual([32, 32, 32]);
+    expect(own.entry.runVoxelSize).toBeUndefined();
+    // Kept with the session, so a reload serves it there again.
+    expect(ctx.session.state.models.map((m) => m.runVoxelSize)).toEqual([[32, 32, 32], undefined]);
+    const listing = await listed();
+    expect(listing[HF54]).toMatchObject({ selected: true, run_voxel_size: [32, 32, 32] });
+    expect(listing[HF56]).not.toHaveProperty("run_voxel_size");
+    const exported = await backend.handle(request("GET", "/api/export-config"));
+    if (!("body" in exported)) throw new Error("not a body answer");
+    expect(uncommented(exported.body as string)).toContain(toYaml({ models: [{ ...SERVER_54("setup_54_fp32.onnx"), run_voxel_size: [32, 32, 32] }] }).replace(/^models:\n/, ""));
+
+    // Another size is another view (another URL, so no chunk of the other is
+    // shown), and a blank one its own size again.
+    await backend.handle(submit([HF54, HF56], { run_voxel_sizes: { [HF54]: [32, 16, 16] } }));
+    const served54 = () => ctx.infer.served().find((s) => s.entry.name === NAME_54)!;
+    const at321616 = served54();
+    expect(at321616.entry.runVoxelSize).toEqual([32, 16, 16]);
+    expect(at321616.view).not.toBe(at32.view);
+    await backend.handle(submit([HF54, HF56], { run_voxel_sizes: { [HF54]: " " } }));
+    expect(ctx.infer.served().map((s) => s.entry.runVoxelSize)).toEqual([undefined, undefined]);
+    expect(served54().view).not.toBe(at321616.view);
+    expect(ctx.infer.serves.map((s) => s.name)).toEqual([NAME_54, NAME_56, NAME_54, NAME_54]);  // setup_56 was not served again
+    expect(await listed()).not.toHaveProperty([HF54, "run_voxel_size"]);
+
+    // A size that is none is refused, naming the model, and changes nothing.
+    const refused = await backend.handle(submit([HF54], { run_voxel_sizes: { [HF54]: "16,8" } }));
+    expect(refused.status).toBe(400);
+    expect(body(refused).error).toContain(HF54);
+    expect(ctx.infer.served()).toHaveLength(2);
+  });
 });
 
 describe("the Loaded models list: GET /api/models/loaded and POST /api/models/remove", () => {
