@@ -874,6 +874,17 @@ Define input normalization and output postprocessing under ``json_data``:
 
 Normalizers are applied in order before inference. Postprocessors are applied in order after inference.
 
+A model reads one channel of a raw that has several (light microscopy's OME-Zarr with a ``c`` axis, an N5 or precomputed volume of more than one channel): channel 0, or the one a ``ChannelSelector`` step picks, first in ``input_norm``:
+
+.. code-block:: yaml
+
+    json_data:
+      input_norm:
+        ChannelSelector:
+          channel: 1
+
+In the dashboard this is the *Channel* at the top of the Processing tab's input normalization, shown for such a raw and named by its OME-Zarr ``omero`` channel labels when it has them. A pick applies at once, and the models, the raw layer, the finetune trainer, the ranking, Label it and AI annotation all read that channel; a model's start and *Use this model* keep it in front of the normalization they set.
+
 .. _resampling:
 
 Data at Another Voxel Size

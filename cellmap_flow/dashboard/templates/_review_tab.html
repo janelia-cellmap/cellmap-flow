@@ -1,6 +1,7 @@
 <div class="alert alert-info" role="alert">
-  <strong>Review:</strong> Query the instance-review SQLite and record
-  bless/edit verdicts. Server navigates neuroglancer to each instance.
+  <strong>Review:</strong> record a verdict on each instance of a review db.
+  <details class="more"><summary aria-label="More">i</summary><span class="more-body">Query the instance-review SQLite and record
+  bless/edit verdicts. Server navigates neuroglancer to each instance.</span></details>
 </div>
 
 <!-- Session setup -->
@@ -43,8 +44,9 @@
 
     <div class="d-grid gap-1 mt-3">
       <div class="small text-muted mb-1">
-        Hover the cursor over a segment in NG and press <kbd>t</kbd> to pick
-        it. The current instance updates automatically — no Select click.
+        Press <kbd>t</kbd> over a segment in NG to pick it.
+        <details class="more"><summary aria-label="More">i</summary><span class="more-body">Hover the cursor over the segment first. The current instance
+        updates automatically — no Select click.</span></details>
       </div>
       <div class="btn-group" role="group">
         <button class="btn btn-sm btn-primary" id="reviewNextBtn">Next</button>

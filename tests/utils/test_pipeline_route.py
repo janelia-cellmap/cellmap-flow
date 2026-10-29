@@ -171,3 +171,26 @@ def test_a_step_a_served_model_cannot_take_is_refused_saying_which_and_why(call)
     # The probability model stopped (unticked on the Models tab): its config stays, but it is not served.
     get_session().jobs = [SimpleNamespace(model_name="cellpose_sam_v2_flows", host=None)]
     assert call("PUT", "/api/pipeline", masks)[0] == 200
+
+
+def test_the_channel_picker_lists_the_raws_channels_and_refuses_one_past_them(dashboard, ome_pyramid):
+    """A light microscope's raw has a channel axis: the Processing tab's
+    Channel picks the one every model reads, the chain's ChannelSelector,
+    among the channels named as OME-Zarr names them. A pick past them failed
+    every read, deep in a model's server."""
+    import zarr
+
+    path = ome_pyramid(channels=2)
+    zarr.open_group(path, mode="r+").attrs["omero"] = {"channels": [{"label": "DAPI"}, {"label": "GFP"}]}
+    get_session().dataset_path = path
+
+    def channels():
+        return dashboard.get("/api/raw/channels").get_json()
+
+    assert channels() == {"success": True, "channels": 2, "labels": ["DAPI", "GFP"], "selected": 0}
+    body = {"input_norm": [{"name": "ChannelSelector", "channel": "1"}], "postprocess": []}
+    assert dashboard.put("/api/pipeline", json=body).status_code == 200
+    assert channels()["selected"] == 1
+    body["input_norm"][0]["channel"] = "2"
+    assert dashboard.put("/api/pipeline", json=body).status_code == 400
+    assert channels()["selected"] == 1

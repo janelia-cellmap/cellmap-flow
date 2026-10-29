@@ -31,6 +31,7 @@ import { headOf } from "./finetune/onnx-head";
 import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn } from "./link";
 import { isFinetuned, lineage, publishedRef } from "./models/finetuned";
 import { HF_REPO } from "./models/hf";
+import { type Hint, hint, hintText } from "./shared/hint";
 import { decodeState, isStateHash } from "./viewer/share";
 
 /** The header's button (templates/index.html, browser mode only). */
@@ -133,24 +134,28 @@ async function hubBaseRef(base: FinetunedRecord["base"], catalog: Pick<Catalog, 
 }
 
 /** What the sender is told about a link beside its having been copied: a
- * sentence for each paint volume its view shows, which stays here, each
+ * line for each paint volume its view shows, which stays here, each
  * finetuned model rebuilt where it opens, and each one that could not be
- * put in it; none for a link that opens elsewhere as it is here. */
-export function shareNotes(paint: readonly string[], refs: Pick<LinkRefs, "rebuilt" | "unlinked">): string[] {
-  const notes = paint.map((volume) =>
-    `The paint in ${volume} stays in this browser: someone else opening the link will not see it. The Finetune tab's Download paint (zarr) saves it as a .zarr.zip to send with the link.`);
-  for (const { name, base } of refs.rebuilt) notes.push(`${name}'s last layer is in the link: it is rebuilt from ${base} where the link opens.`);
-  for (const { name, why } of refs.unlinked) notes.push(`${name} could not be put in the link as a finetuned model (${why}): it opens only in this browser.`);
+ * put in it, the why under an "i"; none for a link that opens elsewhere as
+ * it is here. */
+export function shareNotes(paint: readonly string[], refs: Pick<LinkRefs, "rebuilt" | "unlinked">): Hint[] {
+  const notes: Hint[] = paint.map((volume) => ({
+    short: `The paint in ${volume} stays in this browser.`,
+    more: "Someone else opening the link will not see it. The Finetune tab's Download paint (zarr) saves it as a .zarr.zip to send with the link.",
+  }));
+  for (const { name, base } of refs.rebuilt) notes.push({ short: `${name}'s last layer is in the link.`, more: `It is rebuilt from ${base} where the link opens.` });
+  for (const { name, why } of refs.unlinked) notes.push({ short: `${name} opens only in this browser.`, more: `It could not be put in the link as a finetuned model (${why}).` });
   return notes;
 }
 
 /** `notes` in a notice under the header, by the Share button, in the
- * dashboard's alert colours (browser.css), headed by `title`, until its
- * close button is pressed or the next notice takes its place; no notes
- * clears it. Where the page tells the sender what a link leaves behind and
- * the recipient what it could not open: the log goes to the console, and
- * the button's own word lasts two seconds, too short to read this by. */
-export function showLinkNotice(title: string, notes: readonly string[], tone: "info" | "warning" = "info"): void {
+ * dashboard's alert colours (browser.css), headed by `title`, each a line
+ * with the rest under an "i", until its close button is pressed or the next
+ * notice takes its place; no notes clears it. Where the page tells the
+ * sender what a link leaves behind and the recipient what it could not
+ * open: the log goes to the console, and the button's own word lasts two
+ * seconds, too short to read this by. */
+export function showLinkNotice(title: string, notes: readonly Hint[], tone: "info" | "warning" = "info"): void {
   document.getElementById(LINK_NOTICE_ID)?.remove();
   if (!notes.length) return;
   const notice = document.createElement("div");
@@ -169,8 +174,10 @@ export function showLinkNotice(title: string, notes: readonly string[], tone: "i
   const heading = document.createElement("strong");
   heading.textContent = title;
   notice.append(close, heading, ...notes.map((note) => {
-    const line = document.createElement("p");
-    line.textContent = note;
+    // A <div>, not a <p>: the "i"'s <details> is not allowed in a paragraph.
+    const line = document.createElement("div");
+    line.className = "link-notice-note";
+    line.append(...hint(note.short, note.more));
     return line;
   }));
   document.body.appendChild(notice);
@@ -216,7 +223,7 @@ export function installShareUi(opts: {
       copied = false;
       window.prompt("Copy this link:", link);
     }
-    for (const note of notes) opts.log(note);
+    for (const note of notes) opts.log(hintText(note));
     showLinkNotice(copied ? "Link copied." : "Link shown to copy.", notes);
   });
 }

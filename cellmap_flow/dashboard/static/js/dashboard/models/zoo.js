@@ -5,7 +5,7 @@
 // voxel size. Submit sends the ticked models as selected_bioimage_models,
 // each {id, voxel_size}.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
-import { h } from "../../lib/dom.js";
+import { h, hint } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
 import { listControls, modelSection, notice, trainedNm, untickBox, zooRow } from "../../shared/model-list.js";
 
@@ -47,10 +47,11 @@ function row(model, voxelSize) {
       title: VOXEL_TITLE, value: Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || ""),
     }))];
   if (trained) {
+    // What else to know before running it (its note) under the "i".
     shown.push(h("div", { class: "zoo-trained", title: trained.confidence + " confidence: " + trained.source },
-      (trainedAt ? "Trained at " + trainedAt + " (z,y,x) on " : "Trained on ")
-      + trained.trained_on + "." + (trained.note ? " " + trained.note : "")
-      + (trainedAt ? "" : " Enter the voxel size of the data to run it on.")));
+      hint((trainedAt ? "Trained at " + trainedAt + " (z,y,x) on " : "Trained on ")
+        + trained.trained_on + "." + (trainedAt ? "" : " Enter the voxel size of the data to run it on."),
+      trained.note)));
   }
   const showTicked = (on) => shown.forEach((el) => { el.style.display = on ? "" : "none"; });
   showTicked(checked);

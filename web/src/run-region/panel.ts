@@ -28,6 +28,7 @@ import type { AppContext, LayerSpec, ServedModel } from "../contracts";
 import { type HandleStore, indexedDbHandles, localKeyFor, localUrl, pickDirectory, supportsLocalFolders } from "../local-folder";
 import { dropDirectory, type DropWording } from "../local-folder/panel";
 import { count, formatBytes, formatDuration } from "../shared/format";
+import { type Hint, setHint } from "../shared/hint";
 import { message } from "../shared/message";
 import { shaderColor } from "../viewer/display";
 import { dimensionsOf, PREDICTION_COLORS } from "../viewer/layers";
@@ -83,8 +84,12 @@ const FRAME_ID = "my_iframe";
  * change in the models served. */
 const POLL_MS = 1000;
 
-/** What the tab says where the browser cannot write to a folder. */
-export const NO_FOLDER_NOTE = `Saving to a folder needs Chrome or Edge (the File System Access API). In this browser a run of up to ${formatBytes(ZIP_LIMIT_BYTES)} of predictions is kept in memory and saved as a zip of the .zarr folders.`;
+/** What the tab says where the browser cannot write to a folder: a line,
+ * the rest under an "i" (shared/hint). */
+export const NO_FOLDER_NOTE: Hint = {
+  short: "Saving to a folder needs Chrome or Edge; here you get a zip.",
+  more: `Chrome and Edge have the File System Access API. In this browser a run of up to ${formatBytes(ZIP_LIMIT_BYTES)} of predictions is kept in memory and saved as a zip of the .zarr folders.`,
+};
 
 /** How long typing in the region's fields pauses before the box in the
  * viewer is redrawn to them (showTypedBox): each redraw sets the viewer's
@@ -380,13 +385,17 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
     if (!supported) {
       el.chooseFolder.style.display = "none";
       el.folderName.textContent = "No folder: this browser cannot write to one";
-      el.folderNote.textContent = NO_FOLDER_NOTE;
+      setHint(el.folderNote, NO_FOLDER_NOTE.short, NO_FOLDER_NOTE.more);
       return;
     }
     el.folderName.textContent = folder ? folder.name : "No folder chosen";
-    el.folderNote.textContent = folder
-      ? `Each model goes to ${folder.name}/<model>.zarr. The browser asks to allow writing to the folder when you click Save, when it has not yet (after a reload, say).`
-      : "Choose where the predictions go, or drop a folder here: each model is written to <folder>/<model>.zarr. Chrome won't let a page write straight into Downloads or your home folder (\"it contains system files\"): make a new folder inside it (the picker has a New Folder button) and choose that.";
+    if (folder) {
+      setHint(el.folderNote, `Each model goes to ${folder.name}/<model>.zarr.`,
+        "The browser asks to allow writing to the folder when you click Save, when it has not yet (after a reload, say).");
+    } else {
+      setHint(el.folderNote, "Choose where the predictions go, or drop a folder here.",
+        "Each model is written to <folder>/<model>.zarr. Chrome won't let a page write straight into Downloads or your home folder (\"it contains system files\"): make a new folder inside it (the picker has a New Folder button) and choose that.");
+    }
   }
 
   /** The picker, in the user's click; the folder chosen, or null when the dialog was cancelled. */

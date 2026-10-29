@@ -99,7 +99,7 @@ describe("datasetInfoFrom", () => {
       dtype: "uint8", channels: 1,
       axes: [{ name: "z", unit: "micrometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "" }],
       levels: [{ shape: [10, 20, 30], voxel: [0.008, 8, 8], origin: [0.004, 4, 4] }],
-    });
+    }, { count: 1, labels: null });
     expect(info.url).toBe("https://x/raw.zarr");
     expect(info.dtype).toBe("uint8");
     expect(info.axes).toEqual([{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }]);

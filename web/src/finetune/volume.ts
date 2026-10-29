@@ -71,11 +71,9 @@ type PaintPlan = Omit<Plan, "claimed_output_voxel_size" | "claimed_input_voxel_s
  * and padded to whole chunks) and the labels' dtype (uint16 for a model
  * trained on instances, here an affinity model: hasAffinityChannels, as the
  * browser trains it). A refusal comes back as its sentence, thrown here.
- *
- * Refused for a dataset with more than one channel, as serve() refuses it:
- * the browser mode reads single-channel volumes. */
+ * The volume keeps `chain`'s input steps, its channel pick among them: it
+ * trains on the channel it was painted over. */
 export async function planVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: VolumeOptions = {}): Promise<PaintVolume> {
-  refuseChannels(dataset);
   const model = geometryOf(entry);
   const raw = dataset.levels[chooseRawLevel(dataset.levels, model.input_voxel_size)];
   const plan = await infer.python<Plan | { error: string }>(`${VOLUME_CALLS}:plan_volume`, {
@@ -99,11 +97,9 @@ export interface VolumeOptions { id?: string; now?: Date }
  * voxel size, the level the viewer shows at a screen pixel of `pixelNm`
  * (shownVoxelSize; null, the finest). Its model_name and model_id are null:
  * it is not trained on (trainingRefusal), and Which model to start from's
- * Use this model carries its paint onto a model's grid. Refused as
- * planVolume is for a dataset of more than one channel, and with the
+ * Use this model carries its paint onto a model's grid. Refused with the
  * Python's sentence for a voxel size it cannot plan at. */
 export async function planPaintVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, voxelSize: number[] | null, chain: Chain, options: VolumeOptions & { pixelNm?: number | null } = {}): Promise<PaintVolume> {
-  refuseChannels(dataset);
   const size = voxelSize ?? (await shownVoxelSize(infer, dataset, options.pixelNm ?? null));
   const raw = dataset.levels[chooseRawLevel(dataset.levels, size)];
   const plan = await infer.python<PaintPlan | { error: string }>(`${VOLUME_CALLS}:plan_paint_volume`, { level: levelOf(raw), voxel_size: size });
@@ -148,14 +144,6 @@ export function viewPixelNm(viewerUrl: string | null): number | null {
 export async function trainingRefusal(infer: Pick<Inference, "python">, volume: PaintVolume): Promise<string | null> {
   const answer = await infer.python<{ error?: string }>(`${VOLUME_CALLS}:training_refusal`, { volume: { model_name: volume.model_name } });
   return answer.error ?? null;
-}
-
-/** Refused for a dataset with more than one channel, as serve() refuses it:
- * the browser mode reads single-channel volumes. */
-function refuseChannels(dataset: DatasetInfo): void {
-  if (dataset.channels > 1) {
-    throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode paints and trains on single-channel volumes (it does not select a channel yet)`);
-  }
 }
 
 /** A raw level as the plans take it: its shape, voxel size and voxel-0 lower corner (the engine's origin is the centre). */

@@ -33,19 +33,22 @@ function at(index: number[]): StageAt {
 
 /** The model stage's input for `at`, as Engine.input makes it: the box grown
  * by the halo on the raw grid, what lies inside the volume (of `raw` voxels)
- * read (uint16), the rest zero. */
-function engineInput(a: StageAt, raw = RAW): Block {
+ * read (uint16), the rest zero; of `channels` read together, as the reader
+ * reads a precomputed volume's, channel c 1000 above the one before. */
+function engineInput(a: StageAt, raw = RAW, channels = 1): Block {
   const { lo, hi } = inputBox(a.lo, a.hi, ratio(G), haloOf(G));
   const readLo = lo.map((o) => Math.max(o, 0)), readHi = hi.map((h, i) => Math.min(h, raw[i]));
   let data: ArrayBuffer | null = null;
   if (readHi.every((h, i) => h > readLo[i])) {
     const shape = readHi.map((h, i) => h - readLo[i]);
-    const out = new Uint16Array(shape[0] * shape[1] * shape[2]);
+    const out = new Uint16Array(channels * shape[0] * shape[1] * shape[2]);
     let k = 0;
-    for (let z = readLo[0]; z < readHi[0]; z++) for (let y = readLo[1]; y < readHi[1]; y++) for (let x = readLo[2]; x < readHi[2]; x++) out[k++] = rawValue(z, y, x);
+    for (let c = 0; c < channels; c++) {
+      for (let z = readLo[0]; z < readHi[0]; z++) for (let y = readLo[1]; y < readHi[1]; y++) for (let x = readLo[2]; x < readHi[2]; x++) out[k++] = rawValue(z, y, x) + 1000 * c;
+    }
     data = out.buffer;
   }
-  return padded(data, "uint16", 1, readLo, readHi, lo, hi, "zero");
+  return padded(data, "uint16", channels, readLo, readHi, lo, hi, "zero");
 }
 
 /** A fake model: C channels, each the centre 2³ of the input times (c + 1);
@@ -115,6 +118,15 @@ describe("the model stage", () => {
     expect(v(5, 2, 2)).toBe(rawValue(4, 2, 0));  // raw z 7: past what the engine read, the same
     expect(out.shape).toEqual([1, 1, 2, 2]);
     expect(Array.from(out.data as Float32Array)).toEqual([rawValue(4, 2, 0), rawValue(4, 2, 1), rawValue(4, 3, 0), rawValue(4, 3, 1)]);
+  });
+
+  it("feeds the model the raw channel the chain's ChannelSelector picks, of a volume read with its channels together", async () => {
+    const m = model(1);
+    const a = at([1, 0, 1]);
+    await stage([{ name: "ChannelSelector", channel: "1" }], 1, true, m.run).produce(engineInput(a, RAW, 2), a);
+    const fed = m.fed[0].data;
+    expect(fed.length).toBe(216);
+    expect(fed[(2 * 6 + 2) * 6 + 2]).toBe(rawValue(2, 0, 2) + 1000);  // the block starts at raw (0, -2, 0)
   });
 
   it("refuses an output that is not what the manifest says", async () => {

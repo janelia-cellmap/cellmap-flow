@@ -31,7 +31,8 @@ portable/calls.py; numpy and the standard library only. In short:
   sets: its declaration, or its kind's convention) and through the
   session's when that is another (``norm_tries``), and the better score is
   kept (``best_try``, its own among equals). Read through none, or another
-  model's, a model's score is noise.
+  model's, a model's score is noise. Each is read on the raw channel the
+  session's chain picks (``on_channel``).
 - Where the raw under the paint is narrower than NARROW_WINDOW of the
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
@@ -232,6 +233,24 @@ def same_steps(a: Sequence[dict], b: Sequence[dict]) -> bool:
         x.keys() == y.keys() and all(_value(x[k]) == _value(y[k]) for k in x) for x, y in zip(a, b))
 
 
+# The step that picks which channel of a multi-channel raw a model reads
+# (norm/input_normalize.py), first in the session's chain when there is one.
+CHANNEL_STEP = "ChannelSelector"
+
+
+def normalizers(steps: Sequence[dict]) -> List[dict]:
+    """``steps`` (normalizer specs) without those that pick the raw's channel."""
+    return [dict(s) for s in steps if s.get("name") != CHANNEL_STEP]
+
+
+def on_channel(steps: Sequence[dict], chain: Sequence[dict]) -> List[dict]:
+    """``steps``' normalizers read on the raw channel ``chain`` picks: its
+    first ChannelSelector, then them. The channel is the raw's, picked by
+    the user, so a model's start, its advice and the ranking, which put a
+    model's normalization in the chain, keep it."""
+    return [dict(s) for s in chain or [] if s.get("name") == CHANNEL_STEP][:1] + normalizers(steps)
+
+
 def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> List[dict]:
     """The input normalizations a model is scored through, each once, its own
     first: ``{"input_norm": steps, "from": where}``.
@@ -245,17 +264,19 @@ def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> L
     scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
     channel nucleus for paint of mitochondria). The session's is tried too,
     as one the user set may fit this raw better. With neither, the raw as it
-    is ("none").
+    is ("none"). Every one reads the channel the session's chain picks
+    (``on_channel``), which alone is no normalization of the session's.
     """
     tries = []
     # An assumption is tried after the session's, which someone chose, so it
     # loses a tie to it (best_try keeps the first among equals).
     order = ((own, own_from), (session, "session"))
     for steps, where in (order[::-1] if own_from == "assumed" else order):
-        steps = [dict(s) for s in steps or []]
-        if steps and not any(same_steps(steps, t["input_norm"]) for t in tries):
-            tries.append({"input_norm": steps, "from": where})
-    return tries or [{"input_norm": [], "from": "none"}]
+        if normalizers(steps or []):
+            steps = on_channel(steps, session)
+            if not any(same_steps(steps, t["input_norm"]) for t in tries):
+                tries.append({"input_norm": steps, "from": where})
+    return tries or [{"input_norm": on_channel([], session), "from": "none"}]
 
 
 def best_try(scores: Sequence[Optional[dict]]) -> Optional[int]:

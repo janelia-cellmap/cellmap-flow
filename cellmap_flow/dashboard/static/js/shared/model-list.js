@@ -17,7 +17,7 @@
 // on Submit or score in the ranking, is the place's. So are the ids (a
 // row's, and the prefix of a section's and of a control's), so the same
 // model listed on both tabs is two boxes, and each label ticks its own.
-import { h } from "../lib/dom.js";
+import { h, setHint } from "../lib/dom.js";
 import { matchesWords, searchText } from "../lib/search.js";
 
 // A small tag: a model's dims, weight format, Cellpose name or source.
@@ -256,21 +256,20 @@ export function neededField(key) {
 // model and a button beside it (`button`, what it does: Resolve, or Add),
 // which Enter in the field presses too, and which hands what was typed to
 // onSubmit. Then, when the place shows them (show), what the reference was
-// found to be (summary), its notes, a field for each value given or still
-// needed ({key, label, value, title, placeholder}; neededField says how a
-// needed one is asked for), and the button that adds the model (`action`),
-// which hands onAction the fields' values by key. `id` is the field's, and
-// prefixes the value fields' (<id>_<key>).
+// found to be (summary), its notes under an "i" beside that, a field for each
+// value given or still needed ({key, label, value, title, placeholder};
+// neededField says how a needed one is asked for), and the button that adds
+// the model (`action`), which hands onAction the fields' values by key. `id`
+// is the field's, and prefixes the value fields' (<id>_<key>).
 export function addModelField({ id, button, placeholder, title, onSubmit }) {
   const input = h("input", {
     type: "text", class: "form-control form-control-sm", id, placeholder, title, autocomplete: "off", spellcheck: "false",
   });
   const go = h("button", { type: "button", class: "btn btn-sm btn-outline-secondary" }, button);
   const summary = h("div", { class: "small" });
-  const notes = h("div", { class: "small text-muted" });
   const fields = h("div", { class: "add-model-fields mt-2" });
   const action = h("button", { type: "button", class: "btn btn-sm btn-outline-secondary mt-2" });
-  const result = h("div", { class: "add-model-result mt-2", hidden: true }, summary, notes, fields, action);
+  const result = h("div", { class: "add-model-result mt-2", hidden: true }, summary, fields, action);
   let inputs = [];
   let onAction = null;
 
@@ -296,8 +295,7 @@ export function addModelField({ id, button, placeholder, title, onSubmit }) {
     button: go,
     show(found) {
       result.hidden = false;
-      summary.textContent = found.summary || "";
-      notes.textContent = found.notes || "";
+      setHint(summary, found.summary || "", found.notes);
       const wanted = found.fields || [];
       inputs = wanted.map((field) => h("input", {
         class: "form-control form-control-sm", id: `${id}_${field.key}`, dataset: { key: field.key }, value: field.value || "",

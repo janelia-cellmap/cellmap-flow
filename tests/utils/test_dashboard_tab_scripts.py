@@ -7,13 +7,14 @@ null that throws and takes the rest of the page's or the tab's setup with it.
 
 Each tab's scripts are the modules in static/js/dashboard/<tab>/, and the
 Processing tab's is main.js (initApply), which sets up the rest of the page
-too. They drive the Flask dashboard's page, a cluster's or a laptop's, and
-the browser build's (web/build/render.py), and each page has elements the
-others do not: the browser's Download and Delete buttons, say,
-are in its browser-mode blocks only. So an id must be on one of the pages;
-which page a lookup runs on is the script's own business (finetune/index.js
-starts each part in its mode). The browser's Save predictions tab is
-TypeScript, and tests/web/test_render.py checks its ids.
+too, with raw-channel.js for its Channel. They drive the Flask dashboard's
+page, a cluster's or a laptop's, and the browser build's (web/build/render.py),
+and each page has elements the others do not: the browser's Download and
+Delete buttons, say, are in its browser-mode blocks only. So an id must be
+on one of the pages; which page a lookup runs on is the script's own
+business (finetune/index.js starts each part in its mode). The browser's
+Save predictions tab is TypeScript, and tests/web/test_render.py checks its
+ids.
 """
 
 import importlib.util
@@ -36,7 +37,7 @@ CREATED = re.compile(r"""\.id\s*=\s*["']([\w-]+)["']|\bid:\s*["']([\w-]+)["']"""
 TAB_LOOKUP = re.compile(r"""(?:getElementById|\$)\(\s*["']([\w-]+)["']\s*\)""")
 TABS = {
     "models": sorted((JS / "dashboard" / "models").glob("*.js")),
-    "processing": [JS / "dashboard" / "main.js"],
+    "processing": [JS / "dashboard" / "main.js", JS / "dashboard" / "raw-channel.js"],
     "finetune": sorted((JS / "dashboard" / "finetune").glob("*.js")),
     "review": sorted((JS / "dashboard" / "review").glob("*.js")),
 }

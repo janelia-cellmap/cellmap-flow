@@ -9,7 +9,7 @@
    same difference. #}
 <div class="alert alert-info" role="alert">
   {% if mode == "browser" %}
-  <strong>Finetune:</strong> paint corrections, then train the model's last layer in this tab, or a 2D model's whole network.
+  <strong>Finetune:</strong> paint corrections, then train the model in this tab. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Its last layer, or a 2D model's whole network.</span></details>
   {% else %}
   <strong>Finetune:</strong> paint corrections, then train on the GPU cluster.
   {% endif %}
@@ -50,7 +50,7 @@
     {# Browser mode only: what trains here (web/src/finetune), since it is not
        the server's LoRA finetune of the whole network. #}
     {% if mode == "browser" %}
-    <small class="form-text d-block mt-1" id="browserFinetuneNote">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint, on this machine; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</small>
+    <div class="form-text d-block mt-1" id="browserFinetuneNote">Trains the model's last layer on your paint, on this machine. <details class="more"><summary aria-label="More">i</summary><span class="more-body">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</span></details></div>
     {% endif %}
   </div>
 
@@ -94,7 +94,7 @@
                title="The voxel size to paint at: one number for all three axes, or z, y, x. The raw's levels are offered; another size covers the raw in voxels of that size. Blank: the level the viewer shows now (the finest, without a viewer).">
         <datalist id="volumeVoxelSizes"></datalist>
       </div>
-      <small class="form-text text-muted d-block mt-1">No model is loaded, so the volume is painted on the raw's grid. To train, rank the models on your paint under <em>Which model to start from</em> and click <em>Use this model</em>: it copies the paint onto that model's grid.</small>
+      <div class="form-text text-muted d-block mt-1">No model is loaded, so you paint on the raw's grid. <details class="more"><summary aria-label="More">i</summary><span class="more-body">To train, rank the models on your paint under <em>Which model to start from</em> and click <em>Use this model</em>: it copies the paint onto that model's grid.</span></details></div>
     </div>
     <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> and up = foreground, an id per object.</small>
   </div>
@@ -106,7 +106,7 @@
       Redraw Annotated Regions
     </button>
     <span id="annotatedRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
-    <small class="form-text text-muted d-block mt-1">Draws a box in the viewer around each region annotated so far. Only when you click, and not while painting: it drops the selected draw tool.</small>
+    <div class="form-text text-muted d-block mt-1">Draws a box in the viewer around each region annotated so far. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Only when you click, and not while painting: it drops the selected draw tool.</span></details></div>
   </div>
 
   <!-- The patch on screen: one-click labels, AI-assisted annotation, and good
@@ -261,7 +261,7 @@
              key is never shown in the clear. #}
           {% if mode == "browser" %}
           <div class="mt-2" id="aiAnnotateCredentials" hidden>
-            <div class="d-flex align-items-baseline justify-content-between">
+            <div class="d-flex flex-wrap align-items-baseline justify-content-between column-gap-2">
               <span class="text-muted" style="font-size: 0.85rem;">Credentials</span>
               <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateCredsState"></span>
             </div>
@@ -280,7 +280,7 @@
                      title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
             </div>
             <div class="d-flex align-items-baseline gap-2 mt-1">
-              <small class="text-muted" id="aiAnnotateCredsHint"></small>
+              <div class="form-text text-muted mt-0" id="aiAnnotateCredsHint"></div>
               <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="aiAnnotateForgetCredsBtn"
                       title="Removes the credentials from this page.">Clear</button>
             </div>
@@ -293,7 +293,7 @@
               Send planes of this dataset to: <span id="aiAnnotateDestination"></span>
             </label>
           </div>
-          <small class="text-muted d-block" id="aiAnnotateAckHint">Required once per provider and dataset.</small>
+          <div class="form-text text-muted d-block" id="aiAnnotateAckHint">Required once per provider and dataset.</div>
 
           <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
             <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateRunBtn"
@@ -359,7 +359,7 @@
         Delete volume
       </button>
     </div>
-    <small class="form-text text-muted d-block mt-1">The paint stays in this browser until you delete it; download it to keep it elsewhere or to train on the server.</small>
+    <div class="form-text text-muted d-block mt-1">The paint stays in this browser until you delete it. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Download it to keep it elsewhere or to train on the server.</span></details></div>
   </div>
   {% endif %}
 
@@ -427,12 +427,13 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small">
-            Bulk-load externally annotated zarr crops as <code>_chunk_*.zarr</code>
+          <div class="text-muted small mb-3">
+            Bulk-load annotated zarr crops to train alongside your paint.
+            <details class="more"><summary aria-label="More">i</summary><span class="more-body">Externally annotated zarr crops become <code>_chunk_*.zarr</code>
             entries that train alongside painted chunks. Voxel size, ROI offset and
             shape are auto-read from each zarr's OME-NGFF metadata; the raw read
-            snaps to the closest available scale of the current dataset.
-          </p>
+            snaps to the closest available scale of the current dataset.</span></details>
+          </div>
           <div class="mb-2">
             <label for="loadCropsYamlPath" class="form-label">YAML file path (optional)</label>
             <div class="input-group">
@@ -441,9 +442,10 @@
                 Load File
               </button>
             </div>
-            <small class="form-text text-muted">
-              Either pick a YAML file here, or paste the manifest below. If both are filled, the textarea wins.
-            </small>
+            <div class="form-text text-muted">
+              Either pick a YAML file here, or paste the manifest below.
+              <details class="more"><summary aria-label="More">i</summary><span class="more-body">If both are filled, the textarea wins.</span></details>
+            </div>
           </div>
           <div class="mb-2">
             <label for="loadCropsYaml" class="form-label">YAML manifest</label>
@@ -453,14 +455,15 @@
               rows="10"
               placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
             ></textarea>
-            <small class="form-text text-muted">
-              Bare strings default to <code>fg_ids=all_nonzero, mode=dense</code>.
+            <div class="form-text text-muted">
+              One crop per entry: a zarr path, or a path with overrides.
+              <details class="more"><summary aria-label="More">i</summary><span class="more-body">Bare strings default to <code>fg_ids=all_nonzero, mode=dense</code>.
               Per-entry overrides: <code>fg_ids</code>, <code>bg_ids</code>,
               <code>mode</code> (dense|sparse), <code>connected_components</code> (bool).
               Top-level: <code>patches_per_epoch</code>, <code>jitter_voxels</code>.
               Imported crops are written into the session's annotation volume
-              and trained on via FG-anchored random patches.
-            </small>
+              and trained on via FG-anchored random patches.</span></details>
+            </div>
           </div>
           <div id="loadCropsStatus" class="text-muted small"></div>
         </div>
@@ -484,13 +487,15 @@
           {# The browser mode lists the volumes of its own paint store, with no
              directory to scan (sessions.js scans as the modal opens); the
              server's words and its directory row are server-only. #}
-          <p class="text-muted small server-only">
-            The selected session will be <strong>copied</strong> into a new session directory so your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.
-          </p>
+          <div class="text-muted small mb-3 server-only">
+            The selected session is <strong>copied</strong> into a new session directory.
+            <details class="more"><summary aria-label="More">i</summary><span class="more-body">Your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.</span></details>
+          </div>
           {% if mode == "browser" %}
-          <p class="text-muted small" id="existingVolumesNote">
-            These are the volumes painted in this browser, newest first. Pick one to paint on and train again.
-          </p>
+          <div class="text-muted small mb-3" id="existingVolumesNote">
+            The volumes painted in this browser, newest first.
+            <details class="more"><summary aria-label="More">i</summary><span class="more-body">Pick one to paint on and train again.</span></details>
+          </div>
           {% endif %}
           <div class="mb-2 server-only">
             <label for="existingBrowseRoot" class="form-label">Search in</label>
@@ -581,8 +586,8 @@
       <h5 class="d-inline" style="border-bottom: 0;">Which model to start from</h5>
     </summary>
     <div class="card-body" style="border-top: 1px solid var(--border);">
-      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.
-        {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</p>
+      <div class="text-muted small mb-2">Ranks models by how well each one already matches your paint.
+        <details class="more"><summary aria-label="More">i</summary><span class="more-body">Use it to pick the best one to finetune. {% if mode == "browser" %}Listed as the Models tab lists them: the ones served now, cellmap's, the Hugging Face repos you added, your finetunes; the ticked ones are scored.{% else %}Listed as the Models tab lists them: the ones running, the CellMap catalog, cellmap's Hugging Face models and the BioImage Zoo; the ticked ones are scored, and one not running is started on the cluster for its score, then stopped.{% endif %}</span></details></div>
       {# The models as the Models tab lists them, made of the same pieces
          (js/shared/model-list.js): rank.js puts each in a section for the
          Models tab section it is under (the candidates' group), the
@@ -604,7 +609,7 @@
       </small>
       <div class="accordion mb-2" id="rankSections"></div>
       <div class="add-model mb-1" id="rankAdd"></div>
-      <small class="d-block text-muted mb-2">Cellpose models are not ranked: they predict flows, not objects and background.</small>
+      <div class="form-text text-muted d-block mb-2">Cellpose models are not ranked. <details class="more"><summary aria-label="More">i</summary><span class="more-body">They predict flows, not objects and background.</span></details></div>
       <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
         <button type="button" class="btn btn-primary" id="rankBtn" disabled
                 title="Scores each ticked model shown in turn on the voxels you painted. {% if mode == "browser" %}A model not served yet is downloaded and run for its score, which can take up to a minute each{% else %}A model not running is started on the cluster for its score and stopped after, which waits for a GPU each{% endif %}; only the running ones and the ones added start ticked; the Models tab and the viewer are left as they were.">
@@ -617,9 +622,9 @@
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: how much of your paint the model already gets right, objects and background counting equally (50% is guessing, 100% is all of it). Use this model makes it the model to finetune, with the row's threshold, input normalization and channel.</small>
+        <div class="form-text text-muted mb-1">Match: how much of your paint the model already gets right. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Objects and background count equally (50% is guessing, 100% is all of it). Use this model makes it the model to finetune, with the row's threshold, input normalization and channel.</span></details></div>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
-        <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
+        <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: paint in two or three places for a clearer ranking. <details class="more"><summary aria-label="More">i</summary><span class="more-body">With little paint, scores a few points apart are effectively tied.</span></details></div>
       </div>
     </div>
   </details>
@@ -668,7 +673,7 @@
       <select id="trainChannel" class="form-select">
         <option value="" selected>Best match for your paint</option>
       </select>
-      <small class="text-muted d-block">The channel picked learns your paint; the others are held to what the model predicted.</small>
+      <div class="form-text text-muted d-block">The channel picked learns your paint. <details class="more"><summary aria-label="More">i</summary><span class="more-body">The others are held to what the model predicted.</span></details></div>
     </div>
     {% if mode == "browser" %}
     <div class="mb-3" id="finetuneModeGroup" hidden>
@@ -677,7 +682,7 @@
         <option value="head" selected>Last layer</option>
         <option value="full">Whole network</option>
       </select>
-      <small class="text-muted d-block" id="finetuneModeNote">The last layer trains in seconds; the whole network in minutes, on this machine's GPU.</small>
+      <div class="form-text text-muted d-block" id="finetuneModeNote">The last layer trains in seconds; the whole network in minutes. <details class="more"><summary aria-label="More">i</summary><span class="more-body">The whole network trains on this machine's GPU.</span></details></div>
     </div>
     {% endif %}
     <!-- Optional: Manual checkpoint path override -->
@@ -701,14 +706,14 @@
             <option value="64" selected>64 (Very high capacity) - Recommended</option>
             <option value="0">0 (Full finetune: every parameter, no adapter)</option>
           </select>
-          <small class="text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune.</small>
+          <div class="form-text text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune.</div>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
           <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="500" step="1">
-          <small class="text-muted">Usually 10–20.{% if mode == "browser" %} A 3D model's whole network trains one block a step: aim for 60 to 150 steps in all, epochs × blocks (the run's first line gives the blocks).{% endif %}</small>
+          <div class="form-text text-muted">Usually 10–20.{% if mode == "browser" %} <details class="more"><summary aria-label="More">i</summary><span class="more-body">A 3D model's whole network trains one block a step: aim for 60 to 150 steps in all, epochs × blocks (the run's first line gives the blocks).</span></details>{% endif %}</div>
         </div>
       </div>
     </div>
@@ -725,7 +730,7 @@
             {% endfor %}
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted" id="batchSizeHint">Tiles per step: each step's time and memory grow with it.</small>
+          <div class="form-text text-muted" id="batchSizeHint">Tiles per step: each step's time and memory grow with it.</div>
           {% else %}
           <small class="text-muted">Higher = faster, more GPU memory.</small>
           {% endif %}
@@ -737,7 +742,7 @@
           {# A 3D model's Block Size: training-form.js renames it, its title and its sides (N³). #}
           <label for="tileSize" id="tileSizeLabel" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
           <select id="tileSize" class="form-select"></select>
-          <small class="text-muted d-block" id="tileSizeHint"></small>
+          <div class="form-text text-muted d-block" id="tileSizeHint"></div>
         </div>
       </div>
       <div class="col-md-6 head-only">
@@ -796,7 +801,7 @@
             <label class="form-check-label" for="learningRateEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
           </div>
           {% if mode == "browser" %}
-          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
+          <div class="form-text text-muted">1e-2 suits the last layer. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Lower it if the loss jumps about.</span></details></div>
           {% else %}
           <small class="text-muted">1e-4 suits LoRA.</small>
           {% endif %}
@@ -823,7 +828,7 @@
             <input class="form-check-input" type="checkbox" id="learningRateFullEase" checked>
             <label class="form-check-label" for="learningRateFullEase" title="{{ ease_title }}">Ease down to a tenth over the run</label>
           </div>
-          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
+          <div class="form-text text-muted">1e-4 suits the whole network. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Lower it if the loss jumps about or the model forgets what it knew.</span></details></div>
         </div>
       </div>
       {% endif %}
@@ -958,7 +963,7 @@
             <option value="all">All voxels</option>
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted">Of the painted chunks, up to 32,768 voxels. Good regions, once marked, decide instead.</small>
+          <div class="form-text text-muted">Where distillation applies. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Of the painted chunks, up to 32,768 voxels. Good regions, once marked, decide instead.</span></details></div>
           {% else %}
           <small class="text-muted">Where distillation applies.</small>
           {% endif %}
@@ -1003,9 +1008,9 @@
             </label>
             {% endif %}
           </div>
-          <small class="text-muted">
+          <div class="form-text text-muted">
             <span id="augmentAdvice" class="d-block"></span>
-          </small>
+          </div>
         </div>
       </div>
     </div>
@@ -1026,10 +1031,10 @@
     </div>
     {# job-monitor.js's restartFromKey; the server's routes/finetune/restart_key.py
        and the browser's web/src/backend/routes/finetune.ts bind the key over the viewer. #}
-    <small class="text-muted d-block mt-2">
-      Once a job waits for a restart, Shift+R over the viewer restarts it with these settings,
-      as Restart Training does, without asking first.
-    </small>
+    <div class="form-text text-muted d-block mt-2">
+      Shift+R over the viewer restarts a waiting job with these settings.
+      <details class="more"><summary aria-label="More">i</summary><span class="more-body">As Restart Training does, but without asking first.</span></details>
+    </div>
   </div>
 </div>
 
@@ -1141,7 +1146,7 @@
         <label class="form-check-label small" for="hfRemember">Remember on this server</label>
       </div>
       <div class="text-muted small mt-1" id="hfTokenHint">
-        {% if mode == "browser" %}Make one at huggingface.co/settings/tokens (a Write token). It is kept in this page only and sent only to Hugging Face.{% else %}Make one at huggingface.co/settings/tokens (a Write token). It is sent only to Hugging Face.{% endif %}
+        Make one at huggingface.co/settings/tokens (a Write token). <details class="more"><summary aria-label="More">i</summary><span class="more-body">{% if mode == "browser" %}It is kept in this page only and sent only to Hugging Face.{% else %}It is sent only to Hugging Face.{% endif %}</span></details>
       </div>
       <div class="patch-tools-fields publish-fields">
         <label for="publishRepo">Repository</label>
@@ -1151,7 +1156,8 @@
       </div>
       <div class="form-check mt-1">
         <input class="form-check-input" type="checkbox" id="publishPrivate" autocomplete="off">
-        <label class="form-check-label small" for="publishPrivate">Private (its links will not open it: the app reads public repositories only)</label>
+        <label class="form-check-label small" for="publishPrivate">Private</label>
+        <details class="more small"><summary aria-label="More">i</summary><span class="more-body">Its links will not open it: the app reads public repositories only.</span></details>
       </div>
       <div class="form-check" title="The model card is public with the repository, and a dataset's URL can be an internal one (a cluster path, a private bucket), so it is left out unless you ask for it.">
         <input class="form-check-input" type="checkbox" id="publishIncludeDataset" autocomplete="off">
@@ -1166,7 +1172,7 @@
       <div class="form-check" title="model.pt2 is the network as torch.export saves it, which a LoRA finetune attaches to. Without it the published model still runs anywhere, and can still be finetuned whole.">
         <input class="form-check-input" type="checkbox" id="publishLoraCopy" autocomplete="off" checked>
         <label class="form-check-label small" for="publishLoraCopy">Also upload <code>model.pt2</code>, so it can be LoRA-finetuned on a server</label>
-        <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
+        <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights. <details class="more"><summary aria-label="More">i</summary><span class="more-body">In the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</span></details></div>
       </div>
       {# A smaller copy for the browser (finetune.distill): a funlib UNet with
          a tenth of the model's parameters or fewer, trained on a cluster GPU
@@ -1175,7 +1181,7 @@
       <div class="form-check" title="Worth it for a model too big for the browser (the 800M-parameter UNets) or slow in it. The small copy is a funlib UNet trained to reproduce this model's output on the data it was finetuned on; the card says how close it came.">
         <input class="form-check-input" type="checkbox" id="publishSmallCopy" autocomplete="off">
         <label class="form-check-label small" for="publishSmallCopy">Also publish a smaller copy for the browser</label>
-        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU, for up to 3 hours when the model is a funlib UNet (it starts from the model's own channels) and 8 otherwise (from scratch), then adds it to the repository: at most 12M parameters, about 100 MB in its four files.</div>
+        <div class="text-muted small" id="publishSmallCost">Trains it on one cluster GPU for hours, then adds it. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Up to 3 hours when the model is a funlib UNet (it starts from the model's own channels) and 8 otherwise (from scratch). At most 12M parameters, about 100 MB in its four files.</span></details></div>
       </div>
       {% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap mt-2">

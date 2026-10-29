@@ -23,7 +23,7 @@ import logging
 
 import numpy as np
 import worldarray as wa
-from worldarray.levels import same_voxel_size
+from worldarray.levels import discover_group, same_voxel_size
 
 from cellmap_flow.io import CHANNEL_AXIS_NAMES, metadata, paths
 from cellmap_flow.process_chain import process_chain
@@ -135,16 +135,37 @@ def selected_channel(input_norms) -> int:
     return 0
 
 
-def channel_select(array: wa.WorldArray, input_norms):
-    """worldarray's ``select`` for reading one channel of ``array``: its
-    channel axis (the one named c, c^ or channel, else the first non-spatial
-    axis) pinned to the channel the chain asks for; None for an array with
-    spatial axes only."""
+def channel_axis(array: wa.WorldArray):
+    """The index of ``array``'s channel axis: the one named c, c^ or channel,
+    else its first non-spatial axis; None for an array with spatial axes only."""
     extra = [i for i in range(len(array.axes)) if i not in array.spatial]
     if not extra:
         return None
-    axis = next((i for i in extra if array.axes[i] in CHANNEL_AXIS_NAMES), extra[0])
-    return {array.axes[axis]: selected_channel(input_norms)}
+    return next((i for i in extra if array.axes[i] in CHANNEL_AXIS_NAMES), extra[0])
+
+
+def channel_select(array: wa.WorldArray, input_norms):
+    """worldarray's ``select`` for reading one channel of ``array``: its
+    channel axis pinned to the channel the chain asks for; None for an array
+    with spatial axes only."""
+    axis = channel_axis(array)
+    return None if axis is None else {array.axes[axis]: selected_channel(input_norms)}
+
+
+def raw_channels(path) -> tuple:
+    """``(count, labels)`` for the raw at ``path``: how many channels a model
+    can be given to read (1 for an array with spatial axes only), and their
+    names, an OME-Zarr's ``omero.channels[].label`` when it names every
+    channel, else None."""
+    array = metadata.open_level(path)
+    axis = channel_axis(array)
+    count = 1 if axis is None else int(array.shape[axis])
+    # omero is on the multiscale group, which a level's path is under.
+    group, _ = discover_group(wa.detect(paths.normalize_path(path)))
+    omero = (group.ome_attrs.get("omero") if group is not None else None) or {}
+    labels = [channel.get("label") for channel in omero.get("channels") or [] if isinstance(channel, dict)]
+    named = len(labels) == count and all(isinstance(label, str) and label for label in labels)
+    return count, (labels if named else None)
 
 
 class RawInput:

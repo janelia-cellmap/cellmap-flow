@@ -788,6 +788,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/models/add", availability: "both", request: "AddModel" },
   { method: "GET", path: "/api/model_advice", availability: "both", request: null },
   { method: "PUT", path: "/api/pipeline", availability: "both", request: "PipelineUpdate" },
+  { method: "GET", path: "/api/raw/channels", availability: "both", request: null },
   { method: "POST", path: "/api/pipeline/apply", availability: "server", request: null },
   { method: "POST", path: "/api/process", availability: "server", request: null },
   { method: "POST", path: "/update/equivalences", availability: "server", request: "Equivalences" },

@@ -7,7 +7,7 @@
 // another output of the same model beside. Submit sends the ticked rows as
 // selected_cellpose_models, each {model, voxel_size, output, do_3d,
 // stitch_threshold}.
-import { h } from "../../lib/dom.js";
+import { h, hint } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
 import { tag, untickBox } from "../../shared/model-list.js";
 
@@ -80,9 +80,9 @@ function row(model, settings, extra) {
     // Output list.
     h("div", { class: "cellpose-3d-box" }, threeD, h("label", { for: id + "_3d", title: THREE_D_TITLE }, "3D")),
     stitchLabel, stitch);
-  const hint = h("div", { class: "zoo-trained" },
-    "Objects about 30 voxels across work best: enter the voxel size at which yours are "
-    + "about that. Runs in the cellpose4 environment.");
+  const note = h("div", { class: "zoo-trained" },
+    hint("Enter a voxel size at which your objects are about 30 voxels across.",
+      "Objects about 30 voxels across work best. Runs in the cellpose4 environment."));
 
   const div = h("div", { class: "form-check cellpose-model-item", dataset: { model: model.model } },
     input,
@@ -90,7 +90,7 @@ function row(model, settings, extra) {
     tag(model.model, "Cellpose's name for it (pretrained_model)"),
     another,
     h("div", { class: "zoo-desc", title: model.description }, model.description),
-    settingsRow, hint);
+    settingsRow, note);
 
   another.addEventListener("click", () => {
     if (extra) {
@@ -111,7 +111,7 @@ function row(model, settings, extra) {
   });
 
   const showTicked = () => {
-    [settingsRow, hint].forEach((el) => { el.style.display = input.checked ? "" : "none"; });
+    [settingsRow, note].forEach((el) => { el.style.display = input.checked ? "" : "none"; });
     // 3D masks are 3D objects already: nothing to link.
     const linkable = output.value === "masks" && !threeD.checked;
     stitchLabel.style.display = linkable ? "" : "none";

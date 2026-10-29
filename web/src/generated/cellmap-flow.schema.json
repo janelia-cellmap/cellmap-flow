@@ -121,6 +121,12 @@
       "request": "PipelineUpdate"
     },
     {
+      "method": "GET",
+      "path": "/api/raw/channels",
+      "availability": "both",
+      "request": null
+    },
+    {
       "method": "POST",
       "path": "/api/pipeline/apply",
       "availability": "server",
