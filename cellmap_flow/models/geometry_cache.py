@@ -57,24 +57,29 @@ def cache_key(model_config):
     keyed by an explicit revision, which is immutable; without one the
     revision is whatever ``main`` points at today, so those are not cached
     rather than risk serving geometry for a model that has since moved.
+    A model run at a voxel size not its own (``run_voxel_size``) has the
+    geometry at that size, so the key ends in it.
     """
     if model_config is None:
         return None
 
+    key = None
     script_path = getattr(model_config, "script_path", None)
+    repo = getattr(model_config, "repo", None)
+    revision = getattr(model_config, "revision", None)
     if script_path:
         try:
             mtime = os.stat(script_path).st_mtime_ns
         except OSError:
             return None
-        return f"script:{os.path.abspath(script_path)}:{mtime}"
+        key = f"script:{os.path.abspath(script_path)}:{mtime}"
+    elif repo and revision:
+        key = f"hf:{repo}:{revision}"
 
-    repo = getattr(model_config, "repo", None)
-    revision = getattr(model_config, "revision", None)
-    if repo and revision:
-        return f"hf:{repo}:{revision}"
-
-    return None
+    run_voxel_size = getattr(model_config, "run_voxel_size", None)
+    if key and run_voxel_size is not None:
+        key += f"@{','.join(str(v) for v in run_voxel_size)}"
+    return key
 
 
 def _read_cache():

@@ -157,10 +157,13 @@ def resolve(ref: str, *, name: str = None, voxel_size=None, online: bool = True)
     Args:
         ref: what the user pasted.
         name: the model's name; by default one is made from ``ref``.
-        voxel_size: nm per voxel (one number, one per axis, or "8,8,8"), for
-            the types that do not read it from the model: given to Cellpose
-            and bioimage.io models as ``voxel_size`` and to a fly model as
-            ``input_voxel_size``, and ignored, with a note, by the others.
+        voxel_size: nm per voxel (one number, one per axis, or "8,8,8"):
+            given to Cellpose and bioimage.io models as ``voxel_size`` and to
+            a fly model (and an onnx one without a manifest) as
+            ``input_voxel_size``; any other model is run at it, as its
+            entry's ``run_voxel_size`` (``ModelConfig.run_voxel_size``),
+            unless it reads its input itself (a script with its own
+            ``process_chunk``), which ignores it with a note.
         online: whether a Hugging Face repo or zoo id may be checked online.
 
     Raises:
@@ -220,11 +223,30 @@ def _default_env(type_name: str, params: Dict[str, Any]) -> Optional[str]:
         return None
 
 
+def _reads_input_itself(type_name: str, params: Dict[str, Any]) -> bool:
+    """Whether the model reads its input itself, so that it runs only at its
+    own voxel size (``ModelConfig.reads_input_itself``), as far as is known
+    without building it: a type with a ``process_chunk`` of its own does,
+    and a script that defines one, or a ``predict``."""
+    if type_name == "script":
+        from cellmap_flow.models.configs.script import script_reads_input_itself
+
+        return script_reads_input_itself(params["script_path"])
+    return callable(getattr(_type_class(type_name), "process_chunk", None))
+
+
 def _resolved(type_name, params, name, how, request, needs=(), notes=(), takes_voxel_size=False) -> Resolved:
+    """A Resolved of ``params``. ``takes_voxel_size``: the type has its own
+    voxel size argument, which its caller gave ``request.voxel_size`` to;
+    any other model is run at it (``run_voxel_size``)."""
     notes = list(notes)
     if request.voxel_size is not None and not takes_voxel_size:
-        article = "an" if type_name[0] in "aeiou" else "a"
-        notes.append(f"voxel_size is not used: {article} {type_name} model says its own")
+        if _reads_input_itself(type_name, params):
+            notes.append("voxel_size is not used: the model reads its input itself (its own process_chunk or "
+                         "predict), so it runs only at its own voxel size")
+        else:
+            params["run_voxel_size"] = request.voxel_size
+            notes.append(f"run at {request.voxel_size} nm, not at its own voxel size: its sizes in nm scale with it")
     return Resolved(
         type=type_name,
         params=params,

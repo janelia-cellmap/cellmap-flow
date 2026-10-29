@@ -46,6 +46,58 @@ def _voxels(extent, voxel_size) -> Tuple[int, ...]:
     return tuple(int(v) for v in np.where(np.isclose(quotient, nearest), nearest, np.floor(quotient)))
 
 
+def _at_voxel_size(shape, voxel_size, new):
+    """``(voxel size, shape)``: ``shape`` (nm) of ``voxel_size`` voxels, as
+    many voxels of ``new`` instead; as they are when ``new`` is None."""
+    if new is None:
+        return voxel_size, shape
+    voxels = np.asarray(_voxels(shape, voxel_size), dtype=float)
+    return _numbers(new), _numbers(voxels * np.asarray(new, dtype=float))
+
+
+def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict:
+    """The base model's geometry at the voxel sizes a finetune was trained at.
+
+    A volume made without resampling lies on the raw level nearest the
+    model's voxel size, and the trainer read that level as it is: the model
+    learnt that scale, so the finetuned model really is a model at the
+    level's voxel size (16 nm data read as 8 nm by an 8 nm model gives a 16
+    nm model). Declaring it, the served model reads that level exactly,
+    instead of the nearest one relabelled with a warning. The shapes in nm
+    scale with the voxel size; the voxel counts are the base's.
+
+    Returns ``input_voxel_size``, ``output_voxel_size``, ``read_shape`` and
+    ``write_shape``; each size None keeps the base's.
+    """
+    geometry = {}
+    for which, trained in (("input", input_voxel_size), ("output", output_voxel_size)):
+        shape_key = "read_shape" if which == "input" else "write_shape"
+        geometry[f"{which}_voxel_size"], geometry[shape_key] = _at_voxel_size(
+            getattr(base_cfg, shape_key), getattr(base_cfg, f"{which}_voxel_size"), trained
+        )
+    return geometry
+
+
+def run_voxel_sizes(input_voxel_size, output_voxel_size, run_voxel_size) -> tuple:
+    """``(input, output)`` voxel sizes of a model that reads ``input_voxel_size``
+    and writes ``output_voxel_size``, run at ``run_voxel_size``: that, and the
+    output scaled per axis as the input is (a 16 nm model writing 8 nm voxels,
+    run at 32 nm, writes 16 nm ones)."""
+    scale = np.asarray(run_voxel_size, dtype=float) / np.asarray(input_voxel_size, dtype=float)
+    return _numbers(run_voxel_size), _numbers(np.asarray(output_voxel_size, dtype=float) * scale)
+
+
+def run_at_geometry(config, run_voxel_size) -> dict:
+    """``config``'s geometry when the model is run at ``run_voxel_size`` (nm,
+    z, y, x) instead of its own input voxel size: ``trained_at_geometry`` at
+    ``run_voxel_sizes``, so the voxel counts are the model's own and the
+    shapes in nm scale with the voxel sizes. ``ModelConfig.run_voxel_size``.
+    """
+    return trained_at_geometry(
+        config, *run_voxel_sizes(config.input_voxel_size, config.output_voxel_size, run_voxel_size)
+    )
+
+
 def _channel_names(names) -> Optional[Tuple[str, ...]]:
     """``names`` as a tuple of strings, or None when it names no channel.
 

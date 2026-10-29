@@ -4,6 +4,11 @@
 a Config: the model (or a ``predict``) and its geometry. Sizes in voxels
 (``input_size``, ``output_size``) and shapes in nm (``read_shape``,
 ``write_shape``) are each derived from the other when only one is given.
+
+A script that defines its own ``process_chunk`` or ``predict`` (a TensorFlow
+model's) reads its input itself, and so runs only at its own voxel size
+(``ModelConfig.run_voxel_size``); ``script_reads_input_itself`` says so from
+its text, without running it.
 """
 
 import ast
@@ -105,6 +110,40 @@ def load_safe_config(config_path, force_safe=None):
     return config
 
 
+# The names a script defines to read its input itself: the server then calls
+# them with each chunk to write (inference/runner.py ModelRunner.predict).
+_OWN_INPUT_NAMES = ("process_chunk", "predict")
+
+
+def script_reads_input_itself(script_path) -> bool:
+    """Whether the script at ``script_path`` defines a ``process_chunk`` or a
+    ``predict`` at its top level (a function, or a name assigned), read from
+    its text without running it; False when it cannot be read.
+
+    For saying so before its server is started: the dashboard's Submit
+    refuses to run such a script at another voxel size, and ``cellmap_flow
+    add -v`` gives it none.
+    A name it imports is not seen here; its built config is checked too
+    (``ModelConfig.config``).
+    """
+    try:
+        with open(os.path.expanduser(str(script_path))) as f:
+            tree = ast.parse(f.read())
+    except (OSError, SyntaxError, ValueError):
+        return False
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names = [node.name]
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = [target.id for target in targets if isinstance(target, ast.Name)]
+        else:
+            continue
+        if any(name in _OWN_INPUT_NAMES for name in names):
+            return True
+    return False
+
+
 class ScriptModelConfig(ModelConfig):
 
     cli_name = "script"
@@ -116,6 +155,12 @@ class ScriptModelConfig(ModelConfig):
         self.script_path = script_path
         self.name = name
         self.scale = scale
+
+    def reads_input_itself(self) -> bool:
+        """Its built config's answer, else its script's (``script_reads_input_itself``)."""
+        if self._config is not None:
+            return super().reads_input_itself()
+        return script_reads_input_itself(self.script_path)
 
     def _get_config(self):
         config = load_safe_config(self.script_path)

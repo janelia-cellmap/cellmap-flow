@@ -21,6 +21,9 @@
   going, and why its last one failed, which the Finetune tab's Use this
   model waits on (routes/finetune/rank_routes.py _served_geometry), and the
   model advice says while any is (routes/model_advice.py).
+- ``served_at_run_voxel_size()``: the models running or starting at a voxel
+  size not their own (``ModelConfig.run_voxel_size``), whose Run at (nm)
+  fields the Models tab fills in.
 """
 
 from cellmap_flow.config.yaml import ConfigError
@@ -35,6 +38,7 @@ from cellmap_flow.models.models_config import (
 )
 from cellmap_flow.models.registry import build_model
 from cellmap_flow.viewer.layers import prediction_layer, replace_layer
+import copy
 import threading
 from typing import List
 import re
@@ -280,12 +284,29 @@ def _cellpose_configs(selections) -> list:
 
 
 def _settings_changed(config) -> bool:
-    """Whether the running Cellpose model named as ``config`` was started
-    with other settings (a voxel size, a slice linking) than ``config``'s."""
+    """Whether the model named as ``config`` was started with other settings
+    than ``config``'s: another run voxel size, or, a Cellpose model, another
+    voxel size or slice linking."""
     for mc in get_session().models_config:
-        if isinstance(mc, CellposeModelConfig) and mc.name == config.name:
+        if getattr(mc, "name", None) != config.name:
+            continue
+        if getattr(mc, "run_voxel_size", None) != config.run_voxel_size:
+            return True
+        if isinstance(mc, CellposeModelConfig) and isinstance(config, CellposeModelConfig):
             return mc.to_dict() != config.to_dict()
+        return False
     return False
+
+
+def _at_run_voxel_size(config, run_voxel_size):
+    """``config``, a session's model ticked by name, at ``run_voxel_size``
+    (None: its own): itself when it is at it already, else a copy, so that
+    the model running from ``config`` is still known as it was started
+    (``_settings_changed``) until the copy replaces it. A ValueError for a
+    model that reads its input itself (``ModelConfig.run_voxel_size``)."""
+    moved = copy.copy(config)
+    moved.run_voxel_size = run_voxel_size
+    return config if moved.run_voxel_size == config.run_voxel_size else moved
 
 
 # The names whose launch thread has not returned yet: from Submit until the
@@ -427,7 +448,7 @@ def _catalog_groups() -> dict:
     return {name: group for group, models in get_session().model_catalog.items() for name in models}
 
 
-def _picked(names, hf_repos, bioimage_models, cellpose_models) -> list:
+def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) -> list:
     """``[(name, config)]`` for everything ticked, in the order the tab lists
     them: the catalog's models, Hugging Face's, the zoo's, the Cellpose
     panel's, then the models ticked by name alone (one that Add a model
@@ -435,6 +456,12 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models) -> list:
     since and ticked again: no catalog entry names them, so their config
     starts them; not a finetuned model's, whose server is its finetune
     job's).
+
+    A catalog model, a Hugging Face one and one ticked by name is run at its
+    ``run_voxel_sizes`` entry, by the name or repo it is ticked by, and at
+    its own voxel size without one. A running Hugging Face model is ticked by
+    its repo and, as a running model, by its name too: its repo's entry
+    decides, as its repo's config is the one started.
 
     Each config is built here, before anything is stopped or started, so a
     bad entry refuses the whole Submit (ValueError) rather than half of it.
@@ -454,42 +481,46 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models) -> list:
     for group in session.model_catalog.values():
         for name, folder in group.items():
             if name in names:
-                add(name, _built({"type": "cellmap", "folder_path": folder, "name": name}, name))
+                add(name, _built({"type": "cellmap", "folder_path": folder, "name": name,
+                                  "run_voxel_size": run_voxel_sizes.get(name)}, name))
     for repo in hf_repos:
         name = _sanitize_job_name(repo.split("/")[-1])
-        add(name, _built({"type": "huggingface", "repo": repo, "name": name}, repo))
+        add(name, _built({"type": "huggingface", "repo": repo, "name": name,
+                          "run_voxel_size": run_voxel_sizes.get(repo)}, repo))
     for config in _bioimage_configs(bioimage_models) + _cellpose_configs(cellpose_models):
         add(config.name, config)
     configs = configs_by_name()
     for name in names:
         config = configs.get(name)
-        if config is not None and not isinstance(config, FinetuneModelConfig):
-            add(name, config)
+        if name not in taken and config is not None and not isinstance(config, FinetuneModelConfig):
+            add(name, _at_run_voxel_size(config, run_voxel_sizes.get(name)))
     return picked
 
 
 def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
-                      cellpose_models: List[dict] = None):
+                      cellpose_models: List[dict] = None, run_voxel_sizes: dict = None):
     """Run ``names`` (catalog models, and models ticked by name), ``hf_repos``,
     ``bioimage_models`` ({"id", "voxel_size"} each) and ``cellpose_models``
     ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
-    and stop every other model. A ValueError, before anything changes, when
-    an entry cannot be built: a zoo model needs a voxel size, a Cellpose
-    model's settings are missing or wrong, a catalog folder is not there.
+    and stop every other model. ``run_voxel_sizes`` ({name or repo: [z, y,
+    x]}) is what voxel size a catalog, Hugging Face or by-name model is run
+    at, when not its own (``_picked``). A ValueError, before anything
+    changes, when an entry cannot be built: a zoo model needs a voxel size, a
+    Cellpose model's settings are missing or wrong, a catalog folder is not
+    there, a model that reads its input itself is given a run voxel size.
 
     When the chain has no input normalizers, the first model started that
     declares some (an onnx model's manifest) sets them, as part of its start
     (routes.pipeline.set_declared_input_norm); any other chain is left as it
     is, and only the page's Apply changes it."""
     session = get_session()
-    picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [])
+    picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
-    # A running Cellpose model whose voxel size, output or slice linking was
-    # changed is stopped and started again with them: its name does not say
-    # them, so it would otherwise be kept as it was, and the change silently
-    # ignored.
-    restarted = {name for name, config in picked
-                 if isinstance(config, CellposeModelConfig) and _settings_changed(config)}
+    # A running model whose run voxel size was changed, or a Cellpose model's
+    # voxel size, output or slice linking, is stopped and started again with
+    # them: its name does not say them, so it would otherwise be kept as it
+    # was, and the change silently ignored.
+    restarted = {name for name, config in picked if _settings_changed(config)}
     kept = (set(names) | {name for name, _ in picked}) - restarted
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
@@ -512,6 +543,17 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
         # launch_entry, not to_dict(): a Hugging Face model's to_dict() fetches its metadata.
         logger.info(f"To be submitted: {name} ({config.launch_entry})")
         _launch(name, run_model, config, st_data)
+
+
+def served_at_run_voxel_size() -> list:
+    """The configs of the models running or starting at a voxel size not
+    their own (``ModelConfig.run_voxel_size``): the Models tab fills in their
+    rows' Run at (nm) with it, the catalog's from the page
+    (routes/index_page) and Hugging Face's from its listing
+    (routes/models)."""
+    running = running_names()
+    return [mc for mc in get_session().models_config
+            if getattr(mc, "run_voxel_size", None) is not None and getattr(mc, "name", None) in running]
 
 
 # Where each model on the Loaded models list came from: the "source" of its
