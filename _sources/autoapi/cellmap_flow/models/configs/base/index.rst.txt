@@ -1,0 +1,386 @@
+cellmap_flow.models.configs.base
+================================
+
+.. py:module:: cellmap_flow.models.configs.base
+
+.. autoapi-nested-parse::
+
+   ``ModelConfig``, the base of every model type, and the helpers the types share.
+
+   The constructors normalize their arguments with ``models.entry``'s
+   ``voxel_size``, ``sizes``, ``per_axis``, ``as_given`` and ``names``, which
+   read the same values from a number, a sequence or the text a command line
+   or form sends.
+
+   A model type is a ModelConfig subclass. The CLIs, YAML ``type:`` entries
+   and the dashboard's model form are built from its constructor's signature,
+   and its ``_get_config`` builds the model and returns a ``Config`` that
+   describes it. What the rest of cellmap-flow reads:
+
+   - ``config``: that Config, built on first use and checked: the required
+     attributes, then the declared shapes against a forward pass, unless
+     ``validate_model_shapes`` is off or ``check_shapes_on_warmup`` leaves it
+     to a ModelRunner's warmup forward, which calls ``check_output_shape``.
+   - ``geometry``: the Config's shapes and voxel sizes, as a ``ModelGeometry``.
+   - ``chunk_output_axes``, ``output_dtype``: what a processed chunk is.
+   - ``to_dict()``: the model entry ``registry.build_model`` rebuilds it from.
+   - ``launch_entry``: the entry a launched server rebuilds it from
+     (``cellmap_flow serve --model <it, as JSON>``).
+   - ``command``: the ``cellmap_flow_server <type>`` arguments that rebuild
+     it, which launchers passed before 0.3.0; that form of the server goes in
+     the release after it.
+   - ``env``: the environment its entry names for its server, when not this
+     one (``models.envs``). Set after construction, never a constructor
+     argument; to_dict() and launch_entry carry it.
+   - ``run_voxel_size``: the voxel size its entry runs it at, when not its
+     own; ``config`` and ``declared_geometry()`` are then scaled to it
+     (``geometry.run_at_geometry``). Set after construction, as ``env`` is, and
+     carried alike. A model that reads its input itself refuses it
+     (``reads_input_itself``).
+   - ``default_env``: the environment a type's models run in when their
+     entry names none; ``effective_env``: the one a model runs in, of the two.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.base.logger
+   cellmap_flow.models.configs.base.DEFAULT_AXES_NAMES
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.base.ModelEnvError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.base.Config
+   cellmap_flow.models.configs.base.ModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.base.model_entry
+   cellmap_flow.models.configs.base.command_argv
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: model_entry(cls, params: dict) -> dict
+
+   The model entry ``cellmap_flow serve --model`` builds ``cls(**params)`` from.
+
+   ``{"type": <the name the registry has cls under>, **params}``, leaving
+   out None. The server rebuilds it with ``registry.build_model``, as a
+   YAML's entry is rebuilt, so ``params`` may be to_dict()'s, extra keys
+   and all.
+
+
+.. py:function:: command_argv(cls, params: dict) -> list
+
+   ``cellmap_flow_server`` arguments that build ``cls(**params)``.
+
+   The name the server CLI registers ``cls`` under, then ``--arg value``
+   for each constructor argument in signature order, leaving out None.
+   Each value is written the way the server CLI parses it back.
+
+
+.. py:exception:: ModelEnvError
+
+
+
+   A model that runs in its own environment was built in another, which
+   lacks its packages (``ModelConfig.config``).
+
+
+.. py:data:: DEFAULT_AXES_NAMES
+   :value: ['x', 'y', 'z']
+
+
+.. py:class:: Config(**kwargs)
+
+   What a model type's ``_get_config`` returns: the model, its geometry
+   and anything else its script or checkpoint defines, as attributes.
+
+   Built from keyword arguments (a script's globals, for a script model),
+   which ``to_dict()`` and ``get()`` read back. ``axes_names`` defaults to
+   x, y, z.
+
+
+   .. py:attribute:: axes_names
+
+
+   .. py:attribute:: kwargs
+
+
+   .. py:method:: to_dict()
+
+      Returns the configuration as a dictionary.
+
+
+
+   .. py:method:: get(key: str, default: Any = None) -> Any
+
+      Gets the value of a configuration key.
+
+
+
+.. py:class:: ModelConfig
+
+   .. py:attribute:: env
+      :value: None
+
+
+
+   .. py:attribute:: default_env
+      :value: None
+
+
+
+   .. py:attribute:: display_channel
+      :value: None
+
+
+
+   .. py:attribute:: normalizes_input
+      :value: False
+
+
+
+   .. py:attribute:: finetunable
+      :value: False
+
+
+
+   .. py:attribute:: config_relative_paths
+      :value: ()
+
+
+
+   .. py:method:: finetune_modes()
+
+      What this model can be finetuned with: ("lora", "full"), ("full",)
+      or (). For the dashboard, so it must not build the network: a type
+      whose networks differ (a compiled one takes no LoRA adapter) reads
+      it from what describes the model. The trainer checks the module it
+      gets the same way (``finetune.trainable.finetune_modes``).
+
+
+
+   .. py:method:: declared_input_norm(data_range=None)
+
+      The input normalization the model declares itself, as cellmap-flow
+      steps (``[{"name": ..., **params}]``), or None when it declares none.
+
+      Asked on every dashboard poll, so it must be cheap and must not
+      raise. An onnx model's manifest declares its steps, and so does the
+      metadata.json of a model a server published to Hugging Face; a
+      cellmap-models export's metadata.json declares the range the model
+      reads (``probe.metadata_input_norm``), which needs ``data_range``, the
+      raw data's (lo, hi), to say what to scale from.
+
+
+
+   .. py:method:: declared_geometry()
+
+      What the model says of its output without being built: ``{"write_shape"
+      (nm, z, y, x), "input_voxel_size" and "output_voxel_size" (nm),
+      "output_channels", "channels" (their names, None when it names
+      none)}``, as its server reports them; None when it says none, or not
+      for certain. At ``run_voxel_size``, when it has one: every type's is
+      scaled to it (``__init_subclass__``), so a type declares its own sizes.
+
+      For the finetune tab's model list, which asks on every poll while
+      the model's server is not up: building the model there loaded its
+      weights and ran a forward on the dashboard's CPU (25 s for a 3 GB
+      TorchScript). So it must be cheap and must not raise, as
+      declared_input_norm. A type declares it from what describes the model
+      (a metadata.json, a manifest, its entry).
+
+
+
+   .. py:method:: output_graph()
+
+      The graph of what this model serves, for its output activation:
+      ``(nodes, output)`` as ``portable.activation.output_activation``
+      reads them, or None when it cannot be read. The inference server
+      reads it once the model is built (inference/runner.py), so it may
+      load what the built model has.
+
+      By default ``config.model``'s (``inference.graph.module_graph``: a
+      TorchScript, a torch.export program or module, a torch.fx trace of
+      any other module), when that is what the server runs: not when the
+      config predicts through its own ``predict`` or ``process_chunk``,
+      which may do anything to the model's output (a script's sigmoid
+      after it). A type whose own process_chunk it knows says its graph
+      itself (an onnx model's file, a bioimage.io model's postprocessing).
+
+
+
+   .. py:method:: trainable_model()
+
+      The torch module the finetune trainer trains, or None for
+      ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).
+
+      The trainer feeds it a float tensor (B, 1, Z, Y, X), normalized as
+      the dashboard's input normalization does, at the input voxel size and
+      read shape, and wants (B, C, Z', Y', X') at the write shape back. A
+      type whose ``config.model`` is not such a module (a bioimage.io
+      prediction pipeline, a Cellpose model object) returns one that is,
+      sharing its parameters, so that what is trained is what is served.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Make ``config`` serve ``module``, the trained ``trainable_model()``.
+
+      ``config`` is this model's own Config (the trainer's live server) or
+      a new one with its geometry (a finetuned model's,
+      ``FinetuneModelConfig``). By default the module is the model, run by
+      the inferencer's own forward; a type that predicts through its own
+      ``process_chunk`` sets that up here instead.
+
+
+
+   .. py:attribute:: validate_model_shapes
+      :value: True
+
+
+
+   .. py:attribute:: check_shapes_on_warmup
+      :value: False
+
+
+
+   .. py:property:: run_voxel_size
+
+      The voxel size (nm, z, y, x) the model is run at, or None for its
+      own: its entry's ``run_voxel_size``.
+
+      Its ``config`` then reads at it, and writes at its output voxel size
+      scaled as the input's is (``geometry.run_at_geometry``): a 16 nm
+      model run on the 32 nm level. The voxel counts are the model's own,
+      so the shapes in nm scale with it. Set from one number, three or the
+      text a form sends; a blank clears it. Setting another one forgets the
+      config built at the old one.
+
+      :raises ValueError: not a voxel size, or the model reads its input itself
+          (``reads_input_itself``), and so cannot be run at another.
+
+
+   .. py:method:: reads_input_itself() -> bool
+
+      Whether the model reads its input itself: its config's own
+      ``process_chunk`` or ``predict`` works out in nm, at the model's own
+      voxel size, what to read around each chunk, so it cannot be run at
+      another from outside (``run_voxel_size``).
+
+      Its built config says for certain. Unbuilt, a type that defines a
+      ``process_chunk`` of its own does (Cellpose, a BioImage Model Zoo
+      model), and a type whose models decide it says so for each (a
+      script); any other is taken not to until it is built, which then
+      refuses a run voxel size.
+
+
+
+   .. py:property:: effective_env
+
+      The environment this model's server and finetuning job run in, or
+      None for this one: ``env``, else ``default_env`` (``envs.effective``).
+
+
+   .. py:property:: config
+
+
+   .. py:method:: check_output_shape(output_shape)
+
+      Raise ValueError if a forward's ``output_shape`` (batch first)
+      contradicts the declared write_shape, block_shape or output_channels.
+
+
+
+   .. py:property:: geometry
+      :type: cellmap_flow.models.geometry.ModelGeometry
+
+
+      The config's geometry as one ModelGeometry, read once per built config.
+
+
+   .. py:property:: chunk_output_axes
+      :type: tuple[str, ...]
+
+
+      The axes of a processed chunk; by default ``geometry.DEFAULT_OUTPUT_AXES``,
+      ("c", "z", "y", "x").
+
+      Models can override by setting config.chunk_output_axes. The server
+      and blockwise read it only for whether a chunk has a channel axis:
+      one that has must have it first, and its spatial axes are the raw
+      data's, in the raw data's order.
+
+
+   .. py:property:: output_dtype
+
+      Returns the output dtype of the model. Defaults to np.float32.
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+      ``{"type": <registered name>, **the constructor arguments given}``,
+      leaving out None as the built-in types leave out an unset name or
+      scale. The built-in types write their own; this one serves a plugin
+      type that does not, so exporting its config and launching its server
+      work without one.
+
+
+
+   .. py:property:: launch_entry
+      :type: dict
+
+
+      The model entry a launched server rebuilds this exact config from.
+
+      to_dict(), less what only the pipeline builder shows (a Hugging Face
+      repo's downloaded metadata), under the name the registry has this
+      class under (``registry.cli_name_of``), so that the server rebuilds
+      this class and not a parent it inherited cli_name from. With the
+      entry's own ``env``, if it has one, which ``serving.launch`` takes off
+      again (the server's environment is ``effective_env``, which it reads
+      from the config), and its ``run_voxel_size``, which the server's
+      config is built at.
+
+
+   .. py:property:: command
+      :type: str
+
+
+      ``cellmap_flow_server`` arguments that rebuild this exact config.
+
+      Generated from to_dict() so no constructor argument is left behind
+      (hand-written commands dropped Fly's input/output size, which then
+      silently fell back to 178/56, and Bio's required voxel size), with
+      every token shell-quoted: bsub runs it through ``bash -c`` and local
+      launches through ``shlex.split``. The class is named as the server
+      CLI registers it (``registry.cli_name_of``), so it rebuilds this
+      class and not a parent it inherited cli_name from.
+
+

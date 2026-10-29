@@ -1,0 +1,138 @@
+cellmap_flow.models.hf_catalog
+==============================
+
+.. py:module:: cellmap_flow.models.hf_catalog
+
+.. autoapi-nested-parse::
+
+   The cellmap models published on the Hugging Face Hub, for the dashboard's picker.
+
+   ``list_huggingface_models`` answers from a cache file under
+   ``~/.cellmap_flow`` once there is one, so opening the dashboard does not
+   query the Hub each time; ``refresh_huggingface_models`` rebuilds it;
+   ``cached_huggingface_models`` reads the cache alone, for a list that must
+   not wait on the Hub. Each model is keyed by its repo id, with the
+   ``metadata.json`` it publishes and, beside its fields, what every model list
+   shows of a model without downloading it (``FACTS``): its weight formats, how
+   it can be finetuned, the size of its largest weights file, and the copy of it
+   that runs in the browser, if it has one. Those are read from the repo's file
+   list and the sizes of its weights (one listing of the organization's repos
+   with their file names, then one request of sizes per repo), and from the
+   manifests of cellmap/onnx-web-models, when the cache is built, and kept in it:
+   a page's poll never asks the Hub for them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.hf_catalog.HUGGING_FACE_ORGS_NAME
+   cellmap_flow.models.hf_catalog.HF_CACHE_DIR
+   cellmap_flow.models.hf_catalog.HF_CACHE_FILE
+   cellmap_flow.models.hf_catalog.WEB_MODELS_REPO
+   cellmap_flow.models.hf_catalog.FORMATS
+   cellmap_flow.models.hf_catalog.WEIGHT_ENDINGS
+   cellmap_flow.models.hf_catalog.FACTS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.hf_catalog.weight_facts
+   cellmap_flow.models.hf_catalog.folder_facts
+   cellmap_flow.models.hf_catalog.facts_of
+   cellmap_flow.models.hf_catalog.repo_facts
+   cellmap_flow.models.hf_catalog.list_huggingface_models
+   cellmap_flow.models.hf_catalog.cached_huggingface_models
+   cellmap_flow.models.hf_catalog.refresh_huggingface_models
+
+
+Module Contents
+---------------
+
+.. py:data:: HUGGING_FACE_ORGS_NAME
+   :value: 'cellmap'
+
+
+.. py:data:: HF_CACHE_DIR
+
+.. py:data:: HF_CACHE_FILE
+
+.. py:data:: WEB_MODELS_REPO
+   :value: 'cellmap/onnx-web-models'
+
+
+.. py:data:: FORMATS
+   :value: (('.ts', 'TorchScript'), ('.pt2', 'torch.export'), ('.onnx', 'ONNX'))
+
+
+.. py:data:: WEIGHT_ENDINGS
+   :value: ('.ts', '.pt2', '.onnx', '.onnx.data', '.pt', '.pth', '.safetensors', '.ckpt')
+
+
+.. py:data:: FACTS
+   :value: ('formats', 'finetune_modes', 'size_mb', 'browser_copy', 'variants')
+
+
+.. py:function:: weight_facts(sizes: Dict[str, Optional[int]]) -> Dict[str, Any]
+
+   ``formats``, ``finetune_modes`` and ``size_mb`` of a model whose
+   top-level files are ``sizes`` (each name's size in bytes, None when not
+   known).
+
+   ``finetune_modes`` is the training form's for the model
+   (``export_finetune_modes``).
+
+
+.. py:function:: folder_facts(folder: str) -> Dict[str, Any]
+
+   ``FACTS`` of a cellmap_models export's folder (the Local Catalog's
+   models, models.yaml), from its files' names and sizes as a repo's are
+   read, loading nothing; a browser cannot read a folder of the cluster's,
+   so none has a browser copy. Empty when the folder cannot be listed.
+
+
+.. py:function:: facts_of(metadata: Dict[str, Any]) -> Dict[str, Any]
+
+   The ``FACTS`` a listed model's entry has (a cache written before they
+   were listed has none).
+
+
+.. py:function:: repo_facts(repo: str, revision: Optional[str] = None) -> Dict[str, Any]
+
+   ``FACTS`` of one repo, for a model added by reference that the listing
+   does not have (another owner's, as David's finetuned exports): from its
+   files, and its browser copy only when it holds one in a folder of its
+   own, cellmap/onnx-web-models having copies of cellmap's models alone,
+   which the listing has. Raises what listing its files raises.
+
+
+.. py:function:: list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   List available Hugging Face models, using cache if available.
+
+   A cache written before the listing gave each model's ``FACTS`` is fetched
+   again, once: its rows would show nothing of what each model is.
+
+   :param org_name: Hugging Face organization name to filter models (default: "cellmap")
+
+   :returns: A dict mapping model IDs to their metadata
+
+
+.. py:function:: cached_huggingface_models() -> Optional[Dict[str, Any]]
+
+   The models as the last fetch cached them, or None when nothing is
+   cached (or the cache cannot be read), without asking the Hub: the
+   Finetune tab's ranking lists them so (routes/finetune/rank_routes.py),
+   and its Refresh is the Models tab's, ``refresh_huggingface_models``.
+
+
+.. py:function:: refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   Force refresh the Hugging Face models cache.
+
+

@@ -1,0 +1,363 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.routes.finetune.rank_routes &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../../_static/favicon.ico"/>
+      <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.restart_key" href="../restart_key/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.publish" href="../publish/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard.routes</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.routes.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.routes.finetune.rank_routes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../../_sources/autoapi/cellmap_flow/dashboard/routes/finetune/rank_routes/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.routes.finetune.rank_routes">
+<span id="cellmap-flow-dashboard-routes-finetune-rank-routes"></span><h1>cellmap_flow.dashboard.routes.finetune.rank_routes<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.rank_routes" title="Link to this heading"></a></h1>
+<p>Which model to start from, in server mode: the browser’s routes
+(web/src/backend/routes/rank.ts), answered by the dashboard, so the Finetune
+tab’s ranking (static/js/dashboard/finetune/rank.js) works the same in both.</p>
+<ul class="simple">
+<li><p>GET /api/finetune/rank/candidates: the models to rank as the Models tab
+offers them, each with the <code class="docutils literal notranslate"><span class="pre">group</span></code> of the tab’s it is listed under, in
+the tab’s order: the session’s (“Running”, running or not; not a
+Cellpose model, whose flows the ranking does not score), each catalog
+group’s (models.yaml’s “cellmap”, “saalfeldlab”), cellmap’s on Hugging
+Face (“Hugging Face”) and the BioImage Model Zoo’s (“BioImage Zoo”, with
+its <code class="docutils literal notranslate"><span class="pre">em</span></code> tag, which the others are), from the lists the tab last
+cached (<code class="docutils literal notranslate"><span class="pre">hf_cached</span></code> and <code class="docutils literal notranslate"><span class="pre">zoo_cached</span></code> say whether there were any: none
+is fetched here, so a listing never waits on the Hub or bioimage.io; the
+tab’s Refresh fetches them), then the ones given by reference (“Added”,
+rank_add); and the session’s volume and the model it is for. Each
+carries what every model list shows of a model (models/hf_catalog.py
+FACTS: its formats, finetune modes, size and browser copy), as the
+Hugging Face list cached them for its repo, from the files of a catalog
+model’s folder, or from a repo’s own when it is added by reference. Each
+not running says how to build it (<code class="docutils literal notranslate"><span class="pre">entry</span></code>, the one the Models tab
+starts it from); only the running ones and the added start ticked, as a
+model not running is started on the cluster for its score. A zoo model
+whose voxel size nothing says (its server would refuse it) has no entry,
+and <code class="docutils literal notranslate"><span class="pre">error</span></code> and <code class="docutils literal notranslate"><span class="pre">needs</span></code> say so.</p></li>
+<li><p>POST /api/finetune/rank/add {ref, name?, voxel_size?}: a model added by
+reference, resolved as the Models tab’s Add a model resolves it, starting
+nothing (rank_add).</p></li>
+<li><p>POST /api/finetune/rank/score {name, entry?, queue?}: one scored on the
+session volume’s paint (portable/rank.py says how; the browser runs the
+same Python): a running model through its server, any other started for
+the score alone (<code class="docutils literal notranslate"><span class="pre">entry</span></code>, the candidate’s, says how to build it; a zoo
+model is served from its own environment, as the Models tab serves it;
+<code class="docutils literal notranslate"><span class="pre">queue</span></code>, the Training tab’s GPU queues ticked, says where, else the
+Models tab’s) and stopped after, so a ranking leaves the Models tab and
+the cluster as they were. The model is read through its own input
+normalization (what its start sets: its declaration, or the CellMap
+convention) and through the session’s when that is another, and the
+better kept: a server runs the chain each request names. Where the raw
+under the paint is narrow, the same server is asked again through that
+normalization stretched to the raw’s window. The answer is the ranking’s
+row (portable/rank.py score_row: the score kept, its threshold, the raw’s
+range it read and the steps it was read through, <code class="docutils literal notranslate"><span class="pre">input_norm</span></code>, with
+what every channel matched, <code class="docutils literal notranslate"><span class="pre">channel_matches</span></code>, and what the other
+normalizations tried did, <code class="docutils literal notranslate"><span class="pre">input_norm_others</span></code>: why this one), and the
+postprocessing its layer needs to show right instead of the session’s,
+<code class="docutils literal notranslate"><span class="pre">postprocess</span></code> (portable/rank.py needed_postprocess: the sigmoid added
+or taken away, and the threshold fitted to the paint, an affinity
+model’s too), or null when the session’s shows it right.</p></li>
+<li><p>POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
+select_channel?, queue?}: the one picked made the model to finetune.
+<code class="docutils literal notranslate"><span class="pre">input_norm</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> (the row’s) are made the dashboard’s
+chain first, and <code class="docutils literal notranslate"><span class="pre">select_channel</span></code> (the row’s channel_index) the channel
+its layer shows (Session.shown_channels); then the model is running (as
+the Models tab’s Add runs it, on <code class="docutils literal notranslate"><span class="pre">queue</span></code> as for a score), and its paint
+is carried onto its grid (annotation_core.carry_onto_model, which
+training’s submit carries through too, for a model whose grid is not the
+volume’s): a volume made for it, its paint layer in the old one’s place,
+and the old volume retired, so the session has the one volume, which its
+manifest trains on. The model’s sizes come from its server once its
+start is over (<code class="docutils literal notranslate"><span class="pre">_served_geometry</span></code>, which waits for a start still
+falling back through the GPU queues).</p></li>
+<li><p>POST /api/finetune/rank/input-norm {input_norm, postprocess?}: the row’s
+steps made the dashboard’s chain alone, with no model started and no
+volume made: Fit to Paint’s, for the model already seeding the paint
+(rank_input_norm).</p></li>
+</ul>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.logger" title="cellmap_flow.dashboard.routes.finetune.rank_routes.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.RAW_SAMPLE" title="cellmap_flow.dashboard.routes.finetune.rank_routes.RAW_SAMPLE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAW_SAMPLE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.NORM_FROM" title="cellmap_flow.dashboard.routes.finetune.rank_routes.NORM_FROM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NORM_FROM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.FLOWS" title="cellmap_flow.dashboard.routes.finetune.rank_routes.FLOWS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FLOWS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.VOXEL_NEEDS" title="cellmap_flow.dashboard.routes.finetune.rank_routes.VOXEL_NEEDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOXEL_NEEDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.SERVER_WAIT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.rank_routes.SERVER_WAIT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_WAIT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.START_WAIT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.rank_routes.START_WAIT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">START_WAIT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_candidates" title="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_candidates"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_candidates</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_add" title="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_add"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_add</span></code></a>()</p></td>
+<td><p>A model for the ranking by reference, <code class="docutils literal notranslate"><span class="pre">{ref,</span> <span class="pre">name?,</span> <span class="pre">voxel_size?}</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_score" title="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_score"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_score</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_use" title="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_use"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_use</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_input_norm" title="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_input_norm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_input_norm</span></code></a>()</p></td>
+<td><p>Fit to paint's: the input normalization a score was read through and</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.RAW_SAMPLE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">RAW_SAMPLE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1000000</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.RAW_SAMPLE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.NORM_FROM">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">NORM_FROM</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.NORM_FROM" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.FLOWS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">FLOWS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'flows'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.FLOWS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.VOXEL_NEEDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">VOXEL_NEEDS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.VOXEL_NEEDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_candidates">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">rank_candidates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_candidates" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_add">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">rank_add</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_add" title="Link to this definition"></a></dt>
+<dd><p>A model for the ranking by reference, <code class="docutils literal notranslate"><span class="pre">{ref,</span> <span class="pre">name?,</span> <span class="pre">voxel_size?}</span></code>
+(a ResolveModel), resolved as the Models tab’s Add a model resolves it
+(routes/model_resolve.py resolve_request), starting nothing.</p>
+<p>Answers <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;candidate&quot;:</span> <span class="pre">...}</span></code>, the candidate as the
+listing gives it (<code class="docutils literal notranslate"><span class="pre">group</span></code> “Added”, ticked, its <code class="docutils literal notranslate"><span class="pre">entry</span></code> the resolved
+one) with the resolve’s <code class="docutils literal notranslate"><span class="pre">how</span></code>, <code class="docutils literal notranslate"><span class="pre">env</span></code> and <code class="docutils literal notranslate"><span class="pre">notes</span></code>, and keeps it in
+the session (Session.rank_added), so every listing after includes it.
+A reference that resolves to nothing is the resolve’s 400. One whose
+model needs more than the reference says is a 400 whose <code class="docutils literal notranslate"><span class="pre">needs</span></code> lists
+what (the resolve’s): a voxel size, which the same request with
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> gives; anything else only the Models tab’s Add a model
+asks for, and the model it starts there is listed here as running. A
+Cellpose model is a 400 too: it predicts flows, which are not ranked.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_score">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">rank_score</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_score" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_use">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">rank_use</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_use" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.rank_input_norm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">rank_input_norm</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.rank_input_norm" title="Link to this definition"></a></dt>
+<dd><p>Fit to paint’s: the input normalization a score was read through and
+the postprocessing its layer needs ({input_norm, postprocess?}, the
+score answer’s) made the dashboard’s chain, as Use this model makes it,
+without starting a model or making a volume. Answers the session’s
+chain as it now is, <code class="docutils literal notranslate"><span class="pre">input_norm</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code>; refused (400)
+for steps that are not a list of ops of their kind the dashboard has,
+which leaves the chain as it was.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.SERVER_WAIT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">SERVER_WAIT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">180</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.SERVER_WAIT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.rank_routes.START_WAIT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.rank_routes.</span></span><span class="sig-name descname"><span class="pre">START_WAIT_SECONDS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.rank_routes.START_WAIT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../publish/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.publish" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../restart_key/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.restart_key" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

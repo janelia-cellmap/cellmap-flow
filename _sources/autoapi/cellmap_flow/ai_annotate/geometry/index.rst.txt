@@ -1,0 +1,84 @@
+cellmap_flow.ai_annotate.geometry
+=================================
+
+.. py:module:: cellmap_flow.ai_annotate.geometry
+
+.. autoapi-nested-parse::
+
+   Which plane of the data an AI annotation reads, and which voxels it writes.
+
+   The maths is ``cellmap_flow.portable.ai_annotate``'s, which the browser runs
+   too, and is re-exported here under the names the server's callers use:
+   ``plan_plane`` (a ``PlanePlan``: the square field around the point, snapped
+   to the annotation volume's voxels and clipped to the volume and the data,
+   and the raw read covering the same physical area), ``raw_box`` (that read on
+   the raw's grid, as voxel ``(begin, end)``) and the screen layout
+   (``screen_axes``, ``screen_shape``, ``to_screen``, ``from_screen``): the
+   image sent is laid out as the viewer's panel shows the plane. What is the
+   server's alone is reading which plane the viewer shows: its layout and its
+   display dimensions (``depth_axis_for_view``, ``display_dimensions_for_view``),
+   which the browser reads from its own viewer (web/src/viewer/state.ts).
+
+   Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
+   image sent (``portable/ai_annotate.py`` says how it is drawn).
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.geometry.depth_axis_from_layout
+   cellmap_flow.ai_annotate.geometry.display_dimensions_for_view
+   cellmap_flow.ai_annotate.geometry.depth_axis_for_view
+   cellmap_flow.ai_annotate.geometry.plan_plane
+   cellmap_flow.ai_annotate.geometry.raw_box
+
+
+Module Contents
+---------------
+
+.. py:function:: depth_axis_from_layout(layout, display_dimensions=None) -> int
+
+   The data axis (0 z, 1 y, 2 x) the panel named by ``layout`` looks along.
+
+   ``layout`` is neuroglancer's layout as a string ("xy", "xz-3d"...), a
+   dict with a "type", or the state's layout object. ``display_dimensions``
+   are the names of the viewer's display dimensions in order (z, y, x when
+   None, as a viewer that sets none over z, y, x shows them); see
+   ``_LAYOUT_DEPTH_SLOT`` for why they matter. Only a single-plane layout says which plane the
+   user is looking at: neuroglancer keeps one layout for the whole viewer,
+   so in "4panel" or "3d" the panel a click landed in is not known. Those
+   (and anything unrecognised) get the "xy" panel's axis, the panel
+   neuroglancer puts first. A rotated cross-section is not followed.
+
+
+.. py:function:: display_dimensions_for_view(viewer_state) -> tuple
+
+   The display dimensions of a neuroglancer ``ViewerState``, as
+   ``display_names`` gives them.
+
+
+.. py:function:: depth_axis_for_view(viewer_state) -> int
+
+   ``depth_axis_from_layout`` for a neuroglancer ``ViewerState``, over
+   its display dimensions as they are: a panel looking along one that is
+   not z, y or x (time) gets z.
+
+
+.. py:function:: plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int, data_box_nm=None, display_dimensions=None) -> cellmap_flow.portable.ai_annotate.PlanePlan
+
+   ``portable.ai_annotate.plan_plane`` (its docstring says what the plane
+   is), its refusal raised as the ``AIAnnotateError`` ("refused", 400) the
+   routes answer: a point outside the volume or the data, which the user
+   fixes by moving the view.
+
+
+.. py:function:: raw_box(plan: cellmap_flow.portable.ai_annotate.PlanePlan, voxel_size, corner) -> tuple
+
+   The raw voxels to read for ``plan``, ``(begin, end)`` on a raw grid of
+   ``voxel_size`` from ``corner`` (its voxel 0's lower corner):
+   ``portable.ai_annotate.raw_box``'s box.
+
+

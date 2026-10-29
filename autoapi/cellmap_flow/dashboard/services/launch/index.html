@@ -1,0 +1,478 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.services.launch &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.services.startup" href="../startup/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.services" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.services</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.services.launch</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/dashboard/services/launch/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.services.launch">
+<span id="cellmap-flow-dashboard-services-launch"></span><h1>cellmap_flow.dashboard.services.launch<a class="headerlink" href="#module-cellmap_flow.dashboard.services.launch" title="Link to this heading"></a></h1>
+<p>Start the models picked on the Models tab, and show each in the viewer.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">update_run_models()</span></code>: stop and forget the models no longer picked,
+start the ones newly picked, each in its own thread. A finetune job’s
+server is the Finetune tab’s to stop, never this one’s. A chain with no
+input normalizers takes the ones the first model started declares.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_model()</span></code>: start one model’s inference server
+(<code class="docutils literal notranslate"><span class="pre">serving.launch.launch</span></code>, which records the job) and add its layer, the
+one Submit would give it. Every model the tab picks goes through it, as a
+model config built from the entry its row describes
+(<code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code>): a catalog, Hugging Face, BioImage Model Zoo or
+Cellpose model, one Add a model resolved (<code class="docutils literal notranslate"><span class="pre">routes/model_resolve</span></code>), or one
+ticked again by name. Each is served from its environment: its entry’s,
+else its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code> (a zoo model from pixi’s <code class="docutils literal notranslate"><span class="pre">bioimageio</span></code>
+environment, a Cellpose one from <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">loaded_models()</span></code> / <code class="docutils literal notranslate"><span class="pre">remove_model()</span></code>: the Models tab’s <em>Loaded
+models</em> list, every model running or starting with where it came from,
+and its ✕: stop that one model and take its layer away, whatever else is
+ticked on the tab and not submitted.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">launching()</span></code> / <code class="docutils literal notranslate"><span class="pre">start_error()</span></code>: whether a model’s start is still
+going, and why its last one failed, which the Finetune tab’s Use this
+model waits on (routes/finetune/rank_routes.py _served_geometry), and the
+model advice says while any is (routes/model_advice.py).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">served_at_run_voxel_size()</span></code>: the models running or starting at a voxel
+size not their own (<code class="docutils literal notranslate"><span class="pre">ModelConfig.run_voxel_size</span></code>), whose Run at (nm)
+fields the Models tab fills in.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">watch_layer_deletes()</span></code>: a model whose layer the person deletes in the
+viewer is stopped, as its ✕ stops it.</p></li>
+</ul>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.logger" title="cellmap_flow.dashboard.services.launch.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS" title="cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLPOSE_MODELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.SOURCES" title="cellmap_flow.dashboard.services.launch.SOURCES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SOURCES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.NotRemovable" title="cellmap_flow.dashboard.services.launch.NotRemovable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NotRemovable</span></code></a></p></td>
+<td><p>A model ✕ could not remove: a finetune job's, whose job could not be cancelled.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.run_model" title="cellmap_flow.dashboard.services.launch.run_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_model</span></code></a>(config, st_data[, queue])</p></td>
+<td><p>Start <code class="docutils literal notranslate"><span class="pre">config</span></code>'s inference server, in its environment, and add its</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.bioimage_job_name" title="cellmap_flow.dashboard.services.launch.bioimage_job_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage_job_name</span></code></a>(→ str)</p></td>
+<td><p>A zoo model's job, layer and config name, from the key it is loaded</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.bioimage_model_entry" title="cellmap_flow.dashboard.services.launch.bioimage_model_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage_model_entry</span></code></a>(model[, voxel_size, online])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(entry,</span> <span class="pre">choice,</span> <span class="pre">refusal)</span></code>: the model entry the Models tab's Submit</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.cellpose_job_name" title="cellmap_flow.dashboard.services.launch.cellpose_job_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellpose_job_name</span></code></a>(→ str)</p></td>
+<td><p>A Cellpose model's job, layer and config name: &quot;cpsam_v2&quot; serving all</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.is_panel_cellpose" title="cellmap_flow.dashboard.services.launch.is_panel_cellpose"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_panel_cellpose</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">mc</span></code> is one of the Cellpose panel's own rows: a model it</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.running_names" title="cellmap_flow.dashboard.services.launch.running_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">running_names</span></code></a>(→ set)</p></td>
+<td><p>The models running, or on their way: the session's jobs and the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.launching" title="cellmap_flow.dashboard.services.launch.launching"><code class="xref py py-obj docutils literal notranslate"><span class="pre">launching</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">name</span></code>'s start is still going: its launch thread waits for</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.start_error" title="cellmap_flow.dashboard.services.launch.start_error"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_error</span></code></a>(name)</p></td>
+<td><p>Why <code class="docutils literal notranslate"><span class="pre">name</span></code>'s last start failed, or None: it has not failed, or was</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.configs_by_name" title="cellmap_flow.dashboard.services.launch.configs_by_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">configs_by_name</span></code></a>(→ dict)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.drop_config" title="cellmap_flow.dashboard.services.launch.drop_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drop_config</span></code></a>(name)</p></td>
+<td><p>Take the model config named <code class="docutils literal notranslate"><span class="pre">name</span></code> out of the session's models;</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="cellmap_flow.dashboard.services.launch.update_run_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_run_models</span></code></a>(names[, hf_repos, bioimage_models, ...])</p></td>
+<td><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models, and models ticked by name), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code>,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.served_at_run_voxel_size" title="cellmap_flow.dashboard.services.launch.served_at_run_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">served_at_run_voxel_size</span></code></a>(→ list)</p></td>
+<td><p>The configs of the models running or starting at a voxel size not</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.loaded_models" title="cellmap_flow.dashboard.services.launch.loaded_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loaded_models</span></code></a>(→ list)</p></td>
+<td><p>The models running and starting, for the Models tab's Loaded models</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.remove_model" title="cellmap_flow.dashboard.services.launch.remove_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_model</span></code></a>(→ list)</p></td>
+<td><p>Stop the one model <code class="docutils literal notranslate"><span class="pre">name</span></code> and take its layer away; every other</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.watch_layer_deletes" title="cellmap_flow.dashboard.services.launch.watch_layer_deletes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">watch_layer_deletes</span></code></a>(viewer)</p></td>
+<td><p>Have a layer the person deletes in <code class="docutils literal notranslate"><span class="pre">viewer</span></code> (the trash button of a</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.run_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">run_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">st_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.run_model" title="Link to this definition"></a></dt>
+<dd><p>Start <code class="docutils literal notranslate"><span class="pre">config</span></code>’s inference server, in its environment, and add its
+layer with <code class="docutils literal notranslate"><span class="pre">st_data</span></code>, the session’s layer blob. The one launcher behind
+Submit, Add a model and the Training tab’s Use this model, which gives
+the Training tab’s GPU queues as <code class="docutils literal notranslate"><span class="pre">queue</span></code> (the Models tab’s otherwise).</p>
+<p>A chain with no postprocessing takes what the model’s output needs (a
+sigmoid for logits) once its server’s probe says what that is
+(routes.pipeline.set_needed_postprocess); the redraw that sets it draws
+this model’s layer too.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.bioimage_job_name">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">bioimage_job_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.bioimage_job_name" title="Link to this definition"></a></dt>
+<dd><p>A zoo model’s job, layer and config name, from the key it is loaded
+by: “affable-shark” is affable_shark. A DOI’s slash and dots go too.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.bioimage_model_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">bioimage_model_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">online</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.bioimage_model_entry" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(entry,</span> <span class="pre">choice,</span> <span class="pre">refusal)</span></code>: the model entry the Models tab’s Submit
+starts for a zoo model at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (what its row says; None when
+blank), how its voxel size was decided, and why its server would refuse
+it, or None.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model</span></code> is its row of the cached list, or the id a row was ticked by,
+which is looked up in it: the listed id may be a DOI, and the model is
+loaded by its nickname when the list has one, and named
+<code class="docutils literal notranslate"><span class="pre">bioimage_job_name</span></code> of that. Its voxel size is decided as its server
+decides it (<code class="docutils literal notranslate"><span class="pre">bioimage_catalog.entry_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">choice</span></code>); a model
+that declares none, and that cellmap-flow does not know the training
+voxel size of, would be refused by its server after its job started,
+where nothing on the page shows it, so <code class="docutils literal notranslate"><span class="pre">refusal</span></code> says so in a sentence
+(unless it is running already), and the caller refuses it. <code class="docutils literal notranslate"><span class="pre">online</span></code>
+False decides from the cached list alone, as the Finetune tab’s ranking
+lists every zoo model (routes/finetune/rank_routes.py) without a fetch
+for each.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">CELLPOSE_MODELS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.cellpose_job_name">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">cellpose_job_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_3d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.cellpose_job_name" title="Link to this definition"></a></dt>
+<dd><p>A Cellpose model’s job, layer and config name: “cpsam_v2” serving all
+its channels (flows, the default) is cellpose_sam_v2, its probability
+alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks;
+in 3D each ends in _3d.</p>
+<p>The output and 3D are in the name, so one model’s outputs can run side
+by side (the probability to look at, the masks to proofread; 2D beside
+3D to compare), each its own job and layer; the default output keeps
+the plain name. The voxel size and the slice linking are not: changing
+them restarts that job instead (<code class="docutils literal notranslate"><span class="pre">update_run_models</span></code>), rather than
+leaving the old one running beside.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.is_panel_cellpose">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">is_panel_cellpose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mc</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.is_panel_cellpose" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">mc</span></code> is one of the Cellpose panel’s own rows: a model it
+lists, named as the row names its job, so its Submit names it alike.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.running_names">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">running_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.running_names" title="Link to this definition"></a></dt>
+<dd><p>The models running, or on their way: the session’s jobs and the
+launches not finished yet.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.launching">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">launching</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.launching" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">name</span></code>’s start is still going: its launch thread waits for
+its job’s host (jobs/launch.py start_hosts: the job pending on a GPU
+queue, falling back to the next, or its server loading the model). With
+no <code class="docutils literal notranslate"><span class="pre">name</span></code>, whether any model’s is.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.start_error">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">start_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.start_error" title="Link to this definition"></a></dt>
+<dd><p>Why <code class="docutils literal notranslate"><span class="pre">name</span></code>’s last start failed, or None: it has not failed, or was
+started again since.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.configs_by_name">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">configs_by_name</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.configs_by_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.drop_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">drop_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.drop_config" title="Link to this definition"></a></dt>
+<dd><p>Take the model config named <code class="docutils literal notranslate"><span class="pre">name</span></code> out of the session’s models;
+nothing when none is. Export Config and the pipeline builder list what
+is left.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.update_run_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">update_run_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hf_repos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bioimage_models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellpose_models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_voxel_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="Link to this definition"></a></dt>
+<dd><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models, and models ticked by name), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code>,
+<code class="docutils literal notranslate"><span class="pre">bioimage_models</span></code> ({“id”, “voxel_size”} each) and <code class="docutils literal notranslate"><span class="pre">cellpose_models</span></code>
+({“model”, “voxel_size”, “output”, “do_3d”, “stitch_threshold”} each),
+and stop every other model. <code class="docutils literal notranslate"><span class="pre">run_voxel_sizes</span></code> ({name or repo: [z, y,
+x]}) is what voxel size a catalog, Hugging Face or by-name model is run
+at, when not its own (<code class="docutils literal notranslate"><span class="pre">_picked</span></code>). A ValueError, before anything
+changes, when an entry cannot be built: a zoo model needs a voxel size, a
+Cellpose model’s settings are missing or wrong, a catalog folder is not
+there, a model that reads its input itself is given a run voxel size.</p>
+<p>When the chain has no input normalizers, the first model started that
+declares some (an onnx model’s manifest) sets them, as part of its start
+(routes.pipeline.set_declared_input_norm); any other chain is left as it
+is, and only the page’s Apply changes it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.served_at_run_voxel_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">served_at_run_voxel_size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.served_at_run_voxel_size" title="Link to this definition"></a></dt>
+<dd><p>The configs of the models running or starting at a voxel size not
+their own (<code class="docutils literal notranslate"><span class="pre">ModelConfig.run_voxel_size</span></code>): the Models tab fills in their
+rows’ Run at (nm) with it, the catalog’s from the page
+(routes/index_page) and Hugging Face’s from its listing
+(routes/models).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.SOURCES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">SOURCES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('catalog',</span> <span class="pre">'huggingface',</span> <span class="pre">'bioimage',</span> <span class="pre">'cellpose',</span> <span class="pre">'added',</span> <span class="pre">'finetuned')</span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.SOURCES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.loaded_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">loaded_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.loaded_models" title="Link to this definition"></a></dt>
+<dd><p>The models running and starting, for the Models tab’s Loaded models
+list: the session’s jobs in order, then the launches not returned yet.</p>
+<p>Each is <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;,</span> <span class="pre">&quot;source&quot;</span></code> (one of SOURCES), <code class="docutils literal notranslate"><span class="pre">&quot;detail&quot;</span></code> (the
+catalog group, the repo, the zoo id, the Cellpose model and output, the
+model type, or the base a finetune started from), <code class="docutils literal notranslate"><span class="pre">&quot;status&quot;</span></code>
+(“running”, “starting”, or “ended” for a finetune job’s model whose job
+has), <code class="docutils literal notranslate"><span class="pre">&quot;removable&quot;</span></code> (true: every model’s ✕ works), <code class="docutils literal notranslate"><span class="pre">&quot;note&quot;</span></code> (what ✕
+does, for a finetune job’s), <code class="docutils literal notranslate"><span class="pre">&quot;confirm&quot;</span></code> (what ✕ asks first, when it
+does more than stop the model: a finetune job’s, which it cancels; else
+None), and what the tab’s rows know it by, to untick them: <code class="docutils literal notranslate"><span class="pre">&quot;hf_id&quot;</span></code>
+(the Hugging Face row’s repo), <code class="docutils literal notranslate"><span class="pre">&quot;zoo_id&quot;</span></code> (the zoo row’s id) and
+<code class="docutils literal notranslate"><span class="pre">&quot;cellpose&quot;</span></code> ({model, output, do_3d} of its Cellpose panel row)``}``.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.NotRemovable">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">NotRemovable</span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.NotRemovable" title="Link to this definition"></a></dt>
+<dd><p>A model ✕ could not remove: a finetune job’s, whose job could not be cancelled.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.remove_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">remove_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">cancel_finetune</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.remove_model" title="Link to this definition"></a></dt>
+<dd><p>Stop the one model <code class="docutils literal notranslate"><span class="pre">name</span></code> and take its layer away; every other
+model, and anything ticked on the Models tab and not submitted, stays as
+it is. Returns the Loaded models list as it is then.</p>
+<p>A running model’s job is killed and forgotten, as Submit does for one
+unticked. A model still starting is withdrawn: a job of it waiting in a
+queue is killed now, and whatever its launch still starts is stopped
+as it comes up (<code class="docutils literal notranslate"><span class="pre">_start</span></code>), so a Submit may start it again at once. A
+finetune job’s model is that job’s server: while the job is alive, ✕
+(once the page has asked, see _finetune_note) cancels it as the
+Finetune tab’s Cancel does, and NotRemovable if it cannot; once the job
+has ended, its server has too, and only its layer and its entry among
+the jobs are left to take away. With <code class="docutils literal notranslate"><span class="pre">cancel_finetune</span></code> False a live
+job is left running and its model only forgotten here: for a layer
+deleted in the viewer, which cannot ask first (<code class="docutils literal notranslate"><span class="pre">_layers_deleted</span></code>).
+The model’s config goes with it, so Export Config no longer lists a
+model taken off (a model unticked on Submit keeps its config, for the
+Models tab’s rows and the pipeline builder).</p>
+<p>Raises LookupError when no model of that name is running or starting.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.watch_layer_deletes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">watch_layer_deletes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.watch_layer_deletes" title="Link to this definition"></a></dt>
+<dd><p>Have a layer the person deletes in <code class="docutils literal notranslate"><span class="pre">viewer</span></code> (the trash button of a
+layer in neuroglancer’s top bar, or Delete layer in its panel) mean what
+it shows (<code class="docutils literal notranslate"><span class="pre">_layers_deleted</span></code>). Called for each viewer the dashboard
+makes: /api/set-data’s and the CLIs’.</p>
+<p>Neuroglancer calls a state’s changed callbacks from the thread that
+changed it, holding the state’s lock, so this one only compares the
+layers with the state’s before and hands any deleted to a thread of its
+own (stopping a model bkills its job). A change the browser made is one
+whose generation neuroglancer names <code class="docutils literal notranslate"><span class="pre">&lt;client</span> <span class="pre">id&gt;/&lt;generation&gt;</span></code>
+(server.SetStateHandler), where this process’s own are bare tokens: a
+layer the dashboard takes away itself (a ✕, a Submit, a finetune’s next
+iteration in place of its last) is not the person’s.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.services" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../startup/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.services.startup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

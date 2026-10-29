@@ -1,0 +1,243 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.io.metadata &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.io.multiscale" href="../multiscale/index.html" />
+    <link rel="prev" title="cellmap_flow.io" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.io</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.io.metadata</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/io/metadata/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.io.metadata">
+<span id="cellmap-flow-io-metadata"></span><h1>cellmap_flow.io.metadata<a class="headerlink" href="#module-cellmap_flow.io.metadata" title="Link to this heading"></a></h1>
+<p>Opening a path as cellmap-flow reads it, and nanometers per unit.</p>
+<p>Array metadata is worldarray’s: <code class="docutils literal notranslate"><span class="pre">wa.open(path).meta</span></code> or <code class="docutils literal notranslate"><span class="pre">wa.metadata(path)</span></code>
+give an <code class="docutils literal notranslate"><span class="pre">ArrayMeta</span></code> (every axis in the array’s order, the store’s units,
+<code class="docutils literal notranslate"><span class="pre">translation</span></code> the <em>centre</em> of voxel 0 and <code class="docutils literal notranslate"><span class="pre">.corner</span></code> its lower corner),
+<code class="docutils literal notranslate"><span class="pre">wa.open_pyramid(path)</span></code> a group’s levels, and <code class="docutils literal notranslate"><span class="pre">.in_nm()</span></code> the spatial axes
+in nanometers. This module keeps the two things cellmap-flow adds on top:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">open_level</span></code>: the one way every reader opens a path, so that a group is
+read at its first level when no voxel size asks for another;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nm_per_unit</span></code> and <code class="docutils literal notranslate"><span class="pre">_NM_PER_UNIT</span></code>: worldarray’s unit table as nanometers
+per unit, forgiving of a missing or unknown unit, which the browser shares
+(<code class="docutils literal notranslate"><span class="pre">web/build/export_data.py</span></code>).</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">snap_integral</span></code> takes the float noise out of unit conversions.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.logger" title="cellmap_flow.io.metadata.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.NANOMETER" title="cellmap_flow.io.metadata.NANOMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NANOMETER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.nm_per_unit" title="cellmap_flow.io.metadata.nm_per_unit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nm_per_unit</span></code></a>(→ float)</p></td>
+<td><p>How many nanometers one <code class="docutils literal notranslate"><span class="pre">unit</span></code> is; 1 for a missing, &quot;pixel&quot; or unknown</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.snap_integral" title="cellmap_flow.io.metadata.snap_integral"><code class="xref py py-obj docutils literal notranslate"><span class="pre">snap_integral</span></code></a>(values)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.open_level" title="cellmap_flow.io.metadata.open_level"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_level</span></code></a>(→ worldarray.WorldArray)</p></td>
+<td><p>The worldarray array <code class="docutils literal notranslate"><span class="pre">path</span></code> names, as cellmap-flow reads a path: an</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.NANOMETER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">NANOMETER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nanometer'</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.NANOMETER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.nm_per_unit">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">nm_per_unit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">unit</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.nm_per_unit" title="Link to this definition"></a></dt>
+<dd><p>How many nanometers one <code class="docutils literal notranslate"><span class="pre">unit</span></code> is; 1 for a missing, “pixel” or unknown
+unit, with a warning for an unknown one.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.snap_integral">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">snap_integral</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.snap_integral" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.open_level">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">open_level</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">worldarray.WorldArray</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.open_level" title="Link to this definition"></a></dt>
+<dd><p>The worldarray array <code class="docutils literal notranslate"><span class="pre">path</span></code> names, as cellmap-flow reads a path: an
+array, or one scale of a precomputed volume, as it is whatever is asked
+for; a group or precomputed volume at its level for <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>
+(worldarray chooses it from the group’s document), its first without one.
+<code class="docutils literal notranslate"><span class="pre">kwargs</span></code> are <code class="docutils literal notranslate"><span class="pre">wa.open</span></code>’s (<code class="docutils literal notranslate"><span class="pre">on_mismatch</span></code>, <code class="docutils literal notranslate"><span class="pre">padding</span></code>, <code class="docutils literal notranslate"><span class="pre">units</span></code>,
+<code class="docutils literal notranslate"><span class="pre">context</span></code>, …); units it cannot convert are left as they are rather
+than refused.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.io" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../multiscale/index.html" class="btn btn-neutral float-right" title="cellmap_flow.io.multiscale" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

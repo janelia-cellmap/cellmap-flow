@@ -1,0 +1,108 @@
+cellmap_flow.portable.volume_calls
+==================================
+
+.. py:module:: cellmap_flow.portable.volume_calls
+
+.. autoapi-nested-parse::
+
+   What the browser calls to plan an annotation volume and its good regions,
+   and to tell whether a model trains on the session's volume as it is: the
+   functions ``web/src/finetune/volume.ts``, ``web/src/finetune/good-regions.ts``,
+   ``web/src/finetune/run.ts`` and ``web/src/backend/routes/finetune.ts``'s
+   submit run through chunkmirage's
+   ``Engine.call("cellmap_flow.portable.volume_calls:<name>", args, arrays)``
+   (``calls.py`` says the shape). Each takes plain numbers in its JSON and
+   answers JSON; the rules are ``volume.py``'s and ``regions.py``'s, which the
+   server calls in its process. A refusal (a ValueError of those rules) is
+   answered as ``{"error": <its sentence>}``, so the page shows the sentence the
+   server's route would, not a Python traceback.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.volume_calls.plan_volume
+   cellmap_flow.portable.volume_calls.plan_paint_volume
+   cellmap_flow.portable.volume_calls.shown_level
+   cellmap_flow.portable.volume_calls.training_refusal
+   cellmap_flow.portable.volume_calls.carry_note
+   cellmap_flow.portable.volume_calls.mark_region
+   cellmap_flow.portable.volume_calls.region_boxes
+   cellmap_flow.portable.volume_calls.anchor_boxes
+
+
+Module Contents
+---------------
+
+.. py:function:: plan_volume(args, arrays)
+
+   ``volume.plan_volume`` of ``level`` (``shape``, ``voxel``, ``corner``:
+   the raw level the model reads) and ``model`` (its voxel sizes and its
+   blocks, as ``block_shapes`` takes them), with ``dtype``, the labels'
+   (``volume.annotation_dtype`` of ``output_type``, what the model trains on).
+
+
+.. py:function:: plan_paint_volume(args, arrays)
+
+   ``volume.plan_paint_volume`` of ``level`` (``shape``, ``voxel``,
+   ``corner``: the raw level read at the voxel size) and ``voxel_size``
+   (nm, z, y, x), a volume painted before any model, with ``dtype`` uint8:
+   its labels are background and objects, which a model's volume they are
+   carried to holds in its own dtype.
+
+
+.. py:function:: shown_level(args, arrays)
+
+   ``{"index": volume.shown_level(voxel_sizes, pixel_nm)}``: which of
+   the raw's levels (``voxel_sizes``, nm, finest first) the viewer shows at
+   a screen pixel of ``pixel_nm`` (null: not known, the finest), the
+   default voxel size of a volume painted before any model.
+
+
+.. py:function:: training_refusal(args, arrays)
+
+   ``{"error": <the sentence>}`` when ``volume`` (its record) is not
+   trained on (``volume.training_refusal``: a paint-first volume), else
+   ``{}``.
+
+
+.. py:function:: carry_note(args, arrays)
+
+   Training's submit with a model whose grid is not the session
+   volume's: ``{"note": volume.carried_note(...)}`` when ``to`` (the volume
+   planned for the model to train) is on another grid than ``from`` (the
+   session's volume, its paint's), each a volume as the browser keeps it,
+   and ``kept`` where the old one is kept; ``{}`` when they are on one
+   grid (``volume.same_grid``), and the model trains on the volume as it is.
+
+
+.. py:function:: mark_region(args, arrays)
+
+   The region a mark makes (``regions.new_region``): a box of the size
+   ``size_nm`` asks for (``regions.region_size_nm``, the volume's output
+   block by default: ``volume`` has its ``chunk_size`` and
+   ``output_voxel_size``, or is null) centred on ``centre_nm``, labelled
+   ``label`` or after the ``regions`` already stored. Answers the region,
+   and ``boxes``, the layer's boxes of the stored regions and it
+   (``region_boxes``).
+
+
+.. py:function:: region_boxes(args, arrays)
+
+   The good_regions layer's boxes of ``regions``: per entry its
+   ``offset_nm``, ``shape_nm`` and ``label``, or null for one that is not a
+   region (``regions.region_box_nm``), so the layer's ids stay the entries'
+   indices.
+
+
+.. py:function:: anchor_boxes(args, arrays)
+
+   ``regions.anchor_boxes`` of ``regions`` on the grid of ``volume``
+   (its ``dataset_offset_nm``, ``output_voxel_size``, ``dataset_shape_voxels``
+   and ``chunk_size``, the model's output block): the boxes, and the
+   entries skipped, each by its index in ``regions``.
+
+

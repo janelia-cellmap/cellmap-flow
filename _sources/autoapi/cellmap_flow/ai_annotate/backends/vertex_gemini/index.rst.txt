@@ -1,0 +1,106 @@
+cellmap_flow.ai_annotate.backends.vertex_gemini
+===============================================
+
+.. py:module:: cellmap_flow.ai_annotate.backends.vertex_gemini
+
+.. autoapi-nested-parse::
+
+   Gemini image models on Google Cloud Vertex AI, asked to paint the structure.
+
+   The plane is sent as a PNG at its own size (padded to a square when it is
+   not one, see ``_square``) with the recolor prompt; the
+   model answers with an image in which the structure is painted the prompt's
+   colour on black, and the mask is the pixels of that colour. The plane is
+   not upsampled first: gemini-3-pro-image charges the same ~560 tokens for an
+   image whatever its size, so more pixels buy nothing, and the resolution the
+   prompt states must be the one sent.
+
+   Authentication is Application Default Credentials (``gcloud auth
+   application-default login``, or a service account on a cloud host), found
+   by the SDK, or the credentials file the config names (``credentials_file``,
+   read by ``secrets.load_google_credentials``), so this backend holds no key. The google-genai SDK is
+   imported only when the first call is made, so the dashboard runs without it
+   when the feature is off.
+
+   Every call has a timeout. Only "try again later" answers (429, 503) are
+   retried, at most ``MAX_ATTEMPTS`` times in all with bounded waits; anything
+   else fails at once. Failures become ``AIAnnotateError`` with a message
+   written here: the SDK's text goes to the server log, not the browser.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.vertex_gemini.logger
+   cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_ATTEMPTS
+   cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_WAITS_S
+   cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_CODES
+   cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_STATUSES
+   cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_REPLY_CHARS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: MAX_ATTEMPTS
+   :value: 3
+
+
+.. py:data:: RETRY_WAITS_S
+   :value: (10.0, 30.0)
+
+
+.. py:data:: RETRY_CODES
+   :value: (429, 503)
+
+
+.. py:data:: RETRY_STATUSES
+   :value: ('UNAVAILABLE', 'RESOURCE_EXHAUSTED')
+
+
+.. py:data:: MAX_REPLY_CHARS
+   :value: 200
+
+
+.. py:class:: VertexGeminiBackend(project, location, timeout_s, sleep=time.sleep, client_factory=None, credentials_file=None)
+
+   Recolor-and-threshold segmentation through Vertex AI.
+
+   ``project`` may be None, in which case the SDK takes it from
+   ``GOOGLE_CLOUD_PROJECT`` or the credentials. ``credentials_file`` may be
+   None, in which case the SDK finds Application Default Credentials
+   itself. ``sleep`` is how retries
+   wait and ``client_factory`` (no arguments, returns an object with
+   ``.models.generate_content``) replaces the SDK client; both are for tests.
+
+
+   .. py:attribute:: project
+
+
+   .. py:attribute:: credentials_file
+      :value: None
+
+
+
+   .. py:attribute:: location
+
+
+   .. py:attribute:: timeout_s
+
+
+   .. py:method:: segment(request: cellmap_flow.ai_annotate.backends.base.SegmentRequest, model: str) -> cellmap_flow.ai_annotate.backends.base.SegmentResult
+
+

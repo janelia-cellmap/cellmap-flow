@@ -1,0 +1,219 @@
+cellmap_flow.dashboard.routes.finetune.view_labels
+==================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.view_labels
+
+.. autoapi-nested-parse::
+
+   Labelling the box on screen in one click: from the model's prediction, or all background.
+
+   Two buttons beside "Mark This View as Good", over the same box (one model
+   output patch centred where the viewer looks, ``good_regions.view_box_nm``,
+   or ``box_voxels`` annotation voxels when the request gives them; with
+   ``field_of_view``, what the viewer's panel shows, ``_field_of_view_nm``):
+
+   - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
+     segmented into objects, each written with an id of its own (2 and up),
+     and background 1. The user then cleans it up with the brush; it is far
+     quicker than painting a whole object from nothing. How it is segmented
+     is the request's ``method``, one of the ``post.segment`` segmenters that
+     fits what the model outputs (``SEED_METHODS``); ``seed_sources`` says
+     which fit each running model.
+   - POST ``/api/finetune/view-labels/background``: every unannotated voxel 1,
+     for a region the model fills with false positives.
+
+   A seed's maths (its options, the channels it reads, where the prediction
+   lies on the paint's grid, the probability and the components method) is
+   ``cellmap_flow/portable/label_it.py``'s, which the browser runs too; this
+   module reads the model's server and writes the paint around it.
+
+   Both fill only unannotated voxels (``session.fill``): a voxel the user
+   painted is a decision, a seed is a guess. The write goes to MinIO, which
+   neuroglancer reads, and the changed chunks are pulled to disk at once.
+   Neuroglancer keeps the chunks it has already read, so the page reloads the
+   viewer afterwards to show the new labels.
+
+   A box over LARGE_BOX_VOXELS voxels is only labelled when the request says
+   ``confirm: true``; without it the answer is a 409 with
+   ``needs_confirmation``, for the page to ask first.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.view_labels.logger
+   cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS
+   cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS
+   cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS
+   cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH
+   cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.view_labels.model_output
+   cellmap_flow.dashboard.routes.finetune.view_labels.methods_for
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources
+   cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background
+   cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects
+   cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: LARGE_BOX_VOXELS
+   :value: 2097152
+
+
+.. py:data:: PREDICTION_TIMEOUT_SECONDS
+   :value: 120
+
+
+.. py:data:: METADATA_TIMEOUT_SECONDS
+   :value: 5
+
+
+.. py:data:: UNDO_DEPTH
+   :value: 10
+
+
+.. py:function:: model_output(model_name)
+
+   ``(output_type, offsets)``: what the model is trained on, as submit decides it.
+
+   ``autodetect_output_type``: "affinities" (with the offsets, a JSON
+   list) when the model's script or channel names say so, "distance" for
+   a distance model, a type's declared target ("flows" for Cellpose), else
+   "binary". A model with no config here, or affinities without offsets,
+   is "binary": a threshold is all a seed can do with it.
+
+
+.. py:function:: methods_for(output_type, serves_integers)
+
+   The seed methods that fit a model's output, the best fit first.
+
+   ``components`` fits every output (an instance label is foreground where
+   it is not 0), so it is always offered, last unless nothing else fits.
+
+
+.. py:data:: UNANSWERED_RETRY_SECONDS
+   :value: 60
+
+
+.. py:function:: seed_methods(model_name, host, base_model=None)
+
+   The methods a seed from ``model_name``'s server can use (``methods_for``).
+
+
+.. py:function:: seed_sources()
+
+   The models a seed can read, for the page's picker: ``models`` (every
+   running server, oldest first), ``default``, the one a seed reads when
+   none is chosen (None when that is a choice for the user), and
+   ``methods``, {model: the seed methods that fit its output, best first};
+   and ``box_voxels``, the volume's output patch (z, y, x), the box a label
+   action covers when it gives no other.
+
+
+.. py:function:: read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), input_norm=None)
+
+   The model's raw output over annotation voxels ``[lo, hi)``.
+
+   Read from its server as a layer is, with the dashboard's input
+   normalization (``input_norm``, step dicts, instead: the server runs the
+   chain each request names) and no postprocessing: the trainer's target is set on the
+   raw output, and that is where its decision boundary is. (``postprocess``
+   asks for one anyway: Cellpose's masks of a flows server's output, for a
+   seed of its instances.) Each annotation
+   voxel takes the served voxel its centre lies in (``label_it.placement``),
+   placed where neuroglancer draws the layer (``prediction_voxel_override``),
+   so the seed lies under the prediction the user sees.
+
+   The served level is read with worldarray, as any zarr is, and placed by
+   its OME metadata. A server that fails to answer raises RuntimeError.
+
+   Returns ``(prediction, lo, hi)``: a (channels, z, y, x) array, float32
+   or, when the server serves integer labels, as served (an id past 2^24
+   is not exact in float32); and the box, shrunk to what the server covers.
+
+
+.. py:function:: segment_prediction(method, prediction, output_class, channels, offsets, threshold=0.5, min_size=0, connectivity=1, per_slice=False)
+
+   The objects ``method`` makes of the prediction: 0 background, 1..n (``post.segment``).
+
+   ``threshold`` is a probability (``label_it.probability``) for every
+   method that thresholds: the foreground boundary for components and the
+   distance watershed, and the mutex watershed's bias, the affinity above
+   which two voxels join. ``connectivity`` and ``per_slice`` are the
+   connected components'; the watersheds take ``connectivity`` too.
+   ``instances`` splits an id's disconnected parts: a server numbers each
+   chunk's objects on its own (Cellpose's from 1), and the box can span
+   chunks. Components and the mutex watershed's input are
+   ``label_it``'s, as the browser's are; the mutex watershed itself, the
+   distance watershed and the instances are the server's.
+
+
+.. py:function:: seed_view_from_prediction()
+
+   Fill the unannotated voxels of the box on screen from the model's prediction.
+
+   JSON body, all optional: ``size_nm`` (as for mark-view) or
+   ``box_voxels``, ``field_of_view`` with ``viewer_px`` (the box is what
+   the viewer's panel shows, ``box_voxels`` its depth), ``confirm``
+   (label a large box), ``select_channel`` (the channel the session
+   trains, when it trains one: an index into the volume's model's
+   channels, so read only from that model or one of its finetunes),
+   ``model`` (a name from ``seed_sources``;
+   the latest finetune, else the base, when absent), ``method`` (one of
+   the model's ``seed_sources`` methods; "components" when absent),
+   ``threshold`` (probability, 0 to 1; the model's own boundary, 0.5, when
+   absent: see ``segment_prediction``), ``min_size`` (objects of fewer
+   voxels are background), ``connectivity`` (1 faces, the default; 2 and
+   edges; 3 all neighbours) and ``per_slice`` (components per z slice).
+
+
+.. py:function:: label_view_background()
+
+   Label every unannotated voxel of the box on screen background (1).
+
+   JSON body, all optional: the box (``size_nm``, ``box_voxels``,
+   ``field_of_view``) and ``confirm``, as for seed.
+
+
+.. py:function:: split_view_objects()
+
+   Relabel the box on screen's foreground by connected component.
+
+   For a merge the model made: paint a background wall through the object,
+   in every slice it spans, and click; the two sides get ids of their own
+   (``fill.relabel_objects``). A stroke joining two objects merges them.
+   JSON body, all optional: the box (``size_nm``, ``box_voxels``,
+   ``field_of_view``) and ``confirm``, as for seed; ``connectivity`` and
+   ``per_slice``, as for a seed's components (with ``per_slice``, a wall
+   in one slice is enough, and each slice of an object gets an id of its
+   own). A field of view one slice deep is that slice alone, so a wall
+   there splits the object in it.
+
+
+.. py:function:: undo_view_labels()
+
+   Take back the last Seed, All Background or Split of the session's volume.
+
+   The box goes back to what it held before, on the voxels still as that
+   action left them: a stroke painted there since is kept. 409 when there
+   is nothing to undo.
+
+

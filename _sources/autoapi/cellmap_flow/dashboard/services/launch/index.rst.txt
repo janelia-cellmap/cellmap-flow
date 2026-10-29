@@ -1,0 +1,271 @@
+cellmap_flow.dashboard.services.launch
+======================================
+
+.. py:module:: cellmap_flow.dashboard.services.launch
+
+.. autoapi-nested-parse::
+
+   Start the models picked on the Models tab, and show each in the viewer.
+
+   - ``update_run_models()``: stop and forget the models no longer picked,
+     start the ones newly picked, each in its own thread. A finetune job's
+     server is the Finetune tab's to stop, never this one's. A chain with no
+     input normalizers takes the ones the first model started declares.
+   - ``run_model()``: start one model's inference server
+     (``serving.launch.launch``, which records the job) and add its layer, the
+     one Submit would give it. Every model the tab picks goes through it, as a
+     model config built from the entry its row describes
+     (``registry.build_model``): a catalog, Hugging Face, BioImage Model Zoo or
+     Cellpose model, one Add a model resolved (``routes/model_resolve``), or one
+     ticked again by name. Each is served from its environment: its entry's,
+     else its type's ``default_env`` (a zoo model from pixi's ``bioimageio``
+     environment, a Cellpose one from ``cellpose4``).
+   - ``loaded_models()`` / ``remove_model()``: the Models tab's *Loaded
+     models* list, every model running or starting with where it came from,
+     and its ✕: stop that one model and take its layer away, whatever else is
+     ticked on the tab and not submitted.
+   - ``launching()`` / ``start_error()``: whether a model's start is still
+     going, and why its last one failed, which the Finetune tab's Use this
+     model waits on (routes/finetune/rank_routes.py _served_geometry), and the
+     model advice says while any is (routes/model_advice.py).
+   - ``served_at_run_voxel_size()``: the models running or starting at a voxel
+     size not their own (``ModelConfig.run_voxel_size``), whose Run at (nm)
+     fields the Models tab fills in.
+   - ``watch_layer_deletes()``: a model whose layer the person deletes in the
+     viewer is stopped, as its ✕ stops it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.launch.logger
+   cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS
+   cellmap_flow.dashboard.services.launch.SOURCES
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.launch.NotRemovable
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.launch.run_model
+   cellmap_flow.dashboard.services.launch.bioimage_job_name
+   cellmap_flow.dashboard.services.launch.bioimage_model_entry
+   cellmap_flow.dashboard.services.launch.cellpose_job_name
+   cellmap_flow.dashboard.services.launch.is_panel_cellpose
+   cellmap_flow.dashboard.services.launch.running_names
+   cellmap_flow.dashboard.services.launch.launching
+   cellmap_flow.dashboard.services.launch.start_error
+   cellmap_flow.dashboard.services.launch.configs_by_name
+   cellmap_flow.dashboard.services.launch.drop_config
+   cellmap_flow.dashboard.services.launch.update_run_models
+   cellmap_flow.dashboard.services.launch.served_at_run_voxel_size
+   cellmap_flow.dashboard.services.launch.loaded_models
+   cellmap_flow.dashboard.services.launch.remove_model
+   cellmap_flow.dashboard.services.launch.watch_layer_deletes
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: run_model(config, st_data, queue=None)
+
+   Start ``config``'s inference server, in its environment, and add its
+   layer with ``st_data``, the session's layer blob. The one launcher behind
+   Submit, Add a model and the Training tab's Use this model, which gives
+   the Training tab's GPU queues as ``queue`` (the Models tab's otherwise).
+
+   A chain with no postprocessing takes what the model's output needs (a
+   sigmoid for logits) once its server's probe says what that is
+   (routes.pipeline.set_needed_postprocess); the redraw that sets it draws
+   this model's layer too.
+
+
+.. py:function:: bioimage_job_name(key: str) -> str
+
+   A zoo model's job, layer and config name, from the key it is loaded
+   by: "affable-shark" is affable_shark. A DOI's slash and dots go too.
+
+
+.. py:function:: bioimage_model_entry(model, voxel_size=None, *, online: bool = True)
+
+   ``(entry, choice, refusal)``: the model entry the Models tab's Submit
+   starts for a zoo model at ``voxel_size`` (what its row says; None when
+   blank), how its voxel size was decided, and why its server would refuse
+   it, or None.
+
+   ``model`` is its row of the cached list, or the id a row was ticked by,
+   which is looked up in it: the listed id may be a DOI, and the model is
+   loaded by its nickname when the list has one, and named
+   ``bioimage_job_name`` of that. Its voxel size is decided as its server
+   decides it (``bioimage_catalog.entry_voxel_size``, ``choice``); a model
+   that declares none, and that cellmap-flow does not know the training
+   voxel size of, would be refused by its server after its job started,
+   where nothing on the page shows it, so ``refusal`` says so in a sentence
+   (unless it is running already), and the caller refuses it. ``online``
+   False decides from the cached list alone, as the Finetune tab's ranking
+   lists every zoo model (routes/finetune/rank_routes.py) without a fetch
+   for each.
+
+
+.. py:data:: CELLPOSE_MODELS
+
+.. py:function:: cellpose_job_name(model: str, output: str, do_3d: bool = False) -> str
+
+   A Cellpose model's job, layer and config name: "cpsam_v2" serving all
+   its channels (flows, the default) is cellpose_sam_v2, its probability
+   alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks;
+   in 3D each ends in _3d.
+
+   The output and 3D are in the name, so one model's outputs can run side
+   by side (the probability to look at, the masks to proofread; 2D beside
+   3D to compare), each its own job and layer; the default output keeps
+   the plain name. The voxel size and the slice linking are not: changing
+   them restarts that job instead (``update_run_models``), rather than
+   leaving the old one running beside.
+
+
+.. py:function:: is_panel_cellpose(mc) -> bool
+
+   Whether ``mc`` is one of the Cellpose panel's own rows: a model it
+   lists, named as the row names its job, so its Submit names it alike.
+
+
+.. py:function:: running_names() -> set
+
+   The models running, or on their way: the session's jobs and the
+   launches not finished yet.
+
+
+.. py:function:: launching(name=None) -> bool
+
+   Whether ``name``'s start is still going: its launch thread waits for
+   its job's host (jobs/launch.py start_hosts: the job pending on a GPU
+   queue, falling back to the next, or its server loading the model). With
+   no ``name``, whether any model's is.
+
+
+.. py:function:: start_error(name)
+
+   Why ``name``'s last start failed, or None: it has not failed, or was
+   started again since.
+
+
+.. py:function:: configs_by_name() -> dict
+
+.. py:function:: drop_config(name)
+
+   Take the model config named ``name`` out of the session's models;
+   nothing when none is. Export Config and the pipeline builder list what
+   is left.
+
+
+.. py:function:: update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None, cellpose_models: List[dict] = None, run_voxel_sizes: dict = None)
+
+   Run ``names`` (catalog models, and models ticked by name), ``hf_repos``,
+   ``bioimage_models`` ({"id", "voxel_size"} each) and ``cellpose_models``
+   ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
+   and stop every other model. ``run_voxel_sizes`` ({name or repo: [z, y,
+   x]}) is what voxel size a catalog, Hugging Face or by-name model is run
+   at, when not its own (``_picked``). A ValueError, before anything
+   changes, when an entry cannot be built: a zoo model needs a voxel size, a
+   Cellpose model's settings are missing or wrong, a catalog folder is not
+   there, a model that reads its input itself is given a run voxel size.
+
+   When the chain has no input normalizers, the first model started that
+   declares some (an onnx model's manifest) sets them, as part of its start
+   (routes.pipeline.set_declared_input_norm); any other chain is left as it
+   is, and only the page's Apply changes it.
+
+
+.. py:function:: served_at_run_voxel_size() -> list
+
+   The configs of the models running or starting at a voxel size not
+   their own (``ModelConfig.run_voxel_size``): the Models tab fills in their
+   rows' Run at (nm) with it, the catalog's from the page
+   (routes/index_page) and Hugging Face's from its listing
+   (routes/models).
+
+
+.. py:data:: SOURCES
+   :value: ('catalog', 'huggingface', 'bioimage', 'cellpose', 'added', 'finetuned')
+
+
+.. py:function:: loaded_models() -> list
+
+   The models running and starting, for the Models tab's Loaded models
+   list: the session's jobs in order, then the launches not returned yet.
+
+   Each is ``{"name", "source"`` (one of SOURCES), ``"detail"`` (the
+   catalog group, the repo, the zoo id, the Cellpose model and output, the
+   model type, or the base a finetune started from), ``"status"``
+   ("running", "starting", or "ended" for a finetune job's model whose job
+   has), ``"removable"`` (true: every model's ✕ works), ``"note"`` (what ✕
+   does, for a finetune job's), ``"confirm"`` (what ✕ asks first, when it
+   does more than stop the model: a finetune job's, which it cancels; else
+   None), and what the tab's rows know it by, to untick them: ``"hf_id"``
+   (the Hugging Face row's repo), ``"zoo_id"`` (the zoo row's id) and
+   ``"cellpose"`` ({model, output, do_3d} of its Cellpose panel row)``}``.
+
+
+.. py:exception:: NotRemovable
+
+
+
+   A model ✕ could not remove: a finetune job's, whose job could not be cancelled.
+
+
+.. py:function:: remove_model(name: str, *, cancel_finetune=True) -> list
+
+   Stop the one model ``name`` and take its layer away; every other
+   model, and anything ticked on the Models tab and not submitted, stays as
+   it is. Returns the Loaded models list as it is then.
+
+   A running model's job is killed and forgotten, as Submit does for one
+   unticked. A model still starting is withdrawn: a job of it waiting in a
+   queue is killed now, and whatever its launch still starts is stopped
+   as it comes up (``_start``), so a Submit may start it again at once. A
+   finetune job's model is that job's server: while the job is alive, ✕
+   (once the page has asked, see _finetune_note) cancels it as the
+   Finetune tab's Cancel does, and NotRemovable if it cannot; once the job
+   has ended, its server has too, and only its layer and its entry among
+   the jobs are left to take away. With ``cancel_finetune`` False a live
+   job is left running and its model only forgotten here: for a layer
+   deleted in the viewer, which cannot ask first (``_layers_deleted``).
+   The model's config goes with it, so Export Config no longer lists a
+   model taken off (a model unticked on Submit keeps its config, for the
+   Models tab's rows and the pipeline builder).
+
+   Raises LookupError when no model of that name is running or starting.
+
+
+.. py:function:: watch_layer_deletes(viewer)
+
+   Have a layer the person deletes in ``viewer`` (the trash button of a
+   layer in neuroglancer's top bar, or Delete layer in its panel) mean what
+   it shows (``_layers_deleted``). Called for each viewer the dashboard
+   makes: /api/set-data's and the CLIs'.
+
+   Neuroglancer calls a state's changed callbacks from the thread that
+   changed it, holding the state's lock, so this one only compares the
+   layers with the state's before and hands any deleted to a thread of its
+   own (stopping a model bkills its job). A change the browser made is one
+   whose generation neuroglancer names ``<client id>/<generation>``
+   (server.SetStateHandler), where this process's own are bare tokens: a
+   layer the dashboard takes away itself (a ✕, a Submit, a finetune's next
+   iteration in place of its last) is not the person's.
+
+

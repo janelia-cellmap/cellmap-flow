@@ -1,0 +1,170 @@
+cellmap_flow.dashboard.routes.finetune.ai_annotate
+==================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.ai_annotate
+
+.. autoapi-nested-parse::
+
+   AI-assisted annotation: a hosted model's first guess at one plane, for the user to review.
+
+   The user hovers a point in the viewer and presses Shift+G (or clicks
+   "Annotate at view centre"). A background job reads one 2D plane of raw EM
+   around the point, in the plane the user is looking at (XY, XZ or YZ), asks
+   the configured model to paint the target structure in a colour, turns the
+   image it returns into a mask and stages it beside the session's corrections
+   (``ai_annotate.staging``). Nothing is written to the annotation volume until
+   the user accepts the preview.
+
+   - GET ``/api/finetune/ai-annotate/config``: whether the feature is on (and
+     if not, why and how to turn it on), the providers and models the server's
+     config allows with where each sends the data, the day's calls against
+     the limit, the organelle catalog with each one's editable prompt, and the
+     session's settings and acknowledgements.
+   - POST ``/api/finetune/ai-annotate/settings``: the provider, model, target
+     and prompt to use; ``acknowledge: true`` records that the user accepts
+     that the selected provider's destination receives this dataset's images.
+     Also binds Shift+G in the viewer.
+   - POST ``/api/finetune/ai-annotate/run``: start a job at a point (by default
+     the view centre, in the layout's plane).
+   - GET ``/api/finetune/ai-annotate/status``: the job's stage, or its preview
+     (input | model output | overlay) once it is ready.
+   - POST ``/api/finetune/ai-annotate/resend``: ask the model again about the
+     same staged plane, with an edited prompt.
+   - POST ``/api/finetune/ai-annotate/accept``: write the staged mask into the
+     annotation volume, over unannotated voxels only unless ``overwrite`` says
+     otherwise. The existing Undo (``/api/finetune/view-labels/undo``) takes
+     it back, as it takes back a seed.
+   - POST ``/api/finetune/ai-annotate/reject``: throw the staged mask away.
+
+   The feature is off unless the server's config file turns it on, and the
+   browser only ever picks a provider and a model that the file lists: it
+   never sends an endpoint or a credential. A run is refused until the session
+   has acknowledged the provider's destination for the dataset, and once the
+   day's call limit is reached. Error answers carry an ``AIAnnotateError``'s
+   short ``user_message``, never an SDK's own text, which may echo a request;
+   anything unexpected is "AI annotation failed; see the server log", with the
+   detail logged after redaction. Every request, staging, failure, resend and
+   decision is appended to the volume's audit log (``ai_annotate.audit``).
+
+   One job runs per dashboard session, and a staged result must be accepted or
+   rejected before the next run: two previews of overlapping planes would be
+   confusing to review and could be accepted out of order.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.logger
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ACTION
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.KEY
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.KEYBINDING
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.STATUS_KEY
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.GENERIC_FAILURE
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.NOT_SENT
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.STAGE_LABELS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_config
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_settings
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_run
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_status
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_resend
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_accept
+   cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_reject
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: ACTION
+   :value: 'ai-annotate'
+
+
+.. py:data:: KEY
+   :value: 'shift+keyg'
+
+
+.. py:data:: KEYBINDING
+   :value: 'Shift+G'
+
+
+.. py:data:: STATUS_KEY
+   :value: 'ai_annotate'
+
+
+.. py:data:: GENERIC_FAILURE
+   :value: 'AI annotation failed; see the server log.'
+
+
+.. py:data:: NOT_SENT
+   :value: ('auth', 'config')
+
+
+.. py:data:: STAGE_LABELS
+
+.. py:function:: ai_annotate_config()
+
+   What the page needs to show the AI-annotate panel; see the module docstring.
+
+
+.. py:function:: ai_annotate_settings()
+
+   Set the provider, model, target and prompt; optionally acknowledge the provider's destination.
+
+   JSON body: ``provider`` and ``model`` (ones the config allows),
+   ``label_key`` (an organelle catalog key) and/or ``label_name`` (what
+   to call the target, by default the catalog's name), ``prompt`` (the
+   editable prompt; null or the catalog's own text uses the catalog's) and
+   ``acknowledge``.
+
+
+.. py:function:: ai_annotate_run()
+
+   Start a job: at ``point_nm`` (z, y, x) in the plane normal to ``depth_axis``.
+
+   Both optional: the view centre, and the plane of the viewer's layout
+   (XY in a multi-panel layout, where which panel is meant is not known).
+
+
+.. py:function:: ai_annotate_status()
+
+   The session's job: its status and stage, its error, or (``?preview=1``) its preview once ready.
+
+   The preview is three PNGs of up to 1024 pixels a side, so it comes only
+   when asked for: the page asks once when a result becomes ready, not on
+   every poll while it waits for review. A result being written by Accept
+   is reported as ready, its last state the page can show.
+
+
+.. py:function:: ai_annotate_resend()
+
+   Ask the model again about the staged plane, with ``prompt`` (the editable text).
+
+   The plane is not read again: the same image goes with the new prompt,
+   and the preview is replaced under the same annotate_id.
+
+
+.. py:function:: ai_annotate_accept()
+
+   Write the staged mask into the annotation volume: each object an id of its own, the rest background.
+
+   JSON body: ``annotate_id`` and ``overwrite``. Without ``overwrite`` only
+   unannotated voxels are written, as a seed writes them; with it, the
+   staged labels replace what the plane held. Either way Undo takes it back.
+
+
+.. py:function:: ai_annotate_reject()
+
+   Throw the staged mask away. JSON body: ``annotate_id``.
+
+

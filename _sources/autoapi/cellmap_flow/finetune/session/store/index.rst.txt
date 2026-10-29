@@ -1,0 +1,132 @@
+cellmap_flow.finetune.session.store
+===================================
+
+.. py:module:: cellmap_flow.finetune.session.store
+
+.. autoapi-nested-parse::
+
+   Which session a base output path means, the volumes registered for
+   painting, and the session's current volume among them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.store.logger
+   cellmap_flow.finetune.session.store.SESSION_DIR_RE
+   cellmap_flow.finetune.session.store.SUPERSEDED_DIRNAME
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.store.SessionStore
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: SESSION_DIR_RE
+
+.. py:data:: SUPERSEDED_DIRNAME
+   :value: 'superseded'
+
+
+.. py:class:: SessionStore(sessions: dict, volumes: Optional[dict] = None)
+
+   Sessions and the volume registry, kept in the dicts it is given.
+
+   ``sessions`` maps a base output path to the session this process made
+   under it (the dashboard's ``get_session().output_sessions``); ``volumes``
+   maps a volume id -- its MinIO bucket key without ".zarr" -- to its
+   record (``get_session().annotation_volumes``). The store holds nothing else, so any number
+   of them over the same dicts agree. Both dicts live in memory only;
+   ``latest_on_disk`` is what finds a session again after a restart.
+
+
+   .. py:method:: get_or_create(base: str) -> str
+
+      The session this process uses under ``base``: the one it made
+      before, else a new ``<base>/<timestamp>`` (not created on disk).
+
+
+
+   .. py:method:: latest_on_disk(base: str) -> Optional[str]
+
+      The newest session under ``base`` that has something to train on.
+
+      That is the latest ``<base>/<YYYYmmdd_HHMMSS>/`` whose corrections/
+      holds a virtual-sources manifest. The in-memory map dies with the
+      dashboard, so after a restart get_or_create hands out a new, empty
+      session, and submitting training for the base path failed with
+      "Corrections path does not exist" although the session painted
+      before the restart was right there. None when there is none.
+
+
+
+   .. py:method:: register_volume(volume_id: str, *, keep_sync_state: bool = False, **data) -> dict
+
+      Record a volume being served for painting; returns its record.
+
+      The record starts with no chunk sync state, so the next sync compares
+      MinIO against nothing and pulls every chunk. ``keep_sync_state``
+      updates an existing record instead, keeping the state a pull just
+      recorded (an instance correction reattached after its pre-mirror pull).
+
+
+
+   .. py:method:: volumes() -> dict
+
+      The registry itself: volume id -> record.
+
+
+
+   .. py:method:: session_volume(corrections_dir: Optional[str] = None)
+
+      ``(volume_id, record)`` of the session's current volume, or ``(None, None)``.
+
+      That is the one the session's manifest trains on (trained_volume_name)
+      when it is registered, else the last one registered: for
+      ``corrections_dir``, or, when it is None, for the corrections dir of
+      the last volume registered for any. Every route asks this, so that
+      Rank, Use this model, Seed, a crop import, the good regions and
+      training all mean the volume training reads.
+
+      The manifest first, not the last registered alone: the registry can
+      hold several volumes of a session, in the order they were registered
+      (by New Volume, a resume, the periodic sync's listing of MinIO), and
+      only the manifest says which one training reads. By the registry
+      alone, Rank could score one volume while training read another and
+      Use this model carried from a third. The manifest is read on every
+      call (one small file), as a dashboard restart forgets the registry
+      but not it.
+
+
+
+   .. py:method:: retire_volume(volume_id: str) -> Optional[str]
+
+      Take a volume out of the session for good, keeping it on disk.
+
+      Its record leaves the registry, so nothing syncs it from MinIO or
+      ranks, seeds or trains it, and its zarr moves to
+      ``<corrections>/superseded/<id>.zarr`` (SUPERSEDED_DIRNAME), where
+      listing and resuming sessions and the annotated regions do not look.
+      Never deleted: it holds what was painted on it. Returns where it
+      went, or None when it could not be moved (logged): it is out of the
+      registry all the same, and the manifest names the volume that
+      replaced it, so the session's volume is that one either way.
+
+      Use this model retires the volume it carried the paint from, so that
+      the session has one volume: kept beside the new one, the old one
+      would be listed, resumed, drawn and synced with it, one paint in two
+      volumes of one session.
+
+
+

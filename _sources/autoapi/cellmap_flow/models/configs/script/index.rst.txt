@@ -1,0 +1,110 @@
+cellmap_flow.models.configs.script
+==================================
+
+.. py:module:: cellmap_flow.models.configs.script
+
+.. autoapi-nested-parse::
+
+   ``ScriptModelConfig``: a model that a Python script defines.
+
+   ``load_safe_config`` checks the script, runs it and returns its globals as
+   a Config: the model (or a ``predict``) and its geometry. Sizes in voxels
+   (``input_size``, ``output_size``) and shapes in nm (``read_shape``,
+   ``write_shape``) are each derived from the other when only one is given.
+
+   A script that defines its own ``process_chunk`` or ``predict`` (a TensorFlow
+   model's) reads its input itself, and so runs only at its own voxel size
+   (``ModelConfig.run_voxel_size``); ``script_reads_input_itself`` says so from
+   its text, without running it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.script.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.script.ScriptModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.script.load_safe_config
+   cellmap_flow.models.configs.script.script_reads_input_itself
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: load_safe_config(config_path, force_safe=None)
+
+   Loads the configuration script at `config_path` after verifying its safety.
+   If `force_safe` is True, raises an error if the script is deemed unsafe.
+   When it is None, the FORCE_SAFE_CONFIG environment variable decides.
+
+
+.. py:function:: script_reads_input_itself(script_path) -> bool
+
+   Whether the script at ``script_path`` defines a ``process_chunk`` or a
+   ``predict`` at its top level (a function, or a name assigned), read from
+   its text without running it; False when it cannot be read.
+
+   For saying so before its server is started: the dashboard's Submit
+   refuses to run such a script at another voxel size, and ``cellmap_flow
+   add -v`` gives it none.
+   A name it imports is not seen here; its built config is checked too
+   (``ModelConfig.config``).
+
+
+.. py:class:: ScriptModelConfig(script_path, name=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'script'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: script_path
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: reads_input_itself() -> bool
+
+      Its built config's answer, else its script's (``script_reads_input_itself``).
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

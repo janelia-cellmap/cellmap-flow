@@ -1,0 +1,44 @@
+cellmap_flow.ai_annotate.mask_extraction
+========================================
+
+.. py:module:: cellmap_flow.ai_annotate.mask_extraction
+
+.. autoapi-nested-parse::
+
+   From an EM plane to the RGB image a model is sent, and from its reply to a mask.
+
+   Adapted from ask-to-mask (``_normalize_to_uint8``/``_slice_to_rgb`` and
+   ``extract_mask``'s colour-difference mode): the model is asked to paint the
+   structure one colour and everything else black, and the mask is the pixels
+   that came back that colour. The arithmetic is
+   ``cellmap_flow.portable.ai_annotate``'s (``normalize_to_uint8``,
+   ``extract_mask``; ``model_mask`` lines a reply up with the plane first),
+   which the browser runs too; here are the Pillow images the server's
+   backends and staging pass around.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.mask_extraction.slice_to_rgb
+   cellmap_flow.ai_annotate.mask_extraction.extract_mask
+
+
+Module Contents
+---------------
+
+.. py:function:: slice_to_rgb(data_2d: numpy.ndarray) -> PIL.Image.Image
+
+   A 2D plane as a grey RGB image, the form image models take.
+
+
+.. py:function:: extract_mask(output_image, target_rgb: tuple[int, int, int], threshold: float = 200.0) -> numpy.ndarray
+
+   The pixels of the model's reply (a Pillow image or an RGB array)
+   painted ``target_rgb``, as a bool (H, W) mask
+   (``portable.ai_annotate.extract_mask`` says how a pixel is scored).
+
+

@@ -1,0 +1,120 @@
+cellmap_flow.portable.activation
+================================
+
+.. py:module:: cellmap_flow.portable.activation
+
+.. autoapi-nested-parse::
+
+   A model's output activation, read from its network: the rule both modes run.
+
+   What a model's output is, ``UNIT`` (a sigmoid or softmax already applied),
+   ``SIGNED_UNIT`` (a tanh) or ``UNBOUNDED`` (logits, distances: no
+   activation), decides the sigmoid a model's start sets, Use this model's
+   threshold, the ranking's cut-offs and a seed's probability. Measured, it is
+   a guess: the inference server's probe runs the network on noise and buckets
+   what comes out (portable/label_it.py classify_output_range), and
+   jrc_mus-livers_16nm_to_8nm_peroxisome answered -0.9595 everywhere, read as a
+   tanh's [-1, 1], when its network ends in a Conv. The network itself says it
+   for certain: ``output_activation`` walks back from the graph's output, past
+   the ops that only move values about, to the last op that computes them.
+
+   The graph comes as ``nodes``, each ``{"op": str, "inputs": [str],
+   "outputs": [str]}``, its inputs and outputs the names of the values it
+   reads and writes, as each format's extractor reads them: the inference
+   server's (inference/runner.py, models/configs: TorchScript, torch.export,
+   an ONNX file, a torch.fx trace) and the browser's (web/src/finetune/onnx-proto.ts,
+   through ``calls.output_activation``). ``op`` is the format's own name for
+   the op, which ``canonical`` reads: an ONNX op_type (``Sigmoid``), a
+   TorchScript kind (``aten::sigmoid``), a torch.export target
+   (``aten.sigmoid.default``), a torch.fx target or module class (``sigmoid``,
+   ``Conv3d``) all come to one name (``sigmoid``, ``conv``), so each
+   extractor passes its names as they are and the sets below are the only
+   place that knows them. A clip's bounds, when its extractor can read them,
+   are the node's ``min`` and ``max`` (numbers).
+
+   A value no node writes is a graph input, a weight or a constant. So is one
+   a ``CONSTANT_OPS`` node writes (an ONNX Constant, a TorchScript or fx
+   attribute read): an add of one of those to a linear layer's output is the
+   layer's bias.
+
+   The standard library alone, beside label_it's names for the classes: the
+   browser's Python runs it as it is.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.activation.UNIT_OPS
+   cellmap_flow.portable.activation.SIGNED_UNIT_OPS
+   cellmap_flow.portable.activation.CLIP_OPS
+   cellmap_flow.portable.activation.LINEAR_OPS
+   cellmap_flow.portable.activation.BIAS_OPS
+   cellmap_flow.portable.activation.PASS_THROUGH_OPS
+   cellmap_flow.portable.activation.CONCAT_OPS
+   cellmap_flow.portable.activation.CONSTANT_OPS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.activation.canonical
+   cellmap_flow.portable.activation.output_activation
+
+
+Module Contents
+---------------
+
+.. py:data:: UNIT_OPS
+
+.. py:data:: SIGNED_UNIT_OPS
+
+.. py:data:: CLIP_OPS
+
+.. py:data:: LINEAR_OPS
+
+.. py:data:: BIAS_OPS
+
+.. py:data:: PASS_THROUGH_OPS
+
+.. py:data:: CONCAT_OPS
+
+.. py:data:: CONSTANT_OPS
+
+.. py:function:: canonical(op: str) -> str
+
+   ``op``, any format's name for it, as the sets above have it:
+   ``aten::_convolution``, ``aten.convolution.default`` and ``Conv`` are
+   ``convolution`` and ``conv``; ``Conv3d`` (an fx module's class) and
+   ``aten::conv3d`` are ``conv``; ``aten::sigmoid_`` is ``sigmoid``.
+
+   The namespace and a torch.export overload go, then the case, the
+   underscores (``batch_norm`` is ONNX's ``BatchNormalization``'s
+   ``batchnorm...``) and a dimensionality (``3d``).
+
+
+.. py:function:: output_activation(nodes: List[dict], output: str) -> Optional[dict]
+
+   ``{"output_class", "op"}``: the class of the graph value ``output``,
+   from the last op that computes it, and that op's name for the page; None
+   when the graph does not say.
+
+   From ``output``, back through each PASS_THROUGH_OPS op's first input to
+   the op that changes values:
+
+   - a UNIT_OPS op (Sigmoid, Softmax, HardSigmoid), or a clip to [0, 1]: UNIT;
+   - a SIGNED_UNIT_OPS op (Tanh), or a clip to [-1, 1]: SIGNED_UNIT;
+   - a LINEAR_OPS op (Conv, ConvTranspose, Linear, MatMul, a
+     normalization), or an add of a bias to one (one input from the graph,
+     read back to the linear op; the other a weight or a constant):
+     UNBOUNDED, its op the linear one;
+   - anything else: None. Arithmetic after an activation (a sigmoid times
+     2), a ReLU (no upper bound, but no logits either), a custom op, a
+     concatenation of several values, or a value no node writes (the
+     walk ran off the graph): what the output is, the graph cannot say.
+
+

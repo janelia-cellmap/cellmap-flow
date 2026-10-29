@@ -1,0 +1,292 @@
+cellmap_flow.portable.rank
+==========================
+
+.. py:module:: cellmap_flow.portable.rank
+
+.. autoapi-nested-parse::
+
+   How well a model's prediction already matches the paint: the score the
+   Finetune tab ranks models by, to pick the one to start finetuning from.
+
+   The one implementation both modes run: the server dashboard
+   (dashboard/routes/finetune/rank_routes.py) in its process, the browser
+   (web/src/backend/routes/rank.ts) in chunkmirage's Pyodide workers through
+   portable/calls.py; numpy and the standard library only. In short:
+
+   - A model is scored on the targets its own finetune trains on, over the
+     painted voxels: an object or not on each channel of a binary model, the
+     painted pairs of an affinity model.
+   - The score is the geometric mean of the share of object targets called
+     object and of background targets called background: each share is of its
+     own class, so the paint's mix of the two does not tilt it, and a model
+     must get both right, as one that calls everything background scores 0
+     however much of the paint is background (their plain mean, the balanced
+     accuracy, gave that model 0.5, read as half right). With one class
+     painted, it is that class's share. A binary model's painted voxels next
+     to one of the other class are not counted (rough strokes are forgiven
+     along their edges).
+   - It is read at the model's own cut-off: the logit, among CUTOFFS, with the
+     best Dice of its calls against the painted objects (the nearest to 0
+     among equals; 0 when only one class is painted). The score at 0 is given
+     beside it.
+   - A binary model answers with its best channel, by name and index
+     (``channel``, ``channel_index``): the one the Finetune tab's Use this
+     model makes the training form's Channel (select_channel) for a model of
+     several, and Fit to Paint when none is picked. An affinity model is
+     scored on its channels together, and answers neither.
+   - A model is read through its own input normalization (what its start
+     sets: its declaration, or its kind's convention) and through the
+     session's when that is another (``norm_tries``), and the better score is
+     kept (``best_try``, its own among equals). Read through none, or another
+     model's, a model's score is noise. Each is read on the raw channel the
+     session's chain picks (``on_channel``).
+   - Where the raw under the paint is narrower than NARROW_WINDOW of the
+     model's MinMaxNormalizer's range, the model is scored again with the
+     normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
+     kept only when it scores WINDOW_MARGIN better.
+   - The row of the ranking (``score_row``) is the score kept, with what it
+     was read at in the units its controls take: the cut-off as Seed from
+     Prediction's threshold (a probability) and the raw's range read as 0 to
+     1 (the stretched window, or the normalizer's own range), and the
+     normalizer steps it was read through (``input_norm``), which Use this
+     model and Fit to Paint make the session's, with what the other channels
+     and normalizations matched (``channel_matches``, ``input_norm_others``):
+     why this one. Both modes answer it as it is, so their tables agree.
+   - Beside it, the postprocessing the model's layer needs to show a good
+     prediction (``needed_postprocess``): the sigmoid its output needs and the
+     threshold fitted to the paint, which they set too, as a model's start
+     sets the sigmoid alone.
+
+   The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
+   default loss, is given beside the score: about 0.69 is guessing, about 0.20
+   the paint fitted exactly.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.rank.RANK_BLOCKS
+   cellmap_flow.portable.rank.RANK_SMOOTHING
+   cellmap_flow.portable.rank.CUTOFFS
+   cellmap_flow.portable.rank.NARROW_WINDOW
+   cellmap_flow.portable.rank.WINDOW_MARGIN
+   cellmap_flow.portable.rank.CHANNEL_STEP
+   cellmap_flow.portable.rank.SIGMOID
+   cellmap_flow.portable.rank.THRESHOLD
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.rank.spread
+   cellmap_flow.portable.rank.empty_tallies
+   cellmap_flow.portable.rank.paint_edges
+   cellmap_flow.portable.rank.tally
+   cellmap_flow.portable.rank.rank_score
+   cellmap_flow.portable.rank.windowed
+   cellmap_flow.portable.rank.same_steps
+   cellmap_flow.portable.rank.normalizers
+   cellmap_flow.portable.rank.on_channel
+   cellmap_flow.portable.rank.norm_tries
+   cellmap_flow.portable.rank.best_try
+   cellmap_flow.portable.rank.needed_postprocess
+   cellmap_flow.portable.rank.score_row
+
+
+Module Contents
+---------------
+
+.. py:data:: RANK_BLOCKS
+   :value: 32
+
+
+.. py:data:: RANK_SMOOTHING
+   :value: 0.1
+
+
+.. py:data:: CUTOFFS
+
+.. py:data:: NARROW_WINDOW
+   :value: 0.25
+
+
+.. py:data:: WINDOW_MARGIN
+   :value: 0.03
+
+
+.. py:function:: spread(items: Sequence, count: int) -> list
+
+   ``count`` of ``items``, spread evenly over them in their order; all of them when there are no more.
+
+
+.. py:function:: empty_tallies(channels: int) -> List[dict]
+
+   One channel's agreement with the paint per channel: the targets
+   counted, their logits binned against CUTOFFS (bin b: above b of them),
+   and the loss summed, apart for object and background targets.
+
+
+.. py:function:: paint_edges(labels: numpy.ndarray) -> numpy.ndarray
+
+   The painted voxels of ``labels`` (z, y, x; 0 unpainted, 1 background,
+   2 and up objects) that touch a painted voxel of the other class along z,
+   y or x: the strokes' edges, which a binary model's score leaves out.
+
+
+.. py:function:: tally(tallies: List[dict], target: numpy.ndarray, mask: numpy.ndarray, logits: numpy.ndarray, skip: Optional[numpy.ndarray] = None) -> None
+
+   Add one painted block to ``tallies``: ``target`` and ``mask`` (C, z, y, x)
+   as the finetune's target transform makes them, ``logits`` the model's on
+   the same voxels (NaN where it was not read), and ``skip`` (z, y, x) the
+   voxels not to count (paint_edges), or None.
+
+
+.. py:function:: rank_score(tallies: List[dict], channels: Sequence[str], affinity: bool) -> Optional[dict]
+
+   The score of ``tallies``: an affinity model's over its channels
+   together (``channel`` and ``channel_index`` None), a binary model's best
+   channel's (by the score, then the lower loss), ``channel`` its name in
+   ``channels`` ("channel <i>" past them) and ``channel_index`` its index,
+   as select_channel takes it; with ``channel_matches``, every channel's
+   ``{channel, channel_index, matches}``, the best first, which says why
+   that one (organelle close behind mito, say). None when nothing was
+   counted.
+
+
+.. py:function:: windowed(norm: Sequence[dict], lo: float, hi: float) -> Optional[List[dict]]
+
+   ``norm`` (normalizer specs, ``{"name": ..., ...}``) with its
+   MinMaxNormalizer set to the raw's window [lo, hi], or None: no
+   MinMaxNormalizer, no window (lo = hi), or one not narrower than
+   NARROW_WINDOW of the normalizer's own range.
+
+
+.. py:function:: same_steps(a: Sequence[dict], b: Sequence[dict]) -> bool
+
+   Whether two normalizer chains are the same steps with the same
+   parameters, read as values (``_value``: "0" is 0).
+
+
+.. py:data:: CHANNEL_STEP
+   :value: 'ChannelSelector'
+
+
+.. py:function:: normalizers(steps: Sequence[dict]) -> List[dict]
+
+   ``steps`` (normalizer specs) without those that pick the raw's channel.
+
+
+.. py:function:: on_channel(steps: Sequence[dict], chain: Sequence[dict]) -> List[dict]
+
+   ``steps``' normalizers read on the raw channel ``chain`` picks: its
+   first ChannelSelector, then them. The channel is the raw's, picked by
+   the user, so a model's start, its advice and the ranking, which put a
+   model's normalization in the chain, keep it.
+
+
+.. py:function:: norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> List[dict]
+
+   The input normalizations a model is scored through, each once, its own
+   first: ``{"input_norm": steps, "from": where}``.
+
+   ``own`` is what the model's start sets (its declaration, ``own_from``
+   "declared"; or its kind's convention, "convention"), else what the model
+   advice assumes for a model nothing is known of ("assumed"; [] when there
+   is nothing to assume), ``session`` the session's input normalization
+   ("session").
+   The model's own is always tried: read through another's, or none, a model
+   scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
+   channel nucleus for paint of mitochondria). The session's is tried too,
+   as one the user set may fit this raw better. With neither, the raw as it
+   is ("none"). Every one reads the channel the session's chain picks
+   (``on_channel``), which alone is no normalization of the session's.
+
+
+.. py:function:: best_try(scores: Sequence[Optional[dict]]) -> Optional[int]
+
+   The index of the score (``rank_score``'s, one per ``norm_tries``
+   entry, None where it counted nothing) that matches best, the first among
+   equals (the model's own); None when none counted.
+
+
+.. py:data:: SIGMOID
+   :value: 'SigmoidPostprocessor'
+
+
+.. py:data:: THRESHOLD
+   :value: 'ThresholdPostprocessor'
+
+
+.. py:function:: needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict], threshold: Optional[float] = None) -> Optional[List[dict]]
+
+   The postprocessing a model's layer needs instead of ``postprocess``
+   (the session's steps) to show a good prediction, or None when it shows
+   one as it is: what a model's start sets on a chain with none (no
+   ``threshold``), and what Use this model, Fit to Paint and Use these
+   settings set beside the input normalization (the ranking row's
+   ``threshold``, an affinity model's too: the cut-off its painted pairs
+   were scored at). ``output_class`` is the model's output activation
+   (portable/label_it.py, as its server's probe answers it); with None,
+   not known, nothing changes.
+
+   Two steps are this rule's, on a chain of nothing else:
+
+   - The activation: a sigmoid for an output with none (UNBOUNDED, logits)
+     when the chain has none, and is empty or is given a threshold. A
+     threshold alone on logits shows them cut at a logit (0, the model's
+     own boundary, as a rule); a sigmoid put ahead of it would cut the
+     probabilities there instead, everything object at 0. An affinity
+     model's logits need it as much as any model's: the chain into a
+     segmentation (serving/probe.py suggest_affinity_chain) stays the
+     model advice's optional offer, which replaces the threshold and
+     cuts the objects at it.
+   - ``threshold``, a probability as the ranking's row gives it (0.5 at
+     the model's own boundary): a ThresholdPostprocessor at it, in place of
+     one the chain has, in the units of the output after the activation:
+     the probability itself after the sigmoid and on an output in [0, 1]
+     (UNIT); 2p - 1 on one in [-1, 1] (SIGNED_UNIT, a tanh), whose
+     probability label_it.probability reads as (x + 1) / 2.
+
+   A chain with any other step (a watershed, DefaultPostprocessor, a
+   ChannelSelection) is the user's and left as it is, but for one thing: a
+   sigmoid on an output that has one already (UNIT, SIGNED_UNIT) is taken
+   away from any chain, as a second sigmoid flattens the contrast (the
+   model advice warns of it: serving/probe.py review_postprocess).
+
+
+.. py:function:: score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict], raw: Optional[Sequence[float]], norm_from: str = 'session', others: Sequence[dict] = ()) -> Optional[dict]
+
+   A model's row of the ranking, as both modes answer it beside the
+   model's name, the time taken and the notes; None when ``base`` is None
+   (the paint gave the model nothing to score).
+
+   ``base`` is the model's score (``rank_score``) read through ``norm``,
+   the normalizer specs it was served with (the best of ``norm_tries``,
+   ``norm_from`` its ``from``); ``stretched`` its score read through
+   ``windowed(norm, *raw)``, ``raw`` the raw's 1st and 99th percentiles
+   under the paint, or None when that was not tried (the raw is not narrow)
+   or counted nothing. The stretched score is kept when it matches
+   WINDOW_MARGIN better than ``base``. The row is the score kept, with:
+
+   - ``window``: ``raw`` when the stretched score was kept, else None; and
+     then ``matches_without_window``, ``base``'s match;
+   - ``threshold``: the cut-off as a probability, as Seed from
+     Prediction's threshold takes it, to three decimals: 0.5 at the
+     model's own boundary (cut-off 0), else the probability the paint is
+     fitted best above;
+   - ``input_window``: the raw's range the model read as 0 to 1, as the
+     Processing tab's MinMaxNormalizer takes it: ``window`` when kept, else
+     ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer;
+   - ``input_norm``: the normalizer steps the score kept was read through
+     (``norm``, stretched when the stretch was kept), which Use this model
+     and Fit to Paint make the session's; and ``input_norm_from``, where
+     they come from (``norm_from``);
+   - ``input_norm_others``: what the other normalizations tried matched,
+     ``others`` (``{from, matches}`` each), which says why this one.
+
+

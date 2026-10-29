@@ -1,0 +1,393 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.io.raw &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.jobs" href="../../jobs/index.html" />
+    <link rel="prev" title="cellmap_flow.io.paths" href="../paths/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.io</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.io.raw</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/io/raw/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.io.raw">
+<span id="cellmap-flow-io-raw"></span><h1>cellmap_flow.io.raw<a class="headerlink" href="#module-cellmap_flow.io.raw" title="Link to this heading"></a></h1>
+<p>The raw data as a model reads it: a worldarray array through the input chain.</p>
+<p><code class="docutils literal notranslate"><span class="pre">open_raw(path,</span> <span class="pre">voxel_size)</span></code> opens, with worldarray, the level a model at
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> reads: the level of a multiscale group or precomputed volume
+for that size (the finest no coarser than it), the path of one level as it
+is. When no level is at that size the level found is read as if it were
+(“relabel”: voxel for voxel, its corner rescaled, with a warning) or
+resampled to it (<code class="docutils literal notranslate"><span class="pre">resample=True</span></code>). What comes back is a plain
+<code class="docutils literal notranslate"><span class="pre">worldarray.WorldArray</span></code>: <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> and <code class="docutils literal notranslate"><span class="pre">corner</span></code> (nm, spatial axes),
+<code class="docutils literal notranslate"><span class="pre">shape</span></code> (every axis), <code class="docutils literal notranslate"><span class="pre">read</span></code> and <code class="docutils literal notranslate"><span class="pre">read_index</span></code>; <code class="docutils literal notranslate"><span class="pre">spatial_shape</span></code> and
+<code class="docutils literal notranslate"><span class="pre">spatial_axes</span></code> pick out its spatial part.</p>
+<p><code class="docutils literal notranslate"><span class="pre">RawInput</span></code> is what a model reads its input from, and what a config’s
+<code class="docutils literal notranslate"><span class="pre">process_chunk(idi,</span> <span class="pre">roi)</span></code> or <code class="docutils literal notranslate"><span class="pre">predict</span></code> script is given: <code class="docutils literal notranslate"><span class="pre">to_ndarray_ts(roi)</span></code>
+is the world box <code class="docutils literal notranslate"><span class="pre">roi</span></code> through the input chain, the normalizers (and
+ChannelSelector) given as <code class="docutils literal notranslate"><span class="pre">input_norms</span></code>, else the process’s chain
+(<code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>) as it is at read time, which scripts rely
+on. The inference server reads with <code class="docutils literal notranslate"><span class="pre">serving.chunkmirage_ops.BlockInput</span></code>,
+the same protocol over the block chunkmirage read for a chunk.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.logger" title="cellmap_flow.io.raw.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.RESAMPLE_HINT" title="cellmap_flow.io.raw.RESAMPLE_HINT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESAMPLE_HINT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.RawInput" title="cellmap_flow.io.raw.RawInput"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RawInput</span></code></a></p></td>
+<td><p>What a model reads its input from: <code class="docutils literal notranslate"><span class="pre">array</span></code> (the level a model reads,</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.is_label_dtype" title="cellmap_flow.io.raw.is_label_dtype"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_label_dtype</span></code></a>(→ bool)</p></td>
+<td><p>Whether data of <code class="docutils literal notranslate"><span class="pre">dtype</span></code> is resampled as labels (nearest voxel)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.open_raw" title="cellmap_flow.io.raw.open_raw"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_raw</span></code></a>(→ worldarray.WorldArray)</p></td>
+<td><p>The level of <code class="docutils literal notranslate"><span class="pre">path</span></code> a model at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> reads, open.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.spatial_shape" title="cellmap_flow.io.raw.spatial_shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spatial_shape</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">array</span></code>'s shape on its spatial axes (its resampled shape when it</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.spatial_axes" title="cellmap_flow.io.raw.spatial_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spatial_axes</span></code></a>(→ tuple)</p></td>
+<td><p>The names of <code class="docutils literal notranslate"><span class="pre">array</span></code>'s spatial axes (z, y, x when the store names none).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.apply_norms" title="cellmap_flow.io.raw.apply_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_norms</span></code></a>(data[, input_norms])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">data</span></code> (a tensorstore view is read first) through the chain</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.selected_channel" title="cellmap_flow.io.raw.selected_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">selected_channel</span></code></a>(→ int)</p></td>
+<td><p>The input channel a chain asks for: its first ChannelSelector's, else 0.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.channel_axis" title="cellmap_flow.io.raw.channel_axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_axis</span></code></a>(array)</p></td>
+<td><p>The index of <code class="docutils literal notranslate"><span class="pre">array</span></code>'s channel axis: the one named c, c^ or channel,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.channel_select" title="cellmap_flow.io.raw.channel_select"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_select</span></code></a>(array, input_norms)</p></td>
+<td><p>worldarray's <code class="docutils literal notranslate"><span class="pre">select</span></code> for reading one channel of <code class="docutils literal notranslate"><span class="pre">array</span></code>: its</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.raw.raw_channels" title="cellmap_flow.io.raw.raw_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_channels</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(count,</span> <span class="pre">labels)</span></code> for the raw at <code class="docutils literal notranslate"><span class="pre">path</span></code>: how many channels a model</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.io.raw.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RESAMPLE_HINT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">RESAMPLE_HINT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'resample=True</span> <span class="pre">(`resample:</span> <span class="pre">true`</span> <span class="pre">in</span> <span class="pre">a</span> <span class="pre">YAML,</span> <span class="pre">`--resample`</span> <span class="pre">on</span> <span class="pre">the</span> <span class="pre">command</span> <span class="pre">line)</span> <span class="pre">resamples</span> <span class="pre">it</span> <span class="pre">to...</span></span><a class="headerlink" href="#cellmap_flow.io.raw.RESAMPLE_HINT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.is_label_dtype">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">is_label_dtype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.is_label_dtype" title="Link to this definition"></a></dt>
+<dd><p>Whether data of <code class="docutils literal notranslate"><span class="pre">dtype</span></code> is resampled as labels (nearest voxel)
+rather than as intensities (mean and linear): bool, or an integer type
+of 32 bits or more.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.open_raw">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">open_raw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'edge'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">worldarray.WorldArray</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.open_raw" title="Link to this definition"></a></dt>
+<dd><p>The level of <code class="docutils literal notranslate"><span class="pre">path</span></code> a model at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> reads, open.</p>
+<p><code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (nm, z, y, x) picks the level of a multiscale group or
+precomputed volume: the finest not coarser than it (worldarray’s
+“floor”), or with <code class="docutils literal notranslate"><span class="pre">resample</span></code> the coarsest not coarser than it on any
+axis, else the finest. The path of one level, or of an array, is read as
+it is. Without a voxel size a group’s first level is opened.</p>
+<p>When the level is not at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>, reads are relabelled (the
+default, with a warning: the level is read voxel for voxel as if it were
+at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>, so the data really lies where its <code class="docutils literal notranslate"><span class="pre">source_voxel_size</span></code>
+and <code class="docutils literal notranslate"><span class="pre">source_translation</span></code> say and <code class="docutils literal notranslate"><span class="pre">corner</span></code> is its own corner
+rescaled) or, with <code class="docutils literal notranslate"><span class="pre">resample</span></code>,
+resampled to it by worldarray (labels by the nearest voxel, intensities
+linearly), from the level’s own corner. <code class="docutils literal notranslate"><span class="pre">resampled</span></code> tells the two
+apart; <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> is the size reads are at either way.</p>
+<p><code class="docutils literal notranslate"><span class="pre">padding</span></code> is what a read past the array is padded with, after the
+chain: “edge” (the default), the array’s outermost voxels repeated, is
+what a model’s input is read with, since a flat fill is a wall the model
+never saw in training; <code class="docutils literal notranslate"><span class="pre">0</span></code> for anything else. The reads go through one
+tensorstore reader thread and no cache (worldarray’s
+<code class="docutils literal notranslate"><span class="pre">capped_context(network=False)</span></code>) unless <code class="docutils literal notranslate"><span class="pre">context</span></code> says otherwise.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.spatial_shape">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">spatial_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">worldarray.WorldArray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.spatial_shape" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">array</span></code>’s shape on its spatial axes (its resampled shape when it
+resamples): what cellmap-flow calls the dataset’s shape, z, y, x.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.spatial_axes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">spatial_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">worldarray.WorldArray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.spatial_axes" title="Link to this definition"></a></dt>
+<dd><p>The names of <code class="docutils literal notranslate"><span class="pre">array</span></code>’s spatial axes (z, y, x when the store names none).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.apply_norms">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">apply_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.raw.apply_norms" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">data</span></code> (a tensorstore view is read first) through the chain
+<code class="docutils literal notranslate"><span class="pre">input_norms</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> means the process’s, <code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.selected_channel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">selected_channel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.selected_channel" title="Link to this definition"></a></dt>
+<dd><p>The input channel a chain asks for: its first ChannelSelector’s, else 0.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.channel_axis">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">channel_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">worldarray.WorldArray</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.raw.channel_axis" title="Link to this definition"></a></dt>
+<dd><p>The index of <code class="docutils literal notranslate"><span class="pre">array</span></code>’s channel axis: the one named c, c^ or channel,
+else its first non-spatial axis; None for an array with spatial axes only.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.channel_select">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">channel_select</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">worldarray.WorldArray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.raw.channel_select" title="Link to this definition"></a></dt>
+<dd><p>worldarray’s <code class="docutils literal notranslate"><span class="pre">select</span></code> for reading one channel of <code class="docutils literal notranslate"><span class="pre">array</span></code>: its
+channel axis pinned to the channel the chain asks for; None for an array
+with spatial axes only.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.raw_channels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">raw_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.raw_channels" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(count,</span> <span class="pre">labels)</span></code> for the raw at <code class="docutils literal notranslate"><span class="pre">path</span></code>: how many channels a model
+can be given to read (1 for an array with spatial axes only), and their
+names, an OME-Zarr’s <code class="docutils literal notranslate"><span class="pre">omero.channels[].label</span></code> when it names every
+channel, else None.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.raw.</span></span><span class="sig-name descname"><span class="pre">RawInput</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">worldarray.WorldArray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput" title="Link to this definition"></a></dt>
+<dd><p>What a model reads its input from: <code class="docutils literal notranslate"><span class="pre">array</span></code> (the level a model reads,
+<code class="docutils literal notranslate"><span class="pre">open_raw</span></code>’s) through the input chain.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norms</span></code> is the chain reads go through, the normalizers and the
+ChannelSelector; <code class="docutils literal notranslate"><span class="pre">None</span></code> follows the process’s chain
+(<code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>) as it is at each read, so a worker that
+unpickles one reads its own chain, not the sender’s. <code class="docutils literal notranslate"><span class="pre">normalize=False</span></code>
+reads the channel the chain selects as it is stored, through no
+normalizer: the finetune trainer and the AI-annotate reader normalize
+for themselves.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.array">
+<span class="sig-name descname"><span class="pre">array</span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.array" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.input_norms">
+<span class="sig-name descname"><span class="pre">input_norms</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.input_norms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.normalize">
+<span class="sig-name descname"><span class="pre">normalize</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.normalize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.chain">
+<span class="sig-name descname"><span class="pre">chain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.chain" title="Link to this definition"></a></dt>
+<dd><p>The chain reads go through now.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.with_input_norms">
+<span class="sig-name descname"><span class="pre">with_input_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.io.raw.RawInput" title="cellmap_flow.io.raw.RawInput"><span class="pre">RawInput</span></a></span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.with_input_norms" title="Link to this definition"></a></dt>
+<dd><p>This input read through <code class="docutils literal notranslate"><span class="pre">input_norms</span></code> instead; the open array is shared.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.to_ndarray_ts">
+<span class="sig-name descname"><span class="pre">to_ndarray_ts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.to_ndarray_ts" title="Link to this definition"></a></dt>
+<dd><p>The world box <code class="docutils literal notranslate"><span class="pre">roi</span></code> (nm, half-open; a funlib <code class="docutils literal notranslate"><span class="pre">Roi</span></code>, a worldarray
+<code class="docutils literal notranslate"><span class="pre">Box</span></code> or a <code class="docutils literal notranslate"><span class="pre">(begin,</span> <span class="pre">end)</span></code> pair) through the chain: the channel the
+chain selects of a multichannel array, the normalizers applied unless
+<code class="docutils literal notranslate"><span class="pre">normalize</span></code> is off, and past the array what <code class="docutils literal notranslate"><span class="pre">open_raw</span></code>’s <code class="docutils literal notranslate"><span class="pre">padding</span></code>
+says, added after the chain, so padding is never normalized. A voxel
+is read when its centre lies in the box (worldarray’s rule). An array
+that resamples is resampled first, then goes through the chain, as a
+stored level at that voxel size would.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.io.raw.RawInput.read_index">
+<span class="sig-name descname"><span class="pre">read_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">begin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.io.raw.RawInput.read_index" title="Link to this definition"></a></dt>
+<dd><p>Voxels <code class="docutils literal notranslate"><span class="pre">[begin,</span> <span class="pre">end)</span></code> on the array’s spatial grid (its resampled
+grid when it resamples), read as <code class="docutils literal notranslate"><span class="pre">to_ndarray_ts</span></code> reads them.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../paths/index.html" class="btn btn-neutral float-left" title="cellmap_flow.io.paths" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../jobs/index.html" class="btn btn-neutral float-right" title="cellmap_flow.jobs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

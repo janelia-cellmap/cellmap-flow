@@ -1,0 +1,492 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.distill &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.export_merged" href="../export_merged/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.data.sampler" href="../data/sampler/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.distill</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/distill/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.distill">
+<span id="cellmap-flow-finetune-distill"></span><h1>cellmap_flow.finetune.distill<a class="headerlink" href="#module-cellmap_flow.finetune.distill" title="Link to this heading"></a></h1>
+<p>Distill a finetuned model into a small copy the browser can run, and export the copy for the browser.</p>
+<p>The large cellmap UNets (about 800M parameters, 3.2 GB, such as
+mito-aff-unet-setup-16) are too big for a browser to load, and export_web
+gives them no browser form. This trains a small network to compute what a
+finetuned model’s network computes, and exports it as export_web exports a
+model’s browser form. The network surgery is cellmap-models’ (its
+<code class="docutils literal notranslate"><span class="pre">distill_student</span></code>); this is the job around it:</p>
+<ul class="simple">
+<li><p>The teacher is the network the serving YAML serves, as export_web builds
+it (<code class="docutils literal notranslate"><span class="pre">export_web.finetuned_network</span></code>): the base as the trainer builds it,
+the finetune folded in, every layer a real one.</p></li>
+<li><p>The student is cellmap-models’ <code class="docutils literal notranslate"><span class="pre">distill_student</span></code>: for a funlib UNet
+(what <code class="docutils literal notranslate"><span class="pre">prune_funlib_unet</span></code> covers, such as the cellmap StandardUnets) the
+same network with fewer channels at every level, started from the
+teacher’s strongest channels (<code class="docutils literal notranslate"><span class="pre">init</span></code> “pruned”); for any other network
+(ResUNet, Unet3dIso…) a fly_organelles StandardUnet with the teacher’s
+channels and output activation, started at random (<code class="docutils literal notranslate"><span class="pre">init</span></code> “random”),
+at the largest block whose output fits inside the teacher’s. A random
+start has more to learn, so it gets more epochs and hours by default.</p></li>
+<li><p>The distillation trains the student to reproduce the teacher’s output as
+the network emits it, the mean squared difference over every voxel and
+channel (losses.distillation_loss, the finetune’s teacher term), on
+blocks of the raw the model was finetuned on, read and normalized as the
+trainer reads its patches (data.loader.dataset_from_manifest): half
+centred on what was annotated, half at random points of the volume. It
+needs no annotations. Each block is read large enough for both networks’
+inputs; both read and write around the same centre, as the inference
+runner places a model’s output in the middle of what it reads
+(ModelGeometry.context), so the teacher’s input and the student’s are
+the middle of the block, and the student’s target is the middle of the
+teacher’s output. Squared difference of the raw output because the
+output may be logits, affinities or distances, which the network cannot
+tell apart (probe_output_class calls all three unbounded): what is used
+downstream of affinities and distances is their value, every level of it
+(watershed and agglomeration thresholds, distance cut-offs), and a
+student that matches the values matches any threshold or postprocessing
+on them, logits’ included. A sigmoid’s cross-entropy would read distances
+as logits and stop caring where both are far from 0. Adam takes the
+loss’s scale out of its steps, so logits of about 5 or about 1400
+(export_merged’s finetunes) train alike.</p></li>
+<li><p>It runs on the GPU when there is one (utils.device.best_device), the
+training steps in mixed precision (trainer.recovery.Precision: bf16
+where the GPU has it), the held-out comparison in float32 with TF32 off,
+so that its numbers are the networks’ own.</p></li>
+<li><p>How close: on held-out blocks drawn apart from the training’s,
+cellmap-models’ <code class="docutils literal notranslate"><span class="pre">output_difference</span></code> of the student from the teacher
+(the export’s metrics: the mean squared, mean and largest absolute
+difference, and the share of voxels on the other side of the model’s
+decision boundary, 0.5 for a model that ends in a sigmoid and else 0, as
+portable.label_it.probability reads it), for the start and for the
+student exported.</p></li>
+</ul>
+<p>What it writes in <code class="docutils literal notranslate"><span class="pre">&lt;output&gt;</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;folder&gt;-small/manifest.json</span></code> and its ONNX files, as export_web writes
+a model’s browser form (<code class="docutils literal notranslate"><span class="pre">&lt;folder&gt;</span></code> is export_web’s folder for the
+finetuned model), with a <code class="docutils literal notranslate"><span class="pre">distillation</span></code> block: the teacher’s folder (so
+that a publish can say “distilled from” its ref), the teacher’s
+parameters, the student’s <code class="docutils literal notranslate"><span class="pre">init</span></code>, num_fmaps and fmap_inc_factor, the
+steps it trained, and the held-out closeness of the <code class="docutils literal notranslate"><span class="pre">start</span></code> and of the
+student (<code class="docutils literal notranslate"><span class="pre">distilled</span></code>);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">student_best.pt</span></code>: the best student so far, written each time the
+held-out difference improves, so a job killed before it exports keeps
+it; a run that makes the same student continues from it;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">result.json</span></code> and <code class="docutils literal notranslate"><span class="pre">export_log.txt</span></code>, as export_web’s: <code class="docutils literal notranslate"><span class="pre">{&quot;folder&quot;,</span>
+<span class="pre">&quot;manifest&quot;}</span></code> or <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;}</span></code>, also printed as the output’s last line.</p></li>
+</ul>
+<p>The progress lines are the trainer’s, “Starting epoch N of M” and “Epoch
+N/M - Loss: …” (markers’ patterns), each epoch’s with the held-out
+closeness after it.</p>
+<p>The dashboard starts it and follows it as an export, with export_web’s
+<code class="docutils literal notranslate"><span class="pre">export_status</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">run</span> <span class="o">=</span> <span class="n">start_distill</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">,</span> <span class="n">corrections_dir</span><span class="p">,</span> <span class="n">run_dir</span><span class="p">)</span>
+<span class="n">export_web</span><span class="o">.</span><span class="n">export_status</span><span class="p">(</span><span class="n">run</span><span class="p">)</span>   <span class="c1"># the answer start_export's gets</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">start_distill</span></code> submits the job as start_export does (export_web.start_job:
+in the environment the model finetunes in, on its YAML’s queue), into
+<code class="docutils literal notranslate"><span class="pre">&lt;run_dir&gt;/web_export/&lt;YAML's</span> <span class="pre">name&gt;-small/</span></code>, with the training’s time
+limit (the longer, a random start’s, unless given) and an hour for the rest
+as its walltime, and returns at once. From the command line:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">cellmap_flow</span><span class="o">.</span><span class="n">finetune</span><span class="o">.</span><span class="n">distill</span> <span class="o">--</span><span class="n">yaml</span> <span class="o">&lt;</span><span class="n">serving</span> <span class="n">yaml</span><span class="o">&gt;</span> \
+    <span class="o">--</span><span class="n">corrections</span> <span class="o">&lt;</span><span class="n">session</span><span class="o">&gt;/</span><span class="n">corrections</span> <span class="o">--</span><span class="n">output</span> <span class="o">&lt;</span><span class="nb">dir</span><span class="o">&gt;</span> \
+    <span class="p">[</span><span class="o">--</span><span class="n">parameters</span> <span class="mi">12000000</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">epochs</span> <span class="mi">100</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">steps</span><span class="o">-</span><span class="n">per</span><span class="o">-</span><span class="n">epoch</span> <span class="mi">100</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hours</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The student’s size: at most <code class="docutils literal notranslate"><span class="pre">--parameters</span></code>, by default a tenth of the
+teacher’s and no more than BROWSER_PARAMETERS, about what the browser
+catalog’s largest models have (distill_student says how the widths are
+chosen). For mito-aff-unet-setup-16 (792M parameters) that is num_fmaps 13
+and fmap_inc_factor 3, 10.8M parameters, 43 MB in fp32.</p>
+<p>A 2D model (a block one z-slice thick) gets a 2D student (distill_student’s
+1x3x3 kernels and 1x2x2 pooling), trained and exported on slices. The
+browser copy is exported at the block the student trained at and, for a
+StandardUnet student, at the larger blocks it computes too (BROWSER_SIDES,
+cellmap-models’ Student.blocks), each checked against the student on real
+raw.</p>
+<p>What it refuses, before it trains: a model that writes at another voxel size
+than it reads (the student writes at the voxel size it reads); one that
+takes more than one input channel (the browser feeds one); a teacher served
+other than by its network’s forward (Cellpose); and a teacher whose output
+block holds no StandardUnet block.</p>
+<p>Needs cellmap-models with <code class="docutils literal notranslate"><span class="pre">model_export.student</span></code> and <code class="docutils literal notranslate"><span class="pre">model_export.onnx_web</span></code>
+(the pin in pixi.toml’s finetune feature) and its export extra, onnx and
+onnxruntime, where it runs.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.logger" title="cellmap_flow.finetune.distill.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.MODULE" title="cellmap_flow.finetune.distill.MODULE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODULE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.CHECKPOINT_NAME" title="cellmap_flow.finetune.distill.CHECKPOINT_NAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CHECKPOINT_NAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.BROWSER_PARAMETERS" title="cellmap_flow.finetune.distill.BROWSER_PARAMETERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BROWSER_PARAMETERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.TEACHER_SHARE" title="cellmap_flow.finetune.distill.TEACHER_SHARE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TEACHER_SHARE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.RANDOM_SHARE" title="cellmap_flow.finetune.distill.RANDOM_SHARE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RANDOM_SHARE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.HELD_OUT_BLOCKS" title="cellmap_flow.finetune.distill.HELD_OUT_BLOCKS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HELD_OUT_BLOCKS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.HELD_OUT_SEED" title="cellmap_flow.finetune.distill.HELD_OUT_SEED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HELD_OUT_SEED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.EPOCHS" title="cellmap_flow.finetune.distill.EPOCHS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EPOCHS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.HOURS" title="cellmap_flow.finetune.distill.HOURS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HOURS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.STEPS_PER_EPOCH" title="cellmap_flow.finetune.distill.STEPS_PER_EPOCH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STEPS_PER_EPOCH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.LEARNING_RATE" title="cellmap_flow.finetune.distill.LEARNING_RATE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LEARNING_RATE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.WORKERS" title="cellmap_flow.finetune.distill.WORKERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WORKERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.BROWSER_SIDES" title="cellmap_flow.finetune.distill.BROWSER_SIDES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BROWSER_SIDES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.SETUP_HOURS" title="cellmap_flow.finetune.distill.SETUP_HOURS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SETUP_HOURS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.make_student" title="cellmap_flow.finetune.distill.make_student"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_student</span></code></a>(teacher, geometry, out_channels, output_class)</p></td>
+<td><p>cellmap-models' student of <code class="docutils literal notranslate"><span class="pre">teacher</span></code> (its <code class="docutils literal notranslate"><span class="pre">Student</span></code>), for the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.closeness" title="cellmap_flow.finetune.distill.closeness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">closeness</span></code></a>(→ dict)</p></td>
+<td><p>How far <code class="docutils literal notranslate"><span class="pre">network</span></code>'s output on <code class="docutils literal notranslate"><span class="pre">blocks</span></code> (the middle <code class="docutils literal notranslate"><span class="pre">input_size</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.distill" title="cellmap_flow.finetune.distill.distill"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distill</span></code></a>(→ dict)</p></td>
+<td><p>Distill the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves into a small copy and export</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.start_distill" title="cellmap_flow.finetune.distill.start_distill"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_distill</span></code></a>(→ cellmap_flow.finetune.export_web.WebExport)</p></td>
+<td><p>Start distilling the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, trained on the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.distill.main" title="cellmap_flow.finetune.distill.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>(→ int)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.MODULE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">MODULE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap_flow.finetune.distill'</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.MODULE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.CHECKPOINT_NAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">CHECKPOINT_NAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'student_best.pt'</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.CHECKPOINT_NAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.BROWSER_PARAMETERS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">BROWSER_PARAMETERS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">12000000</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.BROWSER_PARAMETERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.TEACHER_SHARE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">TEACHER_SHARE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.1</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.TEACHER_SHARE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.RANDOM_SHARE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">RANDOM_SHARE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.RANDOM_SHARE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.HELD_OUT_BLOCKS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">HELD_OUT_BLOCKS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.HELD_OUT_BLOCKS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.HELD_OUT_SEED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">HELD_OUT_SEED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1000000007</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.HELD_OUT_SEED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.EPOCHS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">EPOCHS</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.EPOCHS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.HOURS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">HOURS</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.HOURS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.STEPS_PER_EPOCH">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">STEPS_PER_EPOCH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">100</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.STEPS_PER_EPOCH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.LEARNING_RATE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">LEARNING_RATE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.LEARNING_RATE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.WORKERS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">WORKERS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.WORKERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.BROWSER_SIDES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">BROWSER_SIDES</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.BROWSER_SIDES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.SETUP_HOURS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">SETUP_HOURS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.SETUP_HOURS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.make_student">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">make_student</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">teacher</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.distill.make_student" title="Link to this definition"></a></dt>
+<dd><p>cellmap-models’ student of <code class="docutils literal notranslate"><span class="pre">teacher</span></code> (its <code class="docutils literal notranslate"><span class="pre">Student</span></code>), for the
+model of <code class="docutils literal notranslate"><span class="pre">geometry</span></code>, whose output has <code class="docutils literal notranslate"><span class="pre">out_channels</span></code> channels and is
+of <code class="docutils literal notranslate"><span class="pre">output_class</span></code> (probe_output_class): at most <code class="docutils literal notranslate"><span class="pre">parameters</span></code>
+parameters, by default a tenth of the teacher’s and at most
+BROWSER_PARAMETERS.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – no student is that small, or one that large would not
+fit an .onnx file, or no StandardUnet block fits in the teacher’s.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.closeness">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">closeness</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">network</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">blocks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.closeness" title="Link to this definition"></a></dt>
+<dd><p>How far <code class="docutils literal notranslate"><span class="pre">network</span></code>’s output on <code class="docutils literal notranslate"><span class="pre">blocks</span></code> (the middle <code class="docutils literal notranslate"><span class="pre">input_size</span></code>
+of each) is from <code class="docutils literal notranslate"><span class="pre">targets</span></code>, the teacher’s: cellmap-models’
+output_difference (<code class="docutils literal notranslate"><span class="pre">mse</span></code>, <code class="docutils literal notranslate"><span class="pre">mean_abs</span></code>, <code class="docutils literal notranslate"><span class="pre">max_abs</span></code>, <code class="docutils literal notranslate"><span class="pre">flip_frac</span></code> on
+<code class="docutils literal notranslate"><span class="pre">threshold</span></code>) over all of them, computed in float32 with TF32 off.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.distill">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">distill</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epochs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps_per_epoch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">STEPS_PER_EPOCH</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hours</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learning_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">LEARNING_RATE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">workers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">WORKERS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variants</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.distill" title="Link to this definition"></a></dt>
+<dd><p>Distill the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves into a small copy and export
+it into <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>; <code class="docutils literal notranslate"><span class="pre">{&quot;folder&quot;,</span> <span class="pre">&quot;manifest&quot;}</span></code> (see the module’s
+docstring).</p>
+<p>Trains for <code class="docutils literal notranslate"><span class="pre">epochs</span></code> of <code class="docutils literal notranslate"><span class="pre">steps_per_epoch</span></code> blocks, or until <code class="docutils literal notranslate"><span class="pre">hours</span></code>
+have passed, whichever is first (by default EPOCHS and HOURS of how the
+student starts), and exports the student that came closest to the
+teacher on the held-out blocks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the model is one this cannot distill or export (see
+the module’s docstring), or its session has no training manifest.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.start_distill">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">start_distill</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_dir</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hours</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../export_web/index.html#cellmap_flow.finetune.export_web.WebExport" title="cellmap_flow.finetune.export_web.WebExport"><span class="pre">cellmap_flow.finetune.export_web.WebExport</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.start_distill" title="Link to this definition"></a></dt>
+<dd><p>Start distilling the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, trained on the
+session <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code>, into <code class="docutils literal notranslate"><span class="pre">&lt;run_dir&gt;/web_export/&lt;YAML's</span>
+<span class="pre">name&gt;-small/</span></code>; follow it with export_web.export_status.</p>
+<p><code class="docutils literal notranslate"><span class="pre">parameters</span></code>: the student’s largest size (by default make_student’s);
+<code class="docutils literal notranslate"><span class="pre">hours</span></code>: the training’s time limit (by default HOURS of how the
+student starts, which the job decides; the walltime allows the longer).
+The job runs as start_export’s does (export_web.start_job), in the
+environment the model finetunes in on the YAML’s queue and charge
+group, and a result an earlier run left there is removed first, so that
+export_status does not read it as this one’s; its best student is kept,
+for this run to continue from.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – the YAML serves no finetuned model, or its environment
+cannot run the job.</p></li>
+<li><p><strong>RuntimeError</strong> – the job could not be submitted.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.distill.main">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.distill.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.distill.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../data/sampler/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.data.sampler" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../export_merged/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.export_merged" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

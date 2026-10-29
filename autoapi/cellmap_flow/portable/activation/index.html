@@ -1,0 +1,313 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.activation &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.ai_annotate" href="../ai_annotate/index.html" />
+    <link rel="prev" title="cellmap_flow.portable" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.activation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/activation/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.activation">
+<span id="cellmap-flow-portable-activation"></span><h1>cellmap_flow.portable.activation<a class="headerlink" href="#module-cellmap_flow.portable.activation" title="Link to this heading"></a></h1>
+<p>A model’s output activation, read from its network: the rule both modes run.</p>
+<p>What a model’s output is, <code class="docutils literal notranslate"><span class="pre">UNIT</span></code> (a sigmoid or softmax already applied),
+<code class="docutils literal notranslate"><span class="pre">SIGNED_UNIT</span></code> (a tanh) or <code class="docutils literal notranslate"><span class="pre">UNBOUNDED</span></code> (logits, distances: no
+activation), decides the sigmoid a model’s start sets, Use this model’s
+threshold, the ranking’s cut-offs and a seed’s probability. Measured, it is
+a guess: the inference server’s probe runs the network on noise and buckets
+what comes out (portable/label_it.py classify_output_range), and
+jrc_mus-livers_16nm_to_8nm_peroxisome answered -0.9595 everywhere, read as a
+tanh’s [-1, 1], when its network ends in a Conv. The network itself says it
+for certain: <code class="docutils literal notranslate"><span class="pre">output_activation</span></code> walks back from the graph’s output, past
+the ops that only move values about, to the last op that computes them.</p>
+<p>The graph comes as <code class="docutils literal notranslate"><span class="pre">nodes</span></code>, each <code class="docutils literal notranslate"><span class="pre">{&quot;op&quot;:</span> <span class="pre">str,</span> <span class="pre">&quot;inputs&quot;:</span> <span class="pre">[str],</span>
+<span class="pre">&quot;outputs&quot;:</span> <span class="pre">[str]}</span></code>, its inputs and outputs the names of the values it
+reads and writes, as each format’s extractor reads them: the inference
+server’s (inference/runner.py, models/configs: TorchScript, torch.export,
+an ONNX file, a torch.fx trace) and the browser’s (web/src/finetune/onnx-proto.ts,
+through <code class="docutils literal notranslate"><span class="pre">calls.output_activation</span></code>). <code class="docutils literal notranslate"><span class="pre">op</span></code> is the format’s own name for
+the op, which <code class="docutils literal notranslate"><span class="pre">canonical</span></code> reads: an ONNX op_type (<code class="docutils literal notranslate"><span class="pre">Sigmoid</span></code>), a
+TorchScript kind (<code class="docutils literal notranslate"><span class="pre">aten::sigmoid</span></code>), a torch.export target
+(<code class="docutils literal notranslate"><span class="pre">aten.sigmoid.default</span></code>), a torch.fx target or module class (<code class="docutils literal notranslate"><span class="pre">sigmoid</span></code>,
+<code class="docutils literal notranslate"><span class="pre">Conv3d</span></code>) all come to one name (<code class="docutils literal notranslate"><span class="pre">sigmoid</span></code>, <code class="docutils literal notranslate"><span class="pre">conv</span></code>), so each
+extractor passes its names as they are and the sets below are the only
+place that knows them. A clip’s bounds, when its extractor can read them,
+are the node’s <code class="docutils literal notranslate"><span class="pre">min</span></code> and <code class="docutils literal notranslate"><span class="pre">max</span></code> (numbers).</p>
+<p>A value no node writes is a graph input, a weight or a constant. So is one
+a <code class="docutils literal notranslate"><span class="pre">CONSTANT_OPS</span></code> node writes (an ONNX Constant, a TorchScript or fx
+attribute read): an add of one of those to a linear layer’s output is the
+layer’s bias.</p>
+<p>The standard library alone, beside label_it’s names for the classes: the
+browser’s Python runs it as it is.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.UNIT_OPS" title="cellmap_flow.portable.activation.UNIT_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNIT_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.SIGNED_UNIT_OPS" title="cellmap_flow.portable.activation.SIGNED_UNIT_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SIGNED_UNIT_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.CLIP_OPS" title="cellmap_flow.portable.activation.CLIP_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CLIP_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.LINEAR_OPS" title="cellmap_flow.portable.activation.LINEAR_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LINEAR_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.BIAS_OPS" title="cellmap_flow.portable.activation.BIAS_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BIAS_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.PASS_THROUGH_OPS" title="cellmap_flow.portable.activation.PASS_THROUGH_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PASS_THROUGH_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.CONCAT_OPS" title="cellmap_flow.portable.activation.CONCAT_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CONCAT_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.CONSTANT_OPS" title="cellmap_flow.portable.activation.CONSTANT_OPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CONSTANT_OPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.canonical" title="cellmap_flow.portable.activation.canonical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">canonical</span></code></a>(→ str)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">op</span></code>, any format's name for it, as the sets above have it:</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.activation.output_activation" title="cellmap_flow.portable.activation.output_activation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">output_activation</span></code></a>(→ Optional[dict])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{&quot;output_class&quot;,</span> <span class="pre">&quot;op&quot;}</span></code>: the class of the graph value <code class="docutils literal notranslate"><span class="pre">output</span></code>,</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.UNIT_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">UNIT_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.UNIT_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.SIGNED_UNIT_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">SIGNED_UNIT_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.SIGNED_UNIT_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.CLIP_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">CLIP_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.CLIP_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.LINEAR_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">LINEAR_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.LINEAR_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.BIAS_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">BIAS_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.BIAS_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.PASS_THROUGH_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">PASS_THROUGH_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.PASS_THROUGH_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.CONCAT_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">CONCAT_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.CONCAT_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.CONSTANT_OPS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">CONSTANT_OPS</span></span><a class="headerlink" href="#cellmap_flow.portable.activation.CONSTANT_OPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.canonical">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">canonical</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">op</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.portable.activation.canonical" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">op</span></code>, any format’s name for it, as the sets above have it:
+<code class="docutils literal notranslate"><span class="pre">aten::_convolution</span></code>, <code class="docutils literal notranslate"><span class="pre">aten.convolution.default</span></code> and <code class="docutils literal notranslate"><span class="pre">Conv</span></code> are
+<code class="docutils literal notranslate"><span class="pre">convolution</span></code> and <code class="docutils literal notranslate"><span class="pre">conv</span></code>; <code class="docutils literal notranslate"><span class="pre">Conv3d</span></code> (an fx module’s class) and
+<code class="docutils literal notranslate"><span class="pre">aten::conv3d</span></code> are <code class="docutils literal notranslate"><span class="pre">conv</span></code>; <code class="docutils literal notranslate"><span class="pre">aten::sigmoid_</span></code> is <code class="docutils literal notranslate"><span class="pre">sigmoid</span></code>.</p>
+<p>The namespace and a torch.export overload go, then the case, the
+underscores (<code class="docutils literal notranslate"><span class="pre">batch_norm</span></code> is ONNX’s <code class="docutils literal notranslate"><span class="pre">BatchNormalization</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">batchnorm...</span></code>) and a dimensionality (<code class="docutils literal notranslate"><span class="pre">3d</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.activation.output_activation">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.activation.</span></span><span class="sig-name descname"><span class="pre">output_activation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.activation.output_activation" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">{&quot;output_class&quot;,</span> <span class="pre">&quot;op&quot;}</span></code>: the class of the graph value <code class="docutils literal notranslate"><span class="pre">output</span></code>,
+from the last op that computes it, and that op’s name for the page; None
+when the graph does not say.</p>
+<p>From <code class="docutils literal notranslate"><span class="pre">output</span></code>, back through each PASS_THROUGH_OPS op’s first input to
+the op that changes values:</p>
+<ul class="simple">
+<li><p>a UNIT_OPS op (Sigmoid, Softmax, HardSigmoid), or a clip to [0, 1]: UNIT;</p></li>
+<li><p>a SIGNED_UNIT_OPS op (Tanh), or a clip to [-1, 1]: SIGNED_UNIT;</p></li>
+<li><p>a LINEAR_OPS op (Conv, ConvTranspose, Linear, MatMul, a
+normalization), or an add of a bias to one (one input from the graph,
+read back to the linear op; the other a weight or a constant):
+UNBOUNDED, its op the linear one;</p></li>
+<li><p>anything else: None. Arithmetic after an activation (a sigmoid times
+2), a ReLU (no upper bound, but no logits either), a custom op, a
+concatenation of several values, or a value no node writes (the
+walk ran off the graph): what the output is, the graph cannot say.</p></li>
+</ul>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../ai_annotate/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.ai_annotate" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

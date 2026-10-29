@@ -1,0 +1,277 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.serving.launch &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.serving.probe" href="../probe/index.html" />
+    <link rel="prev" title="cellmap_flow.serving.engine" href="../engine/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.serving</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.serving.launch</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/serving/launch/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.serving.launch">
+<span id="cellmap-flow-serving-launch"></span><h1>cellmap_flow.serving.launch<a class="headerlink" href="#module-cellmap_flow.serving.launch" title="Link to this heading"></a></h1>
+<p>Starting an inference server for a model: the one launcher, and the
+command line it runs.</p>
+<p><code class="docutils literal notranslate"><span class="pre">launch(model,</span> <span class="pre">data_path,</span> <span class="pre">...)</span></code> is what every launcher calls:
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">add</span> <span class="pre">--run</span></code>, the
+dashboard’s Models tab (its catalog, Hugging Face, zoo and Cellpose picks,
+Add a model, and a model ticked again) and the Training tab’s ranking. It
+applies the one data path and scale rule (<code class="docutils literal notranslate"><span class="pre">config.yaml.resolve_data_path</span></code>),
+falls back to the saved launcher settings for the queues and charge group,
+builds the command and starts the job (<code class="docutils literal notranslate"><span class="pre">jobs.launch.start_hosts</span></code>), which
+it returns.</p>
+<p>The command is <code class="docutils literal notranslate"><span class="pre">&lt;SERVER_COMMAND&gt;</span> <span class="pre">--model</span> <span class="pre">&lt;entry&gt;</span> <span class="pre">-d</span> <span class="pre">&lt;data</span> <span class="pre">path&gt;</span></code>, where the entry
+is <code class="docutils literal notranslate"><span class="pre">ModelConfig.launch_entry</span></code> as JSON, which the server rebuilds as it
+rebuilds a YAML’s model entry, then <code class="docutils literal notranslate"><span class="pre">--resample</span></code> or <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code>:
+always one of them, so a server reads the data as its launcher was told to
+(a YAML’s <code class="docutils literal notranslate"><span class="pre">resample</span></code>, <code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">--no-resample</span></code>, the dashboard’s checkbox)
+whatever <code class="docutils literal notranslate"><span class="pre">serve</span></code>’s own default is.</p>
+<p>The serve program is <code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_COMMAND</span></code>, and deployments change
+it: the fileglancer deploy sets <code class="docutils literal notranslate"><span class="pre">&quot;pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow</span> <span class="pre">serve&quot;</span></code>. So it is
+read each time a command is built, never copied at import (a copy misses
+the override), and split into words (quoted as one token, the shell looks
+for a program called “pixi run cellmap_flow serve”). <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>,
+the program before 0.3.0, takes <code class="docutils literal notranslate"><span class="pre">--model</span></code> too, so a deployment that
+still sets that works.</p>
+<p>A model with an environment of its own (<code class="docutils literal notranslate"><span class="pre">models.envs</span></code>: its entry’s
+<code class="docutils literal notranslate"><span class="pre">env</span></code>, else its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>) is served from it instead: the
+entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> is taken off, and the program is that environment’s (<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span> <span class="pre">--manifest-path</span> <span class="pre">&lt;pixi.toml&gt;</span> <span class="pre">-e</span> <span class="pre">&lt;env&gt;</span>
+<span class="pre">cellmap_flow</span> <span class="pre">serve</span></code>, or <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;/bin/python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.cli.main</span>
+<span class="pre">serve</span></code>) in place of SERVER_COMMAND, which names this deployment’s own.</p>
+<p>The launchers submit it as a shell line, which <code class="docutils literal notranslate"><span class="pre">jobs.spec.shell_join</span></code>
+quotes: the entry’s JSON is full of double quotes and braces, and
+<code class="docutils literal notranslate"><span class="pre">shlex.join</span></code> would single-quote it, which LSF’s own quoting splits apart
+(<code class="docutils literal notranslate"><span class="pre">jobs.spec.shell_quote</span></code> says how).</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.launch.logger" title="cellmap_flow.serving.launch.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.launch.server_argv" title="cellmap_flow.serving.launch.server_argv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">server_argv</span></code></a>(→ list)</p></td>
+<td><p>The server's argv for <code class="docutils literal notranslate"><span class="pre">model_config</span></code> reading <code class="docutils literal notranslate"><span class="pre">data_path</span></code>, resampling</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.launch.server_command" title="cellmap_flow.serving.launch.server_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">server_command</span></code></a>(→ str)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">server_argv</span></code> as the shell line start_hosts takes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.launch.remembered" title="cellmap_flow.serving.launch.remembered"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remembered</span></code></a>(queue, charge_group)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(queue,</span> <span class="pre">charge_group)</span></code> for a command-line launch: the ones given,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.launch.launch" title="cellmap_flow.serving.launch.launch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">launch</span></code></a>(model, data_path, *[, queue, charge_group, ...])</p></td>
+<td><p>Start an inference server for <code class="docutils literal notranslate"><span class="pre">model</span></code> on <code class="docutils literal notranslate"><span class="pre">data_path</span></code>, and return its job.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.serving.launch.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.launch.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.serving.launch.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.launch.server_argv">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.launch.</span></span><span class="sig-name descname"><span class="pre">server_argv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.serving.launch.server_argv" title="Link to this definition"></a></dt>
+<dd><p>The server’s argv for <code class="docutils literal notranslate"><span class="pre">model_config</span></code> reading <code class="docutils literal notranslate"><span class="pre">data_path</span></code>, resampling
+it to the model’s input voxel size when <code class="docutils literal notranslate"><span class="pre">resample</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.launch.server_command">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.launch.</span></span><span class="sig-name descname"><span class="pre">server_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.serving.launch.server_command" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">server_argv</span></code> as the shell line start_hosts takes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.launch.remembered">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.launch.</span></span><span class="sig-name descname"><span class="pre">remembered</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.serving.launch.remembered" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(queue,</span> <span class="pre">charge_group)</span></code> for a command-line launch: the ones given,
+else the saved launcher settings’; the ones given are saved for the next
+run and the dashboard. <code class="docutils literal notranslate"><span class="pre">queue</span></code> is <code class="docutils literal notranslate"><span class="pre">-q</span></code>’s text, one queue or several
+(queues.queue_list), and comes back a list.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.launch.launch">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.launch.</span></span><span class="sig-name descname"><span class="pre">launch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for_host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.serving.launch.launch" title="Link to this definition"></a></dt>
+<dd><p>Start an inference server for <code class="docutils literal notranslate"><span class="pre">model</span></code> on <code class="docutils literal notranslate"><span class="pre">data_path</span></code>, and return its job.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model</span></code> is a model config, or a model entry (<code class="docutils literal notranslate"><span class="pre">models.entry</span></code>), which
+is built first (<code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code>). The server reads
+<code class="docutils literal notranslate"><span class="pre">data_path</span></code> with the model’s <code class="docutils literal notranslate"><span class="pre">scale</span></code> applied
+(<code class="docutils literal notranslate"><span class="pre">config.yaml.resolve_data_path</span></code>), resampling it to the model’s voxel
+size when <code class="docutils literal notranslate"><span class="pre">resample</span></code>. <code class="docutils literal notranslate"><span class="pre">queue</span></code>, the GPU queues it may run on (a
+list; start_hosts tries them in the order queues.candidates gives), and
+<code class="docutils literal notranslate"><span class="pre">charge_group</span></code> default to the saved launcher settings
+(<code class="docutils literal notranslate"><span class="pre">jobs.settings</span></code>). The job is named after the
+model, and is returned once its server has announced its address, or at
+once when <code class="docutils literal notranslate"><span class="pre">wait_for_host</span></code> is off.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference internal" href="../../config/yaml/index.html#cellmap_flow.config.yaml.ConfigError" title="cellmap_flow.config.yaml.ConfigError"><strong>ConfigError</strong></a> – <code class="docutils literal notranslate"><span class="pre">model</span></code> is an entry that does not describe a model.</p></li>
+<li><p><a class="reference internal" href="../../jobs/spec/index.html#cellmap_flow.jobs.spec.JobStartError" title="cellmap_flow.jobs.spec.JobStartError"><strong>JobStartError</strong></a> – no queue accepted the job, or its server never came up.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../engine/index.html" class="btn btn-neutral float-left" title="cellmap_flow.serving.engine" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../probe/index.html" class="btn btn-neutral float-right" title="cellmap_flow.serving.probe" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

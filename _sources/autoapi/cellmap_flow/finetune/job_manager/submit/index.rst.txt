@@ -1,0 +1,203 @@
+cellmap_flow.finetune.job_manager.submit
+========================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.submit
+
+.. autoapi-nested-parse::
+
+   What a submission runs, and where.
+
+   The manager's submit_finetuning_job validates a request and writes the
+   run's directory; this module answers the questions on the way:
+
+   - ``resolve_model_type``: the trainer's ``--model-type`` for a model
+     config, refusing one it cannot train; ``model_entry``: the model as the
+     trainer takes it with ``--model-entry``, for the types that go that way;
+   - ``find_checkpoint``, ``count_corrections``: the checkpoint to start from,
+     and whether the session has anything to train on;
+   - ``model_settings``: the channels and voxel sizes to train with;
+   - ``extract_data_path_from_corrections``: the raw data the job's server
+     serves;
+   - ``build_command``: the trainer's shell command line, which LSF runs on a
+     GPU node (``python -m cellmap_flow.finetune.finetune_cli``);
+     ``module_command``: such a line for any module, in the model's
+     environment (the web export's, finetune/export_web.py, too);
+   - ``launch``: that command on LSF, or here when there is no bsub;
+     ``QueueFallback``: the job moved to the next of its queues when it has
+     not started on one.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.submit.logger
+   cellmap_flow.finetune.job_manager.submit.FLAG_MODEL_TYPES
+   cellmap_flow.finetune.job_manager.submit.SYNCED_TEE
+   cellmap_flow.finetune.job_manager.submit.TEE_PYTHON
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.submit.QueueFallback
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.submit.trainable_model_types
+   cellmap_flow.finetune.job_manager.submit.resolve_model_type
+   cellmap_flow.finetune.job_manager.submit.model_entry
+   cellmap_flow.finetune.job_manager.submit.find_checkpoint
+   cellmap_flow.finetune.job_manager.submit.count_corrections
+   cellmap_flow.finetune.job_manager.submit.model_settings
+   cellmap_flow.finetune.job_manager.submit.extract_data_path_from_corrections
+   cellmap_flow.finetune.job_manager.submit.build_command
+   cellmap_flow.finetune.job_manager.submit.module_command
+   cellmap_flow.finetune.job_manager.submit.launch
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: FLAG_MODEL_TYPES
+
+.. py:function:: trainable_model_types() -> list
+
+   The model types the trainer can train: those that say so (``ModelConfig.finetunable``).
+
+
+.. py:function:: resolve_model_type(model_config) -> str
+
+   Infer the finetuning CLI model type from the model config.
+
+   Raises ValueError for a type the trainer cannot train, rather than
+   submitting a GPU job whose argparse exits with code 2.
+
+
+.. py:function:: model_entry(model_config, model_type: str, checkpoint_path: Optional[pathlib.Path]) -> Optional[dict]
+
+   The model as the trainer takes it with --model-entry, or None for a type
+   that goes by its own flags (FLAG_MODEL_TYPES).
+
+   The entry is the model's to_dict(), so the trainer builds the model the
+   dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
+   entry's own checkpoint, which is how an override reaches a Fly model.
+   A model with an ``env`` always goes as an entry: no other flag carries
+   the env, and without it the serving YAMLs the trainer writes would run
+   the finetuned model in the default environment. Its type's
+   ``default_env`` needs no entry: the trainer builds the same type, and
+   a finetuned model runs where its base type does. So does one run at a
+   voxel size not its own (``run_voxel_size``), which no flag carries
+   either: the trainer would read the data at the model's own.
+
+
+.. py:function:: find_checkpoint(model_config, override=None) -> Optional[pathlib.Path]
+
+   The checkpoint to finetune from: ``override``, else the config's own.
+
+   None when there is neither: a script model passes its script instead.
+   Raises ValueError for a checkpoint that does not exist.
+
+
+.. py:function:: count_corrections(corrections_path: pathlib.Path) -> int
+
+   How many corrections the session holds.
+
+   Raises ValueError when there is nothing to train on.
+
+
+.. py:function:: model_settings(model_config, warned: set)
+
+   (channels, input voxel size, output voxel size) to train ``model_config`` with.
+
+   Each is the config's own, else its geometry's, else a guess: channels
+   ["mito"], 16 nm voxels. A guess is logged once per model; ``warned``
+   holds the names of the models already warned about.
+
+
+.. py:function:: extract_data_path_from_corrections(corrections_path: pathlib.Path) -> str
+
+   Extract dataset path from corrections metadata.
+
+   The manifest's raw_dataset_path first -- it is what the trainer reads
+   -- and only then the first correction zarr's attrs, which a crop zarr
+   may not have.
+
+
+.. py:data:: SYNCED_TEE
+   :value: ''
+
+
+.. py:data:: TEE_PYTHON
+   :value: '/opt/hostedtoolcache/Python/3.11.17/x64/bin/python'
+
+
+.. py:function:: build_command(*, model_config, model_type: str, checkpoint_path: Optional[pathlib.Path], corrections_path: pathlib.Path, output_dir: pathlib.Path, log_file: pathlib.Path, channels: List[str], input_voxel_size: List[int], output_voxel_size: List[int], options: cellmap_flow.finetune.options.TrainingOptions, auto_serve: bool, serve_data_path: Optional[str], models_dir: Optional[pathlib.Path] = None, queue: Optional[List[str]] = None, charge_group: Optional[str] = None) -> str
+
+   Build the shell command used to launch finetuning, for ``bash -c``.
+
+   The training settings go as ``cli.training_flags(options)``, every one
+   said, so the command stands on its own whatever the defaults become.
+
+
+.. py:function:: module_command(model_config, module: str, args: List[str], log_file: pathlib.Path) -> str
+
+   ``python -P -m <module> <args>`` in the environment ``model_config``
+   trains in (``_python_argv``), as a shell line for ``bash -c`` that writes
+   its output to ``log_file`` and exits as the module does: the trainer's
+   (build_command), and the web export's (finetune/export_web.py).
+
+
+.. py:function:: launch(job_name: str, command: str, queue: Optional[str], charge_group: Optional[str], walltime: Optional[str] = None)
+
+   Start ``command`` (build_command's) as the job ``job_name``.
+
+   On LSF with one GPU when bsub is available, for ``walltime`` ("HH:MM"
+   or minutes) or else the site's; otherwise as a process here.
+   Returns its LSFJob or LocalJob; raises RuntimeError if it did not start.
+
+
+.. py:class:: QueueFallback(queues: List[str], submit: Callable[[str], object])
+
+   Moving a training job that has not started to the next of its queues.
+
+   start_hosts does this for a server, while it waits for the server's
+   address. A training job is not waited on but followed, by its monitor,
+   which calls ``move`` at each poll at which LSF says the job is PENDING.
+   Once the job has been pending the site's pending_fallback_seconds on one
+   queue, it is submitted to the next of ``queues`` (those after the first
+   in queues.candidates' order, so only queues the job may run on) and the
+   waiting one is killed; on the last queue it waits however long that
+   takes. A queue that refuses the submission is not asked again, and the
+   next one is asked at once.
+
+   ``submit`` is ``launch`` with the job's name and command: a queue in, the
+   job submitted there out.
+
+
+   .. py:attribute:: queues
+
+
+   .. py:attribute:: submit
+
+
+   .. py:attribute:: since
+
+
+   .. py:method:: move(job) -> bool
+
+      Move ``job``, a FinetuneJob LSF says is pending, to the next queue
+      if it has waited long enough on this one; whether it was moved.
+
+
+

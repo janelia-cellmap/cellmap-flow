@@ -1,0 +1,619 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.export_web &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.finetune_cli" href="../finetune_cli/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.export_merged" href="../export_merged/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.export_web</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/export_web/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.export_web">
+<span id="cellmap-flow-finetune-export-web"></span><h1>cellmap_flow.finetune.export_web<a class="headerlink" href="#module-cellmap_flow.finetune.export_web" title="Link to this heading"></a></h1>
+<p>Export a model finetuned on the server to publish it: a cellmap-models export for servers, and ONNX files and the catalog’s manifest for the browser.</p>
+<p>A model finetuned here is served from the YAML its run wrote
+(run_outputs.write_serving_yaml): a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">finetune</span></code> entry, its base model
+with a LoRA adapter or a full finetune’s weights on top. This turns it into
+the files a publish uploads to Hugging Face (dashboard/routes/finetune/publish.py),
+laid out in <code class="docutils literal notranslate"><span class="pre">&lt;output&gt;</span></code> as the repository lays them out, in two forms:</p>
+<ul class="simple">
+<li><p>for servers, always: the network as cellmap-models exports one, as
+cellmap’s own model repositories hold it at their root, which a server
+opens by the repository’s name (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">huggingface</span></code>) and a folder of
+them serves (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellmap</span></code>; export_merged.export_folder):
+<code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/model.ts</span></code>, the TorchScript that is served;
+<code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/model.pt2</span></code>, the torch.export program a LoRA finetune of it
+trains, where torch.export can make one; <code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/metadata.json</span></code>, its
+channels, voxel sizes and block in cellmap-models’ format, and its input
+normalization in cellmap-flow’s (<code class="docutils literal notranslate"><span class="pre">input_norm</span></code>, which a server takes
+when the model is added); and <code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/export_record.json</span></code>, how it
+was exported;</p></li>
+<li><p>for the browser, when export_onnx_web can make one (below): a folder laid
+out as the browser’s catalog lays out a model (cellmap/onnx-web-models,
+and a model the browser publishes), which the browser opens and a server
+serves with <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">onnx</span></code>. <code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/&lt;folder&gt;/manifest.json</span></code> is the
+model’s manifest in the catalog’s format (web/src/models/manifest.ts
+parseManifest; the server reads it with models/configs/onnx.py
+parse_manifest, which checks it here before the export counts as done):
+its channels, voxel sizes, input normalization, what its output is, the
+ONNX tensors’ names, and one row per variant with its block sizes, its
+file and how far it is from the PyTorch model; and
+<code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/&lt;folder&gt;/&lt;folder&gt;_in&lt;n&gt;_&lt;variant&gt;.onnx</span></code> is one file per
+variant (fp32, fp16, int8w, int8w_fp16, or those <code class="docutils literal notranslate"><span class="pre">--variants</span></code> names).</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/result.json</span></code> says what the export came to, which it also prints
+as the last line of its output, <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;}</span></code> or:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="s2">"folder"</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>             <span class="c1"># the model's folder: the browser form's, and its name</span>
+ <span class="s2">"manifest"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>          <span class="c1"># the browser form's manifest.json; without one, what it</span>
+                            <span class="c1"># would say of the model, with no variants</span>
+ <span class="s2">"server"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"files"</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="c1"># the server form's files, in &lt;output&gt;</span>
+            <span class="s2">"input_size"</span><span class="p">:</span> <span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="s2">"output_size"</span><span class="p">:</span> <span class="p">[</span><span class="nb">int</span><span class="p">]},</span>  <span class="c1"># the block model.ts is traced at</span>
+ <span class="s2">"no_browser"</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">}</span>  <span class="c1"># why there is no browser form; None when there is one</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;output&gt;/export_log.txt</span></code> is its log when it runs as a job.</p>
+<p>How: the base network is built as the trainer builds it
+(model_loading.load_trainable_model), the finetune folded into its weights
+(export_merged.apply_finetune), and the plain network exported at the block
+the model is served at: traced to TorchScript (and exported with
+torch.export) for servers, and exported with cellmap-models’ onnx_web
+(<code class="docutils literal notranslate"><span class="pre">export_onnx_web</span></code>) for the browser. onnx_web rewrites a 3D transposed
+convolution, which onnxruntime-web’s WebGPU cannot run, and every Conv3d,
+which it runs about 16x slower than Conv2d, into ops it runs fast, and
+checks each file with onnxruntime against the PyTorch network. It checks
+them on a block of the raw the model was trained on, read and normalized as
+the trainer reads and normalizes its patches (data.loader.dataset_from_manifest),
+centred where it draws one from what was annotated; the fp32 file must agree
+with the network to FP32_REL_TOL of the output’s scale.</p>
+<p>The dashboard starts an export and follows it (routes/finetune/publish.py):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">export</span> <span class="o">=</span> <span class="n">start_export</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">,</span> <span class="n">corrections_dir</span><span class="p">,</span> <span class="n">run_dir</span><span class="p">)</span>
+<span class="n">export_status</span><span class="p">(</span><span class="n">export</span><span class="p">)</span>
+<span class="c1"># {"status": "running" | "done" | "failed",</span>
+<span class="c1">#  "error": str | None,       # failed: why</span>
+<span class="c1">#  "dir": str,                # the export's directory</span>
+<span class="c1">#  "job": {"id": str | None,  # its LSF job's id, None for a process here</span>
+<span class="c1">#          "queued": bool,    # whether it is still waiting for its node</span>
+<span class="c1">#          "log": str,        # its log</span>
+<span class="c1">#          "epoch": int | None, "epochs": int | None},  # a training's epoch, of how many</span>
+<span class="c1">#  and, done, result.json's "folder", "manifest", "server" and "no_browser"</span>
+<span class="c1">#  (None until then)}</span>
+</pre></div>
+</div>
+<p>The epoch is the last “Starting epoch N of M” line (markers.EPOCH_START_RE)
+near the end of the log: distill prints them; an export prints none.</p>
+<p><code class="docutils literal notranslate"><span class="pre">start_export</span></code> submits the export as a job (job_manager.submit.launch: on
+LSF when there is bsub, else a process here) in the environment the model
+finetunes in, into <code class="docutils literal notranslate"><span class="pre">&lt;run_dir&gt;/web_export/&lt;YAML's</span> <span class="pre">name&gt;/</span></code>, and returns at
+once; the files to upload are <code class="docutils literal notranslate"><span class="pre">&lt;dir&gt;/&lt;file&gt;</span></code> at the repository’s root for
+each of the server form’s files, and <code class="docutils literal notranslate"><span class="pre">&lt;dir&gt;/&lt;folder&gt;/manifest.json</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&lt;dir&gt;/&lt;folder&gt;/&lt;file&gt;</span></code> for each of the manifest’s variants. From the
+command line:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">cellmap_flow</span><span class="o">.</span><span class="n">finetune</span><span class="o">.</span><span class="n">export_web</span> <span class="o">--</span><span class="n">yaml</span> <span class="o">&lt;</span><span class="n">serving</span> <span class="n">yaml</span><span class="o">&gt;</span> \
+    <span class="o">--</span><span class="n">corrections</span> <span class="o">&lt;</span><span class="n">session</span><span class="o">&gt;/</span><span class="n">corrections</span> <span class="o">--</span><span class="n">output</span> <span class="o">&lt;</span><span class="nb">dir</span><span class="o">&gt;</span> <span class="p">[</span><span class="o">--</span><span class="n">variants</span> <span class="n">fp32</span><span class="p">,</span><span class="n">fp16</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>What it cannot export, said rather than worked around:</p>
+<ul class="simple">
+<li><p>A model served through its base’s own prediction rather than its
+network’s forward (Cellpose, which segments with its own eval): a
+TorchScript of the network would not predict what is served, so the
+export fails. Every other model has its server form.</p></li>
+<li><p>The browser form is exported at the block the model is served at, its
+(z, y, x) shape as it is: a cube, a 2D model’s slice (1, y, x), or any
+other block. None for a model with more than one input channel, as the
+browser feeds one.</p></li>
+<li><p>What onnx_web rewrites it asserts: Conv3d unpadded, undilated and
+ungrouped, ConvTranspose3d with kernel equal to stride. Valid-padding
+U-Nets are; anything else has no browser form, for onnx_web’s reason.</p></li>
+<li><p>At most 2 GB of float32 weights in the browser form: onnx_web keeps them
+inside the .onnx file, which protobuf caps there. The large cellmap UNets
+(about 800M parameters, 3.2 GB, such as mito-aff-unet-setup-16) have
+none; no browser would load them either.</p></li>
+<li><p>A model without a browser form is still exported, its server form alone,
+and <code class="docutils literal notranslate"><span class="pre">no_browser</span></code> says why: the publish uploads that, and its card says
+so.</p></li>
+<li><p>The network runs on the GPU the job holds when there is one (the one
+launch asks for, as every finetune job does), for its probes and the
+outputs the ONNX files are checked against; the server form is traced on
+the CPU, as a TorchScript traced on a GPU keeps that GPU in it, and
+onnx_web exports and checks its files on the CPU.</p></li>
+<li><p>The manifest has no <code class="docutils literal notranslate"><span class="pre">finetune</span></code> block: the browser cannot finetune the
+exported model further (its head and full-network specs name graph nodes
+and a training graph that onnx_web does not write).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">output</span></code> says what the network’s output is as the trainer’s probe reads
+it (probe_output_class): probabilities, a tanh’s range, or unbounded; it
+cannot tell logits from distances.</p></li>
+</ul>
+<p>The browser form needs cellmap-models with <code class="docutils literal notranslate"><span class="pre">model_export.onnx_web</span></code> (the
+onnx-web-export-and-pruning branch, which pixi.toml’s finetune feature
+installs) and its export extra, onnx and onnxruntime, where the export
+runs; without them there is none, and <code class="docutils literal notranslate"><span class="pre">no_browser</span></code> says so.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.logger" title="cellmap_flow.finetune.export_web.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.MODULE" title="cellmap_flow.finetune.export_web.MODULE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODULE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.RESULT_NAME" title="cellmap_flow.finetune.export_web.RESULT_NAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESULT_NAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.LOG_NAME" title="cellmap_flow.finetune.export_web.LOG_NAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOG_NAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.WALLTIME" title="cellmap_flow.finetune.export_web.WALLTIME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WALLTIME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.FP32_REL_TOL" title="cellmap_flow.finetune.export_web.FP32_REL_TOL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FP32_REL_TOL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.ONNX_FILE_LIMIT" title="cellmap_flow.finetune.export_web.ONNX_FILE_LIMIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ONNX_FILE_LIMIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.EXPORTER" title="cellmap_flow.finetune.export_web.EXPORTER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EXPORTER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.VARIANTS_HELP" title="cellmap_flow.finetune.export_web.VARIANTS_HELP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VARIANTS_HELP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.OUTPUT_DESCRIPTIONS" title="cellmap_flow.finetune.export_web.OUTPUT_DESCRIPTIONS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OUTPUT_DESCRIPTIONS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.WebExport" title="cellmap_flow.finetune.export_web.WebExport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WebExport</span></code></a></p></td>
+<td><p>An export <code class="docutils literal notranslate"><span class="pre">start_export</span></code> started: the directory it writes and its job</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.serving_entry" title="cellmap_flow.finetune.export_web.serving_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serving_entry</span></code></a>(yaml_path)</p></td>
+<td><p>The serving YAML at <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> and its finetuned model's entry, <code class="docutils literal notranslate"><span class="pre">(config,</span> <span class="pre">entry)</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.folder_name" title="cellmap_flow.finetune.export_web.folder_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">folder_name</span></code></a>(→ str)</p></td>
+<td><p>The model's folder: its name as the catalog's names are made (manifest.ts</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.start_export" title="cellmap_flow.finetune.export_web.start_export"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_export</span></code></a>(→ WebExport)</p></td>
+<td><p>Start exporting the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, trained on the session</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.start_job" title="cellmap_flow.finetune.export_web.start_job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_job</span></code></a>() → WebExport)</p></td>
+<td><p>Start <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">&lt;module&gt;</span></code> on the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.export_status" title="cellmap_flow.finetune.export_web.export_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export_status</span></code></a>(→ dict)</p></td>
+<td><p>Where <code class="docutils literal notranslate"><span class="pre">export</span></code> stands (see the module's docstring for the answer's keys).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.training_manifest" title="cellmap_flow.finetune.export_web.training_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">training_manifest</span></code></a>(→ dict)</p></td>
+<td><p>The training manifest of the session <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.training_block" title="cellmap_flow.finetune.export_web.training_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">training_block</span></code></a>(corrections_dir, input_block, ...)</p></td>
+<td><p>A block of the raw the model was trained on, <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">1,</span> <span class="pre">*input_block]</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.finetuned_network" title="cellmap_flow.finetune.export_web.finetuned_network"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finetuned_network</span></code></a>(yaml_path)</p></td>
+<td><p>The finetuned network <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, on the CPU, as the export</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.describe" title="cellmap_flow.finetune.export_web.describe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">describe</span></code></a>(→ dict)</p></td>
+<td><p>What an export says of the model <code class="docutils literal notranslate"><span class="pre">finetuned</span></code>, whose network has the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.export" title="cellmap_flow.finetune.export_web.export"><code class="xref py py-obj docutils literal notranslate"><span class="pre">export</span></code></a>(→ dict)</p></td>
+<td><p>Export the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves into <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>: its server</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.job_parser" title="cellmap_flow.finetune.export_web.job_parser"><code class="xref py py-obj docutils literal notranslate"><span class="pre">job_parser</span></code></a>(→ argparse.ArgumentParser)</p></td>
+<td><p>The command line start_job gives a job: <code class="docutils literal notranslate"><span class="pre">--yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">--corrections</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.run_job" title="cellmap_flow.finetune.export_web.run_job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_job</span></code></a>(→ int)</p></td>
+<td><p>A job's body (export_web's and distill's <code class="docutils literal notranslate"><span class="pre">main</span></code>): <a href="#id1"><span class="problematic" id="id2">``</span></a>work(output_dir,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.export_web.main" title="cellmap_flow.finetune.export_web.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>(→ int)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.MODULE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">MODULE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap_flow.finetune.export_web'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.MODULE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.RESULT_NAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">RESULT_NAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'result.json'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.RESULT_NAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.LOG_NAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">LOG_NAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'export_log.txt'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.LOG_NAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WALLTIME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">WALLTIME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'01:00'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WALLTIME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.FP32_REL_TOL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">FP32_REL_TOL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.001</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.FP32_REL_TOL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.ONNX_FILE_LIMIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">ONNX_FILE_LIMIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2147483648</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.ONNX_FILE_LIMIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.EXPORTER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">EXPORTER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap_models.model_export.onnx_web</span> <span class="pre">(torch.onnx.export,</span> <span class="pre">TorchScript,</span> <span class="pre">dynamo=False)'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.EXPORTER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.VARIANTS_HELP">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">VARIANTS_HELP</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'comma-separated</span> <span class="pre">onnx_web</span> <span class="pre">precisions</span> <span class="pre">(fp32,fp16,int8w,int8w_fp16;</span> <span class="pre">all</span> <span class="pre">by</span> <span class="pre">default)'</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.VARIANTS_HELP" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.OUTPUT_DESCRIPTIONS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">OUTPUT_DESCRIPTIONS</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.OUTPUT_DESCRIPTIONS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WebExport">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">WebExport</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WebExport" title="Link to this definition"></a></dt>
+<dd><p>An export <code class="docutils literal notranslate"><span class="pre">start_export</span></code> started: the directory it writes and its job
+(a jobs.lsf.LSFJob, or a jobs.local.LocalJob where there is no bsub).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WebExport.output_dir">
+<span class="sig-name descname"><span class="pre">output_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WebExport.output_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WebExport.job">
+<span class="sig-name descname"><span class="pre">job</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WebExport.job" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WebExport.result_file">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">result_file</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WebExport.result_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.WebExport.log_file">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">log_file</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.WebExport.log_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.serving_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">serving_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.export_web.serving_entry" title="Link to this definition"></a></dt>
+<dd><p>The serving YAML at <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> and its finetuned model’s entry, <code class="docutils literal notranslate"><span class="pre">(config,</span> <span class="pre">entry)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the YAML serves no <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">finetune</span></code> model.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.folder_name">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">folder_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.folder_name" title="Link to this definition"></a></dt>
+<dd><p>The model’s folder: its name as the catalog’s names are made (manifest.ts
+isLayerName), lower case, runs of anything but letters, digits, <code class="docutils literal notranslate"><span class="pre">_</span></code> and
+<code class="docutils literal notranslate"><span class="pre">-</span></code> made one <code class="docutils literal notranslate"><span class="pre">_</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.start_export">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">start_export</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_dir</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.export_web.WebExport" title="cellmap_flow.finetune.export_web.WebExport"><span class="pre">WebExport</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.start_export" title="Link to this definition"></a></dt>
+<dd><p>Start exporting the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, trained on the session
+<code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code>, into <code class="docutils literal notranslate"><span class="pre">&lt;run_dir&gt;/web_export/&lt;YAML's</span> <span class="pre">name&gt;/</span></code>, as a
+job (start_job).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – the YAML serves no finetuned model, or its environment
+cannot run the export.</p></li>
+<li><p><strong>RuntimeError</strong> – the job could not be submitted.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.start_job">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">start_job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">walltime</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flags</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.export_web.WebExport" title="cellmap_flow.finetune.export_web.WebExport"><span class="pre">WebExport</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.start_job" title="Link to this definition"></a></dt>
+<dd><p>Start <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">&lt;module&gt;</span></code> on the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves,
+trained on the session <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code>, writing into <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>
+(the export’s job, and distill’s), and return at once.</p>
+<p>The job, <code class="docutils literal notranslate"><span class="pre">&lt;job_name&gt;_&lt;model's</span> <span class="pre">folder&gt;</span></code>, runs in the environment the
+model finetunes in (submit.module_command) on the YAML’s queue and
+charge group, which are its finetune job’s, with <code class="docutils literal notranslate"><span class="pre">flags</span></code> after the
+module’s –yaml, –corrections and –output. A result an earlier job
+left in <code class="docutils literal notranslate"><span class="pre">output_dir</span></code> is removed first, so that <code class="docutils literal notranslate"><span class="pre">export_status</span></code> does
+not read it as this one’s.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError</strong> – the YAML serves no finetuned model, or its environment
+cannot run the job.</p></li>
+<li><p><strong>RuntimeError</strong> – the job could not be submitted.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.export_status">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">export_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">export</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.export_web.WebExport" title="cellmap_flow.finetune.export_web.WebExport"><span class="pre">WebExport</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.export_status" title="Link to this definition"></a></dt>
+<dd><p>Where <code class="docutils literal notranslate"><span class="pre">export</span></code> stands (see the module’s docstring for the answer’s keys).</p>
+<p>“running” until the export has written its result, then “done” or
+“failed” as the result says; “failed” too, with the tail of its log as the
+error, when its job has ended without writing one (killed, out of time or
+memory).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.training_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">training_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.training_manifest" title="Link to this definition"></a></dt>
+<dd><p>The training manifest of the session <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code>
+(session.manifest.read_manifest): where the raw the model was trained
+on is, and how the trainer reads it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the session has none.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.training_block">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">training_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.export_web.training_block" title="Link to this definition"></a></dt>
+<dd><p>A block of the raw the model was trained on, <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">1,</span> <span class="pre">*input_block]</span></code>
+float32, normalized by <code class="docutils literal notranslate"><span class="pre">input_norm</span></code>.</p>
+<p>Read as the trainer reads a patch of the session <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code>, at
+the training manifest’s voxel sizes, around a centre it draws from what
+was annotated: not a random anchor, which may lie anywhere in the
+dataset, resin included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the session has no training manifest.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.finetuned_network">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">finetuned_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.export_web.finetuned_network" title="Link to this definition"></a></dt>
+<dd><p>The finetuned network <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves, on the CPU, as the export
+exports it and the distillation (finetune/distill.py) copies it: its base
+built as the trainer builds it (model_loading.load_trainable_model), the
+finetune folded into its weights (export_merged.apply_finetune), every
+layer a real one. Returns <code class="docutils literal notranslate"><span class="pre">(network,</span> <span class="pre">finetuned,</span> <span class="pre">input_norm)</span></code>: the
+network, the finetuned model’s config, and the input normalization the
+YAML serves it with, as steps.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the YAML serves no finetuned model, or one served other
+than by its network’s forward (see the module’s docstring).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.describe">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">describe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">finetuned</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">folder</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.describe" title="Link to this definition"></a></dt>
+<dd><p>What an export says of the model <code class="docutils literal notranslate"><span class="pre">finetuned</span></code>, whose network has the
+<code class="docutils literal notranslate"><span class="pre">geometry</span></code> and an output of <code class="docutils literal notranslate"><span class="pre">output_class</span></code> (probe_output_class), in
+<code class="docutils literal notranslate"><span class="pre">folder</span></code>: the browser form’s manifest has it at its top, and the
+server form’s metadata.json the same in its terms. <code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> says
+where its weights came from; by default, how it was finetuned from what.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.export">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variants</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.export" title="Link to this definition"></a></dt>
+<dd><p>Export the model <code class="docutils literal notranslate"><span class="pre">yaml_path</span></code> serves into <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>: its server
+form, and its browser form where export_onnx_web can make one. Returns
+result.json’s <code class="docutils literal notranslate"><span class="pre">{&quot;folder&quot;,</span> <span class="pre">&quot;manifest&quot;,</span> <span class="pre">&quot;server&quot;,</span> <span class="pre">&quot;no_browser&quot;}</span></code> (see the
+module’s docstring).</p>
+<p><code class="docutils literal notranslate"><span class="pre">variants</span></code>: onnx_web’s precisions to write, all of them by default.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the model is served other than by its network’s forward
+(see the module’s docstring), so it has no server form; or the
+server form does not open as cellmap-models opens an export.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.job_parser">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">job_parser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_help</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">argparse.ArgumentParser</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.job_parser" title="Link to this definition"></a></dt>
+<dd><p>The command line start_job gives a job: <code class="docutils literal notranslate"><span class="pre">--yaml</span></code>, <code class="docutils literal notranslate"><span class="pre">--corrections</span></code>
+and <code class="docutils literal notranslate"><span class="pre">--output</span></code> (<code class="docutils literal notranslate"><span class="pre">output_help</span></code>); the module adds its own flags.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.run_job">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">run_job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">work</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">logging.Logger</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">failed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.run_job" title="Link to this definition"></a></dt>
+<dd><p>A job’s body (export_web’s and distill’s <code class="docutils literal notranslate"><span class="pre">main</span></code>): <code class="docutils literal notranslate"><span class="pre">work(output_dir,</span>
+<span class="pre">variants)</span></code>’s result, or <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;}</span></code> when it raises (logged to <code class="docutils literal notranslate"><span class="pre">log</span></code>
+after <code class="docutils literal notranslate"><span class="pre">failed</span></code>), written to result.json (_write_result), which
+export_status reads, and printed as the output’s last line. Returns
+the exit code: 1 on an error, else 0.</p>
+<p><code class="docutils literal notranslate"><span class="pre">args</span></code> is job_parser’s, with <code class="docutils literal notranslate"><span class="pre">--variants</span></code> (VARIANTS_HELP) besides.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.export_web.main">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.export_web.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.export_web.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../export_merged/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.export_merged" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../finetune_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.finetune_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

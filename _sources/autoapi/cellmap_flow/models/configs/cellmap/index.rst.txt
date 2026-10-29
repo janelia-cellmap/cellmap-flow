@@ -1,0 +1,145 @@
+cellmap_flow.models.configs.cellmap
+===================================
+
+.. py:module:: cellmap_flow.models.configs.cellmap
+
+.. autoapi-nested-parse::
+
+   ``CellMapModelConfig``: a model that cellmap_models exported, from its folder.
+
+   The folder's metadata gives the shapes, voxel sizes and channel names; the
+   model is its TorchScript export.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellmap.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellmap.CellMapModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellmap.runs_at
+   cellmap_flow.models.configs.cellmap.export_finetune_modes
+   cellmap_flow.models.configs.cellmap.metadata_geometry
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: runs_at(model, input_shape, output_shape) -> bool
+
+   Whether the TorchScript ``model`` runs on an input of ``input_shape``
+   voxels and answers ``output_shape``.
+
+   cellmap_models traces the export (``torch.jit.trace``) at whichever shape
+   the exporter passed, and a traced UNet's crops are baked in, so it runs
+   only at that shape: fed another, it either fails (jrc_mus-livers_16nm_to_8nm_mito,
+   traced at its inference 288³, fails at its training 216³ with "padded
+   input size (1 x 1 x 1)") or answers the baked-in output
+   (mito_aff_unet_setup_16, traced at its training 178³ → 56³, answers 56³
+   to a 378³ input). The metadata records both shapes and not which one
+   the export was traced at, so this asks the model.
+
+
+.. py:function:: export_finetune_modes(file_names) -> tuple
+
+   How a cellmap_models export whose top-level files are ``file_names``
+   can be finetuned, from their names alone: LoRA and full with a
+   ``model.pt2``, which cellmap_models' ``train()`` unflattens into a module
+   adapters attach to; full only without one, as ``train()`` then hands the
+   trainer the TorchScript, a compiled network that takes no adapter.
+
+   The one rule for an export's folder (CellMapModelConfig.finetune_modes),
+   its Hugging Face repository (HuggingFaceModelConfig's) and the model
+   lists' facts (hf_catalog.weight_facts). fly_organelles' copies under
+   /nrs/cellmap/models/saalfeldlab (model.pt and model.ts; their Hugging
+   Face copies have a model.pt2) and cellmap/jrc_mus-livers_16nm_to_8nm_mito
+   (model.pt, model.ts and model.onnx) have none: offered LoRA, their jobs
+   failed at their start.
+
+
+.. py:function:: metadata_geometry(metadata)
+
+   ``ModelConfig.declared_geometry`` from an export's metadata (``metadata``
+   has its fields as attributes): its training output, when the metadata
+   gives no other shape (``_other_shapes``), so that it is the one the
+   export runs at; else None, as when a field is missing. setup_16's
+   metadata gives inference shapes too, and its export runs at the training
+   ones; jrc_mus-livers_16nm_to_8nm_mito's runs at its inference ones.
+
+
+.. py:class:: CellMapModelConfig(folder_path, name=None, scale=None)
+
+
+
+   Configuration class for a CellmapModel.
+
+
+   .. py:attribute:: cli_name
+      :value: 'cellmap'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: cellmap_model
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: finetune_modes()
+
+      ``export_finetune_modes`` of its folder's files, read from their
+      names without loading them: the model list asks on every poll. Both
+      while the folder cannot be listed.
+
+
+
+   .. py:method:: declared_geometry()
+
+      Its export's metadata.json's (``metadata_geometry``), read without the model.
+
+
+
+   .. py:method:: declared_input_norm(data_range=None)
+
+      Its export's metadata.json's input_normalization
+      (``metadata_input_norm``). cellmap_models' parsed metadata leaves that
+      field out, so the file is read for it, once.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

@@ -1,0 +1,129 @@
+cellmap_flow.models.configs.huggingface
+=======================================
+
+.. py:module:: cellmap_flow.models.configs.huggingface
+
+.. autoapi-nested-parse::
+
+   ``HuggingFaceModelConfig``: a cellmap_models export on the Hugging Face Hub.
+
+   It is the export at the repository's root, downloaded (``download_export``),
+   then built as a ``CellMapModelConfig``. ``to_dict()`` adds the repo's
+   ``metadata.json`` for the pipeline builder; building a launch command never
+   downloads it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.huggingface.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.huggingface.HuggingFaceModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.huggingface.download_export
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: download_export(repo, revision=None)
+
+   The cellmap_models export at the root of the Hugging Face repository
+   ``repo``, downloaded: its CellmapModel.
+
+   The root's files only. A model a server published
+   (dashboard/routes/finetune/publish.py) has its ONNX web export in a
+   folder beside them, a model of its own (``<repo>/<folder>``, type
+   onnx) whose files are of no use here and can be gigabytes.
+
+
+.. py:class:: HuggingFaceModelConfig(repo, revision=None, name=None, scale=None)
+
+
+
+   Configuration class for a Hugging Face model.
+
+
+   .. py:attribute:: cli_name
+      :value: 'huggingface'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: METADATA_RETRY_SECONDS
+      :value: 60
+
+
+
+   .. py:attribute:: repo
+
+
+   .. py:attribute:: revision
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: finetune_modes()
+
+      ``export_finetune_modes`` of the repo's files. Their list is asked
+      for, not the model, once for the life of this config; when the Hub
+      cannot say, both are offered, and the job says which it takes.
+
+
+
+   .. py:method:: declared_geometry()
+
+      Its metadata.json's, as a cellmap export's (``metadata_geometry``):
+      that file is downloaded, not the model.
+
+
+
+   .. py:method:: declared_input_norm(data_range=None)
+
+      The input normalization the repo's metadata.json declares: its
+      ``input_norm``, cellmap-flow steps, which a model a server published
+      has (finetune.export_web); else a cellmap-models export's
+      ``input_normalization``, the range the model reads
+      (``metadata_input_norm``), for raw data spanning ``data_range``.
+      Downloaded as for declared_geometry; cheap after the first ask, as
+      ``_load_metadata`` is, and never raises.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

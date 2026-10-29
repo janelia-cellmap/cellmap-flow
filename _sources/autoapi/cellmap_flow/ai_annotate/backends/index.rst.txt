@@ -1,0 +1,93 @@
+cellmap_flow.ai_annotate.backends
+=================================
+
+.. py:module:: cellmap_flow.ai_annotate.backends
+
+.. autoapi-nested-parse::
+
+   The providers a config may name, behind one interface (``base.Backend``).
+
+   ``get_backend`` builds the provider a config entry describes. Adding a
+   provider type is a module here, a branch in ``get_backend``, and its
+   options in ``config.PROVIDER_OPTIONS``.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/ai_annotate/backends/base/index
+   /autoapi/cellmap_flow/ai_annotate/backends/fake/index
+   /autoapi/cellmap_flow/ai_annotate/backends/vertex_gemini/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.DEFAULT_TIMEOUT_S
+   cellmap_flow.ai_annotate.backends.DEFAULT_VERTEX_LOCATION
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.AIAnnotateError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.get_backend
+
+
+Package Contents
+----------------
+
+.. py:data:: DEFAULT_TIMEOUT_S
+   :value: 120
+
+
+.. py:data:: DEFAULT_VERTEX_LOCATION
+   :value: 'global'
+
+
+.. py:exception:: AIAnnotateError(category, user_message, *, http_status=None)
+
+
+
+   A failure the user can be told about, as a category and a safe message.
+
+   ``str()`` of it is the user message too, so a caller that logs or returns
+   ``str(e)`` by habit still shows nothing unvetted. ``http_status``
+   overrides the category's default, e.g. 400 for a request naming a model
+   the config does not allow.
+
+
+   .. py:attribute:: CATEGORIES
+      :value: ('config', 'auth', 'quota', 'timeout', 'bad_response', 'unavailable', 'refused', 'limit')
+
+
+
+   .. py:attribute:: category
+
+
+   .. py:attribute:: user_message
+
+
+   .. py:attribute:: http_status
+
+
+.. py:function:: get_backend(provider)
+
+   The backend for a ``config.ProviderConfig``; a config error for an unknown type.
+
+

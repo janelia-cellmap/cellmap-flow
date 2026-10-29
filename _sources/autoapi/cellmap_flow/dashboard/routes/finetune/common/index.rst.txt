@@ -1,0 +1,250 @@
+cellmap_flow.dashboard.routes.finetune.common
+=============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.common
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.common.logger
+   cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE
+   cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS
+   cellmap_flow.dashboard.routes.finetune.common.EVERY_CHANNEL_TARGETS
+   cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.common.find_model_config
+   cellmap_flow.dashboard.routes.finetune.common.current_chain
+   cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales
+   cellmap_flow.dashboard.routes.finetune.common.session_store
+   cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage
+   cellmap_flow.dashboard.routes.finetune.common.load_user_prefs
+   cellmap_flow.dashboard.routes.finetune.common.save_user_prefs
+   cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session
+   cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations
+   cellmap_flow.dashboard.routes.finetune.common.declared_output_type
+   cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for
+   cellmap_flow.dashboard.routes.finetune.common.model_target
+   cellmap_flow.dashboard.routes.finetune.common.trains_one_channel
+   cellmap_flow.dashboard.routes.finetune.common.channel_choice
+   cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type
+   cellmap_flow.dashboard.routes.finetune.common.settings_note
+   cellmap_flow.dashboard.routes.finetune.common.served_output_class
+   cellmap_flow.dashboard.routes.finetune.common.restart_params
+   cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id
+   cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy
+   cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: USER_PREFS_FILE
+
+.. py:data:: LOG_FILTER_PATTERNS
+   :value: ['^\\s+base_model\\.\\S+\\.lora_', '^INFO:werkzeug:', '^Array metadata \\(scale=', '^Host...
+
+
+.. py:function:: find_model_config(model_name)
+
+.. py:function:: current_chain()
+
+   The dashboard's chains as step lists, ``(input_norm, postprocess)``.
+
+   A new volume and a training manifest record them, so that the trainer
+   normalizes its input as inference does, and the finetuned model's YAML
+   postprocesses as the dashboard does.
+
+
+.. py:function:: viewer_position_and_scales()
+
+   The viewer's position, in its voxels, and each axis's scale in nm:
+   z, y, x when its dimensions name all three (they are x, y, z there),
+   else in the viewer's order.
+
+
+.. py:function:: session_store()
+
+   The dashboard's sessions and volume registry (its session's dicts).
+
+
+.. py:function:: ensure_corrections_storage(output_path)
+
+   ``(session path, corrections directory)``: the corrections directory
+   of ``output_path``'s session in this dashboard (made when it has none),
+   or, with no ``output_path``, ``~/.cellmap_flow/corrections`` and no
+   session. The directory is made, and made a zarr v2 group (its
+   ``.zgroup``, written again each time with the same content), the
+   volumes' parent.
+
+
+.. py:function:: load_user_prefs()
+
+.. py:function:: save_user_prefs(prefs)
+
+.. py:function:: resolve_finetune_session(corrections_path_str)
+
+.. py:function:: detect_sparse_annotations(corrections_path)
+
+   Whether the session trains on painted (sparse) annotations.
+
+   Read from the volume the manifest points at: annotated voxels outside
+   its imported crops are painted. This looked for per-chunk extracts
+   marked source == "sparse_volume", which are only written when there is
+   no manifest -- and every session has one now -- so it was always False:
+   the margin + distillation switch and the distance-model scribble guard in
+   submit never fired, and mask_unannotated was never set. A session
+   without a manifest cannot be trained, so it is not sparse either.
+
+
+.. py:function:: declared_output_type(model_config)
+
+   The training target a model type declares (``finetune_output_type``), or None.
+
+   Cellpose predicts flows, so its type says "flows". A finetuned model
+   trains as its base does, so its ``base_model_config`` is asked in turn
+   (building that config builds no network).
+
+
+.. py:function:: annotation_dtype_for(model_config)
+
+   The labels' dtype of a new annotation volume for ``model_config``:
+   ``cellmap_flow.portable.volume.annotation_dtype`` (the browser's rule too)
+   of what it trains on (``autodetect_output_type``), uint16 for the
+   instance targets in INSTANCE_TARGETS, else uint8; uint8 when that cannot
+   be told.
+
+
+.. py:data:: EVERY_CHANNEL_TARGETS
+   :value: ('affinities', 'flows', 'binary_broadcast')
+
+
+.. py:function:: model_target(model_config, channel_names)
+
+   The training target a model says it has without being built:
+   ``(output_type, offsets)``, the offsets a list or None; ``(None, None)``
+   when nothing says.
+
+   In turn: the target its type declares (``declared_output_type``:
+   Cellpose's flows); the offsets its script assigns, read by parsing it
+   (an affinity model's); the affinity offsets its output channel names
+   give (portable/label_it.affinity_offsets: the browser's Python applies
+   the same rule to its manifest's names, for training and seeding, so
+   both modes treat such a model the same way). ``channel_names`` is a
+   function of no arguments giving those names (None when they are not
+   known), called only when the type and the script say nothing: finding
+   them can cost a download, or the model's geometry.
+
+   The one rule for what a model trains on, which ``autodetect_output_type``
+   (at submit) and ``channel_choice`` (the models list, every two seconds)
+   both apply.
+
+
+.. py:function:: trains_one_channel(output_type, output_channels) -> bool
+
+   Whether a model with ``output_channels`` output channels, trained on
+   ``output_type``, trains one channel at a time (``select_channel``): more
+   than one channel, on a target that is not one of EVERY_CHANNEL_TARGETS.
+   The paint is then about one channel: the binary target on every channel
+   would teach the paint's class to each (er and nucleus would learn
+   "mito").
+
+
+.. py:function:: channel_choice(model_config, output_channels, channel_names) -> bool
+
+   The models list's ``channel_choice``: whether ``model_config``, with
+   ``output_channels`` output channels named ``channel_names`` (None when
+   unknown), trains one channel at a time (``trains_one_channel``) on the
+   target ``model_target`` says. ``model_config`` may be None (a job served
+   without a config), and then only the names say. Never builds the model:
+   the list is asked every two seconds.
+
+
+.. py:function:: autodetect_output_type(model_config, output_type, offsets)
+
+   The training target of ``model_config``: ``(output_type, offsets)``,
+   the offsets as JSON or None.
+
+   ``output_type`` and ``offsets`` when given. Else what the model says
+   (``model_target``, with its channel names read as
+   ``_channel_names_for_autodetect`` reads them); else a distance model's,
+   by its name; else binary. An affinity target without offsets takes its
+   script's, or raises ValueError.
+
+
+.. py:data:: SPARSE_MSE_NOTE
+   :value: 'Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations'
+
+
+.. py:function:: settings_note(asked: cellmap_flow.finetune.options.TrainingOptions, used: cellmap_flow.finetune.options.TrainingOptions) -> Optional[str]
+
+   The sentence submit's answer carries when the loss was switched for sparse
+   annotations (TrainingOptions.for_session), else None: the form still shows
+   what was entered, so say what was used.
+
+
+.. py:function:: served_output_class(model_name) -> Optional[str]
+
+   What the model's running server says its output is (model_info's
+   ``output_class``, serving.probe), the reading ranking and seeding share;
+   None when no server for it is up, or it has not predicted yet, and the
+   training job then probes the model itself.
+
+
+.. py:function:: restart_params(body) -> dict
+
+   The training settings a restart body (requests.FinetuneRestart) changes, as
+   the job's trainer takes them (cli.RESTARTABLE_ARGS). A job started before
+   this version knows three of them by other names, so those go beside the
+   new: ``no_augment`` with ``augment`` (a restart could never switch
+   augmentation on or off while the toggle was dropped), ``no_mixed_precision``
+   with ``mixed_precision`` and ``distillation_all_voxels`` with
+   ``distillation_scope``.
+
+
+.. py:function:: get_lsf_job_id(finetune_job)
+
+.. py:function:: rewrite_minio_url_for_proxy(minio_url, request=None)
+
+   ``minio_url`` as the browser can reach it through a reverse proxy.
+
+   ``session.minio.proxied_url``, for ``request`` or else the Flask request
+   being handled. Unless CELLMAP_FLOW_MINIO_PROXY_URL is set and the
+   request came through a proxy (X-Forwarded-Host), and outside a request
+   (a background import, a script), the URL is returned unchanged.
+
+
+.. py:function:: write_volume_manifest(volume)
+
+   Make an annotation volume its session's, trainable, by writing its manifest.
+
+   ``create_dataloader`` requires this manifest: it is what points the
+   trainer at the volume zarr to stream patches from, and it carries the
+   patch geometry, the dense/sparse ratio and the dashboard's chains. The
+   good regions beside it are honoured through the same dataset. Without
+   one, training raises rather than fall back to anything. It also says
+   which volume is the session's (SessionStore.session_volume).
+
+   Returns the manifest path, or None when the volume record is too
+   incomplete to describe (a resumed session whose .zattrs predates these
+   fields, say). Nothing is guessed: such a session cannot be trained, and
+   submit refuses it.
+
+   A volume painted before any model gets none (portable/volume.py
+   training_refusal: it is on no model's grid), and any manifest in its
+   corrections dir is removed: one naming the volume before it would keep
+   that one the session's, so Rank and Use this model would read the old
+   paint while the user paints the new, and a restart or a resumed copy
+   would train on it.
+
+

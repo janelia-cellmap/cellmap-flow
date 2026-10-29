@@ -1,0 +1,307 @@
+cellmap_flow.portable.label_it
+==============================
+
+.. py:module:: cellmap_flow.portable.label_it
+
+.. autoapi-nested-parse::
+
+   Label it's segmentation of a prediction, written once for both modes.
+
+   What the Finetune tab's *Seed from Prediction* makes of a model's output over
+   the box on screen: the request's options (``seed_options``), the channels a
+   seed reads (``seed_channels``; ``affinity_offsets`` for a model known by its
+   channel names alone), which served voxel lies under each annotation voxel
+   (``placement``, ``gather``), the output as a probability (``probability``)
+   and the objects of the *components* method (``components``: threshold,
+   connected components, smallest size, per slice). The server calls these
+   from ``dashboard/routes/finetune/view_labels.py`` around its read of the
+   model server's array; the browser from ``web/src/backend/routes/view-labels.ts``
+   around the engine's ``readOutput``, through ``label_it_calls.py``.
+
+   The box every tool covers is here too when the page asks for the field of
+   view (``field_of_view_nm``): what the viewer's panel shows, at the slice on
+   screen, rather than a box around its centre.
+
+   The mutex watershed is the one method not here: ``mwatershed`` is Rust, with
+   no Pyodide wheel, so each mode runs its own on what ``affinities`` gives
+   (``post.segment.mutex_watershed`` on the server, ``web/src/infer/affinity.ts``
+   in the browser, parity-tested against it). The distance watershed and a
+   model's own instances are the server's alone (scikit-image, Cellpose); no
+   model the browser runs outputs either.
+
+   scipy is imported inside the functions that need it, never at the top: the
+   browser's Python starts with numpy alone, and chunkmirage's worker loads a
+   package the first time a call fails to import it, then calls again, so the
+   first seed pays for scipy and opening a dataset does not.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.label_it.SEED_METHODS
+   cellmap_flow.portable.label_it.UNIT
+   cellmap_flow.portable.label_it.SIGNED_UNIT
+   cellmap_flow.portable.label_it.UNBOUNDED
+   cellmap_flow.portable.label_it.CONNECTIVITIES
+   cellmap_flow.portable.label_it.FIELD_OF_VIEW_MAX_VOXELS
+   cellmap_flow.portable.label_it.NEUROGLANCER_TOP_ROW_PX
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.label_it.classify_output_range
+   cellmap_flow.portable.label_it.as_connectivity
+   cellmap_flow.portable.label_it.as_bool
+   cellmap_flow.portable.label_it.seed_options
+   cellmap_flow.portable.label_it.affinity_offsets
+   cellmap_flow.portable.label_it.seed_channels
+   cellmap_flow.portable.label_it.placement
+   cellmap_flow.portable.label_it.read_box
+   cellmap_flow.portable.label_it.gather
+   cellmap_flow.portable.label_it.probability
+   cellmap_flow.portable.label_it.foreground_mask
+   cellmap_flow.portable.label_it.affinities
+   cellmap_flow.portable.label_it.remove_small
+   cellmap_flow.portable.label_it.connected_components
+   cellmap_flow.portable.label_it.components
+   cellmap_flow.portable.label_it.panel_px
+   cellmap_flow.portable.label_it.field_of_view_nm
+
+
+Module Contents
+---------------
+
+.. py:data:: SEED_METHODS
+   :value: ('components', 'mutex_watershed', 'distance_watershed', 'instances')
+
+
+.. py:data:: UNIT
+   :value: 'unit'
+
+
+.. py:data:: SIGNED_UNIT
+   :value: 'signed_unit'
+
+
+.. py:data:: UNBOUNDED
+   :value: 'unbounded'
+
+
+.. py:data:: CONNECTIVITIES
+
+.. py:function:: classify_output_range(lo: float, hi: float) -> Optional[str]
+
+   Bucket an observed (min, max) output range into an activation class;
+   None for a flat one, max - min within the tolerance.
+
+   A flat output is no evidence: jrc_mus-livers_16nm_to_8nm_peroxisome gave
+   -0.9595 everywhere on the server's noise, read as a tanh's [-1, 1], when
+   its network ends in a Conv (logits); a sigmoid saturated everywhere
+   would be as flat at 1. Whatever the values, a range they do not span
+   says nothing of what the output can be.
+
+
+.. py:function:: as_connectivity(value, ndim=3) -> int
+
+   ``value`` as scipy's connectivity for an ``ndim``-D array: 1 up to ``ndim``.
+
+   Forms send strings, so "2" is 2. A value past ``ndim`` (3 for one 2D
+   slice) is ``ndim``: every neighbour, which is what it asked for.
+   Raises ValueError for anything that is not 1, 2 or 3, None among them.
+
+
+.. py:function:: as_bool(value) -> bool
+
+   A form's "true"/"false" as a bool; anything else by Python's truth.
+
+
+.. py:function:: seed_options(data) -> dict
+
+   A seed request's options, from its JSON body, with the defaults the
+   routes give an absent one: ``method`` ("components"), ``threshold`` (a
+   probability, 0.5, the model's own boundary), ``min_size`` (0),
+   ``connectivity`` (1, faces) and ``per_slice`` (false).
+
+   Raises ValueError, which both modes answer 400, for a threshold outside
+   0 to 1, a negative or non-integer size, a method not in SEED_METHODS
+   and a connectivity that is not 1, 2 or 3. A ``connectivity`` given as
+   null is refused with the rest, not read as absent: the key is there.
+
+
+.. py:function:: affinity_offsets(channel_names)
+
+   The offsets of a model known by its channel names alone, or None
+   when they name no affinity channel.
+
+   The server's rule for a model whose script says none
+   (``dashboard/routes/finetune/common.autodetect_output_type``): a model
+   with a channel named ``*_aff*`` is an affinity model, and its first
+   affinity channels, up to three, compare each voxel with the next one
+   along z, y and x in turn, whatever their names say after ``_aff``.
+
+
+.. py:function:: seed_channels(output_type, offsets, select_channel=None)
+
+   The channels a seed reads, as a slice, or None for every one.
+
+   As the trainer targets them: the selected channel; else an affinity
+   model's offset channels, the first ``len(offsets)`` (the rest, LSDs
+   say, are masked out of its loss); else every channel, which a binary
+   target is broadcast over. ``offsets`` is a list of the model's offsets.
+   A slice past the model's channels reads those there are
+   (``probability``).
+
+
+.. py:function:: placement(lo, hi, voxel_size, dataset_offset_nm, translation, declared, shape, drawn=None)
+
+   Which voxel of a served array each annotation voxel of ``[lo, hi)``
+   reads: the one its centre lies in, so a seed from a model served at
+   another voxel size (any served model can seed, not only the one the
+   volume is for) lies under that model's layer.
+
+   The volume's grid is its ``voxel_size`` from ``dataset_offset_nm``, the
+   centre of its voxel 0 (its OME translation, as
+   ``finetune/session/volume.volume_corner_nm`` reads it; None is 0). The
+   served array's is its OME ``translation`` (voxel 0's centre too) and
+   ``declared`` voxel size, over ``shape`` voxels; ``drawn`` is the voxel
+   size Neuroglancer draws it at when that is another
+   (``viewer.layers.prediction_voxel_override``), which keeps the served
+   offset in voxels, so the array's corner moves with it.
+
+   Returns ``(indices, lo, hi)``: per axis, the served index of each
+   annotation voxel the array covers, and the box shrunk to those voxels;
+   None when it covers none along some axis.
+
+
+.. py:function:: read_box(indices)
+
+   ``(lo, hi)``: the box of the served array the indices span, the one to read for ``gather``.
+
+
+.. py:function:: gather(region, indices)
+
+   The prediction on the annotation grid: each annotation voxel the
+   served voxel ``placement`` gave it. ``region`` is (channels, z, y, x),
+   the served box ``read_box`` gives; with the two grids equal, all of it
+   in order.
+
+
+.. py:function:: probability(prediction, output_class=None, channels=None)
+
+   The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.
+
+   The boundary depends on the output's activation: 0.5 on [0, 1] output
+   (a sigmoid already applied; the cellmap distance models end in one, and
+   0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on unbounded
+   output, logits or a signed distance alike. Each is turned into a
+   probability, so ``channels`` (a slice: the affinity channels, say) can
+   be averaged and one threshold means the same for every model. A slice
+   running past the model's channels reads those there are; one starting
+   past them is refused. ``output_class`` is the server's (its network's
+   last op, or its probe's: inference/runner.py), or read off the values
+   when it has none, and taken as logits when they are flat
+   (``classify_output_range``). Read off the values is a guess: logits
+   that lie within [0, 1] read as probabilities. It is kept because the
+   values are real predictions (the ranking's under the paint, a seed's in
+   its box), nearer the truth than the probe's noise, and a model whose
+   graph says its activation never comes to it.
+
+
+.. py:function:: foreground_mask(prediction, output_class=None, channels=None, threshold=0.5)
+
+   Where the model says foreground: its ``probability``, averaged over ``channels``, over ``threshold``.
+
+   ``threshold`` is in probability whatever the activation: 0.5 is the
+   model's own boundary. Strictly over: a voxel at it is background.
+
+
+.. py:function:: affinities(prediction, output_class, offsets)
+
+   The mutex watershed's input: the probability of an affinity model's
+   offset channels, the first ``len(offsets)`` (as ``seed_channels``
+   takes them; fewer when the model has fewer).
+
+
+.. py:function:: remove_small(labels, min_size=0)
+
+   ``labels`` with objects of fewer than ``min_size`` voxels made background.
+
+   The rest are numbered 1..n again, in the order they had. ``labels``
+   must already be numbered without large gaps (any segmenter's output):
+   the sizes are counted per id.
+
+
+.. py:function:: connected_components(mask, connectivity=1, min_size=0, per_slice=False)
+
+   An id per connected object of ``mask`` (its nonzero voxels): uint64,
+   0 for background and 1..n with no id skipped, numbered as
+   ``scipy.ndimage.label`` numbers them.
+
+   ``per_slice``: each z slice of a (z, y, x) mask is labelled on its own,
+   in 2D, its ids following the slice before's. For data whose objects are
+   2D (what Cellpose sees), or annotations painted slice by slice: an
+   object touching itself across slices is still one per slice.
+   ``min_size``: objects of fewer voxels are background (specks a
+   threshold let through); per slice, each slice's piece is counted alone.
+
+
+.. py:function:: components(prediction, output_class, channels, threshold=0.5, min_size=0, connectivity=1, per_slice=False)
+
+   The objects of the *components* method: the ``foreground_mask`` of
+   the prediction over ``channels``, an id per connected object
+   (``connected_components``).
+
+
+.. py:data:: FIELD_OF_VIEW_MAX_VOXELS
+   :value: 4194304
+
+
+.. py:data:: NEUROGLANCER_TOP_ROW_PX
+   :value: 27
+
+
+.. py:function:: panel_px(viewer_px, state)
+
+   ``(across, down)``: the size in screen pixels of the panel the field
+   of view is taken from, in a viewer frame ``viewer_px`` (width, height)
+   pixels big showing ``state`` (the viewer's state, its JSON); None in a
+   layout with no slice panel ("3d") or one not in _PANEL_SHARE (a row of
+   viewers).
+
+   The page measures its frame, not the panel: in the server's mode the
+   frame holds neuroglancer's own page, of another origin, whose panels
+   the page cannot read. So the panel is the frame less neuroglancer's top
+   row (NEUROGLANCER_TOP_ROW_PX) and the side panels the state shows
+   (_SIDE_PANELS), and then its share of what is left (_PANEL_SHARE).
+
+
+.. py:function:: field_of_view_nm(viewer_px, state, pixel_nm, depth_axis, display_dimensions, voxel_size, depth_nm=None) -> list
+
+   The size in nm (z, y, x) of the box the viewer's panel shows: the
+   box every Label it tool covers, centred where the viewer looks, when
+   the page asks for the field of view.
+
+   In the plane, what the panel shows at its zoom: its size in screen
+   pixels (``panel_px`` of ``viewer_px``, the page's viewer frame, and
+   ``state``, the viewer's state as JSON) times ``pixel_nm``, the nm one
+   screen pixel spans (``viewer.raw.view_of``'s, the browser's
+   ``viewPixelNm``): its width along the data axis it draws across, its
+   height along the one it draws down (``ai_annotate.screen_axes`` of
+   ``depth_axis`` in a viewer showing ``display_dimensions``). Along
+   ``depth_axis``, the axis the panel looks along by the AI annotation's
+   plane rule, it is ``depth_nm`` (the Box field's depth along it, when it
+   gives one), else one annotation voxel of ``voxel_size`` (nm, z, y, x):
+   the slice on screen.
+
+   Raises ValueError, which both modes answer 400: without the frame's
+   size or the viewer's zoom, in a layout with no slice panel or side
+   panels that leave it none, and for a view of more than
+   FIELD_OF_VIEW_MAX_VOXELS annotation voxels, saying how far to zoom in.
+
+

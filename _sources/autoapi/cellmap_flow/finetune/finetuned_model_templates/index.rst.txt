@@ -1,0 +1,109 @@
+cellmap_flow.finetune.finetuned_model_templates
+===============================================
+
+.. py:module:: cellmap_flow.finetune.finetuned_model_templates
+
+.. autoapi-nested-parse::
+
+   Templates for generating finetuned model YAML configurations.
+
+   This module provides functions to auto-generate the YAML config for serving
+   finetuned models using FinetuneModelConfig (type: finetune).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetuned_model_templates.logger
+   cellmap_flow.finetune.finetuned_model_templates.FINETUNED_MODEL_YAML_MARKER
+   cellmap_flow.finetune.finetuned_model_templates.PLACEHOLDER_DATA_PATHS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetuned_model_templates.generate_finetuned_model_yaml
+   cellmap_flow.finetune.finetuned_model_templates.generate_current_config_yaml
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: FINETUNED_MODEL_YAML_MARKER
+   :value: 'FINETUNED_MODEL_YAML:'
+
+
+.. py:data:: PLACEHOLDER_DATA_PATHS
+
+.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str = None, base_model_dict: dict = None, model_name: str = None, output_path: pathlib.Path = None, data_path: str = None, queue: list = None, charge_group: str = None, json_data: dict = None, scale: str = None, weights_path: str = None, resample: bool = False, input_voxel_size=None, output_voxel_size=None) -> pathlib.Path
+
+   Generate .yaml configuration for serving a finetuned model.
+
+   The generated YAML uses type: finetune, which delegates to
+   FinetuneModelConfig. This loads the base model via its own
+   ModelConfig, applies the LoRA adapter, and serves the result.
+
+   :param lora_adapter_path: Path to the saved LoRA adapter directory
+   :param weights_path: Instead of an adapter, a full state dict from a
+                        --lora-r 0 (full finetune) run. Exactly one of the two.
+   :param base_model_dict: Dict describing the base model (from model_config.to_dict())
+   :param model_name: Name of the finetuned model
+   :param output_path: Where to write the .yaml file
+   :param data_path: Path to actual dataset (REQUIRED - no placeholders)
+   :param queue: The LSF queues it may be served on; None is the site's
+                 default queues
+   :param charge_group: LSF charge group; None is the site's default one
+   :param json_data: Optional dict with input_norm and postprocess from base model
+   :param scale: The level of a multiscale ``data_path`` to serve ("s1"), or
+                 None for none. With none, the server picks the level by the
+                 model's input voxel size, which is how the trainer read the same
+                 ``data_path``. This was always "s0", so a model trained on s1 of
+                 a multiscale group was served s0.
+   :param resample: the model was trained on the raw resampled to its voxel
+                    size (its volume's ``resample``), so serve it that way too
+   :param input_voxel_size: the voxel sizes the finetune was
+                            trained at, when not the base model's (run_outputs); the served
+                            model declares them
+   :param output_voxel_size: the voxel sizes the finetune was
+                             trained at, when not the base model's (run_outputs); the served
+                             model declares them
+
+   :returns: Path to the generated YAML file
+
+
+.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: list = None, charge_group: str = None, walltime: str = None, json_data: dict = None, resample: bool = False, cluster: bool = True) -> str
+
+   Build YAML text snapshotting the dashboard's current live server config
+   (whatever models/normalization/postprocessing/queue are active right
+   now), so it can be handed back to `cellmap_flow yaml` later.
+
+   Unlike generate_finetuned_model_yaml (which describes one specific
+   finetune job), this is a general "export what's currently running"
+   dump -- it doesn't write to disk itself, callers decide where the
+   result goes (a download response, a file, etc).
+
+   :param models: list of model entry dicts (each from ModelConfig.to_dict())
+   :param data_path: current dataset path
+   :param queue: The LSF queues the models may run on; None is the site's
+                 default queues
+   :param charge_group: LSF charge group; None is the site's default one
+   :param walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
+                    the reloaded config falls back to the built-in default
+   :param json_data: dict with "input_norm"/"postprocess" keys reflecting the
+                     currently active normalization/postprocessing, if any
+   :param resample: the dashboard's Resample setting, written either way
+   :param cluster: whether this machine submits to LSF (has bsub). Without
+                   one, queue, charge_group and walltime are left out: nothing
+                   read them where it was exported, and a Mac's export named the
+                   site's default queue, which it never used.
+
+   :returns: YAML text (str) ready to write to a file.
+
+

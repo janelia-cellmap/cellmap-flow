@@ -1,0 +1,506 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.rank &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.regions" href="../regions/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.publish_calls" href="../publish_calls/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.rank</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/rank/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.rank">
+<span id="cellmap-flow-portable-rank"></span><h1>cellmap_flow.portable.rank<a class="headerlink" href="#module-cellmap_flow.portable.rank" title="Link to this heading"></a></h1>
+<p>How well a model’s prediction already matches the paint: the score the
+Finetune tab ranks models by, to pick the one to start finetuning from.</p>
+<p>The one implementation both modes run: the server dashboard
+(dashboard/routes/finetune/rank_routes.py) in its process, the browser
+(web/src/backend/routes/rank.ts) in chunkmirage’s Pyodide workers through
+portable/calls.py; numpy and the standard library only. In short:</p>
+<ul class="simple">
+<li><p>A model is scored on the targets its own finetune trains on, over the
+painted voxels: an object or not on each channel of a binary model, the
+painted pairs of an affinity model.</p></li>
+<li><p>The score is the geometric mean of the share of object targets called
+object and of background targets called background: each share is of its
+own class, so the paint’s mix of the two does not tilt it, and a model
+must get both right, as one that calls everything background scores 0
+however much of the paint is background (their plain mean, the balanced
+accuracy, gave that model 0.5, read as half right). With one class
+painted, it is that class’s share. A binary model’s painted voxels next
+to one of the other class are not counted (rough strokes are forgiven
+along their edges).</p></li>
+<li><p>It is read at the model’s own cut-off: the logit, among CUTOFFS, with the
+best Dice of its calls against the painted objects (the nearest to 0
+among equals; 0 when only one class is painted). The score at 0 is given
+beside it.</p></li>
+<li><p>A binary model answers with its best channel, by name and index
+(<code class="docutils literal notranslate"><span class="pre">channel</span></code>, <code class="docutils literal notranslate"><span class="pre">channel_index</span></code>): the one the Finetune tab’s Use this
+model makes the training form’s Channel (select_channel) for a model of
+several, and Fit to Paint when none is picked. An affinity model is
+scored on its channels together, and answers neither.</p></li>
+<li><p>A model is read through its own input normalization (what its start
+sets: its declaration, or its kind’s convention) and through the
+session’s when that is another (<code class="docutils literal notranslate"><span class="pre">norm_tries</span></code>), and the better score is
+kept (<code class="docutils literal notranslate"><span class="pre">best_try</span></code>, its own among equals). Read through none, or another
+model’s, a model’s score is noise. Each is read on the raw channel the
+session’s chain picks (<code class="docutils literal notranslate"><span class="pre">on_channel</span></code>).</p></li>
+<li><p>Where the raw under the paint is narrower than NARROW_WINDOW of the
+model’s MinMaxNormalizer’s range, the model is scored again with the
+normalizer stretched to the raw’s 1st to 99th percentiles (<code class="docutils literal notranslate"><span class="pre">windowed</span></code>),
+kept only when it scores WINDOW_MARGIN better.</p></li>
+<li><p>The row of the ranking (<code class="docutils literal notranslate"><span class="pre">score_row</span></code>) is the score kept, with what it
+was read at in the units its controls take: the cut-off as Seed from
+Prediction’s threshold (a probability) and the raw’s range read as 0 to
+1 (the stretched window, or the normalizer’s own range), and the
+normalizer steps it was read through (<code class="docutils literal notranslate"><span class="pre">input_norm</span></code>), which Use this
+model and Fit to Paint make the session’s, with what the other channels
+and normalizations matched (<code class="docutils literal notranslate"><span class="pre">channel_matches</span></code>, <code class="docutils literal notranslate"><span class="pre">input_norm_others</span></code>):
+why this one. Both modes answer it as it is, so their tables agree.</p></li>
+<li><p>Beside it, the postprocessing the model’s layer needs to show a good
+prediction (<code class="docutils literal notranslate"><span class="pre">needed_postprocess</span></code>): the sigmoid its output needs and the
+threshold fitted to the paint, which they set too, as a model’s start
+sets the sigmoid alone.</p></li>
+</ul>
+<p>The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune’s
+default loss, is given beside the score: about 0.69 is guessing, about 0.20
+the paint fitted exactly.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.RANK_BLOCKS" title="cellmap_flow.portable.rank.RANK_BLOCKS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RANK_BLOCKS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.RANK_SMOOTHING" title="cellmap_flow.portable.rank.RANK_SMOOTHING"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RANK_SMOOTHING</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.CUTOFFS" title="cellmap_flow.portable.rank.CUTOFFS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CUTOFFS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.NARROW_WINDOW" title="cellmap_flow.portable.rank.NARROW_WINDOW"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NARROW_WINDOW</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.WINDOW_MARGIN" title="cellmap_flow.portable.rank.WINDOW_MARGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WINDOW_MARGIN</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.CHANNEL_STEP" title="cellmap_flow.portable.rank.CHANNEL_STEP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CHANNEL_STEP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.SIGMOID" title="cellmap_flow.portable.rank.SIGMOID"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SIGMOID</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.THRESHOLD" title="cellmap_flow.portable.rank.THRESHOLD"><code class="xref py py-obj docutils literal notranslate"><span class="pre">THRESHOLD</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.spread" title="cellmap_flow.portable.rank.spread"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spread</span></code></a>(→ list)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">count</span></code> of <code class="docutils literal notranslate"><span class="pre">items</span></code>, spread evenly over them in their order; all of them when there are no more.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.empty_tallies" title="cellmap_flow.portable.rank.empty_tallies"><code class="xref py py-obj docutils literal notranslate"><span class="pre">empty_tallies</span></code></a>(→ List[dict])</p></td>
+<td><p>One channel's agreement with the paint per channel: the targets</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.paint_edges" title="cellmap_flow.portable.rank.paint_edges"><code class="xref py py-obj docutils literal notranslate"><span class="pre">paint_edges</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The painted voxels of <code class="docutils literal notranslate"><span class="pre">labels</span></code> (z, y, x; 0 unpainted, 1 background,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.tally" title="cellmap_flow.portable.rank.tally"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tally</span></code></a>(→ None)</p></td>
+<td><p>Add one painted block to <code class="docutils literal notranslate"><span class="pre">tallies</span></code>: <code class="docutils literal notranslate"><span class="pre">target</span></code> and <code class="docutils literal notranslate"><span class="pre">mask</span></code> (C, z, y, x)</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.rank_score" title="cellmap_flow.portable.rank.rank_score"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rank_score</span></code></a>(→ Optional[dict])</p></td>
+<td><p>The score of <code class="docutils literal notranslate"><span class="pre">tallies</span></code>: an affinity model's over its channels</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.windowed" title="cellmap_flow.portable.rank.windowed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">windowed</span></code></a>(→ Optional[List[dict]])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">norm</span></code> (normalizer specs, <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">...}</span></code>) with its</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.same_steps" title="cellmap_flow.portable.rank.same_steps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">same_steps</span></code></a>(→ bool)</p></td>
+<td><p>Whether two normalizer chains are the same steps with the same</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.normalizers" title="cellmap_flow.portable.rank.normalizers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalizers</span></code></a>(→ List[dict])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">steps</span></code> (normalizer specs) without those that pick the raw's channel.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.on_channel" title="cellmap_flow.portable.rank.on_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">on_channel</span></code></a>(→ List[dict])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">steps</span></code>' normalizers read on the raw channel <code class="docutils literal notranslate"><span class="pre">chain</span></code> picks: its</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.norm_tries" title="cellmap_flow.portable.rank.norm_tries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">norm_tries</span></code></a>(→ List[dict])</p></td>
+<td><p>The input normalizations a model is scored through, each once, its own</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.best_try" title="cellmap_flow.portable.rank.best_try"><code class="xref py py-obj docutils literal notranslate"><span class="pre">best_try</span></code></a>(→ Optional[int])</p></td>
+<td><p>The index of the score (<code class="docutils literal notranslate"><span class="pre">rank_score</span></code>'s, one per <code class="docutils literal notranslate"><span class="pre">norm_tries</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.needed_postprocess" title="cellmap_flow.portable.rank.needed_postprocess"><code class="xref py py-obj docutils literal notranslate"><span class="pre">needed_postprocess</span></code></a>(→ Optional[List[dict]])</p></td>
+<td><p>The postprocessing a model's layer needs instead of <code class="docutils literal notranslate"><span class="pre">postprocess</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.rank.score_row" title="cellmap_flow.portable.rank.score_row"><code class="xref py py-obj docutils literal notranslate"><span class="pre">score_row</span></code></a>() → Optional[dict])</p></td>
+<td><p>A model's row of the ranking, as both modes answer it beside the</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.RANK_BLOCKS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">RANK_BLOCKS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">32</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.RANK_BLOCKS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.RANK_SMOOTHING">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">RANK_SMOOTHING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.1</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.RANK_SMOOTHING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.CUTOFFS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">CUTOFFS</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.CUTOFFS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.NARROW_WINDOW">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">NARROW_WINDOW</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.25</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.NARROW_WINDOW" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.WINDOW_MARGIN">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">WINDOW_MARGIN</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.03</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.WINDOW_MARGIN" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.spread">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">spread</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.spread" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">count</span></code> of <code class="docutils literal notranslate"><span class="pre">items</span></code>, spread evenly over them in their order; all of them when there are no more.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.empty_tallies">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">empty_tallies</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.empty_tallies" title="Link to this definition"></a></dt>
+<dd><p>One channel’s agreement with the paint per channel: the targets
+counted, their logits binned against CUTOFFS (bin b: above b of them),
+and the loss summed, apart for object and background targets.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.paint_edges">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">paint_edges</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.paint_edges" title="Link to this definition"></a></dt>
+<dd><p>The painted voxels of <code class="docutils literal notranslate"><span class="pre">labels</span></code> (z, y, x; 0 unpainted, 1 background,
+2 and up objects) that touch a painted voxel of the other class along z,
+y or x: the strokes’ edges, which a binary model’s score leaves out.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.tally">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">tally</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tallies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">skip</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.tally" title="Link to this definition"></a></dt>
+<dd><p>Add one painted block to <code class="docutils literal notranslate"><span class="pre">tallies</span></code>: <code class="docutils literal notranslate"><span class="pre">target</span></code> and <code class="docutils literal notranslate"><span class="pre">mask</span></code> (C, z, y, x)
+as the finetune’s target transform makes them, <code class="docutils literal notranslate"><span class="pre">logits</span></code> the model’s on
+the same voxels (NaN where it was not read), and <code class="docutils literal notranslate"><span class="pre">skip</span></code> (z, y, x) the
+voxels not to count (paint_edges), or None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.rank_score">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">rank_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tallies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">affinity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.rank_score" title="Link to this definition"></a></dt>
+<dd><p>The score of <code class="docutils literal notranslate"><span class="pre">tallies</span></code>: an affinity model’s over its channels
+together (<code class="docutils literal notranslate"><span class="pre">channel</span></code> and <code class="docutils literal notranslate"><span class="pre">channel_index</span></code> None), a binary model’s best
+channel’s (by the score, then the lower loss), <code class="docutils literal notranslate"><span class="pre">channel</span></code> its name in
+<code class="docutils literal notranslate"><span class="pre">channels</span></code> (“channel &lt;i&gt;” past them) and <code class="docutils literal notranslate"><span class="pre">channel_index</span></code> its index,
+as select_channel takes it; with <code class="docutils literal notranslate"><span class="pre">channel_matches</span></code>, every channel’s
+<code class="docutils literal notranslate"><span class="pre">{channel,</span> <span class="pre">channel_index,</span> <span class="pre">matches}</span></code>, the best first, which says why
+that one (organelle close behind mito, say). None when nothing was
+counted.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.windowed">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">windowed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">norm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.windowed" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">norm</span></code> (normalizer specs, <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">...}</span></code>) with its
+MinMaxNormalizer set to the raw’s window [lo, hi], or None: no
+MinMaxNormalizer, no window (lo = hi), or one not narrower than
+NARROW_WINDOW of the normalizer’s own range.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.same_steps">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">same_steps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.same_steps" title="Link to this definition"></a></dt>
+<dd><p>Whether two normalizer chains are the same steps with the same
+parameters, read as values (<code class="docutils literal notranslate"><span class="pre">_value</span></code>: “0” is 0).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.CHANNEL_STEP">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">CHANNEL_STEP</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ChannelSelector'</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.CHANNEL_STEP" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.normalizers">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">normalizers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.normalizers" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">steps</span></code> (normalizer specs) without those that pick the raw’s channel.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.on_channel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">on_channel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chain</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.on_channel" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">steps</span></code>’ normalizers read on the raw channel <code class="docutils literal notranslate"><span class="pre">chain</span></code> picks: its
+first ChannelSelector, then them. The channel is the raw’s, picked by
+the user, so a model’s start, its advice and the ranking, which put a
+model’s normalization in the chain, keep it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.norm_tries">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">norm_tries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">own</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">own_from</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">session</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.norm_tries" title="Link to this definition"></a></dt>
+<dd><p>The input normalizations a model is scored through, each once, its own
+first: <code class="docutils literal notranslate"><span class="pre">{&quot;input_norm&quot;:</span> <span class="pre">steps,</span> <span class="pre">&quot;from&quot;:</span> <span class="pre">where}</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">own</span></code> is what the model’s start sets (its declaration, <code class="docutils literal notranslate"><span class="pre">own_from</span></code>
+“declared”; or its kind’s convention, “convention”), else what the model
+advice assumes for a model nothing is known of (“assumed”; [] when there
+is nothing to assume), <code class="docutils literal notranslate"><span class="pre">session</span></code> the session’s input normalization
+(“session”).
+The model’s own is always tried: read through another’s, or none, a model
+scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
+channel nucleus for paint of mitochondria). The session’s is tried too,
+as one the user set may fit this raw better. With neither, the raw as it
+is (“none”). Every one reads the channel the session’s chain picks
+(<code class="docutils literal notranslate"><span class="pre">on_channel</span></code>), which alone is no normalization of the session’s.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.best_try">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">best_try</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scores</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.best_try" title="Link to this definition"></a></dt>
+<dd><p>The index of the score (<code class="docutils literal notranslate"><span class="pre">rank_score</span></code>’s, one per <code class="docutils literal notranslate"><span class="pre">norm_tries</span></code>
+entry, None where it counted nothing) that matches best, the first among
+equals (the model’s own); None when none counted.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.SIGMOID">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">SIGMOID</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SigmoidPostprocessor'</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.SIGMOID" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.THRESHOLD">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">THRESHOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ThresholdPostprocessor'</span></span><a class="headerlink" href="#cellmap_flow.portable.rank.THRESHOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.needed_postprocess">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">needed_postprocess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.needed_postprocess" title="Link to this definition"></a></dt>
+<dd><p>The postprocessing a model’s layer needs instead of <code class="docutils literal notranslate"><span class="pre">postprocess</span></code>
+(the session’s steps) to show a good prediction, or None when it shows
+one as it is: what a model’s start sets on a chain with none (no
+<code class="docutils literal notranslate"><span class="pre">threshold</span></code>), and what Use this model, Fit to Paint and Use these
+settings set beside the input normalization (the ranking row’s
+<code class="docutils literal notranslate"><span class="pre">threshold</span></code>, an affinity model’s too: the cut-off its painted pairs
+were scored at). <code class="docutils literal notranslate"><span class="pre">output_class</span></code> is the model’s output activation
+(portable/label_it.py, as its server’s probe answers it); with None,
+not known, nothing changes.</p>
+<p>Two steps are this rule’s, on a chain of nothing else:</p>
+<ul class="simple">
+<li><p>The activation: a sigmoid for an output with none (UNBOUNDED, logits)
+when the chain has none, and is empty or is given a threshold. A
+threshold alone on logits shows them cut at a logit (0, the model’s
+own boundary, as a rule); a sigmoid put ahead of it would cut the
+probabilities there instead, everything object at 0. An affinity
+model’s logits need it as much as any model’s: the chain into a
+segmentation (serving/probe.py suggest_affinity_chain) stays the
+model advice’s optional offer, which replaces the threshold and
+cuts the objects at it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">threshold</span></code>, a probability as the ranking’s row gives it (0.5 at
+the model’s own boundary): a ThresholdPostprocessor at it, in place of
+one the chain has, in the units of the output after the activation:
+the probability itself after the sigmoid and on an output in [0, 1]
+(UNIT); 2p - 1 on one in [-1, 1] (SIGNED_UNIT, a tanh), whose
+probability label_it.probability reads as (x + 1) / 2.</p></li>
+</ul>
+<p>A chain with any other step (a watershed, DefaultPostprocessor, a
+ChannelSelection) is the user’s and left as it is, but for one thing: a
+sigmoid on an output that has one already (UNIT, SIGNED_UNIT) is taken
+away from any chain, as a second sigmoid flattens the contrast (the
+model advice warns of it: serving/probe.py review_postprocess).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.rank.score_row">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.rank.</span></span><span class="sig-name descname"><span class="pre">score_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stretched</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_from</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'session'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">others</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.portable.rank.score_row" title="Link to this definition"></a></dt>
+<dd><p>A model’s row of the ranking, as both modes answer it beside the
+model’s name, the time taken and the notes; None when <code class="docutils literal notranslate"><span class="pre">base</span></code> is None
+(the paint gave the model nothing to score).</p>
+<p><code class="docutils literal notranslate"><span class="pre">base</span></code> is the model’s score (<code class="docutils literal notranslate"><span class="pre">rank_score</span></code>) read through <code class="docutils literal notranslate"><span class="pre">norm</span></code>,
+the normalizer specs it was served with (the best of <code class="docutils literal notranslate"><span class="pre">norm_tries</span></code>,
+<code class="docutils literal notranslate"><span class="pre">norm_from</span></code> its <code class="docutils literal notranslate"><span class="pre">from</span></code>); <code class="docutils literal notranslate"><span class="pre">stretched</span></code> its score read through
+<code class="docutils literal notranslate"><span class="pre">windowed(norm,</span> <span class="pre">*raw)</span></code>, <code class="docutils literal notranslate"><span class="pre">raw</span></code> the raw’s 1st and 99th percentiles
+under the paint, or None when that was not tried (the raw is not narrow)
+or counted nothing. The stretched score is kept when it matches
+WINDOW_MARGIN better than <code class="docutils literal notranslate"><span class="pre">base</span></code>. The row is the score kept, with:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">window</span></code>: <code class="docutils literal notranslate"><span class="pre">raw</span></code> when the stretched score was kept, else None; and
+then <code class="docutils literal notranslate"><span class="pre">matches_without_window</span></code>, <code class="docutils literal notranslate"><span class="pre">base</span></code>’s match;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">threshold</span></code>: the cut-off as a probability, as Seed from
+Prediction’s threshold takes it, to three decimals: 0.5 at the
+model’s own boundary (cut-off 0), else the probability the paint is
+fitted best above;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">input_window</span></code>: the raw’s range the model read as 0 to 1, as the
+Processing tab’s MinMaxNormalizer takes it: <code class="docutils literal notranslate"><span class="pre">window</span></code> when kept, else
+<code class="docutils literal notranslate"><span class="pre">norm</span></code>’s own range; None when <code class="docutils literal notranslate"><span class="pre">norm</span></code> has no MinMaxNormalizer;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">input_norm</span></code>: the normalizer steps the score kept was read through
+(<code class="docutils literal notranslate"><span class="pre">norm</span></code>, stretched when the stretch was kept), which Use this model
+and Fit to Paint make the session’s; and <code class="docutils literal notranslate"><span class="pre">input_norm_from</span></code>, where
+they come from (<code class="docutils literal notranslate"><span class="pre">norm_from</span></code>);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">input_norm_others</span></code>: what the other normalizations tried matched,
+<code class="docutils literal notranslate"><span class="pre">others</span></code> (<code class="docutils literal notranslate"><span class="pre">{from,</span> <span class="pre">matches}</span></code> each), which says why this one.</p></li>
+</ul>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../publish_calls/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.publish_calls" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../regions/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.regions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

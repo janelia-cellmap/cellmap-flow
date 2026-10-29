@@ -1,0 +1,426 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.volume &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.volume_calls" href="../volume_calls/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.targets_calls" href="../targets_calls/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.volume</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/volume/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.volume">
+<span id="cellmap-flow-portable-volume"></span><h1>cellmap_flow.portable.volume<a class="headerlink" href="#module-cellmap_flow.portable.volume" title="Link to this heading"></a></h1>
+<p>Where a new annotation volume lies and what holds its labels: the planning
+of <code class="docutils literal notranslate"><span class="pre">finetune/session/volume.py</span></code> (its module docstring says what a volume
+is), on numbers alone, so that the server and the browser plan a volume the
+same way. The server reads the raw level and the model’s geometry
+(<code class="docutils literal notranslate"><span class="pre">open_raw</span></code>, <code class="docutils literal notranslate"><span class="pre">resolve_model_geometry</span></code>) and the browser its
+<code class="docutils literal notranslate"><span class="pre">DatasetInfo</span></code> and model manifest (<code class="docutils literal notranslate"><span class="pre">web/src/finetune/volume.ts</span></code>, through
+<code class="docutils literal notranslate"><span class="pre">volume_calls.py</span></code>); both hand what they found to <code class="docutils literal notranslate"><span class="pre">plan_volume</span></code> here.</p>
+<p>The grid. A model reads one level of the raw, the one <code class="docutils literal notranslate"><span class="pre">select_level</span></code>’s
+“floor” picks for its input voxel size (or, with Resample, the raw resampled
+to that size), and both servers serve its prediction on that level’s grid:
+output voxel 0 starts at the level’s corner, and an output voxel is the
+level’s voxel times the model’s ratio of output to input voxel size. The
+volume lies on that grid, one chunk per model output block, so that a chunk
+of paint is a block of the prediction it is painted over, and it covers the
+level’s whole extent, a partial output voxel at the far end rounded up, then
+padded to whole chunks.</p>
+<p>A volume painted before any model (<code class="docutils literal notranslate"><span class="pre">plan_paint_volume</span></code>, a “paint-first”
+volume) lies on the raw’s own grid instead, at a voxel size the user picks
+(<code class="docutils literal notranslate"><span class="pre">shown_level</span></code> gives the default: the level the viewer shows), in chunks
+PAINT_FIRST_CHUNK voxels a side. It is for no model (its <code class="docutils literal notranslate"><span class="pre">model_name</span></code> is
+None), so it is not trained on (<code class="docutils literal notranslate"><span class="pre">training_refusal</span></code>): Which model to start
+from ranks the models on its paint, and Use this model carries the paint onto
+the chosen model’s grid (<code class="docutils literal notranslate"><span class="pre">carry.py</span></code>), into a volume that is trained on.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.INSTANCE_TARGETS" title="cellmap_flow.portable.volume.INSTANCE_TARGETS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INSTANCE_TARGETS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.WHOLE_VOXEL_TOLERANCE" title="cellmap_flow.portable.volume.WHOLE_VOXEL_TOLERANCE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WHOLE_VOXEL_TOLERANCE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.PAINT_FIRST_CHUNK" title="cellmap_flow.portable.volume.PAINT_FIRST_CHUNK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PAINT_FIRST_CHUNK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.PAINT_FIRST_TRAINING" title="cellmap_flow.portable.volume.PAINT_FIRST_TRAINING"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PAINT_FIRST_TRAINING</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.SHOWN_LEVEL_SLACK" title="cellmap_flow.portable.volume.SHOWN_LEVEL_SLACK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SHOWN_LEVEL_SLACK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.GRID_FIELDS" title="cellmap_flow.portable.volume.GRID_FIELDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRID_FIELDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.annotation_dtype" title="cellmap_flow.portable.volume.annotation_dtype"><code class="xref py py-obj docutils literal notranslate"><span class="pre">annotation_dtype</span></code></a>(→ str)</p></td>
+<td><p>The labels' dtype of a new volume for a model that trains on <code class="docutils literal notranslate"><span class="pre">output_type</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.volume_corner_nm" title="cellmap_flow.portable.volume.volume_corner_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">volume_corner_nm</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The world position of an annotation volume's voxel-0 lower corner, in nm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.whole_voxels" title="cellmap_flow.portable.volume.whole_voxels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">whole_voxels</span></code></a>(→ list)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> (a block size in voxels, as floats) as whole numbers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.block_shapes" title="cellmap_flow.portable.volume.block_shapes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">block_shapes</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(input_size,</span> <span class="pre">output_size)</span></code>, a model's blocks in voxels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.plan_volume" title="cellmap_flow.portable.volume.plan_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_volume</span></code></a>(→ dict)</p></td>
+<td><p>Where a new volume lies for <code class="docutils literal notranslate"><span class="pre">model</span></code> over the raw <code class="docutils literal notranslate"><span class="pre">level</span></code> it reads.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.shown_level" title="cellmap_flow.portable.volume.shown_level"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shown_level</span></code></a>(→ int)</p></td>
+<td><p>The index in <code class="docutils literal notranslate"><span class="pre">voxel_sizes</span></code> (each a raw level's voxel size in nm,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.plan_paint_volume" title="cellmap_flow.portable.volume.plan_paint_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_paint_volume</span></code></a>(→ dict)</p></td>
+<td><p>Where a new paint-first volume lies: over the raw <code class="docutils literal notranslate"><span class="pre">level</span></code> it is</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.training_refusal" title="cellmap_flow.portable.volume.training_refusal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">training_refusal</span></code></a>(volume)</p></td>
+<td><p>Why <code class="docutils literal notranslate"><span class="pre">volume</span></code> (its record or root attrs: a mapping, or an object</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.same_grid" title="cellmap_flow.portable.volume.same_grid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">same_grid</span></code></a>(→ bool)</p></td>
+<td><p>Whether grids <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> (mappings of GRID_FIELDS) are one: the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.grid_text" title="cellmap_flow.portable.volume.grid_text"><code class="xref py py-obj docutils literal notranslate"><span class="pre">grid_text</span></code></a>(→ str)</p></td>
+<td><p>A grid (GRID_FIELDS) as the sentences name it: its input block to its</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume.carried_note" title="cellmap_flow.portable.volume.carried_note"><code class="xref py py-obj docutils literal notranslate"><span class="pre">carried_note</span></code></a>(→ str)</p></td>
+<td><p>What training's submit says, in both modes, when the session volume</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.INSTANCE_TARGETS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">INSTANCE_TARGETS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('affinities',</span> <span class="pre">'flows')</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.INSTANCE_TARGETS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.WHOLE_VOXEL_TOLERANCE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">WHOLE_VOXEL_TOLERANCE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1e-06</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.WHOLE_VOXEL_TOLERANCE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.PAINT_FIRST_CHUNK">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">PAINT_FIRST_CHUNK</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">64</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.PAINT_FIRST_CHUNK" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.PAINT_FIRST_TRAINING">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">PAINT_FIRST_TRAINING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&quot;This</span> <span class="pre">volume</span> <span class="pre">was</span> <span class="pre">painted</span> <span class="pre">before</span> <span class="pre">a</span> <span class="pre">model</span> <span class="pre">was</span> <span class="pre">chosen,</span> <span class="pre">so</span> <span class="pre">it</span> <span class="pre">is</span> <span class="pre">on</span> <span class="pre">no</span> <span class="pre">model's</span> <span class="pre">grid:</span> <span class="pre">under</span> <span class="pre">Which...</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.PAINT_FIRST_TRAINING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.annotation_dtype">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">annotation_dtype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_type</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.annotation_dtype" title="Link to this definition"></a></dt>
+<dd><p>The labels’ dtype of a new volume for a model that trains on <code class="docutils literal notranslate"><span class="pre">output_type</span></code>.</p>
+<p>uint8 (ids up to 255) for a model trained on foreground and background;
+uint16 (up to 65535) for one trained on instances (affinities, Cellpose’s
+flows), whose seeds number each object: 282 of a Cellpose model’s masks
+in one box did not fit a uint8 volume.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.volume_corner_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">volume_corner_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_offset_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.volume_corner_nm" title="Link to this definition"></a></dt>
+<dd><p>The world position of an annotation volume’s voxel-0 lower corner, in nm.</p>
+<p><code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> (a root attr of every volume) is also written as the
+volume’s OME-NGFF translation, and a translation is voxel 0’s <em>centre</em>.
+Neuroglancer drew the volume that way while it was painted, so that is
+where the labels are: read as a corner, the value puts every label half
+an annotation voxel away from where it was drawn. None is an offset of 0.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.whole_voxels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">whole_voxels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">what</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.whole_voxels" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">values</span></code> (a block size in voxels, as floats) as whole numbers.</p>
+<p>A ValueError names <code class="docutils literal notranslate"><span class="pre">what</span></code> when one is not whole: truncating a block of
+177.6 voxels to 177 would make a volume whose chunks are not the model’s
+blocks.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.block_shapes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">block_shapes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.block_shapes" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(input_size,</span> <span class="pre">output_size)</span></code>, a model’s blocks in voxels.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model</span></code> (a mapping, or an object with these attributes) has
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code> and <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>, and either
+<code class="docutils literal notranslate"><span class="pre">input_shape</span></code>/<code class="docutils literal notranslate"><span class="pre">output_shape</span></code> in voxels or <code class="docutils literal notranslate"><span class="pre">read_shape</span></code>/
+<code class="docutils literal notranslate"><span class="pre">write_shape</span></code> in nm, which is what a server reports.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.plan_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">plan_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.plan_volume" title="Link to this definition"></a></dt>
+<dd><p>Where a new volume lies for <code class="docutils literal notranslate"><span class="pre">model</span></code> over the raw <code class="docutils literal notranslate"><span class="pre">level</span></code> it reads.</p>
+<p><code class="docutils literal notranslate"><span class="pre">level</span></code> is that level as the model reads it, z, y, x: <code class="docutils literal notranslate"><span class="pre">voxel</span></code> its
+voxel size in nm, <code class="docutils literal notranslate"><span class="pre">corner</span></code> its voxel-0 lower corner in nm (not the OME
+translation, which is the centre), <code class="docutils literal notranslate"><span class="pre">shape</span></code> its voxels. On the server
+it is the level <code class="docutils literal notranslate"><span class="pre">select_level</span></code> picks for the model’s input voxel size,
+at its own voxel size, or the raw resampled to the model’s input voxel
+size when Resample is on; in the browser, the level <code class="docutils literal notranslate"><span class="pre">chooseRawLevel</span></code>
+picks. <code class="docutils literal notranslate"><span class="pre">model</span></code> is as <code class="docutils literal notranslate"><span class="pre">block_shapes</span></code> takes it.</p>
+<p>Answers the plan’s fields of <code class="docutils literal notranslate"><span class="pre">VolumeGeometry</span></code>, as JSON-ready lists:
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code> the level’s own, <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> the level’s
+times the model’s ratio of output to input voxel size (where both
+servers serve the prediction), the model’s own as the claimed sizes,
+<code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> the model’s output block and <code class="docutils literal notranslate"><span class="pre">input_size</span></code> its input
+block, <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> voxel 0’s centre (the level’s corner plus
+half an output voxel) and <code class="docutils literal notranslate"><span class="pre">dataset_shape_voxels</span></code> the level’s extent in
+output voxels, rounded up, then padded to whole chunks.</p>
+<p>The ratio is the model’s: snapping the output voxel size to a raw level
+of its own could break it (on levels of 10, 20 and 40 nm, a model reading
+8 nm and writing 16 read the 10 nm level and wrote a 10 nm volume, while
+its server serves the prediction at 20), and the volume’s chunks were
+then not the model’s blocks.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.SHOWN_LEVEL_SLACK">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">SHOWN_LEVEL_SLACK</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.01</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.SHOWN_LEVEL_SLACK" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.shown_level">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">shown_level</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxel_sizes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pixel_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.shown_level" title="Link to this definition"></a></dt>
+<dd><p>The index in <code class="docutils literal notranslate"><span class="pre">voxel_sizes</span></code> (each a raw level’s voxel size in nm,
+finest first) of the level the viewer shows when one screen pixel spans
+<code class="docutils literal notranslate"><span class="pre">pixel_nm</span></code>: the coarsest whose finest axis is no coarser than a pixel,
+and the finest when zoomed in past it, as Neuroglancer picks the level
+to draw (viewer/raw.py’s _view_contrast_range reads it so). The finest
+when the zoom is not known (None: no viewer, or none that has reported
+one yet). A paint-first volume’s voxel size is this level’s unless the
+user picks another. A ValueError when there is no level.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.plan_paint_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">plan_paint_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.plan_paint_volume" title="Link to this definition"></a></dt>
+<dd><p>Where a new paint-first volume lies: over the raw <code class="docutils literal notranslate"><span class="pre">level</span></code> it is
+read from, on a grid of <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> nm (z, y, x), for no model.</p>
+<p><code class="docutils literal notranslate"><span class="pre">level</span></code> is as <code class="docutils literal notranslate"><span class="pre">plan_volume</span></code> takes it: on the server the level
+<code class="docutils literal notranslate"><span class="pre">raw_level</span></code> opens for <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (the level at that size, else the
+finest not coarser than it, at its own voxel size; with Resample on, the
+raw resampled to it), in the browser the one <code class="docutils literal notranslate"><span class="pre">chooseRawLevel</span></code> picks.
+The grid starts at the level’s corner: at a level’s own voxel size its
+voxels are the level’s (a size within float noise of it is taken as
+it), and at another (one the user typed) the level’s extent is covered
+in voxels of that size, a partial voxel at the far end rounded up. The
+chunks are PAINT_FIRST_CHUNK voxels a side, as thin as the volume along
+an axis it is thinner along, and the extent is padded to whole chunks.</p>
+<p>Answers <code class="docutils literal notranslate"><span class="pre">plan_volume</span></code>’s fields: <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> the grid’s,
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code> the level’s (what the raw under the paint is read
+at: Which model to start from’s window of it), no claimed sizes (there
+is no model to claim any), <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code>, <code class="docutils literal notranslate"><span class="pre">input_size</span></code> a chunk in the
+level’s voxels, rounded up, <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> voxel 0’s centre and
+<code class="docutils literal notranslate"><span class="pre">dataset_shape_voxels</span></code> the padded extent. A ValueError says what is
+wrong with <code class="docutils literal notranslate"><span class="pre">level</span></code> or <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.training_refusal">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">training_refusal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume.training_refusal" title="Link to this definition"></a></dt>
+<dd><p>Why <code class="docutils literal notranslate"><span class="pre">volume</span></code> (its record or root attrs: a mapping, or an object
+with <code class="docutils literal notranslate"><span class="pre">model_name</span></code>) is not trained on, or None when it can be:
+PAINT_FIRST_TRAINING for a paint-first volume, which names no model,
+so no model’s blocks are its chunks to train on.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.GRID_FIELDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">GRID_FIELDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('input_size',</span> <span class="pre">'output_size',</span> <span class="pre">'input_voxel_size',</span> <span class="pre">'output_voxel_size')</span></span><a class="headerlink" href="#cellmap_flow.portable.volume.GRID_FIELDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.same_grid">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">same_grid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.same_grid" title="Link to this definition"></a></dt>
+<dd><p>Whether grids <code class="docutils literal notranslate"><span class="pre">a</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code> (mappings of GRID_FIELDS) are one: the
+same blocks, voxel for voxel, at the same voxel sizes (float noise of nm
+aside). A volume made for a model is on the grid of that model, of its
+finetunes and of any model of the same sizes; a model on another grid
+took the volume’s 178^3 blocks at 8 nm for its own 1 x 556 x 556 at 16
+and torch.export refused them.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.grid_text">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">grid_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grid</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.grid_text" title="Link to this definition"></a></dt>
+<dd><p>A grid (GRID_FIELDS) as the sentences name it: its input block to its
+output block, “178×178×178 → 56×56×56 at 8 nm”, each at its own voxel
+size when the two differ (“1×556×556 at 8 nm → 1×468×468 at 16 nm”).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume.carried_note">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume.</span></span><span class="sig-name descname"><span class="pre">carried_note</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">from_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">from_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_grid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kept</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.portable.volume.carried_note" title="Link to this definition"></a></dt>
+<dd><p>What training’s submit says, in both modes, when the session volume
+was on <code class="docutils literal notranslate"><span class="pre">from_model</span></code>’s grid and the model to train, <code class="docutils literal notranslate"><span class="pre">to_model</span></code>, is on
+another: the paint carried onto that model’s grid, as Use this model
+carries it, both grids named (grid_text), and where the old volume is
+kept (<code class="docutils literal notranslate"><span class="pre">kept</span></code>, the mode’s words). The input normalization, the
+postprocessing and the channel stay what the user set: only the volume
+changed.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../targets_calls/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.targets_calls" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../volume_calls/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.volume_calls" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

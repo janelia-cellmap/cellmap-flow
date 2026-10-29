@@ -1,0 +1,75 @@
+cellmap_flow.io.metadata
+========================
+
+.. py:module:: cellmap_flow.io.metadata
+
+.. autoapi-nested-parse::
+
+   Opening a path as cellmap-flow reads it, and nanometers per unit.
+
+   Array metadata is worldarray's: ``wa.open(path).meta`` or ``wa.metadata(path)``
+   give an ``ArrayMeta`` (every axis in the array's order, the store's units,
+   ``translation`` the *centre* of voxel 0 and ``.corner`` its lower corner),
+   ``wa.open_pyramid(path)`` a group's levels, and ``.in_nm()`` the spatial axes
+   in nanometers. This module keeps the two things cellmap-flow adds on top:
+
+   - ``open_level``: the one way every reader opens a path, so that a group is
+     read at its first level when no voxel size asks for another;
+   - ``nm_per_unit`` and ``_NM_PER_UNIT``: worldarray's unit table as nanometers
+     per unit, forgiving of a missing or unknown unit, which the browser shares
+     (``web/build/export_data.py``).
+
+   ``snap_integral`` takes the float noise out of unit conversions.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.logger
+   cellmap_flow.io.metadata.NANOMETER
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.nm_per_unit
+   cellmap_flow.io.metadata.snap_integral
+   cellmap_flow.io.metadata.open_level
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: NANOMETER
+   :value: 'nanometer'
+
+
+.. py:function:: nm_per_unit(unit) -> float
+
+   How many nanometers one ``unit`` is; 1 for a missing, "pixel" or unknown
+   unit, with a warning for an unknown one.
+
+
+.. py:function:: snap_integral(values)
+
+   ``values`` as floats, with near-whole numbers made exactly whole.
+
+
+.. py:function:: open_level(path: str, voxel_size=None, **kwargs) -> worldarray.WorldArray
+
+   The worldarray array ``path`` names, as cellmap-flow reads a path: an
+   array, or one scale of a precomputed volume, as it is whatever is asked
+   for; a group or precomputed volume at its level for ``voxel_size``
+   (worldarray chooses it from the group's document), its first without one.
+   ``kwargs`` are ``wa.open``'s (``on_mismatch``, ``padding``, ``units``,
+   ``context``, ...); units it cannot convert are left as they are rather
+   than refused.
+
+

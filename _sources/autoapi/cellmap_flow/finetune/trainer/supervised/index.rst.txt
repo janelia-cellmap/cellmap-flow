@@ -1,0 +1,188 @@
+cellmap_flow.finetune.trainer.supervised
+========================================
+
+.. py:module:: cellmap_flow.finetune.trainer.supervised
+
+.. autoapi-nested-parse::
+
+   The supervised term of the training loss, and how the model's output is read for it.
+
+   ``SupervisedLoss`` builds the criterion ``loss_type`` names and compares the
+   model's output with the target where it is annotated. ``output_class_of``
+   says what the output is -- a sigmoid baked in, a tanh, or logits -- when
+   nothing declared it, in the classes the model's server reports
+   (``serving.probe``) and as the server finds it, off the network's graph
+   first, so that training, ranking and seeding read one model the same way.
+   The browser's twin is web/src/finetune/full/loss.ts.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.supervised.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.supervised.SupervisedLoss
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.supervised.output_class_of
+   cellmap_flow.finetune.trainer.supervised.probe_output_class
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: output_class_of(model_config, model, example, select_channel=None) -> str
+
+   What ``model``'s output is, as its inference server finds it: off
+   ``model_config``'s network graph (``ModelConfig.output_graph``,
+   ``portable.activation``: the op that ends it), else ``probe_output_class``.
+   The graph is the model the job was built from; an adapter or new
+   weights change neither the op its network ends in nor the channel read.
+
+   The graph first, as the probe can mislead: a network that ends in a
+   convolution can answer it with values inside [-1, 1] (one value
+   everywhere, even), which read as a tanh's output.
+
+
+.. py:function:: probe_output_class(model, example, select_channel=None) -> str
+
+   What ``model``'s output is -- unit, signed_unit or unbounded (serving.probe)
+   -- read off its answer to an extreme input.
+
+   ``example`` is an input batch of the shape the model takes; the probe is
+   noise of that shape at 100x, so that an output bounded by a sigmoid or a
+   tanh shows its bounds and logits show their range. ``select_channel``
+   reads the channel training compares. The model is probed in eval mode
+   and left as it was: in train mode a full finetune's BatchNorm took the
+   noise into its running statistics -- about 7,000x on every channel,
+   which takes ~85 batches to decay, longer than most interactive runs --
+   and the export and the served model normalize by them. A probe that
+   fails reads as logits, with a warning.
+
+
+.. py:class:: SupervisedLoss(options, target_transform=None)
+
+   The supervised term: the criterion ``options.loss_type`` names, compared with
+   the target where it is annotated.
+
+   What the criterion sees depends on what the model's output is
+   (``options.output_class``): probabilities when it is bounded -- a sigmoid
+   or a tanh baked in, where a second sigmoid would squash [0, 1] into
+   [0.5, 0.73] and make a well-fitting prediction look like a constant --
+   so BCE-with-logits becomes BCE and Dice and margin skip their sigmoid;
+   logits otherwise (losses.as_probabilities). MSE always compares
+   probabilities with the 0/1 target, as dice and margin do: on a logit
+   model it used to compare the raw logits, training them toward 0 and 1,
+   which the served sigmoid turns into 0.5 and 0.73, wrecking any
+   threshold. The interval loss bounds the logit, where a distance field is
+   a line; the flow loss reads flows and a logit as the model emits them,
+   whatever the probe said (its flows can fall within [0, 1]).
+
+   Label smoothing is redundant with the margin loss and means nothing to
+   bounds, flows or a soft distance target, so it is 0 for those; class
+   balancing does not apply to the flow loss.
+
+   ``targets`` makes a batch's target, mask and bounds from its annotation;
+   the call computes the term and keeps the step's metrics (the interval
+   terms; on BCE the target's entropy floor and the mean |p - t|), which
+   ``tally`` sums over the epoch's supervised batches.
+
+
+   .. py:attribute:: loss_type
+
+
+   .. py:attribute:: margin
+
+
+   .. py:attribute:: balance_classes
+
+
+   .. py:attribute:: label_smoothing
+
+
+   .. py:attribute:: mask_unannotated
+
+
+   .. py:attribute:: target_transform
+      :value: None
+
+
+
+   .. py:attribute:: use_bce
+
+
+   .. py:attribute:: use_mse
+
+
+   .. py:attribute:: use_interval
+
+
+   .. py:attribute:: use_flow
+
+
+   .. py:attribute:: output_class
+      :value: 'unbounded'
+
+
+
+   .. py:attribute:: takes_probabilities
+
+
+   .. py:attribute:: step_interval_terms
+      :value: None
+
+
+
+   .. py:attribute:: step_bce_metrics
+      :value: None
+
+
+
+   .. py:method:: targets(annotation)
+
+      A batch's ``(target, mask, bounds, hard_target)`` from its annotation.
+
+      The target transform's target and mask; for the interval loss the
+      target is the bounds, and the painted class stands in as the target
+      for the class check, the class balance and the TensorBoard image.
+      Without a transform, the legacy reading: 0 unannotated, 1 background,
+      2 foreground, shifted down by one, and masked when mask_unannotated.
+      ``hard_target`` is the target as annotated: class balancing splits
+      voxels into fg and bg by it, before smoothing -- split by the smoothed
+      target, every bg voxel carried s/2 of fg weight (with 100 fg voxels
+      against 100k bg at s = 0.1, 98% of the "fg" half of the loss was bg).
+      Smoothing then moves 0 to s/2 and 1 to 1 - s/2.
+
+
+
+   .. py:method:: reset_epoch()
+
+
+   .. py:method:: tally()
+
+      Add the last step's BCE metrics to the epoch's; for a step that had supervised voxels.
+
+
+
+   .. py:method:: epoch_bce_metrics()
+
+      (mean BCE floor, mean |p - t|) over the epoch's supervised steps, or None without BCE.
+
+
+

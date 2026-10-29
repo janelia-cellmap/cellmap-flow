@@ -1,0 +1,539 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.trainer.loop &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.trainer.recovery" href="../recovery/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.trainer.distillation" href="../distillation/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.trainer</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.trainer.loop</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/trainer/loop/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.trainer.loop">
+<span id="cellmap-flow-finetune-trainer-loop"></span><h1>cellmap_flow.finetune.trainer.loop<a class="headerlink" href="#module-cellmap_flow.finetune.trainer.loop" title="Link to this heading"></a></h1>
+<p>The finetune’s training loop: epochs, the best epoch, Stop Early.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Finetuner</span></code> trains a model on a session’s corrections with the settings of
+a <code class="docutils literal notranslate"><span class="pre">TrainingOptions</span></code>: a LoRA adapter, or every weight (which of the two the
+model decides, see adaptation.strategy_for). An epoch is: fetch a batch,
+make its target, forward, the supervised term (supervised.SupervisedLoss),
+the distillation term and, when one channel trains (select_channel), the
+hold on the others (distillation.Distillation), step, record. The learning
+rate eases from the form’s down to LEARNING_RATE_FLOOR of it over the run’s
+steps, or stays at the form’s, as learning_rate_schedule says
+(learning_rate_factor). Around it:</p>
+<ul class="simple">
+<li><p>recovery from an OOM (halve the batch, then drop distillation and the
+hold) and from a NaN under mixed precision (restart in fp32): recovery.py;</p></li>
+<li><p>a best checkpoint, chosen by the supervised loss alone, which the export
+loads first; the strategies write and read the files (adaptation.py);</p></li>
+<li><p>TensorBoard, continuing across a job’s iterations: tensorboard.py;</p></li>
+<li><p>the single-class warning, the first batch’s summary and the
+gradient-flow watch: diagnostics.py.</p></li>
+</ul>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.logger" title="cellmap_flow.finetune.trainer.loop.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.LoRAFinetuner" title="cellmap_flow.finetune.trainer.loop.LoRAFinetuner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoRAFinetuner</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.Finetuner" title="cellmap_flow.finetune.trainer.loop.Finetuner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Finetuner</span></code></a></p></td>
+<td><p>Trains a model on user corrections: a LoRA adapter, or every weight.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.learning_rate_factor" title="cellmap_flow.finetune.trainer.loop.learning_rate_factor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">learning_rate_factor</span></code></a>(→ float)</p></td>
+<td><p>The share of the run's learning rate that optimizer step <code class="docutils literal notranslate"><span class="pre">step</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.rate_words" title="cellmap_flow.finetune.trainer.loop.rate_words"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rate_words</span></code></a>(→ str)</p></td>
+<td><p>A learning rate as the form's presets write it: 1e-4, 3e-5, 1.5e-3.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.loop.schedule_words" title="cellmap_flow.finetune.trainer.loop.schedule_words"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schedule_words</span></code></a>(→ str)</p></td>
+<td><p>What a run's learning rate does under <code class="docutils literal notranslate"><span class="pre">schedule</span></code>, for its start</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.learning_rate_factor">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">learning_rate_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">schedule</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.learning_rate_factor" title="Link to this definition"></a></dt>
+<dd><p>The share of the run’s learning rate that optimizer step <code class="docutils literal notranslate"><span class="pre">step</span></code>
+(0 to <code class="docutils literal notranslate"><span class="pre">steps</span></code> - 1) of a run of <code class="docutils literal notranslate"><span class="pre">steps</span></code> takes under <code class="docutils literal notranslate"><span class="pre">schedule</span></code>
+(TrainingOptions.learning_rate_schedule). “cosine”: 1 at the first,
+LEARNING_RATE_FLOOR at the last, along half a cosine between them, so
+a run takes big steps while the model is far from the paint and small
+ones once it is close. “constant”: 1 at every step, the form’s rate
+throughout. A run of one step takes the rate itself.</p>
+<p>A step past the last stays at the floor rather than going back up the
+cosine: an OOM that halves the batch mid-run gives the epochs left more
+steps than the run counted at its start. The browser’s trainers compute
+the same rate (web/src/finetune/schedule.ts learningRateAt).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.rate_words">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">rate_words</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.rate_words" title="Link to this definition"></a></dt>
+<dd><p>A learning rate as the form’s presets write it: 1e-4, 3e-5, 1.5e-3.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.schedule_words">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">schedule_words</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">schedule</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.schedule_words" title="Link to this definition"></a></dt>
+<dd><p>What a run’s learning rate does under <code class="docutils literal notranslate"><span class="pre">schedule</span></code>, for its start
+line: “1e-4, cosine to 1e-5 over 40 steps”, or “1e-4, constant over 40
+steps” (web/src/finetune/schedule.ts scheduleWords).</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">Finetuner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.utils.data.DataLoader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../options/index.html#cellmap_flow.finetune.options.TrainingOptions" title="cellmap_flow.finetune.options.TrainingOptions"><span class="pre">cellmap_flow.finetune.options.TrainingOptions</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">teacher_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tb_start_step</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tb_start_epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_requested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">settings</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner" title="Link to this definition"></a></dt>
+<dd><p>Trains a model on user corrections: a LoRA adapter, or every weight.</p>
+<p>Which of the two the model decides: a PEFT model trains its adapter, a
+plain module trains in full (see adaptation.strategy_for).</p>
+<p>Features:
+- Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a</p>
+<blockquote>
+<div><p>GradScaler; it falls back to fp32 when the model NaNs under either</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>Gradient accumulation to simulate larger batch sizes</p></li>
+<li><p>The learning rate eased from the form’s down to LEARNING_RATE_FLOOR
+of it over the run, or kept at the form’s (learning_rate_schedule,
+learning_rate_factor)</p></li>
+<li><p>Partial annotation support (mask unannotated regions)</p></li>
+<li><p>Distillation toward the starting model, on unlabeled voxels, on all
+voxels, or on the good regions’ rehearsal patches</p></li>
+<li><p>One channel of a multi-channel model trained (select_channel), every
+other one held to the starting model’s prediction</p></li>
+<li><p>A best checkpoint, chosen by the supervised loss alone; the export
+loads it first</p></li>
+<li><p>Recovery from an OOM (halve the batch, then drop distillation and the
+hold) and from a NaN under mixed precision (restart in fp32)</p></li>
+<li><p>TensorBoard logging, continuing across a job’s iterations</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – The model to train: a PEFT model (LoRA) or a plain module (full finetune)</p></li>
+<li><p><strong>dataloader</strong> – DataLoader for training data</p></li>
+<li><p><strong>output_dir</strong> – Directory to save checkpoints and logs</p></li>
+<li><p><strong>options</strong> – The training settings (finetune/options.py); the defaults if None.
+Every one of them is read here: the epochs, batch, learning rate and its
+schedule, the loss and its margin, smoothing and class balance, the
+distillation weight and scope, mask_unannotated, select_channel, mixed_precision,
+tensorboard, and output_class, what the model’s output is (None reads
+it as logits; the training job probes the model when nothing declared it)</p></li>
+<li><p><strong>device</strong> – Training device (“cuda” or “cpu”, auto-detected if None)</p></li>
+<li><p><strong>target_transform</strong> – Optional TargetTransform instance that converts raw annotations
+to (target, mask) pairs. Overrides mask_unannotated when provided.
+See cellmap_flow.finetune.target_transforms.</p></li>
+<li><p><strong>teacher_model</strong> – A full finetune’s frozen teacher from a previous iteration, to reuse</p></li>
+<li><p><strong>initial_state</strong> – A full finetune’s starting weights, to reset to; copied from the model if None</p></li>
+<li><p><strong>tb_start_step</strong> – Where the previous iteration’s TensorBoard curves ended</p></li>
+<li><p><strong>tb_start_epoch</strong> – Where the previous iteration’s TensorBoard curves ended</p></li>
+<li><p><strong>stop_requested</strong> – Asked before each epoch, the first included, whether
+to stop there (Stop Early); the training job’s says whether the
+dashboard asked (session_loop.TrainingSession). None: never</p></li>
+<li><p><strong>**settings</strong> – Fields of TrainingOptions to set over <code class="docutils literal notranslate"><span class="pre">options</span></code> (<code class="docutils literal notranslate"><span class="pre">num_epochs=3</span></code>, say)</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">create_dataloader</span><span class="p">(</span><span class="s2">"corrections.zarr"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">Finetuner</span><span class="p">(</span><span class="n">lora_model</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="s2">"output/fly_organelles_v1.1"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">save_adapter</span><span class="p">()</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.options">
+<span class="sig-name descname"><span class="pre">options</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.options" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.model">
+<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.dataloader">
+<span class="sig-name descname"><span class="pre">dataloader</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.dataloader" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.output_dir">
+<span class="sig-name descname"><span class="pre">output_dir</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.output_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.num_epochs">
+<span class="sig-name descname"><span class="pre">num_epochs</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.num_epochs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.gradient_accumulation_steps">
+<span class="sig-name descname"><span class="pre">gradient_accumulation_steps</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.gradient_accumulation_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.select_channel">
+<span class="sig-name descname"><span class="pre">select_channel</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.select_channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.stop_requested">
+<span class="sig-name descname"><span class="pre">stop_requested</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.stop_requested" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.device">
+<span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.device" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.strategy">
+<span class="sig-name descname"><span class="pre">strategy</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.strategy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.initial_state">
+<span class="sig-name descname"><span class="pre">initial_state</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.initial_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.precision">
+<span class="sig-name descname"><span class="pre">precision</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.precision" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.supervised">
+<span class="sig-name descname"><span class="pre">supervised</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.supervised" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.distillation">
+<span class="sig-name descname"><span class="pre">distillation</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.distillation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.current_epoch">
+<span class="sig-name descname"><span class="pre">current_epoch</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.current_epoch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.global_step">
+<span class="sig-name descname"><span class="pre">global_step</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.global_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.best_loss">
+<span class="sig-name descname"><span class="pre">best_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.best_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.last_supervised_loss">
+<span class="sig-name descname"><span class="pre">last_supervised_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.last_supervised_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.last_others_loss">
+<span class="sig-name descname"><span class="pre">last_others_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.last_others_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.training_stats">
+<span class="sig-name descname"><span class="pre">training_stats</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.training_stats" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.tb">
+<span class="sig-name descname"><span class="pre">tb</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.tb" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.distillation_lambda">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">distillation_lambda</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.distillation_lambda" title="Link to this definition"></a></dt>
+<dd><p>The distillation term’s weight as used (see Distillation).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.teacher_model">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">teacher_model</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">torch.nn.Module</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.teacher_model" title="Link to this definition"></a></dt>
+<dd><p>A full finetune’s distillation teacher, the frozen copy of its starting weights; else None.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.log">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">log</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.log" title="Link to this definition"></a></dt>
+<dd><p>Log to console (the job’s tee writes the log file).</p>
+<p>Timestamped like the logger’s lines so epoch duration can be read
+off the log: the 2026-09-23 A/B runs had none on the per-epoch
+summaries, and per-arm speed had to come from LSF’s start/end
+times instead. The progress parsers in finetune/job_manager use
+unanchored re.findall, so the prefix does not affect them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.close" title="Link to this definition"></a></dt>
+<dd><p>Close the TensorBoard writer; the CLI calls this when an iteration is done.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.schedule_steps">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">schedule_steps</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.schedule_steps" title="Link to this definition"></a></dt>
+<dd><p>The optimizer steps the run takes, which the learning rate eases
+over: an epoch’s batches over the gradient accumulation, its last
+partial accumulation a step of its own (see _train_epoch), times the
+epochs.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.train">
+<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.train" title="Link to this definition"></a></dt>
+<dd><p>Run the training loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p>final_loss: Final epoch loss</p></li>
+<li><p>best_loss: Best loss achieved</p></li>
+<li><p>total_epochs: Number of epochs trained</p></li>
+<li><p>total_steps: Total training steps</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Training statistics dictionary with</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.save_checkpoint">
+<span class="sig-name descname"><span class="pre">save_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_best</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.save_checkpoint" title="Link to this definition"></a></dt>
+<dd><p>Save training checkpoint.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>is_best</strong> – If True, saves as “best_checkpoint.pth”, which save_adapter
+exports; otherwise as “checkpoint_epoch_&lt;N&gt;.pth”</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.save_adapter">
+<span class="sig-name descname"><span class="pre">save_adapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">export_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.save_adapter" title="Link to this definition"></a></dt>
+<dd><p>Export the finetune: only the LoRA adapter, or a full finetune’s weights.</p>
+<p>Automatically loads the best checkpoint weights before saving
+so the exported adapter reflects the best training epoch. Without one
+from this run – no epoch supervised anything, or none ran – it
+exports the weights as they are, those of the last epoch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adapter_path</strong> – Path to save adapter. If None, uses output_dir/lora_adapter.
+A full finetune ignores it and writes output_dir/full_finetune.</p></li>
+<li><p><strong>export_dir</strong> – Instead, the directory to export into: the adapter
+goes to export_dir/lora_adapter, full weights to
+export_dir/full_finetune/model_state_dict.pt. The CLI gives
+every iteration its own.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The adapter directory, or the full-finetune weights file.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.Finetuner.load_checkpoint">
+<span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.Finetuner.load_checkpoint" title="Link to this definition"></a></dt>
+<dd><p>Load training checkpoint to resume training.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>checkpoint_path</strong> – Path to checkpoint file</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.loop.LoRAFinetuner">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.loop.</span></span><span class="sig-name descname"><span class="pre">LoRAFinetuner</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.loop.LoRAFinetuner" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../distillation/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.trainer.distillation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../recovery/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.trainer.recovery" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

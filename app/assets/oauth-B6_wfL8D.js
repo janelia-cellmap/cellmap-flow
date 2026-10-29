@@ -1,0 +1,1 @@
+import{o as e,r as t}from"./oauth-CgweKUew.js";var n=document.getElementById(`message`),r=e=>{n.textContent=e};t(r).catch(t=>r(`The sign-in could not start: ${e(t)}`));
