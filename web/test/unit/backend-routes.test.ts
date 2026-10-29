@@ -59,6 +59,14 @@ describe("POST /api/set-data", () => {
     expect(ctx.session.state.datasetUrl).toBe("https://example.org/em.zarr");
   });
 
+  it("opens a path pasted from Neuroglancer without the format it names", async () => {
+    const ctx = fakeContext({ dataset: null });
+    const res = await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: "'https://example.org/em.zarr|zarr2:recon-1/em' " }));
+    expect(res.status).toBe(200);
+    expect(ctx.infer.opened).toEqual(["https://example.org/em.zarr/recon-1/em"]);
+    expect(ctx.session.state.datasetUrl).toBe("https://example.org/em.zarr/recon-1/em");
+  });
+
   it("answers a 500 {error} when the dataset cannot be opened, as the Python route does", async () => {
     const ctx = fakeContext({ dataset: null });
     ctx.infer.failOpen = "no zarr.json at that URL";

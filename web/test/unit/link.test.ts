@@ -35,6 +35,10 @@ describe("parseLink", () => {
     expect(parseLink("")).toEqual({ datasetUrl: null, models: [] });
     expect(parseLink("?other=1")).toEqual({ datasetUrl: null, models: [] });
   });
+
+  it("reads a dataset pasted from Neuroglancer without the format it names", () => {
+    expect(parseLink(`?dataset=zarr://${DATASET}`).datasetUrl).toBe(DATASET);
+  });
 });
 
 describe("the page's first paint", () => {

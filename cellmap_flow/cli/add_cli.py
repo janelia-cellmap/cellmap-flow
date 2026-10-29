@@ -90,6 +90,7 @@ def _run(resolved, data_path, queue, project, resample):
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.spec import JobStartError
     from cellmap_flow.models.registry import build_model
+    from cellmap_flow.portable.pasted import pasted_path
     from cellmap_flow.serving.launch import remembered
 
     if resolved.needs:
@@ -110,6 +111,7 @@ def _run(resolved, data_path, queue, project, resample):
     session.resample = resample
     install_cleanup_handlers()
     try:
-        run_multiple([model], data_path, project, queue, resample=resample)
+        # A path copied from Neuroglancer is read without the format it names.
+        run_multiple([model], pasted_path(data_path), project, queue, resample=resample)
     except JobStartError as e:
         raise click.ClickException(str(e))

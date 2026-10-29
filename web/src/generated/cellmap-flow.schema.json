@@ -2417,7 +2417,7 @@
       "type": "object"
     },
     "SetData": {
-      "description": "The dataset to open a new viewer on.",
+      "description": "The dataset to open a new viewer on, as typed or pasted (a path\ncopied from Neuroglancer opens without its format: portable/pasted.py).",
       "properties": {
         "dataset_path": {
           "default": null,
