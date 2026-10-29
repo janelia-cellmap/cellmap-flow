@@ -51,6 +51,7 @@ from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.models import entry as model_entry
+from cellmap_flow.portable.pasted import pasted_path
 
 
 def _number(value, kind, name):
@@ -182,9 +183,11 @@ class CreateModelConfig(BaseModel):
 
 
 class SetData(BaseModel):
-    """The dataset to open a new viewer on."""
+    """The dataset to open a new viewer on, as typed or pasted (a path
+    copied from Neuroglancer opens without its format: portable/pasted.py)."""
 
-    dataset_path: Annotated[str, _required("dataset_path", strip=True)] = Field(None, validate_default=True)
+    dataset_path: Annotated[str, _required("dataset_path", strip=True), AfterValidator(pasted_path)] = Field(
+        None, validate_default=True)
 
 
 def _voxel_size(value):
@@ -278,8 +281,8 @@ class BbxGenerator(BaseModel):
     """The box tool's viewer on ``dataset_path``, showing the boxes the
     INPUT node has; ``num_boxes`` is how many the dialog counts up to."""
 
-    dataset_path: Annotated[str, _required("dataset_path", message="Dataset path is required")] = Field(
-        None, validate_default=True)
+    dataset_path: Annotated[str, _required("dataset_path", message="Dataset path is required"),
+                            AfterValidator(pasted_path)] = Field(None, validate_default=True)
     num_boxes: WholeNumber = 1
     existing_bounding_boxes: Optional[list[BoundingBox]] = []
 

@@ -44,7 +44,8 @@ export interface RequestBodies {
   "POST /api/finetune/ai-annotate/reject"?: AIAnnotateDecision;
 }
 /**
- * The dataset to open a new viewer on.
+ * The dataset to open a new viewer on, as typed or pasted (a path
+ * copied from Neuroglancer opens without its format: portable/pasted.py).
  */
 export interface SetData {
   dataset_path?: string;

@@ -2,8 +2,10 @@
 
 ``load_config`` reads and checks the file's top level, filling
 ``charge_group`` and ``queue`` from the dashboard's saved settings (then the
-site's default queues) when the file leaves them out, and reading ``queue``
-as a list (one queue, ``queue: gpu_h200``, is a list of one); the model entries under
+site's default queues) when the file leaves them out, reading ``queue``
+as a list (one queue, ``queue: gpu_h200``, is a list of one) and ``data_path``
+as pasted (``portable/pasted.py``: one copied from Neuroglancer without the
+format it names); the model entries under
 ``models`` are built by ``models.registry.build_models``. Every problem is a ``ConfigError``.
 ``resolve_data_path`` is the one rule for a model's ``data_path`` and
 ``scale``, used by every launcher. Every model's input is resampled to its
@@ -22,6 +24,7 @@ import yaml
 
 from cellmap_flow.jobs.queues import queue_list
 from cellmap_flow.jobs.site import current_site
+from cellmap_flow.portable.pasted import pasted_path
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +124,9 @@ def load_config(path: str) -> Dict[str, Any]:
     # Required top-level fields
     if "data_path" not in config:
         raise ConfigError("Missing required field in YAML: data_path")
+    # A path copied from Neuroglancer is read without the format it names.
+    if isinstance(config["data_path"], str):
+        config["data_path"] = pasted_path(config["data_path"])
 
     from cellmap_flow.jobs import lsf
 

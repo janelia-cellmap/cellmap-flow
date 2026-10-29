@@ -4,6 +4,12 @@
     "model_param": "model",
     "dataset_param": "dataset"
   },
+  "pasted": {
+    "neuroglancer_source": {
+      "source": "^\\s*[\"']?\\s*(?:(?:zarr[23]?|n5)://)?(.*?)(?:\\|(zarr[23]?|n5|neuroglancer-precomputed):([^|#?]*?))?\\s*[\"']?\\s*$",
+      "flags": "s"
+    }
+  },
   "huggingface": {
     "oauth_client_id": "https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd",
     "oauth_scopes": [
