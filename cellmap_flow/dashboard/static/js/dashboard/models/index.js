@@ -10,7 +10,7 @@
 //
 // Each list exports payload(), its part of POST /api/models, and
 // untick(model), which unticks a loaded model's row in it: Submit is the
-// merge of the payloads, and a ✕ tells every list.
+// merge of the payloads (submitBody), and a ✕ tells every list.
 import { ApiError, postJSON } from "../../lib/api.js";
 import { announce, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { pageData } from "../../lib/page-data.js";
@@ -25,6 +25,14 @@ import * as serverConfig from "./server-config.js";
 import * as zoo from "./zoo.js";
 
 const LISTS = [catalog, huggingface, zoo, cellpose];
+
+// POST /api/models' body: the lists' `payloads` in one, with Resample. The
+// catalog's and Hugging Face's each have their own run_voxel_sizes, merged
+// here into one rather than the second taking the first's place.
+export function submitBody(payloads, resample) {
+  const runVoxelSizes = Object.assign({}, ...payloads.map((payload) => payload.run_voxel_sizes));
+  return Object.assign({ resample }, ...payloads, { run_voxel_sizes: runVoxelSizes });
+}
 
 export function initModelsTab() {
   const logArea = document.getElementById("modelSubmissionLogModels");
@@ -50,7 +58,7 @@ export function initModelsTab() {
        { intervalMs: jobLogs.POLL_MS, immediate: false, pauseWhenHidden: true });
 
   document.getElementById("submitModelsBtn").addEventListener("click", () => {
-    const body = Object.assign({ resample: resampleCheckbox.checked }, ...LISTS.map((list) => list.payload()));
+    const body = submitBody(LISTS.map((list) => list.payload()), resampleCheckbox.checked);
     console.log("Selected models:", body);
     postJSON("/api/models", body)
       .then((data) => {

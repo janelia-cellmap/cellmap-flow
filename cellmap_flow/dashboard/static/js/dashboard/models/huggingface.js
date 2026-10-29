@@ -4,13 +4,15 @@
 // each row tagged with what its listing says the model is (its formats,
 // finetune modes, size and browser copy). On a server only the models with
 // a copy that runs in the browser are shown to start (Runs in the browser,
-// ticked); the rows are in order of name, or of size. Submit sends the
-// ticked repos as selected_hf_models.
+// ticked); the rows are in order of name, or of size. A ticked row takes the
+// voxel size to run it at, filled in with the one it is served at (its
+// listing's run_voxel_size). Submit sends the ticked repos as
+// selected_hf_models, and the voxel sizes typed as run_voxel_sizes.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { isBrowserMode, pageData } from "../../lib/page-data.js";
 import { dimsWord, searchText } from "../../lib/search.js";
-import { listControls, modelRow, modelSection, notice, untickBox } from "../../shared/model-list.js";
+import { listControls, modelRow, modelSection, notice, runAtField, runVoxelSizes, untickBox } from "../../shared/model-list.js";
 
 // The repos of the Hugging Face models already running, ticked on load; one
 // removed from the Loaded models list is taken out.
@@ -25,14 +27,19 @@ let list = null;
 
 // One row; repo ids and model card descriptions come from Hugging Face, not
 // from us, and modelRow builds it from nodes rather than an HTML string.
+// Under it while it is ticked, the voxel size to run it at: blank, the one
+// its metadata.json declares it reads (input_voxel_size).
 function row(modelId, metadata) {
   const displayName = modelId.split("/").pop();
+  const id = "chk_hf_" + displayName;
+  // Ticked when the page started with it, or when the listing says it is
+  // being served (the browser mode's, after a reload or from a link).
+  const checked = running.has(modelId) || metadata.selected === true;
+  const runAt = runAtField({ id: `${id}_run`, value: metadata.run_voxel_size, own: metadata.input_voxel_size, checked });
   return modelRow({
-    id: "chk_hf_" + displayName, value: modelId, name: displayName, note: metadata.description,
+    id, value: modelId, name: displayName, note: metadata.description,
     rowClass: "form-check mb-2 hf-model-item", boxClass: "hf-model-checkbox", boxName: "selected_hf_models", facts: metadata,
-    // Ticked when the page started with it, or when the listing says it is
-    // being served (the browser mode's, after a reload or from a link).
-    checked: running.has(modelId) || metadata.selected === true,
+    checked, onTick: runAt.show, below: runAt.element,
     // What lib/search.js matches: the repo, its metadata, and the words the
     // ranking's filter takes too, its voxel size ("16nm") and "2d" or "3d".
     search: searchText(modelId, JSON.stringify(metadata), ...(metadata.output_voxel_size || []).map((size) => `${size}nm`),
@@ -117,10 +124,10 @@ export function init() {
   document.getElementById("hfModelAccordion").append(section.item);
 }
 
-// POST /api/models' part: the repos ticked.
+// POST /api/models' part: the repos ticked, and the voxel sizes typed under them.
 export function payload() {
-  const boxes = document.querySelectorAll("#modelSelectionForm input.hf-model-checkbox:checked");
-  return { selected_hf_models: [...boxes].map((box) => box.value) };
+  const boxes = [...document.querySelectorAll("#modelSelectionForm input.hf-model-checkbox:checked")];
+  return { selected_hf_models: boxes.map((box) => box.value), run_voxel_sizes: runVoxelSizes(boxes) };
 }
 
 // Untick a loaded model's row here, if it has one; a list not loaded yet
