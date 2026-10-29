@@ -19,7 +19,7 @@
 // merges a change in, persists it and tells the listeners. Without
 // sessionStorage (a test, or a browser that blocks storage) the session
 // lives in memory for the page's life and says so in the console.
-import type { Chain, RankFit, SessionState, SessionStore, Step, TabKept } from "../contracts";
+import type { Chain, DeletedInViewer, RankFit, SessionState, SessionStore, Step, TabKept } from "../contracts";
 import { FINETUNED_REPO } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 
@@ -37,7 +37,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, tabKept: { finetuned: [], volumes: [] } };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, deletedInViewer: [], tabKept: { finetuned: [], volumes: [] } };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -60,6 +60,7 @@ export function completeState(stored: unknown): SessionState {
     rankAdded: Array.isArray(s.rankAdded) ? s.rankAdded.filter((id): id is string => typeof id === "string") : [],
     rankFits: rankFitsOf(s.rankFits),
     startPostprocess: startPostprocessOf(s.startPostprocess),
+    deletedInViewer: deletedInViewerOf(s.deletedInViewer),
     tabKept: tabKeptOf(s.tabKept),
   };
 }
@@ -81,6 +82,13 @@ function startPostprocessOf(stored: unknown): SessionState["startPostprocess"] {
   const s = stored as { model?: unknown; postprocess?: unknown } | null;
   return s && typeof s === "object" && typeof s.model === "string" && Array.isArray(s.postprocess)
     ? { model: s.model, postprocess: s.postprocess as Step[] } : null;
+}
+
+/** A stored `deletedInViewer` made whole: its entries that are one; none for
+ * anything that is not a list. */
+function deletedInViewerOf(stored: unknown): DeletedInViewer[] {
+  if (!Array.isArray(stored)) return [];
+  return stored.filter((d): d is DeletedInViewer => Boolean(d) && Number.isInteger(d.number) && typeof d.name === "string" && typeof d.hf_id === "string");
 }
 
 /** A stored `shownChannels` made whole: the entries that are a channel's

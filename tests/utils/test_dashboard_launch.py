@@ -390,6 +390,69 @@ def test_removing_a_finetune_jobs_model_cancels_the_job(viewer, dashboard, monke
     assert get_session().jobs == [] and "mito_finetuned_1" not in [layer.name for layer in viewer.state.layers]
 
 
+def _deleted_in_the_browser(viewer, *names):
+    """``names`` deleted as the person deletes a layer in neuroglancer's top
+    bar: the browser sends the state without them, under a generation of its
+    own (neuroglancer's server.SetStateHandler)."""
+    state, generation = viewer.shared_state.raw_state_and_generation
+    layers = [layer for layer in state["layers"] if layer["name"] not in names]
+    viewer.set_state({**state, "layers": layers}, f"client/{len(layers)}", existing_generation=generation)
+
+
+def test_a_model_whose_layer_is_deleted_in_the_viewer_is_stopped_and_not_drawn_again(
+        viewer, dashboard, monkeypatch, ome_pyramid):
+    """As its ✕ stops it, and the Loaded models list is told which, to untick
+    its rows; a redraw through a new chain draws the others and leaves the
+    deleted raw out too. A layer the dashboard takes away itself, or one the
+    person renames, stops nothing."""
+    import cellmap_flow.dashboard.routes.pipeline as pipeline
+
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_voxel_size": [16] * 3, "output_class": "unit"})
+    session = get_session()
+    session.dataset_path = ome_pyramid()
+    mito, nuc, sam = _Job("mito"), _Job("nuc"), _Job("sam")
+    session.jobs = [mito, nuc, sam]
+    with viewer.txn() as s:
+        s.layers["data"] = neuroglancer.ImageLayer(source="zarr://http://raw/x")
+        for job in session.jobs:
+            s.layers[job.model_name] = neuroglancer.ImageLayer(source=f"zarr://{job.host}/{job.model_name}")
+    launch.watch_layer_deletes(viewer)
+
+    _deleted_in_the_browser(viewer, "mito", "data")
+    assert mito.killed and not nuc.killed and session.jobs == [nuc, sam]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert [m["name"] for m in loaded["models"]] == ["nuc", "sam"]
+    assert [(d["number"], d["name"]) for d in loaded["deleted_in_viewer"]] == [(1, "mito")]
+
+    renormalized = {"input_norm": [{"name": "LambdaNormalizer", "expression": "x*2-1"}], "postprocess": []}
+    assert dashboard.put("/api/pipeline", json=renormalized).status_code == 200
+    assert [layer.name for layer in viewer.state.layers] == ["nuc", "sam"]
+
+    with viewer.txn() as s:  # the dashboard's own
+        del s.layers["sam"]
+    state, generation = viewer.shared_state.raw_state_and_generation
+    renamed = [dict(layer, name="nuclei") for layer in state["layers"]]
+    viewer.set_state({**state, "layers": renamed}, "client/renamed", existing_generation=generation)
+    assert not nuc.killed and not sam.killed and session.jobs == [nuc, sam]
+    assert len(dashboard.get("/api/models/loaded").get_json()["deleted_in_viewer"]) == 1
+
+
+def test_a_finetune_jobs_model_deleted_in_the_viewer_leaves_its_job_running(viewer, dashboard, monkeypatch):
+    """Its ✕ cancels the job, after asking; a deleted layer cannot ask, so the
+    model is only forgotten here and the job left to the Finetune tab."""
+    from cellmap_flow.finetune.job_manager.state import JobStatus
+
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    training = _finetune_jobs_model(monkeypatch, JobStatus.WAITING_FOR_RESTART)
+    launch.watch_layer_deletes(viewer)
+
+    _deleted_in_the_browser(viewer, "mito_finetuned_1")
+    assert not training.lsf_job.killed and training.status == JobStatus.WAITING_FOR_RESTART
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert loaded["models"] == [] and [d["name"] for d in loaded["deleted_in_viewer"]] == ["mito_finetuned_1"]
+
+
 def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(
         viewer, dashboard, monkeypatch, placeholder_cellmap_folders):
     """On the page nuc is ticked and sam unticked, neither submitted: the ✕

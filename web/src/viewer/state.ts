@@ -149,6 +149,20 @@ export function withoutLayer(state: NgState, name: string): NgState {
   return { ...state, layers: layersOf(state).filter((layer) => layer.name !== name) };
 }
 
+/** The names of the layers in `before` that `after` has not: the layers
+ * deleted between the two. A layer whose name went while a layer new in
+ * `after` reads its source was renamed (Neuroglancer's layer panel edits a
+ * layer's name), not deleted; a hidden layer is still in the state, so it is
+ * not deleted either. cellmap_flow/viewer/layers.py's deleted_layers, by
+ * which the Python dashboard tells them. */
+export function deletedLayers(before: readonly NgLayer[], after: readonly NgLayer[]): string[] {
+  const names = new Set(after.map((layer) => layer.name));
+  const known = new Set(before.map((layer) => layer.name));
+  const sources = (layer: NgLayer) => JSON.stringify(sourceUrls(layer.source));
+  const renamedFrom = new Set(after.filter((layer) => !known.has(layer.name)).map(sources));
+  return before.filter((layer) => !names.has(layer.name) && !renamedFrom.has(sources(layer))).map((layer) => layer.name);
+}
+
 /** The viewer's position in nm, z, y, x, or null when the state has no
  * position or dimensions yet (the browser has not reported them). The
  * conversion is pointerNm's: see there. */

@@ -211,7 +211,7 @@ def _chunk_outside_all_bboxes(
     return not bool(overlaps.any())
 
 
-def refresh_annotated_regions_layer(corrections_path=None):
+def refresh_annotated_regions_layer(corrections_path=None, *, add=False):
     """Draw a box around every region that has annotations in it, in each
     session's current volume.
 
@@ -220,6 +220,12 @@ def refresh_annotated_regions_layer(corrections_path=None):
     Disk" or "Redraw Annotated Regions". Nothing calls this on a timer: see
     the note on _last_annotated_regions for why a push the user did not ask
     for is destructive.
+
+    A layer drawn before and gone from the viewer since (the person deleted
+    it, or the viewer is a new one) is drawn again only with ``add``, which
+    the Redraw button asks for (refresh_annotated_regions): the other
+    callers leave it out, so a layer the person deleted is not put back by
+    something else they did.
     """
     session = get_session()
     viewer = session.viewer
@@ -390,13 +396,17 @@ def refresh_annotated_regions_layer(corrections_path=None):
     ]
 
     # Nothing to say that we have not already said: leave the viewer alone.
-    # Checked against the live layer list too, so a layer that went away (a
-    # reset, a manual delete) is still restored.
+    # Checked against the live layer list too, so the button puts back a
+    # layer that went away (a reset, a manual delete), which nothing else
+    # does.
     signature = (tuple(axes_names), tuple(
         (tuple(box["lo"]), tuple(box["hi"]), box["label"]) for box in boxes
     ))
     try:
-        if signature == _last_annotated_regions and layer_name in viewer.state.layers:
+        shown = layer_name in viewer.state.layers
+        if not shown and not add and _last_annotated_regions is not None:
+            return len(boxes)
+        if signature == _last_annotated_regions and shown:
             return len(boxes)
     except Exception:
         pass
@@ -443,7 +453,7 @@ def refresh_annotated_regions():
     try:
         if get_session().viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
-        count = refresh_annotated_regions_layer(corrections_path=data.get("corrections_path"))
+        count = refresh_annotated_regions_layer(corrections_path=data.get("corrections_path"), add=True)
         return jsonify({"success": True, "count": count})
     except Exception as e:
         logger.error(f"Error refreshing annotated regions: {e}", exc_info=True)

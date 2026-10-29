@@ -5,6 +5,9 @@
 // (POST /api/models/remove) and unticks its rows on the tab, so a Submit
 // does not start it again; nothing else is sent, so the other models, and
 // whatever is ticked or unticked below and not submitted, stay as they are.
+// A model whose layer is deleted in the viewer is stopped by the backend as
+// its ✕ would stop it, and the list's answer says so (deleted_in_viewer):
+// its rows are unticked here too.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
@@ -30,16 +33,19 @@ const SOURCE_TITLES = {
 
 // ``untick(model)`` unticks the model's rows wherever they are on the tab;
 // ``log(line)`` writes to the tab's submission log. Returns ``refresh()``,
-// which asks for the list again, and ``starting()``, whether a listed model
-// is still starting (minutes in a queue, or loading), so the list is worth
-// asking again.
+// which asks for the list again.
 export function init({ untick, log }) {
   const list = document.getElementById("loadedModelsList");
   // Bumped by each refresh and each remove: an answer to an older refresh
   // (the poll's, in flight while a ✕ was answered) is not drawn over a
   // newer list.
   let seq = 0;
-  let starting = false;
+  // The list as last drawn: a poll's answer like it leaves the rows alone,
+  // so one being pointed at keeps its tooltip.
+  let drawn = null;
+  // The number of the latest deletion in the viewer the answers have
+  // listed; null until the first answer.
+  let deletionsSeen = null;
 
   function row(model) {
     // A name has no spaces: a line may break after each _, - or ., so a long
@@ -75,6 +81,9 @@ export function init({ untick, log }) {
   }
 
   function render(models) {
+    const key = JSON.stringify(models);
+    if (key === drawn) return;
+    drawn = key;
     list.replaceChildren(...models.map(row));
     document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
     const startingCount = models.filter((m) => m.status === "starting").length;
@@ -87,15 +96,33 @@ export function init({ untick, log }) {
     // The Cellpose panel's "N running", after a remove or a Submit as on load.
     const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
     document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
-    // Asked again while one waits too: opening a volume serves it.
-    starting = startingCount + waitingCount > 0;
+  }
+
+  // The models the backend stopped because their layer was deleted in the
+  // viewer (services/launch._layers_deleted; in the browser
+  // web/src/backend/index.ts layerDeleted), numbered as they went: those
+  // newer than this page has seen have their rows unticked and the removal
+  // said, as a ✕'s is, and the rest of the page is told. The first answer's
+  // went before this page was drawn, its rows without them.
+  function untickDeleted(deleted) {
+    const fresh = deletionsSeen === null ? [] : deleted.filter((model) => model.number > deletionsSeen);
+    deletionsSeen = Math.max(deletionsSeen ?? 0, ...deleted.map((model) => model.number));
+    fresh.forEach((model) => {
+      untick(model);
+      log(`Removed ${model.name}: its layer was deleted in the viewer`);
+    });
+    if (fresh.length) announce(MODELS_CHANGED_EVENT);
   }
 
   // Quietly: a failed refresh leaves the list as it was.
   function refresh() {
     const mine = ++seq;
     return getJSON("/api/models/loaded")
-      .then((data) => { if (mine === seq) render(data.models || []); })
+      .then((data) => {
+        if (mine !== seq) return;
+        render(data.models || []);
+        untickDeleted(data.deleted_in_viewer || []);
+      })
       .catch((err) => console.warn("Could not list the loaded models:", err));
   }
 
@@ -132,5 +159,5 @@ export function init({ untick, log }) {
   const modelTabButton = document.getElementById("model-tab");
   if (modelTabButton) modelTabButton.addEventListener("shown.bs.tab", refresh);
   refresh();
-  return { refresh, starting: () => starting };
+  return { refresh };
 }

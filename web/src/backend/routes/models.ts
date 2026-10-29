@@ -245,13 +245,16 @@ export function modelRoutes(router: Router): void {
   // what its output needs, a sigmoid for logits; both null when no loaded
   // model's: postprocessSetBy). The page reads them after every model
   // change, since a model's start can set either part (serving.ts
-  // setDeclaredInputNorm, setNeededPostprocess).
+  // setDeclaredInputNorm, setNeededPostprocess). And the models stopped
+  // because their layer was deleted in the viewer, numbered (the session's
+  // deletedInViewer: backend/index.ts layerDeleted), for the list to untick
+  // the rows of those newer than it has seen, as their ✕ would.
   router.get("/api/models/loaded", async (_req, _params, ctx) => {
-    const { chain, models } = ctx.session.state;
+    const { chain, models, deletedInViewer } = ctx.session.state;
     const post = postprocessSetBy(ctx.session.state);
     return json(200, {
       success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models),
-      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null,
+      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null, deleted_in_viewer: deletedInViewer,
     });
   });
 

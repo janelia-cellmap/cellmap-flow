@@ -15,20 +15,11 @@
 import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
-import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { getAnswer, offerNewVolume, postAnswer, reloadViewer } from "./requests.js";
 import { pickedChannel } from "./training-form.js";
 
 // log: the Annotation Crops panel's log.
 export function initLabelIt({ log }) {
-  // Neuroglancer keeps the chunks it has read. The server re-reads the paint
-  // layer alone (answer's layer_refreshed); only when it could not does the
-  // whole viewer reload, getting its state back from the dashboard. Absent
-  // when no viewer is connected.
-  function reloadViewer() {
-    const frame = document.querySelector("#my_iframe");
-    if (frame) frame.src = frame.src;
-  }
-
   // what: "seed the view", say, for the log; describe(d): the log line for an
   // answer that changed labels. A box too large to label without asking is
   // answered needs_confirmation, and sent again confirmed; the button stays

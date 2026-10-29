@@ -138,6 +138,12 @@ export interface SessionState {
    * says the chain's came from while it is still that; null until a start
    * sets any. The server's `start_postprocess`. */
   startPostprocess: { model: string; postprocess: Step[] } | null;
+  /** The models stopped because the person deleted their layer in the
+   * viewer (backend/index.ts layerDeleted), the latest of each name, each
+   * numbered from 1 up in the order they went, which GET /api/models/loaded
+   * answers so the Models tab unticks their rows, as a ✕ does. The
+   * server's `deleted_in_viewer`. */
+  deletedInViewer: DeletedInViewer[];
   /** Which of the finetuned models and paint volumes this browser keeps
    * (IndexedDB, which every tab and every visit share) are this tab's: made
    * or opened here, or a link's paint (state/index.ts keepInTab); served,
@@ -148,6 +154,15 @@ export interface SessionState {
    * the tab listed. The browser's own: a server's dashboard starts with its
    * process, on a port of its own. */
   tabKept: TabKept;
+}
+
+/** A model stopped because its layer was deleted in the viewer
+ * (SessionState.deletedInViewer): its number, its name, and the Hugging Face
+ * row it is ticked by (its catalog id). */
+export interface DeletedInViewer {
+  number: number;
+  name: string;
+  hf_id: string;
 }
 
 /** The ids of kept things, by kind (SessionState.tabKept): finetuned models'
@@ -514,6 +529,13 @@ export interface ViewerController {
    * (what the user did in it included: the boxes drawn in an annotation
    * layer), or null when the viewer has no such layer. */
   layer(name: string): LayerSpec | null;
+  /** Call `listener` with the name of each layer the person deletes in the
+   * viewer (a layer's trash button in Neuroglancer's top bar, or Delete
+   * layer in its panel): gone from the live viewer without this controller
+   * taking it out. A layer renamed or hidden there is not deleted. The
+   * server's counterpart is services/launch.py's watch_layer_deletes.
+   * Returns the unsubscribe. */
+  onLayerDeleted(listener: (name: string) => void): () => void;
 }
 
 // ---------------------------------------------------------------------------

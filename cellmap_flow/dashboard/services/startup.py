@@ -12,6 +12,7 @@ import itertools
 import logging
 
 from cellmap_flow.dashboard.app import bind_dashboard, create_and_run_app
+from cellmap_flow.dashboard.services.launch import watch_layer_deletes
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
@@ -72,6 +73,7 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
 
     session.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)
     session.viewer = new_viewer(dataset_path, raw=session.raw, layers=layers)
+    watch_layer_deletes(session.viewer)
     url = viewer_url(session.viewer)
     print("viewer", url)
     # Serves the dashboard; does not return.

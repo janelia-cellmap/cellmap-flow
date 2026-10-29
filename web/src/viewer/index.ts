@@ -27,12 +27,17 @@
 // overlay.refresh_annotation_layer respells the server's). A new dataset is
 // a new page of Neuroglancer and so a new `viewer` object, which forgets
 // its bindings: they are kept here and put on each viewer as it appears.
+//
+// And one thing comes back out of it: a layer the person deletes there
+// (onLayerDeleted), told from the controller's own changes as Neuroglancer
+// reports each change of its layer list, so that what the dashboard serves
+// and paints into can follow (backend/index.ts layerDeleted).
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
 import { selectedChannel } from "../infer/norms";
 import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
+import { datasetUrlFromState, deletedLayers, displayDimensionsOf, layerShaderOf, layersOf, type NgLayer, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -65,7 +70,13 @@ export const EXAMPLE_DATASET_URL = "https://janelia-cosem-datasets.s3.amazonaws.
  * soft: no binding, not an exception. */
 interface NgViewer {
   state: { toJSON(): NgState; restoreState(state: NgState): void };
-  layerManager?: { getLayerByName(name: string): { layer: NgUserLayer | null } | undefined };
+  layerManager?: {
+    getLayerByName(name: string): { layer: NgUserLayer | null } | undefined;
+    /** Dispatched as the layer list changes: a layer added, deleted, moved,
+     * renamed, shown or hidden (LayerManager.layersChanged); `add` returns
+     * the remover. */
+    layersChanged?: { add(listener: () => void): () => void };
+  };
   mouseState?: { position?: ArrayLike<number>; active?: boolean; setActive?(active: boolean): void };
   inputEventBindings?: { global?: { set(key: string, action: string): void; delete?(key: string): void } };
   bindAction?(action: string, handler: (event: Event) => void): void;
@@ -173,6 +184,11 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
   const bindings: KeyBinding[] = [];
   /** The viewers told they have no bindings API, so it is said once each. */
   const unbindable = new WeakSet<object>();
+  /** The live viewer's layers as last seen (watchLayers), to tell the ones
+   * the person deletes; null until a viewer is up. */
+  let seen: { viewer: NgViewer; layers: NgLayer[] } | null = null;
+  /** Who is told of a layer the person deleted (onLayerDeleted). */
+  const deletedListeners = new Set<(name: string) => void>();
 
   /** Neuroglancer's viewer in the iframe, once its page has made it. This
    * is where a viewer is noticed, so the key bindings it has not got yet
@@ -185,7 +201,53 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     const viewer = win?.viewer;
     if (!viewer?.state || typeof viewer.state.toJSON !== "function") return null;
     for (const binding of bindings) applyBinding(viewer, binding);
+    watchLayers(viewer);
     return viewer;
+  }
+
+  /** Follow `viewer`'s layer list, once per viewer, from what it has now. A
+   * change is looked at once it is whole, after the code that made it: a
+   * restore reports one for each layer it drops and each it makes, and a
+   * layer half made cannot be read. A layer gone since it was last seen
+   * was deleted by the person (deletedLayers), as this controller's own
+   * restores set what is seen to the state they put in (applyState). A new
+   * viewer (a new dataset's page, a reopened one) starts from its own
+   * layers: one it opened without is not a deletion. A build without the
+   * signal fails soft: nothing is told. */
+  function watchLayers(viewer: NgViewer): void {
+    if (seen?.viewer === viewer) return;
+    const layers = layersNow(viewer);
+    if (!layers) return;  // followed from the next time the viewer is read
+    seen = { viewer, layers };
+    let looking = false;
+    viewer.layerManager?.layersChanged?.add(() => {
+      if (looking) return;
+      looking = true;
+      queueMicrotask(() => {
+        looking = false;
+        noticeDeleted(viewer);
+      });
+    });
+  }
+
+  /** `viewer`'s layers, or null while one is still being made and cannot be read. */
+  function layersNow(viewer: NgViewer): NgLayer[] | null {
+    try {
+      return layersOf(viewer.state.toJSON());
+    } catch {
+      return null;
+    }
+  }
+
+  /** Tell the listeners of the layers gone from `viewer` since it was last seen. */
+  function noticeDeleted(viewer: NgViewer): void {
+    if (seen?.viewer !== viewer) return;
+    const layers = layersNow(viewer);
+    if (!layers) return;  // looked at again at the next change
+    const deleted = deletedLayers(seen.layers, layers);
+    seen.layers = layers;
+    if (selection && deleted.includes(selection.name)) selection = null;
+    for (const name of deleted) for (const listener of deletedListeners) listener(name);
   }
 
   /** Put `binding` on `viewer` unless it is there already: the key to the
@@ -260,6 +322,9 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       const release = live.layerSpecification?.coordinateSpaceCombiner?.retain();
       try {
         live.state.restoreState(state);
+        // What is seen from now: the layers this put in, the next change
+        // the person makes told from them.
+        if (seen?.viewer === live) seen.layers = layersOf(state);
       } catch (e) {
         log(`the viewer could not take ${what} (${(e as Error)?.message ?? e}); opening it again on that state`);
         const hash = encodeState(state);
@@ -505,7 +570,9 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       delete queued[name];
       if (selection?.name === name) selection = null;
       const state = currentState();
-      if (!state) return;
+      // Not there (the person deleted it): restoring the same layers would
+      // only make them all anew.
+      if (!state || !layersOf(state).some((layer) => layer.name === name)) return;
       applyState(withoutLayer(state, name), `the view without ${name}`);
     },
 
@@ -603,6 +670,11 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
           map.delete(key);
         }
       };
+    },
+
+    onLayerDeleted(listener) {
+      deletedListeners.add(listener);
+      return () => void deletedListeners.delete(listener);
     },
 
     refreshLayer(name) {

@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createBackend, restoreSession } from "../../src/backend";
 import { toYaml } from "../../src/backend/yaml";
@@ -14,7 +14,7 @@ import { applyPostprocessors } from "../../src/infer/post";
 import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
-import { rawLayer } from "../../src/viewer/layers";
+import { paintLayerName, rawLayer } from "../../src/viewer/layers";
 import { DATASET, entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { portablePython } from "./pyodide";
 
@@ -244,6 +244,7 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
     const backend = createBackend(ctx);
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
       success: true, models: [], pipeline: defaultChain(), input_norm_from: null, postprocess_from: null, postprocess_fitted: null,
+      deleted_in_viewer: [],
     });
     await backend.handle(submit([HF56, HF54]));
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
@@ -255,7 +256,34 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
       // the default's sigmoid was there before either started
       postprocess_from: null,
       postprocess_fitted: null,
+      deleted_in_viewer: [],
     });
+  });
+
+  it("stops a model whose layer the person deletes in the viewer, as its ✕ does, says which for its rows, and draws it no more", async () => {
+    const ctx = fakeContext();
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54, HF56]));
+    ctx.viewer.deleteLayer(NAME_54);
+    await vi.waitFor(() => expect(ctx.session.state.deletedInViewer).toHaveLength(1));
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+    const listed = body(await backend.handle(request("GET", "/api/models/loaded")));
+    expect(listed.models.map((m: { name: string }) => m.name)).toEqual([NAME_56]);
+    expect(listed.deleted_in_viewer).toEqual([{ number: 1, name: NAME_54, hf_id: HF54 }]);
+    // A new chain draws the model left, and only it.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: [], postprocess: [] }));
+    expect(Object.keys(ctx.viewer.layers)).toEqual([NAME_56]);
+  });
+
+  it("makes a paint volume whose layer the person deletes no longer the session's; another layer deleted changes nothing", async () => {
+    const ctx = fakeContext({ state: { paintVolume: "vol-1" } });
+    createBackend(ctx);
+    ctx.viewer.layers = { good_regions: {}, [paintLayerName("vol-1")]: {} };
+    ctx.viewer.deleteLayer("good_regions");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ctx.session.state.paintVolume).toBe("vol-1");
+    ctx.viewer.deleteLayer(paintLayerName("vol-1"));
+    await vi.waitFor(() => expect(ctx.session.state.paintVolume).toBeNull());
   });
 
   it("stops serving the one model removed; the others stay served, their layers not redrawn, and nothing else in the request is read", async () => {

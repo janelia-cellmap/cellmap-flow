@@ -189,6 +189,10 @@ def get_loaded_models():
     normalization (routes.pipeline.set_declared_input_norm) and the
     postprocessing (set_needed_postprocess), and the Processing tab's list
     then shows it, saying from which model and on what grounds.
+    ``deleted_in_viewer`` lists the models stopped because their layer was
+    deleted in the viewer, numbered in the order they went (the session's
+    record: services.launch._layers_deleted), for the list to untick the
+    rows of those newer than it has seen, as their ✕ would.
     """
     from cellmap_flow.dashboard.routes.pipeline import input_norm_set_by, postprocess_set_by
 
@@ -196,9 +200,11 @@ def get_loaded_models():
     configs = configs_by_name()
     set_by, declared = input_norm_set_by([configs[m["name"]] for m in models if m["name"] in configs])
     post_by, fitted = postprocess_set_by([m["name"] for m in models])
-    return jsonify({"success": True, "models": models, "pipeline": get_session().pipeline_spec.to_json_data(),
+    session = get_session()
+    return jsonify({"success": True, "models": models, "pipeline": session.pipeline_spec.to_json_data(),
                     "input_norm_from": set_by, "input_norm_declared": declared,
-                    "postprocess_from": post_by, "postprocess_fitted": fitted})
+                    "postprocess_from": post_by, "postprocess_fitted": fitted,
+                    "deleted_in_viewer": session.deleted_in_viewer})
 
 
 @models_bp.route("/api/models/remove", methods=["POST"])
