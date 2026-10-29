@@ -321,6 +321,7 @@ describe("the rank routes, without Python", () => {
     const tuned = finetunedEntry(e56, `${NAME_56}-ft1`);
     const er = entry("setup_60", "er", ["er"], 32);
     ctx.catalog.entries = [tuned, e54, e56, er];
+    await ctx.session.update({ tabKept: { finetuned: [tuned.id], volumes: [] } });  // finetuned in this tab
     await ctx.infer.serve(e56, ctx.session.state.chain, "blob", async () => new ArrayBuffer(8));
     const handle = harness(ctx);
     // Each candidate's name, group and tick: the served one ticked, as the

@@ -160,8 +160,9 @@ model to Hugging Face (`publish/`), all five below, and the dashboard build
 7. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged; then
    `installLocalFolderUi()`, the panel's "Browse local folder…" button and
    drop target, which fill the URL field and press Connect, so connect.js
-   must be listening first; the Share button; and `installRunRegionUi()`,
-   the Save predictions tab (below).
+   must be listening first; the Share button; `installRunRegionUi()`,
+   the Save predictions tab (below); and `installKeptUi()`, the Models
+   tab's Kept in this browser (State, below).
 
 ## Request path for `/api/*`
 
@@ -558,6 +559,24 @@ the Hugging Face token a publish uses (`backend/routes/publish.ts`), are in
 no storage at all (`credentials.ts`). The Sign in popup keeps its PKCE
 verifier in its own sessionStorage until it is back from Hugging Face.
 
+What IndexedDB keeps of finetuning, the finetuned models and the paint
+volumes, every tab and visit shares, but a tab lists only its own: the
+session's `tabKept` names them (the models it finetuned, opened from a file,
+served or added to the ranking, the volumes it painted into or a link showed;
+`state/index.ts` keepInTab, and withTabUse on every update), and the Hugging
+Face list, the ranking's candidates and the sessions to resume list those
+alone (`src/kept`: listedInTab, volumeGroups), so a new tab starts as a
+freshly started server does, and a reload lists what the tab listed. A link
+naming a finetuned model kept here still opens it: resolving looks at every
+record, and serving it makes it the tab's. The rest are on the Models tab
+under Kept in this browser (`kept/panel.ts`, its browser-only block in
+`_models_tab.html`), to bring one into the tab or delete it. For the same
+reason the Finetune tab's form is kept in sessionStorage in this mode
+(`training-form.js` formStorage; localStorage on a server, whose origin is
+new at each start). At boot the page asks for persistent storage
+(`navigator.storage.persist()`), so the browser does not clear the models and
+the paint on its own, and logs the answer.
+
 ## Layout
 
 ```
@@ -607,6 +626,8 @@ web/
                              level, the placement's call, the output under a box)
     run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
                              (the run, its progress and provenance), output.ts (the folder, the zip, the saved layer), panel.ts (the tab)
+    kept/                    what this browser keeps, by tab (State, above): index.ts (which finetuned models and volumes the tab
+                             lists, the earlier ones, their delete, the persistent-storage ask), panel.ts (Kept in this browser)
     publish/                 Publishing to Hugging Face (above): model.ts (the files, the card, the links), hub.ts (the library's
                              calls and errors), oauth.ts (Sign in: the popup, the hand-over), oauth-popup.ts (oauth.html's entry)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,

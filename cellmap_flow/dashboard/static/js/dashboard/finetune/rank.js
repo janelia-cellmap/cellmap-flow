@@ -47,7 +47,7 @@
 // model mark Seed from Prediction's threshold as set by ranking, and say on
 // the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
-import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { announce, CHAIN_CHANGED_EVENT, listen, MODEL_LIST_CHANGED_EVENT, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { searchText } from "../../lib/search.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
@@ -1022,7 +1022,8 @@ export function initRank({ form }) {
   // card opened there, and on Rank. While Rank waits for paint, also as the
   // pointer comes onto the card: the paint is made in the viewer beside it.
   // Once listed, again whenever the models served may have changed, for the
-  // Show buttons. A closed card lists nothing.
+  // Show buttons, and when a model comes into the tab unserved (the browser
+  // mode's Kept in this browser). A closed card lists nothing.
   const trainingPane = document.getElementById("training");
   document.getElementById("training-tab").addEventListener("shown.bs.tab", () => {
     if (section.open) refresh();
@@ -1030,9 +1031,11 @@ export function initRank({ form }) {
   document.getElementById("rankCard").addEventListener("pointerenter", () => {
     if (section.open && rankBtn.disabled && !running && switching === null && !fitting) refresh();
   });
-  listen(MODELS_CHANGED_EVENT, () => {
+  const listAgain = () => {
     if (listed && section.open) refresh();
-  });
+  };
+  listen(MODELS_CHANGED_EVENT, listAgain);
+  listen(MODEL_LIST_CHANGED_EVENT, listAgain);
 
   const open = readJSON(OPEN_KEY, null);
   if (typeof open === "boolean") section.open = open;

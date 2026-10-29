@@ -33,6 +33,7 @@ import type { Finetuned, FinetuneOptions, RunFinetune, RunReporter } from "../fi
 import { PYTHON, pyRegExp } from "../generated/python-data";
 import { finetunedRecord, nextFinetunedName } from "../models/finetuned";
 import { stamp } from "../shared/format";
+import { keepInTab } from "../state";
 import { message } from "./router";
 import { serveModels } from "./serving";
 
@@ -465,6 +466,8 @@ export class FinetuneJobs {
     const record = finetunedRecord(trained, name, result.bytes.byteLength, { volume: volume.id, created_at: this.now().toISOString(), params: job.params, epochs: result.epochs, final_loss: result.finalLoss });
     const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);
+    // Made here, so listed here, served or not (src/kept).
+    await keepInTab(ctx.session, { finetuned: [record.id] });
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;
     const on = result.blocks !== undefined ? `in ${result.blocks} block(s)` : result.tiles !== undefined ? `in ${result.tiles} tile(s)` : `of ${result.chunks} chunk(s)`;
     const kept = `Finetuned model ${name} kept in this browser (${fentry.variant.file_mb} MB): ${result.epochs} epoch(s) on ${result.pixels} painted voxels ${on}${loss}.`;

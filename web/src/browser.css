@@ -206,3 +206,26 @@
 #runModels .form-check {
   margin-bottom: 2px;
 }
+
+/* Kept in this browser (the Models tab's browser-only block,
+   templates/_models_tab.html, driven by src/kept/panel.ts): a row for each
+   finetuned model or paint volume kept from earlier, in the look of the
+   Loaded models list (dark.css .loaded-model-*: its name and note classes
+   are the rows' too), with its buttons under its text rather than beside
+   it, so a row fits the dashboard's column and a phone; Delete all and a
+   Delete's question below in the same way. */
+.kept-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.kept-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}

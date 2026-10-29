@@ -138,6 +138,23 @@ export interface SessionState {
    * says the chain's came from while it is still that; null until a start
    * sets any. The server's `start_postprocess`. */
   startPostprocess: { model: string; postprocess: Step[] } | null;
+  /** Which of the finetuned models and paint volumes this browser keeps
+   * (IndexedDB, which every tab and every visit share) are this tab's: made
+   * or opened here, or a link's paint (state/index.ts keepInTab); served,
+   * added to the ranking or painted into here (withTabUse); or brought back
+   * with the Models tab's Kept in this browser (src/kept). Their ids, in
+   * the order they became the tab's. The dashboard lists these alone, so a new
+   * tab does not list an earlier one's experiments, and a reload lists what
+   * the tab listed. The browser's own: a server's dashboard starts with its
+   * process, on a port of its own. */
+  tabKept: TabKept;
+}
+
+/** The ids of kept things, by kind (SessionState.tabKept): finetuned models'
+ * (FinetunedRecord.id) and paint volumes' (PaintVolume.id). */
+export interface TabKept {
+  finetuned: string[];
+  volumes: string[];
 }
 
 /** What a model's score fitted to the paint (SessionState.rankFits). */

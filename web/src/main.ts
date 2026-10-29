@@ -31,17 +31,19 @@ import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext, Chain } from "./contracts";
 import { createInference } from "./infer";
-import { chainFromHash, linkedHash, type LinkedModels, linkNotes, parseLink, resolveLinkedModels, withoutLink } from "./link";
+import { askToKeepStorage } from "./kept";
+import { installKeptUi } from "./kept/panel";
+import { chainFromHash, linkedHash, type LinkedModels, linkNotes, paintVolumesIn, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { installOpenFileUi } from "./model-file";
 import { createCatalog } from "./models";
 import { installApiDownloads, installApiRebase } from "./rebase";
 import { installRunRegionUi } from "./run-region/panel";
 import { installShareUi, showLinkNotice } from "./share-link";
-import { defaultChain, openSession } from "./state";
+import { defaultChain, keepInTab, openSession } from "./state";
 import { openPaintStore } from "./state/paint-store";
 import { createViewer, datasetUrlFromPage } from "./viewer";
-import { withHash } from "./viewer/share";
+import { decodeState, withHash } from "./viewer/share";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts).
  * Resolved against the page, not this module: a relative specifier in
@@ -71,6 +73,9 @@ async function boot() {
   document.documentElement.dataset.mode = "browser";
   installApiRebase();
   installApiDownloads();
+  // The finetuned models and the paint live in IndexedDB, which a browser
+  // may clear on its own unless the page asks it not to; not waited for.
+  void askToKeepStorage(log);
   await registerServiceWorker();
   const session = await openSession();
   // A link to the page names its volume and models in the query (src/link.ts),
@@ -111,6 +116,10 @@ async function boot() {
   const served = new Set(session.state.models.map((m) => m.name));
   const view = await linkedHash(location.hash, { served, renamed: linkedModels.renamed, paint, log });
   if (view.hash !== location.hash) history.replaceState(null, "", withHash(location.href, view.hash));
+  // The paint the view shows, kept in this browser, is this tab's from now
+  // on (src/kept), as the link's models are by being served.
+  const linkedPaint = paintVolumesIn(decodeState(view.hash));
+  if (linkedPaint.length) await keepInTab(session, { volumes: linkedPaint });
   const missing = linkedModels.leftOut.length + view.dropped.length > 0;
   const notes = linkNotes(linkedModels, view.dropped);
   const title = missing ? "Some of the link is not shown here." : notes.length ? "The link opened with a model renamed." : "Open a volume to run the link's models.";
@@ -154,12 +163,15 @@ async function boot() {
   installLocalFolderUi({ log });
   // The Models tab's Open an .onnx file… presses Add a model's Resolve,
   // which add-model.js listens on.
-  installOpenFileUi({ catalog, log });
+  installOpenFileUi({ catalog, session, log });
   installShareUi({ session, viewer, catalog, log });
   // The Save predictions tab (src/run-region): its own DOM, the folder picker
   // in its clicks and the engine's materialize; nothing of the dashboard's
   // script.
   installRunRegionUi(ctx);
+  // Kept in this browser, on the Models tab (src/kept): what earlier tabs
+  // and visits made, which this tab lists only once brought into it.
+  installKeptUi(ctx);
   await restored;
 }
 

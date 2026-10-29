@@ -1,5 +1,5 @@
 // The Finetune tab's form: the output path and the training parameters,
-// kept in localStorage (the output path on the server too), the advice shown
+// kept between page loads (formStorage), the advice shown
 // next to some of them, the Learning Rates typed or picked from their
 // presets and eased down over the run or not, the Channel a model of
 // several channels trains, and the GPU queue picker.
@@ -12,7 +12,16 @@ import { getAnswer, postAnswer } from "./requests.js";
 
 const FINETUNE_STATE_KEY = "finetuneFormState";
 
-// The fields kept in localStorage, as [key in the saved state, element id,
+// Where the form is kept: localStorage on a server, whose dashboard has a
+// port, so an origin, of its own each time it starts, and the tab's
+// sessionStorage in the browser mode, whose origin is the same on every
+// visit: there each new tab starts at the defaults, not at the settings an
+// old experiment left, and keeps its own across its reloads.
+function formStorage() {
+  return isBrowserMode() ? "session" : "local";
+}
+
+// The fields kept, as [key in the saved state, element id,
 // how it is restored]:
 // - "value": when the saved value is not empty;
 // - "blank": also when it is "", which is a choice of its own (keep the
@@ -79,11 +88,11 @@ function saveFinetuneState() {
   const channel = document.getElementById("trainChannel");
   state.channelByModel = keptChannels(channel.dataset.model, channel.value);
   state.gpuQueues = queuePicker.value();
-  writeJSON(FINETUNE_STATE_KEY, state);
+  writeJSON(FINETUNE_STATE_KEY, state, formStorage());
 }
 
 function restoreFinetuneState() {
-  return readJSON(FINETUNE_STATE_KEY, null);
+  return readJSON(FINETUNE_STATE_KEY, null, formStorage());
 }
 
 function applySavedState(saved) {
@@ -294,7 +303,7 @@ function showChannel(name, index) {
 // matched the paint best, for the model it makes the one to finetune, before
 // the model picker has it.
 export function pickChannel(name, index) {
-  writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) });
+  writeJSON(FINETUNE_STATE_KEY, { ...(restoreFinetuneState() || {}), channelByModel: keptChannels(name, String(index)) }, formStorage());
   const select = document.getElementById("trainChannel");
   if (select.dataset.model === name) select.value = String(index);
   showChannel(name, index);

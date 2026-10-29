@@ -4,6 +4,10 @@ export const MODELS_CHANGED_EVENT = "cellmap-flow:models-changed";  // the model
 // Paint's window): the Processing tab's lists read it again, and the model
 // advice is asked for again.
 export const CHAIN_CHANGED_EVENT = "cellmap-flow:chain-changed";
+// A model came into the tab without being served: the browser mode's Kept in
+// this browser brought one back (web/src/kept/panel.ts sends this string
+// too). The Hugging Face list adds its row, and the ranking lists again.
+export const MODEL_LIST_CHANGED_EVENT = "cellmap-flow:model-list-changed";
 // Shift+R over the viewer in browser mode: web/src/backend/routes/finetune.ts sends this string too.
 export const RESTART_EVENT = "cellmap-flow:restart-finetune";
 // The Sign in with Hugging Face popup has answered, in browser mode (detail:
