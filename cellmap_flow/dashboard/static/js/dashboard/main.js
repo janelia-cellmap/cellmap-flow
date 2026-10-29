@@ -4,6 +4,7 @@
 // A module runs once the page is parsed and before DOMContentLoaded, so the
 // page's elements are all there.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
+import { tooltipHints } from "../lib/dom.js";
 import { CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { createQueuePicker, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { chainChanges, mountOpChain } from "../shared/op-chain.js";
@@ -288,6 +289,8 @@ initRawChannel({ input: inputChain, apply: applyBar.apply });
 document.addEventListener("keydown", (event) => applyOnEnter(event, applyBar.apply));
 initServerConfigModal();
 initReviewTab();
+// A hint's "i" shows the rest of its hint as a tooltip too (lib/dom.js).
+tooltipHints();
 // The Finetune tab starts last, so its first requests go after the other
 // tabs' (the Models tab asks for the GPU queues only once the server config
 // has answered): on DOMContentLoaded while the page is still being parsed,

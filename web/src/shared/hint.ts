@@ -23,7 +23,7 @@ export function hint(short: string, more?: string): (string | HTMLElement)[] {
   body.className = "more-body";
   body.textContent = more;
   details.append(summary, body);
-  return [short, " ", details];
+  return [short, "\u00a0", details];  // the "i" held to the line's last word
 }
 
 /** `el`'s content made hint()'s. */
