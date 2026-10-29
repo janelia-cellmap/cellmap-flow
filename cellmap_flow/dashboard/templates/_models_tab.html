@@ -38,11 +38,12 @@
          ranking lists the same models with them. -->
 
     <!-- Local Catalog Section: a section for each group, from the data
-         below. server-only: it lists paths on the cluster's file systems;
-         in the browser mode (web/) the models come from the Hugging Face
-         section below. -->
+         below, with the voxel size a model runs at when it is not its own
+         (run_voxel_sizes, by name). server-only: it lists paths on the
+         cluster's file systems; in the browser mode (web/) the models come
+         from the Hugging Face section below. -->
     <h5 class="server-only">Local Catalog</h5>
-    <script type="application/json" id="model-catalog-data">{{ {"groups": catalog_groups, "ticked": default_models} | tojson }}</script>
+    <script type="application/json" id="model-catalog-data">{{ {"groups": catalog_groups, "ticked": default_models, "run_voxel_sizes": run_voxel_sizes} | tojson }}</script>
     <div class="accordion server-only" id="modelAccordion"></div>
 
     <!-- Hugging Face Section: loaded when it opens. -->
