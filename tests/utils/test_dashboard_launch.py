@@ -3,6 +3,7 @@ or ticked and submitted, the Models tab's Loaded models list with its ✕, the
 exported config and the job logs. Its commands are in test_launch_command, its
 layers in test_layer_sources_snapshot."""
 
+import json
 import shlex
 import threading
 from types import SimpleNamespace
@@ -222,6 +223,55 @@ def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one
     session.jobs = [_Job(name)]
     loaded = dashboard.get("/api/models/loaded").get_json()
     assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
+
+
+def test_submit_runs_a_model_at_the_voxel_size_typed_beside_it(viewer, dashboard, monkeypatch):
+    """POST /api/models' run_voxel_sizes: a ticked Hugging Face model's server
+    builds it at the voxel size typed in its row, which the listing gives
+    that row back while it runs; a blank one starts it again at its own."""
+    from cellmap_flow.models import hf_catalog
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    repo = "cellmap/mito-aff-unet-setup-16"
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {})
+    monkeypatch.setattr(hf_catalog, "list_huggingface_models", lambda: {repo: {"input_voxel_size": [16] * 3}})
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    process_chain().input_norms, process_chain().postprocess = [], []
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    def served():
+        """The model entry the last server was started with."""
+        argv = shlex.split(commands[-1])
+        return json.loads(argv[argv.index("--model") + 1])
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [repo], "run_voxel_sizes": {repo: "32,16,16"}})
+    assert answer.status_code == 200 and served()["run_voxel_size"] == [32, 16, 16]
+    running = _Job("mito_aff_unet_setup_16")
+    session.jobs = [running]
+    assert dashboard.get("/api/huggingface-models").get_json()[repo]["run_voxel_size"] == [32, 16, 16]
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [repo], "run_voxel_sizes": {repo: ""}})
+    assert answer.status_code == 200 and running.killed
+    assert len(commands) == 2 and "run_voxel_size" not in served()
+
+
+def test_submit_refuses_another_voxel_size_for_a_model_that_reads_its_input_itself(dashboard, monkeypatch, tmp_path):
+    """A script with its own process_chunk (a TensorFlow model's) is refused
+    before anything starts: from its server, the page showed nothing."""
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    script = tmp_path / "tf.py"
+    script.write_text("def process_chunk(idi, roi):\n    return None\n")
+    session = get_session()
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
+    session.models_config = [build_model({"type": "script", "script_path": str(script)}, "tf")]
+
+    answer = dashboard.post("/api/models", json={"selected_models": ["tf"], "run_voxel_sizes": {"tf": "32"}})
+    assert answer.status_code == 400 and "tf" in answer.get_json()["error"] and commands == []
+    assert session.models_config[0].run_voxel_size is None
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):

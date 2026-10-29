@@ -290,6 +290,11 @@ export interface ModelEntry {
   variant: ModelVariant;
   /** Where the .onnx bytes are fetched from (Hugging Face resolve URL). */
   onnxUrl: string;
+  /** The voxel size the model is run at, [z, y, x] nm, when it is not its
+   * own: the Models tab's Run at (nm), the server's `run_voxel_size`.
+   * Every reader of the model's geometry sees it scaled to this
+   * (infer/geometry.ts modelVoxelSizes); the manifest stays the model's. */
+  runVoxelSize?: number[];
 }
 
 /** What a model's network ends in: the class of its output and the op that

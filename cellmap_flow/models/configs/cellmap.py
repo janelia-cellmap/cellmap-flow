@@ -85,6 +85,7 @@ def metadata_geometry(metadata):
         names = channel_names_of(metadata)
         return {
             "write_shape": list(Coordinate(metadata.output_shape) * voxel_size),
+            "input_voxel_size": list(Coordinate(metadata.input_voxel_size)),
             "output_voxel_size": list(voxel_size),
             "output_channels": int(metadata.out_channels),
             "channels": list(names) if names else None,

@@ -106,9 +106,11 @@ export function exportYaml(ctx: AppContext): string {
 }
 
 /** A served model as the server's model entry, `type: onnx`
- * (cellmap_flow/models/configs/onnx.py), with serverParams. */
+ * (cellmap_flow/models/configs/onnx.py), with serverParams, and the voxel
+ * size it is run at when that is not its own (`run_voxel_size`, which the
+ * server's entries take for any model), so the server runs it there too. */
 export function serverEntry(m: ModelEntry): Record<string, YamlValue> {
-  return { type: "onnx", name: m.name, ...serverParams(m, true) };
+  return { type: "onnx", name: m.name, ...serverParams(m, true), ...(m.runVoxelSize ? { run_voxel_size: m.runVoxelSize } : {}) };
 }
 
 /** The server's onnx type's arguments for a model: a Hugging Face export by

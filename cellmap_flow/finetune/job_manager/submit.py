@@ -88,9 +88,12 @@ def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) 
     the env, and without it the serving YAMLs the trainer writes would run
     the finetuned model in the default environment. Its type's
     ``default_env`` needs no entry: the trainer builds the same type, and
-    a finetuned model runs where its base type does.
+    a finetuned model runs where its base type does. So does one run at a
+    voxel size not its own (``run_voxel_size``), which no flag carries
+    either: the trainer would read the data at the model's own.
     """
-    if model_type in FLAG_MODEL_TYPES and not getattr(model_config, "env", None):
+    by_flags = not getattr(model_config, "env", None) and getattr(model_config, "run_voxel_size", None) is None
+    if model_type in FLAG_MODEL_TYPES and by_flags:
         return None
     entry = model_config.to_dict()
     if checkpoint_path and "checkpoint_path" in entry:
@@ -168,11 +171,14 @@ def model_settings(model_config, warned: set):
         channels = made_up["channels"] = ["mito"]  # Default fallback
     channels = _normalize_metadata_list(channels, ["mito"])
 
-    # Get voxel sizes
-    input_voxel_size = _get_model_metadata(model_config, "input_voxel_size", geometry)
+    # Get voxel sizes. A model run at a voxel size not its own has them in
+    # its geometry alone: its attributes say its own (a fly model's
+    # input_voxel_size).
+    sized = model_config if getattr(model_config, "run_voxel_size", None) is None else None
+    input_voxel_size = _get_model_metadata(sized, "input_voxel_size", geometry)
     if input_voxel_size is None:
         input_voxel_size = made_up["input_voxel_size"] = [16, 16, 16]
-    output_voxel_size = _get_model_metadata(model_config, "output_voxel_size", geometry)
+    output_voxel_size = _get_model_metadata(sized, "output_voxel_size", geometry)
     if output_voxel_size is None:
         output_voxel_size = made_up["output_voxel_size"] = [16, 16, 16]
     _warn_made_up(model_config, made_up, warned)
@@ -183,7 +189,8 @@ def model_settings(model_config, warned: set):
 
 
 def _get_model_metadata(model_config, attr_name: str, geometry):
-    """``model_config``'s ``attr_name``, else its geometry's (``geometry()``), else None."""
+    """``model_config``'s ``attr_name``, else its geometry's (``geometry()``),
+    else None. ``model_config`` None: its geometry's alone."""
     # First try direct attribute access
     if hasattr(model_config, attr_name):
         value = getattr(model_config, attr_name, None)

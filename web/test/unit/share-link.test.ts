@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FinetunedRecord, ModelEntry } from "../../src/contracts";
 import { headOf, withHead } from "../../src/finetune/onnx-head";
+import { geometryOf, withRunVoxelSize } from "../../src/infer/geometry";
 import { parseFinetunedRef, parseLink, resolveLinkedModels, sameHead } from "../../src/link";
 import { createCatalog } from "../../src/models";
 import { MemoryByteCache } from "../../src/models/byte-cache";
@@ -100,5 +101,22 @@ describe("linkRefs", () => {
     expect(opened.leftOut).toEqual([]);
     expect(opened.entries.map((e) => [e.repo, e.name])).toEqual([[ALICE, A_FT], ["finetuned", onAlice.name], [CAROL, C_FT]]);
     expect(sameHead(headOf(await recipient.modelBytes(opened.entries[1])), heads.ft2)).toBe(true);
+  });
+
+  it("carries the voxel size a model runs at, and a finetune trained at another than its base's own, which run there where the link opens", async () => {
+    const at32 = withRunVoxelSize(hub, [32, 32, 32]);
+    const trained = record(at32, "mito_aff_setup53_16nm-ft1");
+    const sender = { ...catalog, finetuned: async () => [trained], modelBytes: async () => bytes[ft1.id] };
+    const linked = await linkRefs([at32, trained.entry], sender);
+    expect(linked.refs[0]).toBe("setup_53@32nm");
+    expect(linked.refs[1].endsWith("@32nm")).toBe(true);
+
+    const { models } = parseLink(new URL(shareLink(PAGE, DATASET, linked.refs, null)!).search);
+    const recipient = createCatalog({ log: () => {}, fetch: fakeHub({ onnx: { [hub.variant.file]: HEAD_ONNX } }).fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry() });
+    const opened = await resolveLinkedModels(recipient, models, () => {});
+    expect(opened.leftOut).toEqual([]);
+    expect(opened.entries.map((e) => geometryOf(e).input_voxel_size)).toEqual([[32, 32, 32], [32, 32, 32]]);
+    // The finetune is kept as a 32 nm model, as it was trained.
+    expect(opened.entries[1].manifest.input_voxel_size_nm).toEqual([32, 32, 32]);
   });
 });

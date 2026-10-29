@@ -44,7 +44,8 @@ def entry_yaml(resolved) -> str:
 @click.argument("ref")
 @click.option("-n", "--name", default=None, help="The model's name (default: one made from REF).")
 @click.option("-v", "--voxel-size", default=None,
-              help="nm per voxel, '8' or '16,8,8', for a model that does not say its own (Cellpose, bioimage.io).")
+              help="nm per voxel, '8' or '16,8,8': the voxel size of a model that does not say its own "
+                   "(Cellpose, bioimage.io), and the one to run any other at (its run_voxel_size).")
 @click.option("--offline", is_flag=True,
               help="Do not look REF up on Hugging Face or in the BioImage Model Zoo.")
 @click.option("--run", "run_now", is_flag=True,

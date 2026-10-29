@@ -51,10 +51,31 @@ function appendChildren(el, children) {
 // Help text that shows one line and keeps the rest a click away: ``short``,
 // then ``more`` (text, nodes or an array of them) under an "i" beside it, the
 // markup the templates write (css/dark.css details.more). No ``more``: the
-// line alone.
+// line alone. The "i" is held to the line's last word, not wrapped onto a
+// line of its own.
 export function hint(short, more) {
   if (!more || (Array.isArray(more) && !more.length)) return [short];
-  return [short, " ", h("details", { class: "more" }, h("summary", { "aria-label": "More" }, "i"), h("span", { class: "more-body" }, more))];
+  return [short, "\u00a0", h("details", { class: "more" }, h("summary", { "aria-label": "More" }, "i"), h("span", { class: "more-body" }, more))];
+}
+
+// A hint's "i" titled with the rest of its hint while it is closed, so a mouse
+// resting on it shows the rest as a tooltip; open, the rest is in view and the
+// title is dropped. A click or a tap still opens it in place, the one way a
+// touch screen has.
+export function titleHint(summary) {
+  const details = summary.parentElement;
+  const body = details && details.querySelector(".more-body");
+  if (!body) return;
+  summary.title = details.open ? "" : body.textContent.replace(/\s+/g, " ").trim();
+}
+
+// Every hint under ``root`` gets its tooltip as the mouse comes onto its "i":
+// the templates' and the scripts' alike, whenever they were written.
+export function tooltipHints(root = document) {
+  root.addEventListener("mouseover", (event) => {
+    const summary = event.target instanceof Element ? event.target.closest("details.more > summary") : null;
+    if (summary) titleHint(summary);
+  });
 }
 
 // ``el``'s content made hint()'s.

@@ -56,6 +56,30 @@ and normalization is in the model stage for the reasons the file gives. The raw
 volume is opened as the engine view `"raw"` and shown in the viewer straight
 from its own URL (`zarr://https://...`).
 
+A model can be run at another voxel size than its own (the Models tab's Run
+at (nm), POST /api/models' `run_voxel_sizes`; `ModelEntry.runVoxelSize`, the
+server's `run_voxel_size`). The manifest stays the model's; its geometry is
+scaled by one rule, `infer/geometry.ts modelVoxelSizes`, as the server's
+`models/geometry.py run_at_geometry` scales it: the input voxel size is the
+run one, the output voxel size is scaled by the same factor per axis, and the
+voxel counts (the variant's blocks, the halo in voxels) and the ratio stay
+the model's own.
+`geometryOf` and `model_info` read it there, so everything downstream follows
+without a change of its own: the raw level read (exact when the pyramid has
+it, else the nearest, read as if it were), the served level, the ranking,
+Label it, Run on a region, and the annotation volume a finetune plans and
+trains on (a volume planned at another voxel size is carried onto the new
+grid, as another model's is: `finetune/volume.ts plannedFor`). A finetune
+of a model run at another voxel size is a model of that size:
+`models/finetuned.ts finetunedEntry` declares it in the manifest, which its
+download, its publish and a link that rebuilds it carry. The session
+keeps the entry with its run voxel size; Export Config writes it as the
+entry's `run_voxel_size`; a share link puts it after the model's ref
+(`setup_54@32nm`, link.ts runAtRef); the view's name has it after
+the blob (`shared/args.ts viewName`), since the viewer and the service worker
+keep chunks by URL; the stage keys need nothing (`stages.ts modelStageKey`
+says why).
+
 A raw volume of several channels is read on the one the input chain's
 ChannelSelector picks (channel 0 without one), as the server reads it
 (`io/raw.py channel_select`). `src/infer/channels.ts` says how many there are
@@ -82,7 +106,8 @@ here.
 cellmap-flow (`src/`) is the app: the model catalog and `model_info`
 (`models/`, `shared/model-info.ts`), the `__CFLOW_ARGS__` codec
 (`shared/args.ts`), the model's block geometry from its manifest
-(`infer/geometry.ts`: the halo, the ratio, the level choice, the served level),
+(`infer/geometry.ts`: the voxel sizes it runs at, the halo, the ratio, the
+level choice, the served level),
 the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
@@ -590,7 +615,7 @@ web/
       engine.ts (the views, the stats, a region written out: materialize), stages.ts (the model and postprocess stages, their keys),
       output.ts (a box of a model's own output from its chunks, readOutput's),
       norms.ts, post.ts,
-      expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
+      expression.ts (Lambda steps), geometry.ts (the manifest's blocks at the voxel size run at, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
     models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice (the largest block that fits for a 3D model, the one nearest 512 a side for a 2D one), byte cache keyed by URL and ETag, finetuned.ts (the models finetuned here)
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of

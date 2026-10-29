@@ -666,8 +666,9 @@ class OnnxModelConfig(ModelConfig):
             self._geometry(geometry, manifest, self._variant(manifest))
         except (TypeError, ValueError):
             return None
-        return {"write_shape": list(geometry.write_shape), "output_voxel_size": list(geometry.output_voxel_size),
-                "output_channels": geometry.output_channels, "channels": list(geometry.channels)}
+        return {"write_shape": list(geometry.write_shape), "input_voxel_size": list(geometry.input_voxel_size),
+                "output_voxel_size": list(geometry.output_voxel_size), "output_channels": geometry.output_channels,
+                "channels": list(geometry.channels)}
 
     def output_graph(self):
         """The served file's graph (``read_graph``), read back from the
