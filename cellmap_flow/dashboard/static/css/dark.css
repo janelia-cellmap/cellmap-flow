@@ -1038,3 +1038,23 @@ details.more > .more-body {
   z-index: 20;
   background: var(--bg-base);
 }
+
+/* Under them, the open tab's own bars stay too: the Processing tab's Apply
+   bar and its Input normalization / Postprocessing tabs, the Finetune tab's
+   Annotation Crops / Training. Each stops below the bars above it, whose
+   heights (they wrap with the column's width) main.js keeps in --tabs-h and
+   --apply-h. */
+#applyBar,
+#processingTabs,
+#finetuneTabs {
+  position: sticky;
+  z-index: 15;
+  background: var(--bg-base);
+}
+#applyBar,
+#finetuneTabs {
+  top: var(--tabs-h, 0px);
+}
+#processingTabs {
+  top: calc(var(--tabs-h, 0px) + var(--apply-h, 0px));
+}
