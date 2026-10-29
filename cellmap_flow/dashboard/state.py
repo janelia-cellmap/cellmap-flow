@@ -29,8 +29,10 @@ rather than being stored beside the real one:
   ``shader_controls``, ``extra_layers``, ``shown_channels``; and
   ``layer_blob()``, the chain as every prediction layer's URL carries it,
   and ``shown_channel()``, the channel a model's layer opens on.
-- The models: ``models_config``, ``model_catalog``, and
-  ``start_postprocess``, the postprocessing a model's start set.
+- The models: ``models_config``, ``model_catalog``,
+  ``start_postprocess``, the postprocessing a model's start set, and
+  ``deleted_in_viewer``, the models stopped because their layer was deleted
+  in the viewer.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
@@ -76,7 +78,8 @@ class Session:
     # name cannot coexist.
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
                  "shader_controls", "extra_layers", "shown_channels",
-                 "models_config", "model_catalog", "start_postprocess", "_builder_state", "builder_model_configs",
+                 "models_config", "model_catalog", "start_postprocess", "deleted_in_viewer", "_builder_state",
+                 "builder_model_configs",
                  "tmp_dir", "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added",
                  "rank_fits", "review", "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate",
                  "huggingface", "log_buffer", "log_ids", "log_clients", "bbx_generator_state")
@@ -128,6 +131,13 @@ class Session:
         # chain's came from while it is still that; None until a start sets
         # any.
         self.start_postprocess = None
+        # [{"number", "name", "hf_id", "zoo_id", "cellpose"}]: the models
+        # stopped because the person deleted their layer in the viewer
+        # (services/launch.py _layers_deleted), the latest of each name, each
+        # numbered from 1 up in the order they went, which GET
+        # /api/models/loaded answers so the Models tab unticks their rows,
+        # as a ✕ does.
+        self.deleted_in_viewer = []
 
         # The pipeline builder's last apply
         self._builder_state = {key: [] for key in _BUILDER_KEYS}

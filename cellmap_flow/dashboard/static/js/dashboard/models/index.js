@@ -53,8 +53,11 @@ export function initModelsTab() {
   const logs = jobLogs.init();
   const loadedModels = loaded.init({ untick: (model) => LISTS.forEach((list) => list.untick(model)), log });
 
-  // One poll for both, asking only while either has something starting.
-  poll(() => Promise.all([loadedModels.starting() && loadedModels.refresh(), logs.watching() && logs.look()]),
+  // One poll for both: the loaded models always, as a model can stop or
+  // start with nothing on this page doing it (its layer deleted in the
+  // viewer, its server up after minutes in a queue), the job logs while one
+  // is starting.
+  poll(() => Promise.all([loadedModels.refresh(), logs.watching() && logs.look()]),
        { intervalMs: jobLogs.POLL_MS, immediate: false, pauseWhenHidden: true });
 
   document.getElementById("submitModelsBtn").addEventListener("click", () => {

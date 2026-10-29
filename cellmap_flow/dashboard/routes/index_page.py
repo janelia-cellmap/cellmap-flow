@@ -190,11 +190,14 @@ def set_data():
         return error
     dataset_path = body.dataset_path
     try:
+        from cellmap_flow.dashboard.services.launch import watch_layer_deletes
+
         session = get_session()
         session.dataset_path = dataset_path
         # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
         # does not take its dimensions from the raw.
         session.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
+        watch_layer_deletes(session.viewer)
         session.neuroglancer_url = viewer_url(session.viewer)
         logger.debug(f"Neuroglancer viewer set up: {session.neuroglancer_url}")
 

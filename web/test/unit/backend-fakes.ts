@@ -422,6 +422,19 @@ export class FakeViewer implements ViewerController {
   layer(name: string): LayerSpec | null {
     return name in this.layers ? { ...this.layers[name], name } : null;
   }
+
+  private deletedListeners: ((name: string) => void)[] = [];
+
+  onLayerDeleted(listener: (name: string) => void): () => void {
+    this.deletedListeners.push(listener);
+    return () => void (this.deletedListeners = this.deletedListeners.filter((l) => l !== listener));
+  }
+
+  /** The person deleting layer `name` in the viewer: gone, and the listeners told. */
+  deleteLayer(name: string): void {
+    delete this.layers[name];
+    for (const listener of this.deletedListeners) listener(name);
+  }
 }
 
 export interface FakeContext extends AppContext {

@@ -24,6 +24,8 @@
 - ``served_at_run_voxel_size()``: the models running or starting at a voxel
   size not their own (``ModelConfig.run_voxel_size``), whose Run at (nm)
   fields the Models tab fills in.
+- ``watch_layer_deletes()``: a model whose layer the person deletes in the
+  viewer is stopped, as its ✕ stops it.
 """
 
 from cellmap_flow.config.yaml import ConfigError
@@ -37,7 +39,7 @@ from cellmap_flow.models.models_config import (
     BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
 )
 from cellmap_flow.models.registry import build_model
-from cellmap_flow.viewer.layers import prediction_layer, replace_layer
+from cellmap_flow.viewer.layers import deleted_layers, prediction_layer, replace_layer
 import copy
 import threading
 from typing import List
@@ -651,7 +653,7 @@ class NotRemovable(Exception):
     """A model ✕ could not remove: a finetune job's, whose job could not be cancelled."""
 
 
-def remove_model(name: str) -> list:
+def remove_model(name: str, *, cancel_finetune=True) -> list:
     """Stop the one model ``name`` and take its layer away; every other
     model, and anything ticked on the Models tab and not submitted, stays as
     it is. Returns the Loaded models list as it is then.
@@ -664,10 +666,12 @@ def remove_model(name: str) -> list:
     (once the page has asked, see _finetune_note) cancels it as the
     Finetune tab's Cancel does, and NotRemovable if it cannot; once the job
     has ended, its server has too, and only its layer and its entry among
-    the jobs are left to take away. The model's config goes with it, so
-    Export Config no longer lists a model taken off (a model unticked on
-    Submit keeps its config, for the Models tab's rows and the pipeline
-    builder).
+    the jobs are left to take away. With ``cancel_finetune`` False a live
+    job is left running and its model only forgotten here: for a layer
+    deleted in the viewer, which cannot ask first (``_layers_deleted``).
+    The model's config goes with it, so Export Config no longer lists a
+    model taken off (a model unticked on Submit keeps its config, for the
+    Models tab's rows and the pipeline builder).
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -678,7 +682,7 @@ def remove_model(name: str) -> list:
     if not jobs and launch is None:
         raise LookupError(f"No model named {name} is running")
     for job in jobs:
-        if _owned_by_finetune(job):
+        if cancel_finetune and _owned_by_finetune(job):
             from cellmap_flow.dashboard.finetune_layers import training_job_of
             from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES
 
@@ -707,3 +711,78 @@ def remove_model(name: str) -> list:
     drop_config(name)
     logger.info(f"Removed model {name}")
     return loaded_models()
+
+
+def watch_layer_deletes(viewer):
+    """Have a layer the person deletes in ``viewer`` (the trash button of a
+    layer in neuroglancer's top bar, or Delete layer in its panel) mean what
+    it shows (``_layers_deleted``). Called for each viewer the dashboard
+    makes: /api/set-data's and the CLIs'.
+
+    Neuroglancer calls a state's changed callbacks from the thread that
+    changed it, holding the state's lock, so this one only compares the
+    layers with the state's before and hands any deleted to a thread of its
+    own (stopping a model bkills its job). A change the browser made is one
+    whose generation neuroglancer names ``<client id>/<generation>``
+    (server.SetStateHandler), where this process's own are bare tokens: a
+    layer the dashboard takes away itself (a ✕, a Submit, a finetune's next
+    iteration in place of its last) is not the person's.
+    """
+    shown = [_layer_list(viewer.shared_state.raw_state)]
+
+    def changed():
+        layers = _layer_list(viewer.shared_state.raw_state)
+        deleted = deleted_layers(shown[0], layers)
+        shown[0] = layers
+        if deleted and "/" in viewer.shared_state.state_generation:
+            threading.Thread(target=_layers_deleted, args=(deleted,), daemon=True).start()
+
+    viewer.shared_state.add_changed_callback(changed)
+
+
+def _layer_list(raw_state):
+    """A viewer state's layers, as the JSON list neuroglancer keeps."""
+    layers = raw_state.get("layers") if isinstance(raw_state, dict) else None
+    return list(layers) if isinstance(layers, list) else []
+
+
+# One deletion handled at a time: the record's numbers count up.
+_deleting = threading.Lock()
+
+
+def _layers_deleted(names):
+    """The layers ``names``, deleted by the person in the viewer. A model's is
+    that model stopped as its ✕ on the Loaded models list stops it
+    (``remove_model``), and recorded in the session's ``deleted_in_viewer``
+    for the list to untick its rows, as the ✕ does. A finetune job's model
+    whose job is alive is forgotten rather than stopped: its ✕ cancels the
+    job after asking, which a deleted layer cannot, so the job is left to
+    the Finetune tab, and a Restart shows its next iteration.
+
+    Any other layer is only gone. What redraws the viewer on its own does
+    not draw it again (the raw: routes.pipeline's _set_chain_and_redraw; the
+    annotated regions' boxes, but for their Redraw button:
+    overlay.refresh_annotated_regions_layer), and the others are drawn only
+    when asked for (a volume added to the viewer, a region marked as good).
+    A paint volume stays the session's: its manifest, on disk, is what a
+    restart and a resumed session train on.
+    """
+    session = get_session()
+    with _deleting:
+        for name in names:
+            entry = next((m for m in loaded_models() if m["name"] == name), None)
+            if entry is None:
+                continue
+            try:
+                remove_model(name, cancel_finetune=False)
+            except LookupError:
+                continue  # stopped meanwhile
+            except Exception as e:
+                # On a thread of its own, whose exceptions reach only the terminal.
+                logger.error(f"Could not stop {name}, whose layer was deleted in the viewer: {e}", exc_info=True)
+                continue
+            number = 1 + max((d["number"] for d in session.deleted_in_viewer), default=0)
+            untick = {key: entry[key] for key in ("name", "hf_id", "zoo_id", "cellpose")}
+            session.deleted_in_viewer = [d for d in session.deleted_in_viewer if d["name"] != name] + [
+                {"number": number, **untick}]
+            logger.info(f"Stopped {name}: its layer was deleted in the viewer")

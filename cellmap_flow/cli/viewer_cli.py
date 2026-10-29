@@ -47,6 +47,7 @@ def main(dataset, project, resample):
     # Imported inside the command so --help and argument errors do not
     # pay for the whole inference stack (~16s before this).
     from cellmap_flow.dashboard.app import create_and_run_app
+    from cellmap_flow.dashboard.services.launch import watch_layer_deletes
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
@@ -73,6 +74,7 @@ def main(dataset, project, resample):
     # At 8 nm whatever the data's voxel size, as this command has always shown it.
     viewer = new_viewer(dataset, scales=(8, 8, 8))
     session.viewer = viewer
+    watch_layer_deletes(viewer)
 
     # Print viewer URL
     url = viewer_url(viewer)

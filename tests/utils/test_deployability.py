@@ -139,6 +139,13 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
             import contextlib, types
             return contextlib.nullcontext(types.SimpleNamespace(layers={}, dimensions=None))
 
+        @property
+        def shared_state(self):
+            # What the dashboard watches for a layer the person deletes
+            # (services.launch.watch_layer_deletes).
+            import types
+            return types.SimpleNamespace(raw_state={}, add_changed_callback=lambda callback: None)
+
     monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
     raw_layers = []
     # The raw layer new_viewer adds (viewer.layers.raw_layer).

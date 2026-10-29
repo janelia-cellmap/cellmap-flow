@@ -208,6 +208,33 @@ describe("a live viewer", () => {
     expect(again.url).toBe("s3+http://localhost/paint/v~2/annotation");
   });
 
+  it("tells of a layer the person deletes, and not of one it takes out itself, nor one renamed or hidden", async () => {
+    const { doc, viewer } = await mounted();
+    // Neuroglancer's layer list signal, which a restore dispatches too, at each layer.
+    const changed: (() => void)[] = [];
+    const ng = doc.stub.viewer as unknown as Record<string, unknown>;
+    ng.layerManager = { getLayerByName: () => undefined, layersChanged: { add: (fn: () => void) => (changed.push(fn), () => {}) } };
+    const set = doc.stub.viewer.state.restoreState;
+    doc.stub.viewer.state.restoreState = (next: NgState) => { set(next); changed.forEach((fn) => fn()); };
+    /** The person's change in the viewer: the state, and the signal. */
+    const person = (layers: NgLayer[]) => { set({ ...live, layers }); changed.forEach((fn) => fn()); };
+    const deleted: string[] = [];
+    viewer.onLayerDeleted((name) => deleted.push(name));
+    viewer.setLayers({ model: { type: "image", source: "zarr3://http://h/model/" } });
+
+    viewer.removeLayer("annotation_v");
+    await Promise.resolve();
+    const [data, model] = doc.stub.viewer.state.toJSON().layers as NgLayer[];
+    person([{ ...data, visible: false }, model]);
+    await Promise.resolve();
+    person([{ ...data, name: "raw" }, model]);
+    await Promise.resolve();
+    expect(deleted).toEqual([]);
+    person([{ ...data, name: "raw" }]);
+    await Promise.resolve();
+    expect(deleted).toEqual(["model"]);
+  });
+
   it("gives Run on a region the layer as the live viewer has it, with what the user drew in it since the page set it", async () => {
     const box = { type: "axis_aligned_bounding_box", id: "1", pointA: [0, 0, 0], pointB: [80, 160, 240] };
     const region = { type: "annotation", source: [{ url: "local://annotations" }], annotations: [] as unknown[] };

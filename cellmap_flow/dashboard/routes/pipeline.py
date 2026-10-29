@@ -164,11 +164,11 @@ def update_equivalences():
 
 
 def _shows(viewer, jobs, url_blob) -> bool:
-    """Whether ``viewer`` already shows the raw, and each job that has a host
-    its layer over ``url_blob``: then a redraw would show nothing new."""
+    """Whether ``viewer`` already shows each job that has a host its layer
+    over ``url_blob``: then a redraw would show nothing new. The raw is not
+    asked for: a viewer is made with it, so one without it is one the person
+    deleted it from, and a redraw does not put it back."""
     layers = viewer.state.layers
-    if "data" not in layers:
-        return False
     for job in jobs:
         if not job.host:
             continue
@@ -191,11 +191,11 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     ``dashboard_url``, the request's, and the chain's digest:
     Session.layer_blob), and its server runs the chain of the layer it is
     asked for. The raw layer is rebuilt only when the input normalization
-    changed (or the viewer has none): it is drawn through the normalizers.
+    changed, as it is drawn through the normalizers, and only while the
+    viewer has it: one the person deleted stays deleted.
 
     The viewer is left alone when the chain is the one it already shows: the
-    chain was this already, the raw layer is there, and every job's layer
-    carries this chain. The builder sends its canvas after every edit, a
+    chain was this already, and every job's layer carries this chain. The builder sends its canvas after every edit, a
     node dragged too, and each redraw sampled the raw again, asked every
     server for its model_info and reset what the user had set in the viewer
     (a layer hidden, an opacity).
@@ -274,9 +274,10 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # the browser drops every raw chunk it has and fetches them all again
     # through this process, and the raw is black for a long while. Its
     # chunks only change with the input normalization, so otherwise the one
-    # shown stays, with the shader and controls the user has on it.
+    # shown stays, with the shader and controls the user has on it. A raw
+    # the person deleted is not drawn again.
     # .state, not .txn(): this only reads.
-    redraw_raw = input_changed or "data" not in session.viewer.state.layers
+    redraw_raw = input_changed and "data" in session.viewer.state.layers
     # Without a contrast of the user's to restore, the raw's is sampled where
     # the viewer is looking, as neuroglancer's 1-99% button would be.
     view = view_of(session.viewer.state) if redraw_raw and session.shaders.get("data") is None else None

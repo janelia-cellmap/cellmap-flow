@@ -40,8 +40,13 @@
 // restoreSession(ctx) is the boot-time counterpart of Submit: after a reload
 // the session still names the dataset and the models, but the Engine views
 // behind their layers are gone with the page, so they are served again.
+//
+// layerDeleted(ctx, name) is what a layer the person deletes in the viewer
+// means here (ViewerController.onLayerDeleted), so that what is served and
+// painted into agrees with what the viewer shows.
 import type { ApiRequest, ApiResponse, AppContext, Backend } from "../contracts";
 import { parseViewName } from "../shared/args";
+import { paintLayerName } from "../viewer/layers";
 import { message, Router, unavailable } from "./router";
 import { type AiAnnotateDeps, aiAnnotateRoutes } from "./routes/ai-annotate";
 import { configRoutes } from "./routes/config";
@@ -53,7 +58,7 @@ import { pipelineRoutes } from "./routes/pipeline";
 import { type PublishDeps, publishRoutes } from "./routes/publish";
 import { rankRoutes } from "./routes/rank";
 import { viewLabelsRoutes } from "./routes/view-labels";
-import { serveModels, stopServing } from "./serving";
+import { serveModels, stopServing, unserveModel } from "./serving";
 
 export interface BackendOptions {
   /** The finetune routes' seams (a fake run, a fixed volume plan or clock), for tests. */
@@ -98,6 +103,9 @@ export function createBackend(ctx: AppContext, options: BackendOptions = {}): Ba
   // /update/equivalences). A served view is named after its model, with
   // the chain's blob after it; the layer has the model's name.
   ctx.infer.onEquivalences((view, sets) => ctx.viewer.setEquivalences(parseViewName(view).name, sets));
+  ctx.viewer.onLayerDeleted((name) => {
+    layerDeleted(ctx, name).catch((e) => ctx.log(`Could not stop what the deleted layer ${name} showed: ${message(e)}`));
+  });
   return {
     handle(req: ApiRequest): Promise<ApiResponse> {
       return router.handle(req, ctx);
@@ -138,5 +146,31 @@ export async function restoreSession(ctx: AppContext): Promise<void> {
   for (const served of ctx.infer.served()) {
     if (wanted.has(served.entry.id) || !models.some((m) => m.id === served.entry.id)) continue;
     await stopServing(ctx, served.entry.name, [served]);
+  }
+}
+
+/** Layer `name`, deleted by the person in the viewer. A served model's is
+ * that model stopped as the Loaded models list's ✕ stops it (unserveModel),
+ * and recorded in the session's deletedInViewer for the list to untick its
+ * rows, as the ✕ does; the server's services/launch.py _layers_deleted. The
+ * session's paint volume's is that volume no longer the session's: Label
+ * it, the AI annotation, Mark as Good and the training then ask for one
+ * (needs_volume) rather than write into, or train on, paint taken out of
+ * the view; its paint is kept, and resuming it (Load Existing Session)
+ * shows it and makes it the session's again. Any other layer is only gone:
+ * nothing of the app draws one back unasked. */
+export async function layerDeleted(ctx: AppContext, name: string): Promise<void> {
+  const id = (ctx.session.state.models.find((m) => m.name === name) ?? ctx.infer.served().find((s) => s.entry.name === name)?.entry)?.id;
+  if (id !== undefined) {
+    await unserveModel(ctx, name);
+    const { deletedInViewer } = ctx.session.state;
+    const number = 1 + Math.max(0, ...deletedInViewer.map((d) => d.number));
+    await ctx.session.update({ deletedInViewer: [...deletedInViewer.filter((d) => d.name !== name), { number, name, hf_id: id }] });
+    ctx.log(`Stopped ${name}: its layer was deleted in the viewer`);
+  }
+  const { paintVolume } = ctx.session.state;
+  if (paintVolume && name === paintLayerName(paintVolume)) {
+    await ctx.session.update({ paintVolume: null });
+    ctx.log(`${paintVolume} is no longer the session's annotation volume: its layer was deleted in the viewer`);
   }
 }

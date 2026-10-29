@@ -61,7 +61,7 @@ def test_a_box_per_crop_and_per_painted_chunk_outside_them(tmp_path, txns, crops
     assert overlay.refresh_annotated_regions_layer(corrections) == boxes
 
 
-def test_the_viewer_is_pushed_only_when_the_boxes_change(tmp_path, viewer, txns):
+def test_the_viewer_is_pushed_only_when_the_boxes_change(dashboard, tmp_path, viewer, txns):
     corrections = _volume(tmp_path / "corrections", ["0.0.0"])
     assert overlay.refresh_annotated_regions_layer(corrections) == 1 and len(txns) == 1
     for _ in range(3):  # nothing changed: nothing pushed
@@ -71,7 +71,12 @@ def test_the_viewer_is_pushed_only_when_the_boxes_change(tmp_path, viewer, txns)
     assert overlay.refresh_annotated_regions_layer(corrections) == 2 and len(txns) == 2
     with viewer.txn() as s:  # the layer went away: a viewer reset, a manual delete
         del s.layers["annotated_regions"]
+    # Something else the person did (a volume resumed, crops imported) does not
+    # put it back; the Redraw button does.
     overlay.refresh_annotated_regions_layer(corrections)
+    assert "annotated_regions" not in viewer.state.layers and len(txns) == 3
+    assert dashboard.post("/api/finetune/refresh-annotated-regions", json={"corrections_path": corrections}
+                          ).get_json()["count"] == 2
     assert "annotated_regions" in viewer.state.layers and len(txns) == 4
 
 

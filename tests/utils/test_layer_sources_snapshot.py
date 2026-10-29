@@ -203,12 +203,14 @@ SUBMITTED = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_va
 @pytest.fixture
 def submit(servers, dashboard, viewer):
     """Submit ``postprocess`` with a job still queued, over a viewer where the
-    user had given "old" a shader and a control of their own."""
+    user had given "old" a shader and a control of their own, and moved the
+    raw (every viewer is made with it: bootstrap.new_viewer) below it."""
     def post(postprocess):
         get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="queued", host=None)]
         with viewer.txn() as s:
             s.layers["old"] = neuroglancer.ImageLayer(source="zarr://http://old:8000/old", shader="void main() {}",
                                                       shader_controls={"brightness": 0.5})
+            s.layers["data"] = neuroglancer.ImageLayer(source="zarr://http://raw/x")
         payload = dict(SUBMITTED, postprocess=postprocess)
         assert dashboard.post("/api/process", data=json.dumps(payload), content_type="application/json").status_code == 200
         return _viewer(viewer, MODELS)

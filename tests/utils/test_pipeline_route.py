@@ -18,6 +18,7 @@ import pytest
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.protocol import split_dataset_url
+from cellmap_flow.viewer.layers import raw_layer
 
 # The chain configured and drawn before each request.
 SHOWN = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], "postprocess": []}
@@ -48,6 +49,8 @@ def call(dashboard, viewer, ome_pyramid, monkeypatch):
 
     monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_voxel_size": [16] * 3, "output_class": "unit"})
     get_session().dataset_path = ome_pyramid((((24, 12, 12), None),))
+    with viewer.txn() as s:  # every viewer is made with its raw (bootstrap.new_viewer)
+        s.layers["data"] = raw_layer(get_session().dataset_path)
     get_session().jobs = [SimpleNamespace(model_name="mito", host="http://gpu:8000"), SimpleNamespace(model_name="queued", host=None)]
 
     def call(method, url, body):

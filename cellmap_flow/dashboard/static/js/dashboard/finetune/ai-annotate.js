@@ -24,7 +24,7 @@
 import { setBusy, setHint } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
-import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
+import { getAnswer, offerNewVolume, postAnswer, reloadViewer } from "./requests.js";
 
 const BASE = "/api/finetune/ai-annotate";
 // The label picker's entry for a structure that is not in the catalog, and,
@@ -712,15 +712,6 @@ export function initAiAnnotate({ log }) {
       .catch((e) => showError(`Could not resend: ${e}`))
       .finally(() => setBusy(resendBtn, false));
   });
-
-  // Neuroglancer keeps the chunks it has read. The server re-reads the paint
-  // layer alone (answer's layer_refreshed); only when it could not does the
-  // whole viewer reload, getting its state back from the dashboard. Absent
-  // when no viewer is connected.
-  function reloadViewer() {
-    const frame = document.querySelector("#my_iframe");
-    if (frame) frame.src = frame.src;
-  }
 
   function describeAccept(d) {
     if (!d.reload_viewer) {

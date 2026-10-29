@@ -16,6 +16,8 @@ they all place and shade it the same way:
 - ``raw_layer()``: the raw data, with the user's shader put back.
 - ``replace_layer()``: a layer drawn again in place of one of the same name,
   keeping what the user set on that one (``carried_layer_json()``).
+- ``deleted_layers()``: the layers gone from one viewer state to the next,
+  a layer renamed aside.
 
 A model's ``info`` is its server's ``model_info`` (serving.client). A
 caller that already asked for it passes it in, so building a layer asks the
@@ -346,3 +348,20 @@ def replace_layer(layers, name, layer, replacing=None):
     layers[name] = neuroglancer.viewer_state.make_layer(merged)
     if hidden:
         layers[name].visible = False
+
+
+def deleted_layers(before, after):
+    """The names of the layers in ``before`` that ``after`` has not, each a
+    viewer state's list of layers as JSON: the layers deleted between the two.
+
+    A layer whose name went while a layer new in ``after`` reads its source
+    was renamed (neuroglancer's layer panel edits a layer's name), not
+    deleted. A hidden layer is still in the state, so it is not deleted
+    either. The browser's viewer tells them by the same rule
+    (web/src/viewer/state.ts's deletedLayers).
+    """
+    names = {layer.get("name") for layer in after}
+    known = {layer.get("name") for layer in before}
+    renamed_from = [_source_urls(layer.get("source")) for layer in after if layer.get("name") not in known]
+    return [layer.get("name") for layer in before
+            if layer.get("name") not in names and _source_urls(layer.get("source")) not in renamed_from]
