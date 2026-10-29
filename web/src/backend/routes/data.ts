@@ -3,7 +3,9 @@
 // The body is {dataset_path}; in the browser that is a URL (https://, s3://
 // or gs://, to an OME-Zarr group or array, or this page's own local/<key>/
 // for a directory picked on this machine), since there is no file system to
-// read a path from. The answer is {success: true, neuroglancer_url}, after
+// read a path from; one pasted from Neuroglancer, its format with it
+// (zarr://https://..., gs://...|zarr2:), is read without the format
+// (shared/pasted.ts). The answer is {success: true, neuroglancer_url}, after
 // which connect.js reloads the page; the viewer's state for the volume is put
 // in the page's URL now (viewer.prepareDataset) and shown by the reload
 // (viewer.restore), not mounted before it, which showed the volume twice
@@ -26,6 +28,7 @@
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
 import { selectedChannel, withoutChannelPick } from "../../infer/norms";
+import { pastedPath } from "../../shared/pasted";
 import { rawLayer } from "../../viewer/layers";
 
 const DATASET_URL = /^(precomputed:\/\/)?(https?|s3|gs):\/\/\S+$/i;
@@ -82,7 +85,7 @@ export function dataRoutes(router: Router): void {
   router.post("/api/set-data", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
-    const url = typeof body.dataset_path === "string" ? body.dataset_path.trim() : "";
+    const url = typeof body.dataset_path === "string" ? pastedPath(body.dataset_path) : "";
     if (!url) return badRequest("dataset_path is required");
     if (!DATASET_URL.test(url)) {
       return json(400, {

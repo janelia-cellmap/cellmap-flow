@@ -46,6 +46,7 @@ import { NoBrowserCopyError } from "./models/hf";
 import { hubName, voxelLabel, withVariant } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import type { Hint } from "./shared/hint";
+import { pastedPath } from "./shared/pasted";
 import { paintVolumeOf } from "./viewer/layers";
 import { decodeState, encodeState } from "./viewer/share";
 import { layersOf, type NgLayer, type NgState, sourceUrl } from "./viewer/state";
@@ -63,10 +64,11 @@ export interface LinkRequest {
 }
 
 /** What `search` (location.search) asks for: repeated `model` parameters
- * and comma-separated lists both work. */
+ * and comma-separated lists both work, and a dataset pasted from
+ * Neuroglancer with its format (shared/pasted.ts). */
 export function parseLink(search: string): LinkRequest {
   const params = new URLSearchParams(search);
-  const datasetUrl = params.get(DATASET_PARAM)?.trim() || null;
+  const datasetUrl = pastedPath(params.get(DATASET_PARAM) ?? "") || null;
   const models = params.getAll(MODEL_PARAM).flatMap((m) => m.split(",")).map((m) => m.trim()).filter(Boolean);
   return { datasetUrl, models: [...new Set(models)] };
 }

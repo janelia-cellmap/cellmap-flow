@@ -27,4 +27,8 @@ call ``fill_calls.py``).
 A model published to Hugging Face, its card, its manifest's "published"
 block and the app's links to it, is ``publish.py``, which the server's
 publish route calls and the browser's through ``publish_calls.py``.
+A dataset path as a person pastes it, a path copied from Neuroglancer with
+its format, is ``pasted.py``, whose pattern the browser reads from the
+export (``web/build/export_data.py``) rather than through Pyodide: it is
+needed before any worker is started.
 """

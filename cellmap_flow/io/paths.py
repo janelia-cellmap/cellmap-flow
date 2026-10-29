@@ -4,7 +4,9 @@ A dataset path is a local directory or an http(s), s3 or gs URL, with
 ``precomputed://`` in front of a neuroglancer precomputed volume's. worldarray
 reads them as they are (``worldarray.store``: ``normalize_path``, ``is_remote``,
 ``join``, ``parent``, ``basename``). The one rule of cellmap-flow's own is the
-shell-escaped space.
+shell-escaped space. A path pasted from Neuroglancer, which names its
+format too (``zarr://...``, ``...|zarr2:``), is made one of these where a
+person gives it (``portable/pasted.py``).
 """
 
 

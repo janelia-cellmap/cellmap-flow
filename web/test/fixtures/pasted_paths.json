@@ -1,0 +1,23 @@
+{
+  "_format": "A dataset path as a person pastes it (`pasted`) and the path cellmap-flow reads (`path`), for cellmap_flow/portable/pasted.py's pasted_path and its twin web/src/shared/pasted.ts's pastedPath: tests/portable/test_pasted.py and web/test/parity/pasted.test.ts hold both to every case. Written by hand.",
+  "cases": [
+    {"pasted": "zarr://https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8", "path": "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver-zon-2/jrc_mus-liver-zon-2.zarr/recon-1/em/fibsem-uint8"},
+    {"pasted": "zarr2://s3://bucket/x.zarr/raw", "path": "s3://bucket/x.zarr/raw"},
+    {"pasted": "zarr3://gs://liconn-public/ExPID82_1/image_230130b", "path": "gs://liconn-public/ExPID82_1/image_230130b"},
+    {"pasted": "n5://https://host/vol.n5/raw", "path": "https://host/vol.n5/raw"},
+    {"pasted": "gs://bucket/x.zarr/raw|zarr2:", "path": "gs://bucket/x.zarr/raw"},
+    {"pasted": "https://host/x.zarr/|zarr3:", "path": "https://host/x.zarr/"},
+    {"pasted": "s3://bucket/vol.n5/raw|n5:", "path": "s3://bucket/vol.n5/raw"},
+    {"pasted": "gs://bucket/x.zarr|zarr2:raw", "path": "gs://bucket/x.zarr/raw"},
+    {"pasted": "gs://bucket/x.zarr/|zarr:raw/s0", "path": "gs://bucket/x.zarr/raw/s0"},
+    {"pasted": "gs://bucket/em|neuroglancer-precomputed:", "path": "precomputed://gs://bucket/em"},
+    {"pasted": "precomputed://gs://bucket/em", "path": "precomputed://gs://bucket/em"},
+    {"pasted": "  \"zarr://https://host/x.zarr/raw\"\n", "path": "https://host/x.zarr/raw"},
+    {"pasted": " 'gs://bucket/x.zarr|zarr2:raw'\t", "path": "gs://bucket/x.zarr/raw"},
+    {"pasted": "'/nrs/cellmap/data/x/x.zarr/recon-1/em/fibsem-uint8' ", "path": "/nrs/cellmap/data/x/x.zarr/recon-1/em/fibsem-uint8"},
+    {"pasted": "/groups/lab/my\\ volume.zarr/raw", "path": "/groups/lab/my\\ volume.zarr/raw"},
+    {"pasted": "file:///data/x.zarr/raw", "path": "file:///data/x.zarr/raw"},
+    {"pasted": "https://host/x.zarr/", "path": "https://host/x.zarr/"},
+    {"pasted": "graphene://https://host/segmentation", "path": "graphene://https://host/segmentation"}
+  ]
+}

@@ -8,7 +8,8 @@ model advice's affinity chain gives the mutex watershed, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
 ranking's constants, the learning rate's floor, the finetune log's patterns,
 the unit table, the names of a channel axis, the version a model published
-from the browser names, the query parameters of the app's links and the
+from the browser names, the query parameters of the app's links, the
+pattern a pasted dataset path is read through and the
 Hugging Face sign-in's client id and scopes. This script reads them from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
@@ -97,7 +98,7 @@ def python_data():
     from cellmap_flow.dashboard.routes.finetune import view_labels
     from cellmap_flow.finetune import markers
     from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
-    from cellmap_flow.portable import publish, rank
+    from cellmap_flow.portable import pasted, publish, rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import CHANNEL_AXIS_NAMES, metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers
@@ -113,6 +114,9 @@ def python_data():
         # The query parameters of the app's links, which a published model's
         # card writes (portable/publish.py) and web/src/link.ts reads back.
         "links": {"model_param": publish.MODEL_PARAM, "dataset_param": publish.DATASET_PARAM},
+        # A dataset path as pasted, a path copied from Neuroglancer with its
+        # format (portable/pasted.py; web/src/shared/pasted.ts pastedPath).
+        "pasted": {"neuroglancer_source": regex(pasted.NEUROGLANCER_SOURCE)},
         # Sign in with Hugging Face (web/src/publish/oauth.ts), as the
         # server's sign-in asks for it too.
         "huggingface": {
