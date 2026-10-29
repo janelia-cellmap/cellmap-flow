@@ -291,6 +291,22 @@ initServerConfigModal();
 initReviewTab();
 // A hint's "i" shows the rest of its hint as a tooltip too (lib/dom.js).
 tooltipHints();
+// The bars that stay at the top of the column stack: each stops below the
+// ones above it (css/dark.css), whose heights change as the column's width
+// wraps them, and the Apply bar's as its notices come and go.
+function stackStickyBars() {
+  const style = document.documentElement.style;
+  const tabs = document.getElementById("myTab");
+  const apply = document.getElementById("applyBar");
+  const measure = () => {
+    style.setProperty("--tabs-h", `${tabs.offsetHeight}px`);
+    style.setProperty("--apply-h", `${apply ? apply.offsetHeight : 0}px`);
+  };
+  const observer = new ResizeObserver(measure);
+  [tabs, apply].forEach((el) => el && observer.observe(el));
+  measure();
+}
+stackStickyBars();
 // The Finetune tab starts last, so its first requests go after the other
 // tabs' (the Models tab asks for the GPU queues only once the server config
 // has answered): on DOMContentLoaded while the page is still being parsed,
