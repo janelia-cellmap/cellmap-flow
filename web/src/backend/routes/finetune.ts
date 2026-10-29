@@ -75,7 +75,7 @@ import { ANNOTATED_REGIONS_LAYER, boxesLayer, dimensionsOf, PAINT_TAB, paintLaye
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, text } from "../router";
-import { pageBase, showChannel } from "../serving";
+import { pageBase, PORTABLE, showChannel } from "../serving";
 import { done, eventStream, requestedOffset, type SseEvent } from "../sse";
 
 /** The seams the routes run through, so they can be tested with a fake run
@@ -253,7 +253,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if ("error" in pick) return badRequest(pick.error);
     const entry = ctx.infer.served().find((s) => s.entry.name === name)?.entry ?? (await ctx.catalog.list()).find((e) => e.name === name);
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
-    const past = pick.channel === null ? null : notAChannel(entry, pick.channel);
+    const past = notAChannel(entry, pick.channel);
     if (past) return badRequest(past);
     return json(200, { success: true, shown: await pickShownChannel(ctx, name, pick.channel) });
   });
@@ -791,11 +791,12 @@ function refuseChannel(entry: ModelEntry, channel: number | null): string | null
 }
 
 /** Why `channel` is not one of `entry`'s output channels (it is past the
- * last), or null when it is one: a channel picked to train, to show (POST
- * /api/finetune/channel) or with the model used (rank.ts, Use this model). */
-export function notAChannel(entry: ModelEntry, channel: number): string | null {
+ * last), or null when it is one or none is picked (null): a channel picked
+ * to train, to show (POST /api/finetune/channel) or with the model used
+ * (rank.ts, Use this model). */
+export function notAChannel(entry: ModelEntry, channel: number | null): string | null {
   const channels = entry.manifest.channels.length;
-  return channel < channels ? null : `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels} (0 to ${channels - 1}).`;
+  return channel === null || channel < channels ? null : `select_channel ${channel} is not one of ${entry.name}'s output channels: it has ${channels} (0 to ${channels - 1}).`;
 }
 
 /** `channel` made the one the session shows model `name`'s layer on (null:
@@ -816,7 +817,7 @@ export async function pickShownChannel(ctx: AppContext, name: string, channel: n
 /** What carryPaint did: the new volume's voxels painted, the old volume's painted
  * voxels they came from, the new voxels left unpainted because their old voxels
  * disagreed, and the new volume's chunks written. */
-export interface Carried { painted: number; source: number; conflicts: number; chunks: number }
+interface Carried { painted: number; source: number; conflicts: number; chunks: number }
 
 /** `from`'s paint carried onto `to`, a volume planned over the same dataset
  * for model `name` on its grid (planVolume, not yet written): Use this
@@ -843,16 +844,12 @@ export async function carryOnto(ctx: AppContext, from: PaintVolume, to: PaintVol
   return { ...carried, goodRegions: regions.length, layer };
 }
 
-/** The portable Python's carry of paint from one grid to another
- * (cellmap_flow/portable/calls.py carry_paint, over portable/carry.py). */
-const CARRY_PAINT = "cellmap_flow.portable.calls:carry_paint";
-
 /** The paint of `from` copied into `to`, an empty volume over the same dataset on
- * another model's grid (createVolume'd): cellmap_flow.portable.carry, in the engine's
- * Python, with the paint store's reads and writes around it here. The old volume's
- * painted chunks go whole, both grids placed by their volume's dataset_offset_nm
- * (voxel 0's centre, fill.ts volumeCornerNm), and the new chunks that got paint come
- * back whole, to be written as they are. */
+ * another model's grid (createVolume'd): cellmap_flow.portable.carry (calls.py
+ * carry_paint), in the engine's Python, with the paint store's reads and writes
+ * around it here. The old volume's painted chunks go whole, both grids placed by
+ * their volume's dataset_offset_nm (voxel 0's centre, fill.ts volumeCornerNm), and
+ * the new chunks that got paint come back whole, to be written as they are. */
 async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): Promise<Carried> {
   const grid = (v: PaintVolume) => ({ corner_nm: volumeCornerNm(v.dataset_offset_nm, v.output_voxel_size), voxel_nm: v.output_voxel_size, shape: v.dataset_shape_voxels, chunks: v.chunk_size });
   const indices: number[][] = [], labels: ArrayBuffer[] = [];
@@ -861,7 +858,7 @@ async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): 
     if (chunk) { indices.push(index); labels.push(bytesOf(chunk.labels)); }
   }
   const { value, arrays } = await ctx.infer.python<{ value: Carried & { indices: number[][] }; arrays: ArrayBuffer[] }>(
-    CARRY_PAINT, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
+    `${PORTABLE}:carry_paint`, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
   await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
   const { painted, source, conflicts, chunks } = value;
   return { painted, source, conflicts, chunks };

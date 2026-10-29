@@ -8,29 +8,7 @@
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 
-// The few DOM calls the advice makes, on a tree of plain objects: the unit
-// tests run in node, which has no DOM.
-class FakeElement {
-  children: FakeElement[] = [];
-  parent: FakeElement | null = null;
-  className = "";
-  innerHTML = "";
-  textContent = "";
-  onclick: (() => void) | null = null;
-
-  appendChild(child: FakeElement): FakeElement {
-    child.remove();
-    child.parent = this;
-    this.children.push(child);
-    return child;
-  }
-
-  remove(): void {
-    if (!this.parent) return;
-    this.parent.children = this.parent.children.filter((c) => c !== this);
-    this.parent = null;
-  }
-}
+import { FakeElement } from "./dashboard-dom";
 
 const MODEL_ADVICE = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/dashboard/model-advice.js", import.meta.url));
 const EVENTS = fileURLToPath(new URL("../../../cellmap_flow/dashboard/static/js/lib/events.js", import.meta.url));
@@ -46,13 +24,13 @@ interface Advice {
 // once for the file, so each test names its own models: what one test
 // dismissed stays dismissed in the next.
 async function setUp(processing: Record<string, unknown> = { input: {}, postprocess: {}, apply: () => {} }) {
-  const box = new FakeElement();
+  const box = new FakeElement("div");
   const page = { models: [] as Record<string, unknown>[], failing: false, requests: 0 };
   // The page's events (lib/events.js announces them on document).
   const events = new EventTarget();
   vi.stubGlobal("document", {
     getElementById: () => box,
-    createElement: () => new FakeElement(),
+    createElement: (tag: string) => new FakeElement(tag),
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
     dispatchEvent: events.dispatchEvent.bind(events),

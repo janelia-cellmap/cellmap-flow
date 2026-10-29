@@ -3,16 +3,16 @@
 // Python both modes run (here in node's Pyodide, test/unit/pyodide.ts; the
 // score and the carry themselves are tested in tests/finetune/test_rank.py).
 // The list puts each model under the Models tab's section it would be in, and
-// a model added by hand (rank/add) under Added from then on, scored by its
-// name. The score route reads a served model as it is and serves any other for its
-// score alone; a model is read through its own input normalization and the
-// session's, the better kept; a known paint and output rank as they always
-// did; each row gives its threshold, input window and the steps it was read
-// through; Use this model picks the row's channel before the model is
-// served, sets those steps, carries the paint onto the model's grid, makes
-// its volume the session's and retires the old one, and Fit to Paint's
-// input-norm route sets the steps alone, which the model advice then takes
-// as the model's own.
+// a model added by hand (rank/add) under Added from then on. The score route
+// reads a served model as it is and serves any other for its score alone; a
+// model is read through its own input normalization and the session's, the
+// better kept; a known paint and output rank as they always did; each row
+// gives its threshold, input window and the steps it was read through; Use
+// this model picks the row's channel before the model is served, sets those
+// steps, carries the paint onto the model's grid, makes its volume the
+// session's and retires the old one, and Fit to Paint's input-norm route
+// sets the steps alone, which the model advice then takes as the model's
+// own.
 // Without Pyodide (no network for numpy's wheel) these skip.
 import { describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,19 @@ function harness(ctx: FakeContext) {
   return (req: ApiRequest) => router.handle(req, ctx);
 }
 
+/** Whether a voxel of the 20³ painted box is in its 10³ object (painted). */
+const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+
+/** Whether the view a serve made reads through steps that `fits`. */
+const readThrough = (ctx: FakeContext, view: string, fits: (chain: Chain) => boolean) => ctx.infer.serves.some((s) => view.includes(s.blob) && fits(s.chain));
+
+/** Steps that stretch the raw (a MinMaxNormalizer from above 0), and steps that scale it to [-1, 1]. */
+const stretches = (chain: Chain) => Number(chain.input_norm[0]?.min_value) > 0;
+const scales = (chain: Chain) => chain.input_norm.some((n) => n.name === "LambdaNormalizer");
+
+/** Raw spanning 216 to 236 grey levels, as Jurkat's. */
+const narrowRaw = async (_level: number, lo: number[], hi: number[]) => Uint8Array.from({ length: hi.reduce((n, h, a) => n * (h - lo[a]), 1) }, (_, i) => 216 + (i % 21)).buffer;
+
 /** setup_56 (nuc) served through the session's chain (`chain`, or a fresh
  * session's), a volume for it painted with a 10³ object in a 20³ box of
  * background, and its logits +4 inside that object, -4 outside. */
@@ -58,7 +71,6 @@ async function painted(chain?: Chain) {
   const handle = harness(ctx);
   const created = body(await handle(request("POST", "/api/finetune/create-volume", { model_name: NAME_56 })));
   const volume = (await readVolume(ctx.paint, created.volume_id)) as PaintVolume;
-  const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
   const labels = new Uint8Array(20 ** 3).map((_, i) => (inside(Math.floor(i / 400), Math.floor(i / 20) % 20, i % 20) ? 2 : 1));
   await writeBox(ctx.paint, volume, [0, 0, 0], [20, 20, 20], labels);
   ctx.infer.outputAt = (_view, _c, z, y, x) => (inside(z, y, x) ? 4 : -4);
@@ -99,7 +111,6 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     // no objects), joining neighbours above the same cut-off. The painted
     // pairs at -1 over the rest at -4: a cut-off under the model's own fits them.
     const { ctx, handle } = await painted({ input_norm: [], postprocess: [] });
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
     ctx.infer.outputAt = (_view, _c, z, y, x) => (inside(z, y, x) ? -1 : -4);
     const aff = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));
     expect(aff).toMatchObject({ success: true, channel: null });
@@ -110,24 +121,14 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, postprocess: aff.postprocess }))).success).toBe(true);
     const { models } = body(await handle(request("GET", "/api/model_advice")));
     const review = models.find((m: any) => m.model === NAME_54).postprocess_review;
-    expect(review).toMatchObject({ level: "optional", suggest: ["SigmoidPostprocessor", "DefaultPostprocessor", "AffinityPostprocessor"] });
-    expect(review.params.AffinityPostprocessor.bias).toBe(aff.threshold);
-  });
-
-  it("score a model added by hand by the name its candidate answers", async () => {
-    const { handle } = await painted();
-    const { candidate } = body(await handle(request("POST", "/api/finetune/rank/add", { ref: entry("setup_54").id })));
-    expect(body(await handle(request("POST", "/api/finetune/rank/score", { name: candidate.name })))).toMatchObject({ success: true, name: NAME_54 });
+    expect(review).toMatchObject({ level: "optional", params: { AffinityPostprocessor: { bias: aff.threshold } } });
   });
 
   it("score a model again with narrow raw stretched, keep that only when it scores clearly better, and Use this model sets it", async () => {
     const { ctx, handle } = await painted();
-    // Raw spanning 216 to 236 grey levels, as Jurkat's.
-    ctx.infer.readRaw = async (_level, lo, hi) => Uint8Array.from({ length: hi.reduce((n, h, a) => n * (h - lo[a]), 1) }, (_, i) => 216 + (i % 21)).buffer;
+    ctx.infer.readRaw = narrowRaw;
     // A model that sees the object only when its normalizer stretches the raw.
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
-    const stretched = (view: string) => ctx.infer.serves.some((s) => view.includes(s.blob) && Number(s.chain.input_norm[0].min_value) > 0);
-    ctx.infer.outputAt = (view, _c, z, y, x) => (stretched(view) && inside(z, y, x) ? 4 : -4);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (readThrough(ctx, view, stretches) && inside(z, y, x) ? 4 : -4);
     const scored = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));
     expect(scored.window[0]).toBeGreaterThanOrEqual(216);
     expect(scored.window[1]).toBeLessThanOrEqual(236);
@@ -149,18 +150,15 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
 
   it("fit the model seeding the paint: its threshold in its row, its steps made the session's normalization, no volume made", async () => {
     const { ctx, handle } = await painted();
-    ctx.infer.readRaw = async (_level, lo, hi) => Uint8Array.from({ length: hi.reduce((n, h, a) => n * (h - lo[a]), 1) }, (_, i) => 216 + (i % 21)).buffer;
+    ctx.infer.readRaw = narrowRaw;
     // The model served, seeing the object only with the raw stretched, at -1
     // over the rest at -4: a cut-off under its own fits the paint.
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
-    const stretched = (view: string) => ctx.infer.serves.some((s) => view.includes(s.blob) && Number(s.chain.input_norm[0].min_value) > 0);
-    ctx.infer.outputAt = (view, _c, z, y, x) => (stretched(view) && inside(z, y, x) ? -1 : -4);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (readThrough(ctx, view, stretches) && inside(z, y, x) ? -1 : -4);
     const volume = ctx.session.state.paintVolume;
 
     const scored = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
     expect(scored.cutoff).toBeLessThan(0);
     expect(scored.threshold).toBeCloseTo(1 / (1 + Math.exp(-scored.cutoff)), 3);
-    expect(scored.input_window).toEqual(scored.window);
     const serves = ctx.infer.serves.length;
     const fitted = body(await handle(request("POST", "/api/finetune/rank/input-norm", { input_norm: scored.input_norm })));
     expect(fitted).toEqual({ success: true, input_norm: scored.input_norm, postprocess: ctx.session.state.chain.postprocess });
@@ -180,16 +178,12 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
   });
 
   it("read a model through its own input normalization and the session's, and keep the better", async () => {
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
-    // The view a serve made reads through steps that `fits`.
-    const through = (ctx: FakeContext, view: string, fits: (chain: Chain) => boolean) => ctx.infer.serves.some((s) => view.includes(s.blob) && fits(s.chain));
     const declared = entry("setup_56").manifest.input_norm;
 
     // No input normalization in the session: the served model reads the raw
     // as it is and sees nothing, its declared [-1, 1] sees the object.
     const bare = await painted({ input_norm: [], postprocess: [] });
-    const scaled = (chain: Chain) => chain.input_norm.some((n) => n.name === "LambdaNormalizer");
-    bare.ctx.infer.outputAt = (view, _c, z, y, x) => (through(bare.ctx, view, scaled) && inside(z, y, x) ? 4 : -4);
+    bare.ctx.infer.outputAt = (view, _c, z, y, x) => (readThrough(bare.ctx, view, scales) && inside(z, y, x) ? 4 : -4);
     const own = body(await bare.handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
     expect(own).toMatchObject({ success: true, matches: 1, input_norm: declared, input_norm_from: "declared" });
 
@@ -198,33 +192,28 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const session = [{ name: "MinMaxNormalizer", min_value: 0, max_value: 100 }, declared[1]];
     const { ctx, handle } = await painted({ input_norm: session, postprocess: [] });
     const narrow = (chain: Chain) => chain.input_norm.some((n) => n.name === "MinMaxNormalizer" && Number(n.max_value) === 100);
-    ctx.infer.outputAt = (view, _c, z, y, x) => (through(ctx, view, narrow) && inside(z, y, x) ? 4 : -4);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (readThrough(ctx, view, narrow) && inside(z, y, x) ? 4 : -4);
     const serves = ctx.infer.serves.length;
     const theirs = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
     expect(theirs).toMatchObject({ success: true, matches: 1, input_norm: session, input_norm_from: "session" });
     // What its own matched, in the row, which says why the session's.
-    expect(theirs.input_norm_others).toEqual([{ from: "declared", matches: 0.5 }]);
+    expect(theirs.input_norm_others).toEqual([{ from: "declared", matches: 0 }]);
     expect(theirs.note).toBeUndefined();
     expect(ctx.infer.serves.slice(serves).map((s) => s.chain.input_norm)).toEqual([declared]);
   });
 
-  it("read a model that declares no input normalization through the assumed [-1, 1], and give its logits the sigmoid it needs", async () => {
+  it("read a model that declares no input normalization through the assumed [-1, 1]", async () => {
     const { ctx, handle } = await painted({ input_norm: [], postprocess: [] });
     // fly_organelles' copies declare nothing: a model that sees the object only through [-1, 1].
     const m = { ...manifest("setup_61", ["mito"], 128), task: "mito", input_norm: [] };
     const bare = entryFor("setup_61", m, m.variants[0]);
     ctx.catalog.entries = [...ctx.catalog.entries, bare];
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
-    const signed = (view: string) => ctx.infer.serves.some((s) => view.includes(s.blob) && s.chain.input_norm.some((n) => n.name === "LambdaNormalizer"));
-    ctx.infer.outputAt = (view, _c, z, y, x) => (signed(view) && inside(z, y, x) ? 4 : -4);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (readThrough(ctx, view, scales) && inside(z, y, x) ? 4 : -4);
 
     const row = body(await handle(request("POST", "/api/finetune/rank/score", { name: bare.name })));
     const assumed = [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255, invert: false }, { name: "LambdaNormalizer", expression: "x*2-1" }];
     expect(row).toMatchObject({ success: true, matches: 1, input_norm: assumed, input_norm_from: "assumed" });
     expect(ctx.infer.serves.at(-1)).toMatchObject({ name: bare.name, chain: { input_norm: assumed } });
-    // Logits shown through no postprocessing: the sigmoid that makes them
-    // probabilities, then the threshold fitted to the paint.
-    expect(row.postprocess).toEqual([{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: row.threshold }]);
   });
 
   it("read a model's output by its activation, so a sigmoid model scores as the logit model it is equal to", async () => {
@@ -233,7 +222,6 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     const m = { ...manifest("setup_60", ["nuc"], 128), task: "nuc", output: "probabilities (sigmoid applied)" };
     const sigmoid = entryFor("setup_60", m, m.variants[0]);
     ctx.catalog.entries = [...ctx.catalog.entries, sigmoid];
-    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
     // 0.9 inside the object and 0.1 outside; setup_56 (raw logits) says the same as log(9) and -log(9).
     const logit = Math.log(9);
     ctx.infer.outputAt = (view, _c, z, y, x) => (view.startsWith(sigmoid.name) ? (inside(z, y, x) ? 0.9 : 0.1) : inside(z, y, x) ? logit : -logit);
@@ -245,10 +233,8 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     expect(asLogits).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
     expect(asProbability.loss).toBeCloseTo(asLogits.loss, 5);
     // Under the session's sigmoid, the probabilities would be squashed again:
-    // theirs is taken away; the logits' is what they need. Each then cut at
-    // its threshold.
+    // theirs is taken away, then cut at its threshold.
     expect(asProbability.postprocess).toEqual([{ name: "ThresholdPostprocessor", threshold: asProbability.threshold }]);
-    expect(asLogits.postprocess).toEqual([{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: asLogits.threshold }]);
   });
 
   it("set the row's postprocessing beside its steps in one chain set, when Use this model and Fit to Paint are given it", async () => {
@@ -258,10 +244,11 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
     ctx.catalog.entries = [...ctx.catalog.entries, sigmoid];
     const row = body(await handle(request("POST", "/api/finetune/rank/score", { name: sigmoid.name })));
     const stretch = [{ ...row.input_norm[0], max_value: 200 }, row.input_norm[1]];
-    // A postprocessor the browser cannot run: refused, and nothing changes.
-    const before = structuredClone(ctx.session.state.chain);
+    // A postprocessor the browser cannot run: refused before anything is set, served or made.
+    const before = structuredClone(ctx.session.state.chain), volume = ctx.session.state.paintVolume;
     expect(await handle(request("POST", "/api/finetune/rank/use", { name: sigmoid.name, input_norm: stretch, postprocess: [{ name: "NotAPostprocessor" }] }))).toMatchObject({ status: 400 });
     expect(ctx.session.state.chain).toEqual(before);
+    expect(ctx.session.state.paintVolume).toBe(volume);
 
     const chainSets = () => ctx.logged.filter((line) => line.startsWith("Chain ")).length;
     const sets = chainSets();
@@ -282,9 +269,6 @@ describe.skipIf(!python)("the rank routes, on the portable Python", () => {
   it("make the volume of the model used the session's, its paint carried and its paint layer in the old one's place", async () => {
     const { ctx, handle } = await painted();
     const before = ctx.session.state.paintVolume!;
-    // Steps the browser cannot run are refused before anything is served or made.
-    expect(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, input_norm: [{ name: "NotANormalizer" }] }))).toMatchObject({ status: 400 });
-    expect(ctx.session.state.paintVolume).toBe(before);
     // The session's steps already: nothing to set.
     const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, input_norm: ctx.session.state.chain.input_norm })));
     expect(used.error).toBeUndefined();

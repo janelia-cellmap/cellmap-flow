@@ -55,11 +55,18 @@ export function watchProgress(progressUrl, show) {
   return { loadId, stop: poller.stop };
 }
 
+// What the New Volume button's click came to (crops.js): detail.ok, whether
+// a volume was made.
+export const VOLUME_CREATED = "cellmap-flow:volume-created";
+
 // A refusal that needs an annotation volume first (the answer says
 // needs_volume): says why, and offers to start one with the New Volume
 // button, brought into view. Cancel leaves it to the user, e.g. to resume an
-// existing volume instead.
-export function offerNewVolume(message) {
+// existing volume instead. Once the volume is made, ``then`` runs (the action
+// that needed it, again), so what was said, that there is no volume, gives
+// way to what happens now; a New Volume that made none leaves no ``then``
+// behind for a later one.
+export function offerNewVolume(message, then) {
   const create = confirm(
     `${message}\n\nCreate a new annotation volume now? (Cancel to resume an existing one instead.)`
   );
@@ -67,6 +74,7 @@ export function offerNewVolume(message) {
   const button = document.getElementById("createVolumeBtn");
   if (!button) return false;
   button.scrollIntoView({ block: "center" });
+  if (then) document.addEventListener(VOLUME_CREATED, (e) => e.detail.ok && then(), { once: true });
   button.click();
   return true;
 }

@@ -237,9 +237,10 @@ def _wait_for_restart_signal(
     A restart comes from the inference server's control endpoint, through
     ``control``, or, when the job manager cannot reach that, as the
     ``signal_file`` it writes instead, looked for with jobs.spec.exists_now
-    as it comes from another host. Both carry the job manager's timestamp; a signal whose timestamp is in ``applied`` has been acted on
-    already and is dropped. That happens when the HTTP request got through
-    but its reply timed out: the job manager then writes the file as well.
+    as it comes from another host. Both carry the job manager's timestamp;
+    a signal whose timestamp is in ``applied`` has been acted on already
+    and is dropped. That happens when the HTTP request got through but its
+    reply timed out: the job manager then writes the file as well.
 
     The job manager writes the file from another host, so it can be seen
     empty or cut short. Until it parses, it is left alone and the wait goes
@@ -537,7 +538,7 @@ class TrainingSession:
         or, when it cannot reach the server -- in the first iteration none is
         running yet -- writes stop_signal.json into the output directory.
         Either is used up here. The file is written on the dashboard's host,
-        and a plain look for it here missed it for up to a minute (NFS
+        and a plain look for it here can miss it for up to a minute (NFS
         caches the miss; jobs.spec.exists_now). A stop asked for while the
         job sets up is kept until the first epoch; one left from the
         training before is the job manager's to clear, when it sends the

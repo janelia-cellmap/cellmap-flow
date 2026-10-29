@@ -257,10 +257,10 @@ def channel_pick_refusal(model_name, model_config, output_type, select_channel):
     target that is not one per channel (common.trains_one_channel, of the
     ``output_type`` submit resolved): the models list says
     ``channel_choice`` for it, and the training form then asks for the
-    channel. Without one the job trained every channel on the paint. None
-    when a channel is picked, or the model trains every channel at once, or
-    the list has no geometry for it (the form shows no pick then, and the
-    job trains as the command line does).
+    channel: without one, the job would train every channel on the paint.
+    None when a channel is picked, or the model trains every channel at
+    once, or the list has no geometry for it (the form shows no pick then,
+    and the job trains as the command line does).
     """
     if select_channel is not None:
         return None
@@ -291,12 +291,12 @@ def grid_change(model_name, model_config, corrections_dir):
     same sizes), or there is no volume with a grid to compare (one a
     dashboard before this one registered, which trains as it did). Else it
     is what ``carry_onto_model`` takes after the model's name and config,
-    ``(geometry, from_id, from_volume)``. The
-    model's grid is the volume a Create Volume for it would plan now, on the
-    session's dataset; its sizes are its server's or the geometry cache's
-    (geometry_cache.known_geometry), never the model built here (see
-    rank_routes._served_geometry). ``refusal`` is ``(response, 400)`` when
-    neither knows them yet: its server has not answered."""
+    ``(geometry, from_id, from_volume)``. The model's grid is the volume a
+    Create Volume for it would plan now, on the session's dataset; its sizes
+    are its server's or the geometry cache's (geometry_cache.known_geometry),
+    never the model built here (see rank_routes._served_geometry).
+    ``refusal`` is ``(response, 400)`` when neither knows them yet: its
+    server has not answered."""
     from_id, volume = session_store().session_volume(str(corrections_dir))
     from_grid = volume and volume_grid(volume)
     if not from_grid or volume.get("model_name") == model_name:
@@ -416,7 +416,7 @@ def get_finetune_models():
             # The server's first, as it serves the model; else what the
             # pipeline builder saved, or what the model declares. Never the
             # model built here: the tab asks every two seconds while it waits
-            # for a server, and building it loaded its weights and ran a
+            # for a server, and building it loads its weights and runs a
             # forward on the dashboard's CPU (25 s for a 3 GB TorchScript). A
             # model none of them knows is listed with why it has no geometry
             # yet, its ``status``, until its server answers.

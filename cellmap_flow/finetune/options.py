@@ -56,13 +56,11 @@ MANIFEST_FIELDS = ("patches_per_epoch", "rehearsal_fraction")
 # and, under the cosine schedule (learning_rate_schedule, the default),
 # eases down to this share of it by its last optimizer step, along half a
 # cosine: big steps while the model is far from the paint, small ones once
-# it is close (trainer/loop.py learning_rate_factor). Every run used to
-# train at one rate throughout; a LICONN head trained at 1e-2 and then
-# restarted at a smaller rate, a schedule made by hand, looked great. The
-# constant schedule (the form's "Ease down" unticked) keeps that one rate,
-# for a run the user steers by hand. The browser's three trainers read it
-# from web/src/generated/python-data.json (web/build/export_data.py;
-# web/src/finetune/schedule.ts).
+# it is close (trainer/loop.py learning_rate_factor). The constant
+# schedule (the form's "Ease down" unticked) keeps the form's rate
+# throughout, for a run the user steers by hand. The browser's three
+# trainers read it from web/src/generated/python-data.json
+# (web/build/export_data.py; web/src/finetune/schedule.ts).
 LEARNING_RATE_FLOOR = 0.1
 
 

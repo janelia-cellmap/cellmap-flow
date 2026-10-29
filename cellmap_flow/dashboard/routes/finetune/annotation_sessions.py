@@ -9,10 +9,9 @@ manifest trains on), as for every other route (SessionStore.session_volume):
 the list counts that volume's chunks and names its model, and a resume
 copies and registers that one alone. The other volumes in a session's
 directory -- those Use this model retired lie in its ``superseded/``, out of
-the way already -- are neither counted nor copied: a session with one paint
-carried onto three models' grids was listed with 50 chunks (20 + 10 + 10 +
-10), resumed with all four volumes, and the oldest of them became the
-resumed session's volume.
+the way already -- are neither counted nor copied: they are the same paint
+on other models' grids, and a resume of every volume would make the oldest
+of them the resumed session's volume.
 """
 
 import json
@@ -204,9 +203,8 @@ def list_existing_sessions():
                         # The session's current volume alone, what a resume
                         # copies.
                         "volumes": [{"volume_id": current.replace(".zarr", ""), "path": path}],
-                        # Its populated chunks. This used to count legacy
-                        # per-chunk extracts, which no session gets any more,
-                        # so it said 0 for most sessions; then every volume's.
+                        # The volume's own populated chunks, not the legacy
+                        # per-chunk extracts', which no session gets any more.
                         "chunk_count": _populated_chunk_count(path),
                         # The model it is for; None for a volume painted
                         # before any model.

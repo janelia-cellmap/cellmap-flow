@@ -9,10 +9,15 @@ portable/calls.py; numpy and the standard library only. In short:
 - A model is scored on the targets its own finetune trains on, over the
   painted voxels: an object or not on each channel of a binary model, the
   painted pairs of an affinity model.
-- The score is the balanced accuracy, the mean of the share of object
-  targets called object and of background targets called background. A
-  binary model's painted voxels next to one of the other class are not
-  counted (rough strokes are forgiven along their edges).
+- The score is the geometric mean of the share of object targets called
+  object and of background targets called background: each share is of its
+  own class, so the paint's mix of the two does not tilt it, and a model
+  must get both right, as one that calls everything background scores 0
+  however much of the paint is background (their plain mean, the balanced
+  accuracy, gave that model 0.5, read as half right). With one class
+  painted, it is that class's share. A binary model's painted voxels next
+  to one of the other class are not counted (rough strokes are forgiven
+  along their edges).
 - It is read at the model's own cut-off: the logit, among CUTOFFS, with the
   best Dice of its calls against the painted objects (the nearest to 0
   among equals; 0 when only one class is painted). The score at 0 is given
@@ -161,7 +166,7 @@ def _score_of(t: dict, channel: Optional[str], channel_index: Optional[int]) -> 
         right = 1 - wrong / t["background"] if t["background"] else None
         rates = [r for r in (found_share, right) if r is not None]
         dice = 2 * found / max(found + t["objects"] + wrong, 1)
-        return found_share, right, sum(rates) / len(rates), dice
+        return found_share, right, float(np.prod(rates)) ** (1 / len(rates)), dice
 
     zero = int(np.flatnonzero(CUTOFFS == 0)[0])
     k = zero

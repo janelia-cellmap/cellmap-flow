@@ -2,68 +2,67 @@
 (web/src/backend/routes/rank.ts), answered by the dashboard, so the Finetune
 tab's ranking (static/js/dashboard/finetune/rank.js) works the same in both.
 
-GET /api/finetune/rank/candidates lists the models to rank as the Models tab
-offers them, each with the ``group`` of the tab's it is listed under, in the
-tab's order: the session's ("Running", running or not; not a Cellpose
-model, whose flows the ranking does not score), each catalog group's
-(models.yaml's "cellmap", "saalfeldlab"), cellmap's on Hugging Face
-("Hugging Face") and the BioImage Model Zoo's ("BioImage Zoo", with its
-``em`` tag, which the others are), from the lists the tab last cached
-(``hf_cached`` and ``zoo_cached`` say whether there were any: none is
-fetched here, so a listing never waits on the Hub or bioimage.io; the tab's
-Refresh fetches them), then the ones given here by reference ("Added"),
-with the session's volume and the model it is for. Each carries what every
-model list shows of a model (models/hf_catalog.py FACTS: its formats, finetune
-modes, size and browser copy), as the Hugging Face list cached them for its
-repo, from the files of a catalog model's folder, or from a repo's own when
-it is added by reference. Each not running says
-how to build it (``entry``, the one the Models tab starts it from); only the
-running ones and the added start ticked, as a model not running is started
-on the cluster for its score. A zoo model whose voxel size nothing says
-(its server would refuse it) has no entry, and ``error`` and ``needs`` say
-so. POST /api/finetune/rank/add {ref, name?, voxel_size?} adds a model by
-reference, resolved as the Models tab's Add a model resolves it
-(routes/model_resolve.py resolve_request), and answers its candidate,
-starting nothing (a Cellpose model is refused); the session keeps it among
-the candidates (Session.rank_added). POST
-/api/finetune/rank/score {name, entry?, queue?} scores one on the session volume's
-paint (portable/rank.py says how; the browser runs the same Python): a running model
-through its server, any other started for the score alone (``entry``, the
-candidate's, says how to build it; a zoo model is served from its own
-environment, as the Models tab serves it; ``queue``, the Training tab's GPU
-queues ticked, says where, else the Models tab's) and stopped after, so a ranking leaves
-the Models tab and the cluster as they were. The model is read through
-its own input normalization (what its start sets: its declaration, or the
-CellMap convention) and through the session's when that is another, and
-the better kept: a server runs the chain each request names. Where the raw
-under the paint is narrow, the same server is asked again through that
-normalization stretched to the raw's window. The answer is the ranking's
-row (portable/rank.py score_row: the score kept, its threshold, the raw's
-range it read and the steps it was read through, ``input_norm``, with what
-every channel matched, ``channel_matches``, and what the other
-normalizations tried did, ``input_norm_others``: why this one), and the
-postprocessing its layer needs to show right instead of the session's,
-``postprocess`` (portable/rank.py needed_postprocess: the sigmoid added or
-taken away, and the threshold fitted to the paint, an affinity model's
-too), or null when the session's shows it right.
-POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
-select_channel?, queue?} makes the one picked the model to finetune: ``input_norm``
-and ``postprocess`` (the row's) made the dashboard's chain first, and
-``select_channel`` (the row's channel_index) the channel its layer shows
-(Session.shown_channels), then the model running (as the Models tab's Add
-runs it, on ``queue`` as for a score), a volume made for it with the session volume's paint carried onto
-its grid (session/volume.py carry_paint) and its paint layer in the old
-one's place. The old volume is retired (finetune_utils
-retire_annotation_volume): out of the session, kept on disk in its
-corrections dir's ``superseded/``, so the session has the one volume, the
-new one, which its manifest trains on. The carry is
-annotation_core.carry_onto_model, which training's submit carries through
-too, for a model whose grid is not the volume's; the model's sizes come from
-its server once its start is over (``_served_geometry``, which waits for a
-start still falling back through the GPU queues). POST /api/finetune/rank/input-norm
-{input_norm, postprocess?} makes the row's steps the dashboard's chain
-alone, with no model started and no volume made: Fit to paint's, for the
-model already seeding the paint.
+- GET /api/finetune/rank/candidates: the models to rank as the Models tab
+  offers them, each with the ``group`` of the tab's it is listed under, in
+  the tab's order: the session's ("Running", running or not; not a
+  Cellpose model, whose flows the ranking does not score), each catalog
+  group's (models.yaml's "cellmap", "saalfeldlab"), cellmap's on Hugging
+  Face ("Hugging Face") and the BioImage Model Zoo's ("BioImage Zoo", with
+  its ``em`` tag, which the others are), from the lists the tab last
+  cached (``hf_cached`` and ``zoo_cached`` say whether there were any: none
+  is fetched here, so a listing never waits on the Hub or bioimage.io; the
+  tab's Refresh fetches them), then the ones given by reference ("Added",
+  rank_add); and the session's volume and the model it is for. Each
+  carries what every model list shows of a model (models/hf_catalog.py
+  FACTS: its formats, finetune modes, size and browser copy), as the
+  Hugging Face list cached them for its repo, from the files of a catalog
+  model's folder, or from a repo's own when it is added by reference. Each
+  not running says how to build it (``entry``, the one the Models tab
+  starts it from); only the running ones and the added start ticked, as a
+  model not running is started on the cluster for its score. A zoo model
+  whose voxel size nothing says (its server would refuse it) has no entry,
+  and ``error`` and ``needs`` say so.
+- POST /api/finetune/rank/add {ref, name?, voxel_size?}: a model added by
+  reference, resolved as the Models tab's Add a model resolves it, starting
+  nothing (rank_add).
+- POST /api/finetune/rank/score {name, entry?, queue?}: one scored on the
+  session volume's paint (portable/rank.py says how; the browser runs the
+  same Python): a running model through its server, any other started for
+  the score alone (``entry``, the candidate's, says how to build it; a zoo
+  model is served from its own environment, as the Models tab serves it;
+  ``queue``, the Training tab's GPU queues ticked, says where, else the
+  Models tab's) and stopped after, so a ranking leaves the Models tab and
+  the cluster as they were. The model is read through its own input
+  normalization (what its start sets: its declaration, or the CellMap
+  convention) and through the session's when that is another, and the
+  better kept: a server runs the chain each request names. Where the raw
+  under the paint is narrow, the same server is asked again through that
+  normalization stretched to the raw's window. The answer is the ranking's
+  row (portable/rank.py score_row: the score kept, its threshold, the raw's
+  range it read and the steps it was read through, ``input_norm``, with
+  what every channel matched, ``channel_matches``, and what the other
+  normalizations tried did, ``input_norm_others``: why this one), and the
+  postprocessing its layer needs to show right instead of the session's,
+  ``postprocess`` (portable/rank.py needed_postprocess: the sigmoid added
+  or taken away, and the threshold fitted to the paint, an affinity
+  model's too), or null when the session's shows it right.
+- POST /api/finetune/rank/use {name, entry?, input_norm?, postprocess?,
+  select_channel?, queue?}: the one picked made the model to finetune.
+  ``input_norm`` and ``postprocess`` (the row's) are made the dashboard's
+  chain first, and ``select_channel`` (the row's channel_index) the channel
+  its layer shows (Session.shown_channels); then the model is running (as
+  the Models tab's Add runs it, on ``queue`` as for a score), and its paint
+  is carried onto its grid (annotation_core.carry_onto_model, which
+  training's submit carries through too, for a model whose grid is not the
+  volume's): a volume made for it, its paint layer in the old one's place,
+  and the old volume retired, so the session has the one volume, which its
+  manifest trains on. The model's sizes come from its server once its
+  start is over (``_served_geometry``, which waits for a start still
+  falling back through the GPU queues).
+- POST /api/finetune/rank/input-norm {input_norm, postprocess?}: the row's
+  steps made the dashboard's chain alone, with no model started and no
+  volume made: Fit to Paint's, for the model already seeding the paint
+  (rank_input_norm).
 """
 
 import logging
@@ -422,8 +421,8 @@ def rank_use():
         if channel is not None:
             # Before the model starts too, so the layer its start builds
             # (services/launch.py, on Session.shown_channel) opens on the
-            # channel the paint matched: it opened on Neuroglancer's middle
-            # channel, and only moved once the page's pick arrived.
+            # channel the paint matched, not on Neuroglancer's middle one
+            # until the page's pick arrives.
             session.shown_channels[name] = channel
         if name not in running_names():
             _start_for_good(name, config, queue_list(data.get("queue")))
@@ -516,9 +515,10 @@ def _norm_tries(config, session):
     Its own is what its start sets (routes/pipeline.py start_input_norm: its
     declaration, or its kind's convention), else what the model advice
     assumes for a model nothing is known of ([-1, 1], "assumed"), which a
-    start does not set but a score may: the score says whether it fits.
-    fly_organelles' /nrs copies declare nothing and are not under the CellMap
-    models' folder, and were read through no normalization at all."""
+    start does not set but a score may: the score says whether it fits. A
+    model nothing declares and not under the CellMap models' folder (a copy
+    of fly_organelles elsewhere) is otherwise read through no normalization
+    at all."""
     from cellmap_flow.dashboard.routes import model_advice
     from cellmap_flow.dashboard.routes.pipeline import start_input_norm
 
@@ -571,13 +571,12 @@ SERVER_WAIT_SECONDS = 180
 # The longest Use this model waits in all: while the model's start is still
 # going (its job pending, which jobs/launch.py start_hosts gives each GPU
 # queue PENDING_FALLBACK_SECONDS before it falls back to the next) as long
-# as every queue's fallback takes, then SERVER_WAIT_SECONDS. It waited 180 s
-# whatever the start was doing, the same 180 s gpu_h100 got before its
-# fallback to gpu_h200, and gave up at the second the job moved on.
+# as every queue's fallback takes, then SERVER_WAIT_SECONDS: a wait of
+# SERVER_WAIT_SECONDS alone gives up as a job falls back to the next queue.
 START_WAIT_SECONDS = current_site().pending_fallback_seconds * len(current_site().gpu_queues) + SERVER_WAIT_SECONDS
 
 
-def _served_geometry(name, config, timeout=START_WAIT_SECONDS):
+def _served_geometry(name, config):
     """``name``'s geometry, from its server or the geometry cache
     (geometry_cache.known_geometry), waiting for the server Use this model
     just started; never from the model built in the dashboard.
@@ -585,21 +584,21 @@ def _served_geometry(name, config, timeout=START_WAIT_SECONDS):
     It waits while the model's start is going (services/launch.py
     ``launching``: its launch thread waits for the job's host, through every
     queue's fallback), then SERVER_WAIT_SECONDS more for its server to
-    answer, ``timeout`` seconds at most in all. A start that ended without a
+    answer, START_WAIT_SECONDS at most in all. A start that ended without a
     server (no job of the model's running) ends the wait at once, with why
     it failed (``start_error``).
 
-    resolve_model_geometry builds the model here when neither knows it, and
-    for a model whose metadata names two blocks (jrc_mus-livers' 216 and 288,
-    which only running it tells apart) that loaded its TorchScript on the
-    dashboard's CPU and ran it at 288^3: the dashboard died there
-    ("Segmentation fault"), and the page had "Failed to fetch". Raises
-    RuntimeError when the server has not answered in time, or will not."""
+    Not resolve_model_geometry, which builds the model here when neither
+    knows it: for a model whose metadata names two blocks (jrc_mus-livers'
+    216 and 288, which only running it tells apart) that runs its
+    TorchScript on the dashboard's CPU, at 288^3, which can kill the
+    dashboard. Raises RuntimeError when the server has not answered in
+    time, or will not."""
     from cellmap_flow.dashboard.services import launch
     from cellmap_flow.models import geometry_cache
 
     started = time.time()
-    ceiling = started + timeout
+    ceiling = started + START_WAIT_SECONDS
     deadline = min(started + SERVER_WAIT_SECONDS, ceiling)
     while True:
         geometry = geometry_cache.known_geometry(name, config)

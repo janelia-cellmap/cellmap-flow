@@ -40,16 +40,16 @@ import type { Catalog, FinetunedRecord, GpuLimits, ModelEntry, ModelManifest, Mo
 import { PYTHON } from "../generated/python-data";
 
 import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
-import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry } from "./finetuned";
+import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry, publishedRef } from "./finetuned";
 import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError } from "./hf";
 import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
 import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, modelFolders, parseManifest } from "./manifest";
 
 export { chooseVariant, estimatePeakBytes, isOneSlice, PREFER_SMALL_DOWNLOAD, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "./variant";
-export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, hubName, isLayerName, ManifestError, parseManifest, withVariant } from "./manifest";
+export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, ManifestError, parseManifest, withVariant } from "./manifest";
 export { FINETUNED_AUTHOR, listFacts, type ListFacts, metadataFor, MODELS_AUTHOR } from "./metadata";
-export { fetchEtag, HF_REPO, HF_REVISION, hubRef, NoBrowserCopyError, RateLimitError, resolveUrl } from "./hf";
+export { fetchEtag, HF_REPO, HF_REVISION, NoBrowserCopyError, RateLimitError, resolveUrl } from "./hf";
 export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, modelBytesKey, type ByteCache } from "./byte-cache";
 export { type KeyValueStore, LISTING_TTL_MS, MemoryKeyValueStore } from "./listing-cache";
 export {
@@ -592,7 +592,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
  * here was published as is left out: the kept model, the same bytes under
  * its own name, stands for it (resolve). */
 function arranged(hub: ModelEntry[], kept: FinetunedRecord[]): ModelEntry[] {
-  const publishedHere = new Set(kept.flatMap((r) => (r.published ? [`${r.published.repo}/${r.published.folder}`] : [])));
+  const publishedHere = new Set(kept.flatMap((r) => (r.published ? [publishedRef(r.published)] : [])));
   return withUniqueNames([...hub.filter((e) => !publishedHere.has(e.id)), ...kept.map((r) => r.entry)]);
 }
 

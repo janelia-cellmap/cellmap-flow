@@ -9,34 +9,33 @@
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
 // each request. In both modes only the models running and the ones added by
-// hand start ticked. They are
-// listed as the Models tab lists them, made of the same pieces
-// (shared/model-list.js): a section for each of the tab's sections a model
-// is under (its group), with the tab's rows, the Hugging Face and zoo
-// sections' search bar, Refresh and filters (a server's Hugging Face section
-// showing only the models with a browser copy to start, as the Models tab's
-// does, and both modes' in order of name or size), and its Add a model;
-// each row tagged with what the model is (shared/model-list.js factTags,
-// from the candidate's formats, finetune modes, size and browser copy). The
-// ticks are the ranking's own, not the Models tab's: a ticked model stays in
-// view whatever its section's search and filters, and Rank scores every
-// ticked one. Each
-// row of the ranking gives what its score was read at, as the controls it sets
-// take it (portable/rank.py score_row): the threshold, a probability, and
-// the input normalization it was read through (input_norm: the model's own,
-// or the session's when that matched better, maybe stretched to the raw
-// under the paint). Show serves a model and adds its layer, as the Models
-// tab's Add does; Use this model (POST /api/finetune/rank/use) makes one the
-// model to finetune: that input normalization the session's, the model
-// served, a new volume made for it with the paint carried onto its grid,
-// that volume the session's and its paint layer in the viewer. The model picker (models.js pickModel) and the Annotation
-// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow, and
-// a binary model's row's channel (channel_index, the channel that matched
-// best) becomes its Channel in the training form (training-form.js
-// pickChannel), shown once the model is picked if it trains one channel at
-// a time. Rank itself fills the Channel of the model the form shows, when
-// none is picked (fillChannel): that is the model painted for, which has no
-// Use this model.
+// hand start ticked. They are listed as the Models tab lists them, made of
+// the same pieces (shared/model-list.js): a section for each of the tab's
+// sections a model is under (its group), with the tab's rows, the Hugging
+// Face and zoo sections' search bar, Refresh and filters (a server's Hugging
+// Face section showing only the models with a browser copy to start, as the
+// Models tab's does, and both modes' in order of name or size), and its Add
+// a model; each row tagged with what the model is (shared/model-list.js
+// factTags, from the candidate's formats, finetune modes, size and browser
+// copy). The ticks are the ranking's own, not the Models tab's: a ticked
+// model stays in view whatever its section's search and filters, and Rank
+// scores every ticked one. Each row of the ranking gives what its score was
+// read at, as the controls it sets take it (portable/rank.py score_row): the
+// threshold, a probability, and the input normalization it was read through
+// (input_norm: the model's own, or the session's when that matched better,
+// maybe stretched to the raw under the paint). Show serves a model and adds
+// its layer, as the Models tab's Add does; Use this model (POST
+// /api/finetune/rank/use) makes one the model to finetune: that input
+// normalization the session's, the model served, a new volume made for it
+// with the paint carried onto its grid, that volume the session's and its
+// paint layer in the viewer. The model picker (models.js pickModel) and the
+// Annotation Crops panel's volume buttons (crops.js sessionVolumeChanged)
+// follow, and a binary model's row's channel (channel_index, the channel
+// that matched best) becomes its Channel in the training form
+// (training-form.js pickChannel), shown once the model is picked if it
+// trains one channel at a time. Rank itself fills the Channel of the model
+// the form shows, when none is picked (fillChannel): that is the model
+// painted for, which has no Use this model.
 //
 // Fit to Paint, beside Seed from Prediction, does the same for the model
 // that seeds the paint (Label it's Prediction from) without a new volume:
@@ -148,7 +147,7 @@ function activationText(row) {
 
 // What a score that is right on one class only does, in words: a model
 // that calls (almost) everything object finds every painted object and
-// matches about as well as guessing (objects 99%, background 34%: 66%), and
+// matches no better than guessing (objects 99%, background 34%: 58%), and
 // "objects 99%" alone read as good. Null when both are right at least half
 // the time.
 function lopsided(row) {
@@ -365,13 +364,13 @@ export function initRank({ form }) {
     return `the input normalization is now ${from}${Array.isArray(row.window) ? `, stretched to the raw under your paint` : ""} (${stepsText(row.input_norm)}), for every model`;
   }
 
-  // Why a score's model fits the paint, in words: how much of it it gets
-  // right, on which channel ahead of which, through which normalization
-  // ahead of which.
+  // Why a score's model fits the paint, in words: how well it matches, on
+  // which channel ahead of which, through which normalization ahead of
+  // which.
   function whyText(row) {
     const channel = row.channel ? ` on its ${channelLabel(row.channel, row.channel_index)}${runnersUp(row) ? ` (${runnersUp(row)})` : ""}` : "";
     const others = (row.input_norm_others || []).length ? ` (${othersText(row.input_norm_others)})` : "";
-    return `${percent(row.matches)} of your paint right${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
+    return `${percent(row.matches)} match${channel}, read through ${NORM_FROM[row.input_norm_from] || "its input normalization"}${others}`;
   }
 
   // A channel set from a score, in words: a binary model's score is read on
@@ -791,6 +790,17 @@ export function initRank({ form }) {
       // (main.js reads the chain again), so a later Apply keeps it.
       announce(CHAIN_CHANGED_EVENT);
     }
+    setFitted(name, row, explicit);
+    return true;
+  }
+
+  // The threshold and the Channel `row` (model `name`'s score) fitted, set
+  // and said on the line under Label it's buttons: the threshold as Seed
+  // from Prediction's, and the Channel made the row's channel when
+  // `explicit` (Use this model, Use these settings), else filled only when
+  // none is picked (Fit to Paint's). Returns the channel set, by name and
+  // number, or null.
+  function setFitted(name, row, explicit) {
     installThreshold(name, row.threshold);
     let channel = null;
     if (Number.isInteger(row.channel_index)) {
@@ -798,7 +808,7 @@ export function initRank({ form }) {
       if (explicit || fillChannel(name, row.channel_index)) channel = channelLabel(row.channel, row.channel_index);
     }
     sayFit(fittedText(name, row, channel), "success");
-    return true;
+    return channel;
   }
 
   // Makes `candidate` the model to finetune, as its score (`row`) found it
@@ -843,11 +853,8 @@ export function initRank({ form }) {
     // As the listing will have them, until it comes.
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
-    installThreshold(d.name, row.threshold);
-    const channel = Number.isInteger(row.channel_index) ? channelLabel(row.channel, row.channel_index) : null;
-    // Before the pick below, which shows it.
-    if (channel !== null) pickChannel(d.name, row.channel_index);
-    sayFit(fittedText(d.name, row, channel), "success");
+    // The Channel before the pick below (pickModel), which shows it.
+    const channel = setFitted(d.name, row, true);
     // The Processing tab's input normalization shows it as it now runs
     // (main.js reads the chain again), so a later Apply keeps it.
     if (Array.isArray(d.input_norm) || Array.isArray(d.postprocess)) announce(CHAIN_CHANGED_EVENT);
@@ -895,8 +902,8 @@ export function initRank({ form }) {
     setBusy(rankBtn, true, "Ranking...");
     // A volume made, or a model added, since the list was shown is in this one.
     const state = await listCandidates();
-    // Every ticked model, which visible() keeps in view: one the filter hid
-    // used to be left out of the ranking though it was ticked.
+    // Every ticked model, which visible() keeps in view whatever its
+    // section's search: what is ticked is scored, not only what is shown.
     const chosen = candidates.filter(isTicked);
     if (!state.ready || !chosen.length) {
       running = false;
@@ -973,7 +980,9 @@ export function initRank({ form }) {
       const d = await score({ name });
       if (!isScored(d)) {
         sayFit(`Could not fit ${name} to your paint: ${d.error}`, "danger");
-        if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
+        // A new volume has no paint to fit to yet.
+        if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`,
+          () => sayFit("The annotation volume is made: paint on it, then fit."));
         return;
       }
       await applyRow(name, d, false);

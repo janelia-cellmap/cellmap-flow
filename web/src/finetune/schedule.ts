@@ -6,8 +6,8 @@
 // ticked, the default), eases down along half a cosine to
 // LEARNING_RATE_FLOOR of it at its last step: big steps while the model is
 // far from the paint, small ones once it is close. Under the constant one
-// every step takes the form's rate, as every run did before the schedule.
-// A restart is a run of its own, and starts at its rate again.
+// every step takes the form's rate. A restart is a run of its own, and
+// starts at its rate again.
 import { PYTHON } from "../generated/python-data";
 import type { LearningRateSchedule } from "./types";
 

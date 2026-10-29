@@ -163,38 +163,29 @@ def test_training_one_channel_holds_the_others_where_they_were(make_trainer):
     assert moved[1] > 5 * max(moved[0], moved[2])
 
 
-def test_the_learning_rate_eases_from_the_forms_down_to_its_floor(make_trainer):
-    """Every step trained at the form's rate. The first takes it now and the
-    last LEARNING_RATE_FLOOR of it, the steps counted as gradient
-    accumulation makes them (three batches two at a time: two steps an epoch,
-    the second a partial accumulation); a step past the count, which an OOM's
-    halved batch makes, stays at the floor."""
+@pytest.mark.parametrize("schedule", ["cosine", "constant"])
+def test_the_learning_rate_eases_from_the_forms_down_to_its_floor_unless_kept(make_trainer, schedule):
+    """Every step trained at the form's rate. Under the cosine schedule the
+    first takes it now and the last LEARNING_RATE_FLOOR of it, the steps
+    counted as gradient accumulation makes them (three batches two at a
+    time: two steps an epoch, the second a partial accumulation); a step past
+    the count, which an OOM's halved batch makes, stays at the floor. The
+    constant one (the form's Ease down unticked) takes the form's rate at
+    every step, the last one too."""
     from cellmap_flow.finetune.options import LEARNING_RATE_FLOOR
     from cellmap_flow.finetune.trainer.loop import learning_rate_factor
 
     ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
     trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, gradient_accumulation_steps=2,
-                           learning_rate=1e-2, target_transform=BinaryTargetTransform())
+                           learning_rate=1e-2, learning_rate_schedule=schedule,
+                           target_transform=BinaryTargetTransform())
     rates = []
     trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
     assert not trainer.train().get("diverged")
-    assert len(rates) == 6
-    assert rates[0] == pytest.approx(1e-2)
-    assert rates[-1] == pytest.approx(1e-2 * LEARNING_RATE_FLOOR)
-    assert rates == sorted(rates, reverse=True)
-    assert learning_rate_factor(9, 6, "cosine") == pytest.approx(LEARNING_RATE_FLOOR)
-
-
-def test_a_constant_schedule_steps_at_the_forms_rate_to_the_last_step(make_trainer):
-    """The form's Ease down unticked: every step takes the form's rate, as
-    every step did before the schedule, the last one too."""
-    ann = _annotation(1, n=3, fg=(2, np.s_[:, :, :2]))
-    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), num_epochs=3, learning_rate=1e-2,
-                           learning_rate_schedule="constant", target_transform=BinaryTargetTransform())
-    rates = []
-    trainer.optimizer.register_step_pre_hook(lambda optimizer, *_: rates.append(optimizer.param_groups[0]["lr"]))
-    assert not trainer.train().get("diverged")
-    assert rates == pytest.approx([1e-2] * 9)
+    floor = LEARNING_RATE_FLOOR if schedule == "cosine" else 1.0
+    assert len(rates) == 6 and rates == sorted(rates, reverse=True)
+    assert (rates[0], rates[-1]) == pytest.approx((1e-2, 1e-2 * floor))
+    assert learning_rate_factor(9, 6, schedule) == pytest.approx(floor)
 
 
 class _OutOfMemory(nn.Module):

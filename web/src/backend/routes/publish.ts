@@ -79,7 +79,6 @@ interface SignedIn {
   expiresAt: Date | null;
 }
 
-
 /** One model's publish: where it is going, and how far it has got. */
 interface Job {
   repo: string;

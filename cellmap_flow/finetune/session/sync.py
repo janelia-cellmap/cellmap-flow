@@ -299,8 +299,8 @@ def sync_all(force: bool = True, *, state, volumes) -> int:
     MinIO ever served from its data directory: one retired by Use this model
     (store.SessionStore.retire_volume), and every volume of a resumed
     session's source whose ``.minio`` came along. Synced from the bucket's
-    listing, each of those was registered as it went (volume_record), and the
-    session's volume became whichever was listed last.
+    listing, each of those would be registered as it went (volume_record),
+    back into the session it had left.
 
     Returns the number of volumes that had changed chunks, or -1 if MinIO
     is not initialized.
