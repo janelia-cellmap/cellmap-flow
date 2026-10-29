@@ -24,13 +24,17 @@
 // keeps its layer, which opens only in this browser, and the page says so
 // beside the button, with the Finetune tab's download that gives the paint
 // as a file. The page that opens the link leaves out what it cannot show
-// and says so in the same notice (showLinkNotice, called by main.ts).
+// and says so in the same notice (showLinkNotice, called by main.ts). A
+// model run at another voxel size than its ref gives it has that size after
+// its ref (link.ts runAtRef), whichever way it is named.
 import { message } from "./backend/router";
-import { type Catalog, FINETUNED_REPO, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
+import { type Catalog, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
 import { headOf } from "./finetune/onnx-head";
-import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn } from "./link";
-import { isFinetuned } from "./models/finetuned";
+import { modelVoxelSizes, sameVoxelSize } from "./infer/geometry";
+import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn, runAtRef } from "./link";
+import { isFinetuned, lineage, publishedRef } from "./models/finetuned";
 import { HF_REPO } from "./models/hf";
+import { type Hint, hint, hintText } from "./shared/hint";
 import { decodeState, isStateHash } from "./viewer/share";
 
 /** The header's button (templates/index.html, browser mode only). */
@@ -78,11 +82,6 @@ function hubLinkRef(entry: ModelEntry): string {
   return entry.repo === HF_REPO ? entry.folder : entry.id;
 }
 
-/** The ref of the place a model was published to, `<owner>/<repo>/<folder>`. */
-export function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
-  return `${published.repo}/${published.folder}`;
-}
-
 /** The refs of `models` for a link, in their order: a Hugging Face model's
  * hubLinkRef; a finetuned model published from here, where it was
  * published to; any other finetuned model's finetunedRef, its last layer
@@ -93,13 +92,18 @@ export function publishedRef(published: NonNullable<FinetunedRecord["published"]
  * the way there that was published. A finetuned model that cannot be put
  * so (its bytes gone, or the record of a model in its lineage; a whole
  * network trained, or a file opened, on the way) is named by its folder,
- * which opens it only in this browser, and said so. */
+ * which opens it only in this browser, and said so. Each is followed by
+ * the voxel size the model runs at when its ref does not give it that by
+ * itself (runAtRef): the run voxel size of a model named as it is, and for
+ * a finetunedRef the voxel size it runs at when that is not the one of the
+ * model it is rebuilt on (a finetune trained at another voxel size). */
 export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Catalog, "finetuned" | "modelBytes" | "resolve">): Promise<LinkRefs> {
   const linked: LinkRefs = { refs: [], rebuilt: [], unlinked: [] };
   let records: FinetunedRecord[] | null = null;
   for (const model of models) {
+    const runAt = model.runVoxelSize ?? null;
     if (!isFinetuned(model)) {
-      linked.refs.push(hubLinkRef(model));
+      linked.refs.push(runAtRef(hubLinkRef(model), runAt));
       continue;
     }
     try {
@@ -107,10 +111,11 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
       const record = records.find((r) => r.id === model.id);
       if (!record) throw new Error("its record is not in this browser's catalog");
       if (record.published) {
-        linked.refs.push(publishedRef(record.published));
+        linked.refs.push(runAtRef(publishedRef(record.published), runAt));
         continue;
       }
-      const { ancestry, root } = lineage(record, records);
+      const { ancestry, base, published, kept } = lineage(record, records);
+      if (!kept) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
       if (ancestry.some((r) => r.from_file)) {
         throw new Error("it was opened from a file in this browser, which a link does not carry; publish it to Hugging Face (the Finetune tab) to put it in a link, or send the file");
       }
@@ -118,66 +123,52 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
         throw new Error("its whole network was trained in this browser, millions of weights where a link carries a last layer's few dozen; publish it to Hugging Face (the Finetune tab) to put it in a link, or send the .onnx file the Finetune tab's Download finetuned model saves");
       }
       const head = headOf(await catalog.modelBytes(model));
-      linked.refs.push(finetunedRef({ name: model.name, base: await baseRef(root, catalog), file: root.file, weight: head.weight, bias: head.bias }));
-      linked.rebuilt.push({ name: model.name, base: root.name });
+      // The model it is rebuilt on: the published one on the way, as its
+      // record here says it, or the Hugging Face model at the root.
+      const on = published ? records.find((r) => r.published && publishedRef(r.published) === published)!.entry : await hubBase(base, catalog);
+      const ref = finetunedRef({ name: model.name, base: published ?? hubLinkRef(on), file: base.file, weight: head.weight, bias: head.bias });
+      const runs = modelVoxelSizes(model).input;
+      linked.refs.push(runAtRef(ref, sameVoxelSize(runs, modelVoxelSizes(on).input) ? null : runs));
+      linked.rebuilt.push({ name: model.name, base: base.name });
     } catch (e) {
-      linked.refs.push(model.folder);
+      linked.refs.push(runAtRef(model.folder, runAt));
       linked.unlinked.push({ name: model.name, why: message(e) });
     }
   }
   return linked;
 }
 
-/** The model a finetuned model is rebuilt on where a link opens: a record's
- * `base` (its id, name and the file whose head was trained), with `ref` set
- * when it is a model published from here, which a link names by that. */
-type LinkBase = FinetunedRecord["base"] & { ref?: string };
-
-/** What `record` is rebuilt on in a link (`root`), and the finetuned models
- * between them, `record` first: up the records' bases to the first that is
- * not a model finetuned here, or one that was published from here, whose
- * bytes are on Hugging Face. An error when the way stops short of either: a
- * model on it is no longer kept. */
-function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): { ancestry: FinetunedRecord[]; root: LinkBase } {
-  const ancestry = [record];
-  for (let base = record.base; ; ) {
-    if (!base.id.startsWith(`${FINETUNED_REPO}/`)) return { ancestry, root: base };
-    const parent = records.find((r) => r.id === base.id);
-    if (!parent || ancestry.includes(parent)) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
-    if (parent.published) return { ancestry, root: { ...base, ref: publishedRef(parent.published) } };
-    ancestry.push(parent);
-    base = parent.base;
-  }
-}
-
-/** `root`'s ref in a link: where it was published, or the Hugging Face
- * model's, looked up in the catalog (which says when it is gone). */
-async function baseRef(root: LinkBase, catalog: Pick<Catalog, "resolve">): Promise<string> {
-  if (root.ref) return root.ref;
-  const base = await catalog.resolve(root.id);
-  if (!base) throw new Error(`${root.name}, the model it was finetuned from, is not in the model catalog`);
-  return hubLinkRef(base);
+/** `base`, the Hugging Face model a lineage ends at, looked up in the
+ * catalog (which says when it is gone). */
+async function hubBase(base: FinetunedRecord["base"], catalog: Pick<Catalog, "resolve">): Promise<ModelEntry> {
+  const entry = await catalog.resolve(base.id);
+  if (!entry) throw new Error(`${base.name}, the model it was finetuned from, is not in the model catalog`);
+  return entry;
 }
 
 /** What the sender is told about a link beside its having been copied: a
- * sentence for each paint volume its view shows, which stays here, each
+ * line for each paint volume its view shows, which stays here, each
  * finetuned model rebuilt where it opens, and each one that could not be
- * put in it; none for a link that opens elsewhere as it is here. */
-export function shareNotes(paint: readonly string[], refs: Pick<LinkRefs, "rebuilt" | "unlinked">): string[] {
-  const notes = paint.map((volume) =>
-    `The paint in ${volume} stays in this browser: someone else opening the link will not see it. The Finetune tab's Download paint (zarr) saves it as a .zarr.zip to send with the link.`);
-  for (const { name, base } of refs.rebuilt) notes.push(`${name}'s last layer is in the link: it is rebuilt from ${base} where the link opens.`);
-  for (const { name, why } of refs.unlinked) notes.push(`${name} could not be put in the link as a finetuned model (${why}): it opens only in this browser.`);
+ * put in it, the why under an "i"; none for a link that opens elsewhere as
+ * it is here. */
+export function shareNotes(paint: readonly string[], refs: Pick<LinkRefs, "rebuilt" | "unlinked">): Hint[] {
+  const notes: Hint[] = paint.map((volume) => ({
+    short: `The paint in ${volume} stays in this browser.`,
+    more: "Someone else opening the link will not see it. The Finetune tab's Download paint (zarr) saves it as a .zarr.zip to send with the link.",
+  }));
+  for (const { name, base } of refs.rebuilt) notes.push({ short: `${name}'s last layer is in the link.`, more: `It is rebuilt from ${base} where the link opens.` });
+  for (const { name, why } of refs.unlinked) notes.push({ short: `${name} opens only in this browser.`, more: `It could not be put in the link as a finetuned model (${why}).` });
   return notes;
 }
 
 /** `notes` in a notice under the header, by the Share button, in the
- * dashboard's alert colours (browser.css), headed by `title`, until its
- * close button is pressed or the next notice takes its place; no notes
- * clears it. Where the page tells the sender what a link leaves behind and
- * the recipient what it could not open: the log goes to the console, and
- * the button's own word lasts two seconds, too short to read this by. */
-export function showLinkNotice(title: string, notes: readonly string[], tone: "info" | "warning" = "info"): void {
+ * dashboard's alert colours (browser.css), headed by `title`, each a line
+ * with the rest under an "i", until its close button is pressed or the next
+ * notice takes its place; no notes clears it. Where the page tells the
+ * sender what a link leaves behind and the recipient what it could not
+ * open: the log goes to the console, and the button's own word lasts two
+ * seconds, too short to read this by. */
+export function showLinkNotice(title: string, notes: readonly Hint[], tone: "info" | "warning" = "info"): void {
   document.getElementById(LINK_NOTICE_ID)?.remove();
   if (!notes.length) return;
   const notice = document.createElement("div");
@@ -196,8 +187,10 @@ export function showLinkNotice(title: string, notes: readonly string[], tone: "i
   const heading = document.createElement("strong");
   heading.textContent = title;
   notice.append(close, heading, ...notes.map((note) => {
-    const line = document.createElement("p");
-    line.textContent = note;
+    // A <div>, not a <p>: the "i"'s <details> is not allowed in a paragraph.
+    const line = document.createElement("div");
+    line.className = "link-notice-note";
+    line.append(...hint(note.short, note.more));
     return line;
   }));
   document.body.appendChild(notice);
@@ -243,7 +236,7 @@ export function installShareUi(opts: {
       copied = false;
       window.prompt("Copy this link:", link);
     }
-    for (const note of notes) opts.log(note);
+    for (const note of notes) opts.log(hintText(note));
     showLinkNotice(copied ? "Link copied." : "Link shown to copy.", notes);
   });
 }

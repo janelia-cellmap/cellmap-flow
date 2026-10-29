@@ -5,9 +5,13 @@
 // the engine's levels in nm whatever unit each axis is in.
 import { describe, expect, it } from "vitest";
 
+import { entryFor } from "../../src/models/manifest";
 import {
-  type BlockGeometry, chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, outputLevel, sameVoxelSize, volumeShape,
+  type BlockGeometry, chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, halo, outputLevel, ratio, sameVoxelSize, volumeShape,
+  withRunVoxelSize,
 } from "../../src/infer/geometry";
+import { modelInfo } from "../../src/shared/model-info";
+import { manifest } from "./backend-fakes";
 
 /** setup_54's 148³ variant: 148 voxels in, 60 out, at 16 nm. */
 const G: BlockGeometry = {
@@ -99,12 +103,33 @@ describe("datasetInfoFrom", () => {
       dtype: "uint8", channels: 1,
       axes: [{ name: "z", unit: "micrometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "" }],
       levels: [{ shape: [10, 20, 30], voxel: [0.008, 8, 8], origin: [0.004, 4, 4] }],
-    });
+    }, { count: 1, labels: null });
     expect(info.url).toBe("https://x/raw.zarr");
     expect(info.dtype).toBe("uint8");
     expect(info.axes).toEqual([{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }]);
     expect(info.levels[0].voxel.map((v) => +v.toFixed(9))).toEqual([8, 8, 8]);
     expect(info.levels[0].origin.map((v) => +v.toFixed(9))).toEqual([4, 4, 4]);
     expect(info.levels[0].shape).toEqual([10, 20, 30]);
+  });
+});
+
+describe("a model run at another voxel size", () => {
+  // A model reading 8 nm and writing 16 nm, 148 voxels in and 60 out.
+  const coarse = { ...manifest("coarse", ["mito"], 8), output_voxel_size_nm: [16, 16, 16] };
+  const own = entryFor("coarse", coarse, coarse.variants[0]);
+
+  it("reads and writes its own voxels at that size, its output scaled as its input is, and model_info says so", () => {
+    const run = withRunVoxelSize(own, [32, 16, 16]);
+    const g = geometryOf(run);
+    expect(g).toEqual({ read_shape: [148 * 32, 148 * 16, 148 * 16], write_shape: [60 * 64, 60 * 32, 60 * 32], input_voxel_size: [32, 16, 16], output_voxel_size: [64, 32, 32] });
+    // Its halo in voxels and its ratio are its own: the same blocks, on another level.
+    expect(halo(g)).toEqual(halo(geometryOf(own)));
+    expect(ratio(g)).toEqual([2, 2, 2]);
+    expect(chooseRawLevel([{ shape: [1, 1, 1], voxel: [8, 8, 8], origin: [0, 0, 0] }, { shape: [1, 1, 1], voxel: [32, 16, 16], origin: [0, 0, 0] }], g.input_voxel_size)).toBe(1);
+    expect(modelInfo(run)).toMatchObject({ read_shape: g.read_shape, write_shape: g.write_shape, input_voxel_size: [32, 16, 16], output_voxel_size: [64, 32, 32], effective_output_voxel_size: [64, 32, 32] });
+    // The manifest stays the model's, and its own voxel size again is no run voxel size.
+    expect(run.manifest).toBe(own.manifest);
+    expect(withRunVoxelSize(run, [8, 8, 8])).toEqual(own);
+    expect(withRunVoxelSize(run, null)).toEqual(own);
   });
 });

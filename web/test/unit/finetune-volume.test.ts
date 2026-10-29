@@ -55,12 +55,6 @@ describe("planVolume (plan_volume)", () => {
 
     expect((await planVolume({ python: python! }, DATASET, entry("setup_54"), chain)).dtype).toBe("uint16");
   });
-
-  it("refuses a dataset with more than one channel, as serve() does, before asking the Python", async () => {
-    const rgb: DatasetInfo = { ...DATASET, channels: 3, axes: [{ name: "c", unit: "" }, ...DATASET.axes] };
-    const noPython = { python: () => Promise.reject(new Error("not asked")) };
-    await expect(planVolume(noPython, rgb, entry("setup_54"), chain)).rejects.toThrow(/channels/);
-  });
 });
 
 describe("createVolume and readVolume on a paint store", () => {

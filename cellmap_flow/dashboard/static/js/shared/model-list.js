@@ -8,7 +8,10 @@
 // and zooRow for a zoo model's) with the tags of what the model is
 // (factTags), the Hugging Face and zoo sections' search bar, Refresh,
 // filters and order (listControls), and the Add a model field
-// (addModelField).
+// (addModelField). Under a ticked row of the Models tab, and not of the
+// ranking's, which scores each model as it is, the voxel size to run it at
+// (voxelField: the zoo's Voxel (nm), and the catalog's and Hugging Face's
+// Run at (nm), runAtField).
 //
 // Each piece is made from what it is given and handed back, for its place
 // to put where it goes: none looks up an element of the page, or reads a
@@ -17,7 +20,7 @@
 // on Submit or score in the ranking, is the place's. So are the ids (a
 // row's, and the prefix of a section's and of a control's), so the same
 // model listed on both tabs is two boxes, and each label ticks its own.
-import { h } from "../lib/dom.js";
+import { h, hint, setHint } from "../lib/dom.js";
 import { matchesWords, searchText } from "../lib/search.js";
 
 // A small tag: a model's dims, weight format, Cellpose name or source.
@@ -172,6 +175,55 @@ export function zooRow(model, options) {
   });
 }
 
+// A voxel size to give a ticked model, under its row (modelRow's `below`): a
+// field labelled `label`, its id `id`, starting at `value` (z, y, x as an
+// array, or as typed; none: blank), with `placeholder` and `title`, and
+// `note` under it (an element: hint()'s line, say). It is shown only while
+// the row is ticked: as `checked` says to start, then as show(on), the
+// row's onTick, says. `inputClass` is the field's, for what a place's
+// Submit finds it by.
+export function voxelField({ id, label, value, placeholder, title, note, checked, inputClass }) {
+  const input = h("input", {
+    type: "text", class: `form-control form-control-sm zoo-voxel${inputClass ? " " + inputClass : ""}`, id,
+    placeholder, title, value: Array.isArray(value) ? value.join(",") : (value || ""),
+  });
+  const element = h("div", {},
+    h("div", { class: "zoo-voxel-row d-flex align-items-center gap-2 mt-1" }, h("label", { for: id }, label), input),
+    note);
+  const show = (on) => { element.style.display = on ? "" : "none"; };
+  show(checked);
+  return { element, input, show };
+}
+
+const RUN_AT_TITLE = "The voxel size to run it at, in nm: z,y,x or one number for all three.";
+const RUN_AT_MORE =
+  "It then reads the raw at that size (the level of that size, when the data has one); its output, and "
+  + "everything trained or painted for it, follow. A model that reads its input itself refuses it.";
+
+// The voxel size to run a ticked model of the Models tab at (the Local
+// Catalog's, or Hugging Face's), a voxelField: blank, its own, which `own`
+// ([z, y, x]) shows when its listing says it; `value` is the one it runs at
+// already, as the page or the listing says. Submit sends what is typed
+// (runVoxelSizes) for the server or the browser to parse.
+export function runAtField({ id, value, own, checked }) {
+  return voxelField({
+    id, label: "Run at (nm)", value, checked, inputClass: "run-voxel", title: RUN_AT_TITLE,
+    placeholder: Array.isArray(own) ? own.join(",") : "its own",
+    note: h("div", { class: "zoo-trained" }, hint("Blank: its own voxel size.", RUN_AT_MORE)),
+  });
+}
+
+// POST /api/models' run_voxel_sizes from ticked `boxes` (modelRow's), by each
+// box's value: what is typed in its row's runAtField, trimmed. A blank one,
+// or a row with none, gives nothing: that model runs at its own.
+export function runVoxelSizes(boxes) {
+  return Object.fromEntries(boxes.flatMap((box) => {
+    const field = box.parentNode.querySelector("input.run-voxel");
+    const typed = field ? field.value.trim() : "";
+    return typed ? [[box.value, typed]] : [];
+  }));
+}
+
 // A section's ways to find a model, as the Models tab's Hugging Face and zoo
 // sections have them: a search bar (every word typed, lib/search.js) with a
 // Refresh beside it; for the zoo (`zoo`) EM only, ticked to start, 2D and
@@ -219,7 +271,6 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
   const size = (row) => (row.dataset.size ? Number(row.dataset.size) : Infinity);
   return {
     element,
-    search,
     refresh,
     matches(data) {
       if (!matchesWords(data.search || "", search.value)) return false;
@@ -257,21 +308,20 @@ export function neededField(key) {
 // model and a button beside it (`button`, what it does: Resolve, or Add),
 // which Enter in the field presses too, and which hands what was typed to
 // onSubmit. Then, when the place shows them (show), what the reference was
-// found to be (summary), its notes, a field for each value given or still
-// needed ({key, label, value, title, placeholder}; neededField says how a
-// needed one is asked for), and the button that adds the model (`action`),
-// which hands onAction the fields' values by key. `id` is the field's, and
-// prefixes the value fields' (<id>_<key>).
+// found to be (summary), its notes under an "i" beside that, a field for each
+// value given or still needed ({key, label, value, title, placeholder};
+// neededField says how a needed one is asked for), and the button that adds
+// the model (`action`), which hands onAction the fields' values by key. `id`
+// is the field's, and prefixes the value fields' (<id>_<key>).
 export function addModelField({ id, button, placeholder, title, onSubmit }) {
   const input = h("input", {
     type: "text", class: "form-control form-control-sm", id, placeholder, title, autocomplete: "off", spellcheck: "false",
   });
   const go = h("button", { type: "button", class: "btn btn-sm btn-outline-secondary" }, button);
   const summary = h("div", { class: "small" });
-  const notes = h("div", { class: "small text-muted" });
   const fields = h("div", { class: "add-model-fields mt-2" });
   const action = h("button", { type: "button", class: "btn btn-sm btn-outline-secondary mt-2" });
-  const result = h("div", { class: "add-model-result mt-2", hidden: true }, summary, notes, fields, action);
+  const result = h("div", { class: "add-model-result mt-2", hidden: true }, summary, fields, action);
   let inputs = [];
   let onAction = null;
 
@@ -297,8 +347,7 @@ export function addModelField({ id, button, placeholder, title, onSubmit }) {
     button: go,
     show(found) {
       result.hidden = false;
-      summary.textContent = found.summary || "";
-      notes.textContent = found.notes || "";
+      setHint(summary, found.summary || "", found.notes);
       const wanted = found.fields || [];
       inputs = wanted.map((field) => h("input", {
         class: "form-control form-control-sm", id: `${id}_${field.key}`, dataset: { key: field.key }, value: field.value || "",

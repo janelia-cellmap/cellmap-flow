@@ -10,13 +10,13 @@
    script for it. The models' list is filled by panel.ts, from the models
    served. #}
 <div class="alert alert-info" role="alert">
-  <strong>Save predictions:</strong> run the models served on the Models tab over a box of the volume, or all of it, on this machine's GPU, and save their predictions as OME-Zarr in a folder on this machine, to open here again or copy to the cluster.
+  <strong>Save predictions:</strong> run the models over a region and save them to a folder. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Runs the models served on the Models tab over a box of the volume, or all of it, on this machine's GPU, and saves their predictions as OME-Zarr in a folder on this machine, to open here again or copy to the cluster.</span></details>
 </div>
 
 <div class="mb-3">
   <div class="form-label fw-bold mb-1">Models</div>
   <div id="runModels"></div>
-  <small class="form-text text-muted d-block">Each model is written to <code>&lt;folder&gt;/&lt;model&gt;.zarr</code>, through the Processing tab's steps it is served with.</small>
+  <div class="form-text text-muted d-block">Each model is written to <code>&lt;folder&gt;/&lt;model&gt;.zarr</code>. <details class="more"><summary aria-label="More">i</summary><span class="more-body">It is written through the Processing tab's steps it is served with.</span></details></div>
 </div>
 
 <div class="mb-3">
@@ -33,7 +33,7 @@
     <button type="button" class="btn btn-sm btn-outline-secondary" id="runDrawBoxBtn"
             title="Adds the run_region layer to the viewer, if it is not there, for drawing a box in with Ctrl+click.">Draw a box</button>
   </div>
-  <small class="form-text text-muted d-block mb-2">Draw a box: hold Ctrl and click two opposite corners in the viewer. Scroll between the two clicks to give the box depth; a flat box is one chunk deep. The latest box is used.</small>
+  <div class="form-text text-muted d-block mb-2">Draw a box: hold Ctrl and click two opposite corners in the viewer. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Scroll between the two clicks to give the box depth; a flat box is one chunk deep. The latest box is used.</span></details></div>
   <div class="run-region-fields">
     <span></span><span class="run-region-axis">z</span><span class="run-region-axis">y</span><span class="run-region-axis">x</span>
     <label class="mb-0" for="runOffsetZ">Offset (nm)</label>
@@ -62,7 +62,8 @@
             title="The folder on this machine the predictions are written to, one .zarr per model. The browser asks once to allow writing to it, and again after a reload, when you click Save.">Choose folder&hellip;</button>
     <span class="small" id="runFolderName">No folder chosen</span>
   </div>
-  <small class="form-text text-muted d-block" id="runFolderNote"></small>
+  {# Filled by run-region/panel.ts showFolder: a line, the rest under an "i". #}
+  <div class="form-text text-muted d-block" id="runFolderNote"></div>
   {# Gzip by default: zarr-python, Neuroglancer and napari read it; Fiji's
      zarr reader does not, hence None. #}
   <div class="d-flex align-items-center gap-2 mt-2">

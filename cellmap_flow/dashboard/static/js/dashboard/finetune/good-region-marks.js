@@ -63,7 +63,7 @@ export function initGoodRegionMarks({ log }) {
           // A mark that could not be saved must be loud: it would otherwise
           // look drawn, and be gone.
           log.add(`Could not mark region: ${d.error}`);
-          if (d.needs_volume) offerNewVolume(`Could not mark region as good: ${d.error}`);
+          if (d.needs_volume) offerNewVolume(`Could not mark region as good: ${d.error}`, () => markGoodRegionBtn.click());
           else alert(`Could not mark region as good:\n\n${d.error}`);
         }
         log.showEnd();

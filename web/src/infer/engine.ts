@@ -20,6 +20,15 @@
 // whole chunks of uncompressed little-endian float32, channels first, as the
 // view's zarr.json declares them.
 //
+// The raw volume's channel a layer reads is its chain's (ChannelSelector,
+// norms.ts selectedChannel; channel 0 without one), read as chunkmirage's
+// reader reads channels (channels.ts): a precomputed volume of several comes
+// with all of them in every block, and the model stage takes its own
+// (stages.ts modelInput); a zarr image's channel axis is pinned where the
+// source is opened, so each channel past the first is a view of its own over
+// the same source, opened the first time a layer or a read wants it
+// (rawView). readRaw reads one channel either way.
+//
 // A run on a region (materialize, for src/run-region) writes the layer's own
 // view over a box into a folder on this machine, or into memory for a zip:
 // chunkmirage's Engine.materialize walks the box's chunks through the same
@@ -34,8 +43,9 @@ import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, OutputActivation, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
 import { viewModelName, viewName } from "../shared/args";
 import { modelInfo, networkActivation } from "../shared/model-info";
+import { type RawChannels, rawChannels } from "./channels";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
-import { validateNormalizers } from "./norms";
+import { missingChannel, selectedChannel, validateNormalizers } from "./norms";
 import { boxFromChunks } from "./output";
 import { buildPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
 import { type ModelOutput, modelStage, modelStageKey, postprocessStage, postprocessStageKey } from "./stages";
@@ -62,13 +72,14 @@ const OUTPUT_SUFFIX = "~output";
 
 /** A served model's own output, as the view readOutput reads: its name,
  * its ViewInfo and chunk (the layer's, in float32 with the model's
- * channels), the model stage, the level's shape, and whether the engine
- * serves it yet. */
+ * channels), the model stage and the raw view it reads (rawView), the
+ * level's shape, and whether the engine serves it yet. */
 interface OutputView {
   name: string;
   info: ViewInfo;
   chunk: number[];
   stage: Stage;
+  from: string;
   channels: number;
   hasChannel: boolean;
   levelShape: number[];
@@ -80,6 +91,10 @@ export class InferenceEngine implements Inference {
   private listeners = new Set<(stats: InferenceStats) => void>();
   private engine: Engine | null = null;
   private info: DatasetInfo | null = null;
+  /** How the reader reads the dataset's channels (channels.ts). */
+  private channels: RawChannels | null = null;
+  /** The raw view each channel is read from, by channel (rawView). */
+  private channelViews = new Map<number, Promise<string>>();
   private servedList: ServedModel[] = [];
   /** The output view of each served model, by the served view's name. */
   private outputs = new Map<string, OutputView>();
@@ -101,8 +116,21 @@ export class InferenceEngine implements Inference {
 
   // ------------------------------------------------------------- the dataset
 
-  async openDataset(url: string): Promise<DatasetInfo> {
-    if (this.engine && this.info && this.info.url === url) return this.info;
+  /** The dataset opened last, or being opened: a second ask for it while it
+   * opens (a route the dashboard asks as the session is restored) waits for
+   * the one open rather than starting another engine. */
+  private opening: { url: string; info: Promise<DatasetInfo> } | null = null;
+
+  openDataset(url: string): Promise<DatasetInfo> {
+    if (this.opening?.url !== url) {
+      const info = this.open(url);
+      this.opening = { url, info };
+      info.catch(() => { if (this.opening?.info === info) this.opening = null; });
+    }
+    return this.opening.info;
+  }
+
+  private async open(url: string): Promise<DatasetInfo> {
     if (this.engine) {
       // Another URL: the served models were on the old dataset's grid, so
       // they go (the backend serves them again), and so does the engine, its
@@ -114,6 +142,8 @@ export class InferenceEngine implements Inference {
       this.engine.stop();
       this.engine = null;
       this.info = null;
+      this.channels = null;
+      this.channelViews.clear();
     }
     // start() registers the service worker (the one relay.ts registered, by
     // the same name) and opens the source with its reader worker. The raw
@@ -128,10 +158,13 @@ export class InferenceEngine implements Inference {
     // Said when it is there, so a rank that waited can be told apart from a slow one.
     const pythonStarted = performance.now();
     engine.ready.then(() => this.opts.log(`Python loaded (Pyodide with numpy and cellmap_flow.portable, ${((performance.now() - pythonStarted) / 1000).toFixed(1)} s): the ranking's calls answer at once`), (e) => this.opts.log(`Python did not load: ${e instanceof Error ? e.message : String(e)}`));
+    const channels = await rawChannels(url, source);
     this.engine = engine;
-    this.info = datasetInfoFrom(url, source);
+    this.channels = channels;
+    this.info = datasetInfoFrom(url, source, channels);
     const finest = this.info.levels[0];
-    this.opts.log(`opened ${url}: ${source.dtype}, ${source.levels.length} level(s), finest ${finest.shape.join("×")} voxels at ${finest.voxel.join("×")} nm`);
+    const channelWords = channels.count > 1 ? `, ${channels.count} channels${channels.labels ? ` (${channels.labels.join(", ")})` : ""}` : "";
+    this.opts.log(`opened ${url}: ${source.dtype}${channelWords}, ${source.levels.length} level(s), finest ${finest.shape.join("×")} voxels at ${finest.voxel.join("×")} nm`);
     this.setStatus("dataset open");
     return this.info;
   }
@@ -153,7 +186,7 @@ export class InferenceEngine implements Inference {
     const activation = await this.outputActivation(entry, modelBytes);
     const engine = this.engine, dataset = this.info;
     if (!engine || !dataset) throw new Error("open a dataset before serving a model");
-    if (dataset.channels > 1) throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode reads single-channel volumes (it does not select a channel yet)`);
+    const from = await this.rawView(selectedChannel(chain.input_norm));
 
     const geometry = geometryOf(entry);
     const rawLevel = chooseRawLevel(dataset.levels, geometry.input_voxel_size);
@@ -172,7 +205,7 @@ export class InferenceEngine implements Inference {
     const dtype = outputDtype(chain.postprocess, "float32");
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
-    const view = viewName(entry.name, blob);
+    const view = viewName(entry.name, blob, entry.runVoxelSize);
 
     // One level at the output voxel size, as the Python server serves it, in
     // the source's units and axes (the engine reads the raw level at the
@@ -224,13 +257,13 @@ export class InferenceEngine implements Inference {
     // The volume's edge repeated past it, as the Python server's
     // Pipeline(padding="edge"); the model stage pads its normalized block the
     // same way (stages.ts modelInput).
-    engine.serveStages(view, viewInfo, block, RAW_VIEW, stages, "edge");
+    engine.serveStages(view, viewInfo, block, from, stages, "edge");
     this.runner.retain(model.key);
     // The model's own output, for readOutput: served only once asked for.
     const output: OutputView = {
       name: `${view}${OUTPUT_SUFFIX}`,
       info: { ...viewInfo, dtype: "float32", out: "float32", kind: "image", added: info.has_channel ? [info.output_channels] : [] },
-      chunk: block, stage: stages[0], channels: info.output_channels, hasChannel: info.has_channel, levelShape: [...level.shape], registered: false,
+      chunk: block, stage: stages[0], from, channels: info.output_channels, hasChannel: info.has_channel, levelShape: [...level.shape], registered: false,
     };
     this.outputs.set(view, output);
 
@@ -290,13 +323,44 @@ export class InferenceEngine implements Inference {
     return reading;
   }
 
-  /** Voxels [lo, hi) of raw level `level`, as the engine's reader reads them
-   * for a stage's input (Engine.read on the raw view): what the finetune's
-   * samples are cut from. The box must lie within the level. */
-  readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer> {
-    if (!this.engine || !this.info) return Promise.reject(new Error("open a dataset before reading it"));
-    if (level < 0 || level >= this.info.levels.length) return Promise.reject(new Error(`the dataset has no level ${level}`));
-    return this.engine.read(RAW_VIEW, level, lo, hi);
+  /** Voxels [lo, hi) of channel `channel` of raw level `level`, as the
+   * engine's reader reads them for a stage's input (Engine.read on the
+   * channel's raw view): what the finetune's samples are cut from. The box
+   * must lie within the level. */
+  async readRaw(level: number, lo: number[], hi: number[], channel: number): Promise<ArrayBuffer> {
+    const engine = this.engine, info = this.info;
+    if (!engine || !info) throw new Error("open a dataset before reading it");
+    if (level < 0 || level >= info.levels.length) throw new Error(`the dataset has no level ${level}`);
+    const bytes = await engine.read(await this.rawView(channel), level, lo, hi);
+    if (this.channels?.axis || info.channels === 1) return bytes;
+    // The reader read every channel, one after another: the one asked for.
+    const each = bytes.byteLength / info.channels;
+    return bytes.slice(channel * each, (channel + 1) * each);
+  }
+
+  /** The engine view channel `channel` of the raw volume is read from: the
+   * raw view for a volume of one (whatever the pick, as the server reads an
+   * array without a channel axis: io/raw.py channel_select), for one whose
+   * reader reads its channels together (each block holds them all: the
+   * model stage and readRaw take the one wanted) and for the first of a zarr
+   * channel axis (the raw view was opened with no `select`, at index 0 of
+   * it); else a view of the same source with the axis pinned to the channel
+   * (chunkmirage's `select`), added the first time it is asked for. A
+   * channel past the volume's channels is refused. */
+  private rawView(channel: number): Promise<string> {
+    const engine = this.engine, info = this.info, axis = this.channels?.axis;
+    if (!engine || !info) return Promise.reject(new Error("open a dataset before reading it"));
+    const missing = missingChannel(channel, info.channels);
+    if (missing) return Promise.reject(new Error(missing));
+    if (!axis || channel === 0) return Promise.resolve(RAW_VIEW);
+    let view = this.channelViews.get(channel);
+    if (!view) {
+      const name = `${RAW_VIEW}~c${channel}`;
+      view = engine.add({ [name]: { source: info.url, chunk: RAW_CHUNK, select: { [axis]: channel } } }).then(() => name);
+      view.catch(() => this.channelViews.delete(channel));  // a failed open is tried again next time
+      this.channelViews.set(channel, view);
+    }
+    return view;
   }
 
   /** The served model `view` over voxels [lo, hi) of its level, written into
@@ -346,7 +410,7 @@ export class InferenceEngine implements Inference {
       throw new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`);
     }
     if (!output.registered) {
-      engine.serveStages(output.name, output.info, output.chunk, RAW_VIEW, [output.stage], "edge");
+      engine.serveStages(output.name, output.info, output.chunk, output.from, [output.stage], "edge");
       output.registered = true;
     }
     const base = engine.url(output.name);

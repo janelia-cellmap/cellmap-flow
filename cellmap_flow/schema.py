@@ -103,6 +103,7 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/models/add": "both",
     "GET /api/model_advice": "both",
     "PUT /api/pipeline": "both",
+    "GET /api/raw/channels": "both",
     "POST /api/pipeline/apply": "server",
     "POST /api/process": "server",
     # The browser's merging steps set a layer's equivalences in the page.

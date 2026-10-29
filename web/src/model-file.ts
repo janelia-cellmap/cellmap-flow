@@ -10,11 +10,11 @@
 // (FinetunedRecord.from_file); nothing is uploaded. A link cannot name it
 // until it is published (share-link.ts says so).
 //
-// The dashboard's own add-model.js is not changed: once the model is kept,
-// this puts its name in Add a model's field and presses Resolve, so the tab
-// shows it as any other resolved model and Run serves it, as the connect
-// panel's Browse button (src/local-folder) fills the dataset field and
-// presses Connect.
+// The dashboard's own add-model.js knows nothing of files: once the model is
+// kept, this puts its name in Add a model's field and presses Resolve, so
+// the tab shows it as any other resolved model and Run serves it, as the
+// connect panel's Browse button (src/local-folder) fills the dataset field
+// and presses Connect.
 import { type Catalog, FINETUNED_REPO, type FinetunedRecord, MANIFEST_METADATA_KEY, type ModelEntry, type ModelManifest, type ModelVariant } from "./contracts";
 import { readMetadata } from "./finetune/onnx-proto";
 import { entryFor, entryName, freeName, isLayerName, parseManifest } from "./models/manifest";
@@ -45,9 +45,10 @@ export type FileCatalog = Pick<Catalog, "list" | "finetuned" | "modelBytes" | "a
  * name, else the file's own without `.onnx`, else entryName's, whichever
  * first is a layer name (isLayerName); one any model in the list has is
  * followed by the first free `_<n>` (freeName), as an added repo's is in
- * the list, except that this name is the record's and kept. The entry is the manifest with that one variant under
- * the name, as finetunedEntry makes a finetuned model's. Throws, keeping
- * nothing, for a file that is not an ONNX model or has no manifest to go by. */
+ * the list, except that this name is the record's and kept. The entry is
+ * the manifest with that one variant under the name, as finetunedEntry
+ * makes a finetuned model's. Throws, keeping nothing, for a file that is
+ * not an ONNX model or has no manifest to go by. */
 export async function openModelFile(catalog: FileCatalog, onnx: PickedFile, manifestFile: PickedFile | null, now: () => Date = () => new Date()): Promise<ModelEntry> {
   const manifest = manifestOf(onnx, manifestFile);
   const variant = variantOf(manifest, onnx.name);

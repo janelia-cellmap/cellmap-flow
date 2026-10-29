@@ -113,10 +113,10 @@ export interface SessionState {
   /** The channel each model's layer shows, by model name, as POST
    * /api/finetune/channel sets it (the training form's Channel) and Use this
    * model does (the row's channel, before the model is served): the
-   * channel's index into the model's output channels. A
-   * layer built for the model later opens on it, and so does one for a
-   * model finetuned from it (serving.ts shownChannel). The server's
-   * `shown_channels` on its dashboard session. */
+   * channel's index into the model's output channels. A layer built for the
+   * model later opens on it, and so does one for a model finetuned from it
+   * (serving.ts shownChannel). The server's `shown_channels` on its
+   * dashboard session. */
   shownChannels: Record<string, number>;
   /** The models added to Which model to start from's list by hand (POST
    * /api/finetune/rank/add): their catalog ids, in the order added, so
@@ -290,6 +290,11 @@ export interface ModelEntry {
   variant: ModelVariant;
   /** Where the .onnx bytes are fetched from (Hugging Face resolve URL). */
   onnxUrl: string;
+  /** The voxel size the model is run at, [z, y, x] nm, when it is not its
+   * own: the Models tab's Run at (nm), the server's `run_voxel_size`.
+   * Every reader of the model's geometry sees it scaled to this
+   * (infer/geometry.ts modelVoxelSizes); the manifest stays the model's. */
+  runVoxelSize?: number[];
 }
 
 /** What a model's network ends in: the class of its output and the op that
@@ -501,7 +506,13 @@ export interface ViewerController {
 export interface DatasetInfo {
   url: string;
   dtype: string;
+  /** The raw's channels (infer/channels.ts): 1 for a volume of one. A chain
+   * reads one of them, the one its ChannelSelector picks (channel 0 without
+   * one: infer/norms.ts selectedChannel). */
   channels: number;
+  /** What the metadata calls each channel (OME-Zarr's omero labels), when it
+   * names every one; else null. */
+  channelLabels: string[] | null;
   axes: { name: string; unit: string }[];
   /** Finest first; voxel sizes in nm. */
   levels: { shape: number[]; voxel: number[]; origin: number[] }[];
@@ -556,12 +567,14 @@ export interface Inference {
   onEquivalences(listener: (view: string, sets: string[][]) => void): () => void;
   /** Drop every session and the WebGPU device (recovers a hung run); views are re-created on the next chunk. */
   reset(): Promise<void>;
-  /** Voxels [lo, hi) of level `level` of the open dataset (DatasetInfo.levels,
-   * finest first), within the level, as the engine's reader reads them for a
-   * chunk: the bytes of the level's dtype in C order (z, y, x). The caller
-   * clips the box to the level and pads what lies outside (chunkmirage's
-   * `padded`, as the engine does for a stage's input). */
-  readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer>;
+  /** Voxels [lo, hi) of channel `channel` of level `level` of the open
+   * dataset (DatasetInfo.levels, finest first), within the level, as the
+   * engine's reader reads them for a chunk: the bytes of the level's dtype in
+   * C order (z, y, x). The caller clips the box to the level and pads what
+   * lies outside (chunkmirage's `padded`, as the engine does for a stage's
+   * input), and names the channel its chain reads (infer/norms.ts
+   * selectedChannel); a channel the dataset has not got is refused. */
+  readRaw(level: number, lo: number[], hi: number[], channel: number): Promise<ArrayBuffer>;
   /** The served model `view`'s own output (ServedModel.view): what its model
    * stage computes, the chain's normalizers and none of its postprocessors,
    * over voxels [lo, hi) of the level it is served at (its output grid,

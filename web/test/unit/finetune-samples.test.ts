@@ -28,7 +28,7 @@ function model(input: number[], output: number[]): ModelEntry {
 /** A dataset of one level of `shape` voxels at 8 nm. */
 function dataset(shape: number[], dtype = "uint16"): DatasetInfo {
   return {
-    url: "https://example.org/raw.zarr", dtype, channels: 1,
+    url: "https://example.org/raw.zarr", dtype, channels: 1, channelLabels: null,
     axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
     levels: [{ shape, voxel: [8, 8, 8], origin: [0, 0, 0] }],
   };
@@ -37,22 +37,22 @@ function dataset(shape: number[], dtype = "uint16"): DatasetInfo {
 /** The raw volume of the tests: voxel (z, y, x) holds 100 z + 10 y + x + 1, never 0. */
 const rawValue = (z: number, y: number, x: number) => 100 * z + 10 * y + x + 1;
 
-/** An Inference's readRaw over a level of `shape` whose voxel (z, y, x) is
- * `value(z, y, x)` in `dtype`, recording every box asked and refusing one
- * outside the level, as the engine's reader would. */
-function fakeInfer(shape: number[], value: (z: number, y: number, x: number) => number = rawValue, dtype: "uint8" | "uint16" = "uint16") {
+/** An Inference's readRaw over a level of `shape` whose voxel (z, y, x) of
+ * channel c is `value(z, y, x, c)` in `dtype`, recording every box asked and
+ * refusing one outside the level, as the engine's reader would. */
+function fakeInfer(shape: number[], value: (z: number, y: number, x: number, c: number) => number = rawValue, dtype: "uint8" | "uint16" = "uint16") {
   const reads: { level: number; lo: number[]; hi: number[] }[] = [];
   const Typed = dtype === "uint8" ? Uint8Array : Uint16Array;
   return {
     reads,
-    async readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer> {
+    async readRaw(level: number, lo: number[], hi: number[], channel: number): Promise<ArrayBuffer> {
       reads.push({ level, lo: [...lo], hi: [...hi] });
       for (let a = 0; a < 3; a++) {
         if (lo[a] < 0 || hi[a] > shape[a] || hi[a] <= lo[a]) throw new Error(`a box ${lo.join(",")}..${hi.join(",")} is not within the level ${shape.join("×")}`);
       }
       const out = new Typed((hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]));
       let k = 0;
-      for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) out[k++] = value(z, y, x);
+      for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) out[k++] = value(z, y, x, channel);
       return out.buffer;
     },
   };
@@ -86,7 +86,7 @@ async function volumeIn(entry: ModelEntry, data: DatasetInfo, chunks: Record<str
   return { store, volume };
 }
 
-async function samplesOf(entry: ModelEntry, data: DatasetInfo, chunks: Record<string, number[]>, options: { inputNorm?: Step[]; value?: (z: number, y: number, x: number) => number; chain?: Chain } = {}) {
+async function samplesOf(entry: ModelEntry, data: DatasetInfo, chunks: Record<string, number[]>, options: { inputNorm?: Step[]; value?: (z: number, y: number, x: number, c: number) => number; chain?: Chain } = {}) {
   const { store, volume } = await volumeIn(entry, data, chunks, options.inputNorm);
   const infer = fakeInfer(data.levels[0].shape, options.value, data.dtype === "uint8" ? "uint8" : "uint16");
   const samples: Sample[] = [];
@@ -134,6 +134,15 @@ describe("collectSamples on a 3D model", () => {
     const [origin, inside] = samples;
     expect(origin.input.every((v) => v === 1)).toBe(true);
     expect(inside.input.every((v) => v === 1)).toBe(true);
+  });
+
+  it("reads the raw channel the volume's chain picks, the one it was painted over", async () => {
+    const twoChannels: DatasetInfo = { ...RAW3, channels: 2 };
+    const { samples } = await samplesOf(G3, twoChannels, { "1.1.1": EIGHT }, {
+      inputNorm: [{ name: "ChannelSelector", channel: 1 }],
+      value: (z, y, x, c) => rawValue(z, y, x) + 1000 * c,
+    });
+    expect(at(samples[0], [6, 6, 6], 2, 3, 4)).toBe(rawValue(2, 3, 4) + 1000);
   });
 
   it("yields the chunks asked for, in that order, one never painted as zeros (a good region's block), and none past the level", async () => {

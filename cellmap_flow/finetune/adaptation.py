@@ -65,9 +65,10 @@ def frozen_teacher_copy(model: nn.Module) -> nn.Module:
 
     Copied under no_grad, so every copied parameter is a leaf: a TorchScript
     module's deepcopy clones its parameters, and a clone made with grad on is
-    not one, whose requires_grad cannot be changed. fly_organelles' /nrs copies
-    (TorchScript only), trained in full on one channel, failed at setup so:
-    the hold on the other channels always makes this teacher."""
+    not one, whose requires_grad cannot be changed. Every full finetune of
+    one channel of a TorchScript model (fly_organelles' copies on /nrs are
+    TorchScript only) makes this teacher, as the hold on its other channels
+    needs it whatever the distillation weight."""
     try:
         with torch.no_grad():
             teacher = copy.deepcopy(model)

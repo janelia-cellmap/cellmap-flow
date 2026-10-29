@@ -76,8 +76,7 @@ describe("the page's first paint", () => {
 describe("a link that names a model and no volume", () => {
   it("puts another repo's model in the session, which is served once a volume is opened", async () => {
     const ALICE = "alice/mito-ft1", FT = "mito_aff_setup54_16nm-ft1";
-    const hub = fakeHub({ repos: { [ALICE]: { manifests: { [FT]: publishedManifest(entryFixture("setup_54"), FT) } } }, onnx: { [`${FT}.onnx`]: HEAD_ONNX } });
-    const catalog = createCatalog({ log: () => {}, fetch: hub.fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry() });
+    const { catalog } = browser({ repos: { [ALICE]: { manifests: { [FT]: publishedManifest(entryFixture("setup_54"), FT) } } }, onnx: { [`${FT}.onnx`]: HEAD_ONNX } });
     // "Try it in the browser", as a published model's card links it.
     const link = parseLink(`?model=${ALICE}/${FT}`);
     expect(link.datasetUrl).toBeNull();
@@ -87,7 +86,7 @@ describe("a link that names a model and no volume", () => {
     expect((await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: DATASET }))).status).toBe(200);
     await restoreSession(ctx);
     expect(ctx.infer.served().map((s) => s.entry.id)).toEqual([`${ALICE}/${FT}`]);
-  });
+  }, 60_000);  // the serve reads what the network ends in in node's Pyodide, which loads the first time
 });
 
 describe("a link to a model a server published without a copy for the browser", () => {
@@ -96,7 +95,7 @@ describe("a link to a model a server published without a copy for the browser", 
     // the network was too big for an .onnx file. Its smaller copy comes later.
     const REPO = "ada/mito-ft", FOLDER = "mito_aff_unet_setup_16_finetuned", SMALL = `${FOLDER}-small`;
     const server = ["metadata.json", "model.ts", "model.pt2", "export_record.json"];
-    const catalogOf = (repo: FakeRepo) => createCatalog({ log: () => {}, fetch: fakeHub({ repos: { [REPO]: repo } }).fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry() });
+    const catalogOf = (repo: FakeRepo) => browser({ repos: { [REPO]: repo } }).catalog;
     const refs = [REPO, `${REPO}/${FOLDER}`, `${REPO}/${SMALL}`];
 
     // While the smaller copy trains: each ref is left out, each saying why itself.

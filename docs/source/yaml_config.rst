@@ -158,7 +158,8 @@ Available Model Types
        by default), with ``file`` or ``variant``; ``input_voxel_size`` for a file
        without a manifest. See :ref:`onnx`.
 
-Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
+Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`),
+``run_voxel_size`` (see :ref:`run-voxel-size`).
 
 .. _resolving-models:
 
@@ -874,6 +875,17 @@ Define input normalization and output postprocessing under ``json_data``:
 
 Normalizers are applied in order before inference. Postprocessors are applied in order after inference.
 
+A model reads one channel of a raw that has several (light microscopy's OME-Zarr with a ``c`` axis, an N5 or precomputed volume of more than one channel): channel 0, or the one a ``ChannelSelector`` step picks, first in ``input_norm``:
+
+.. code-block:: yaml
+
+    json_data:
+      input_norm:
+        ChannelSelector:
+          channel: 1
+
+In the dashboard this is the *Channel* at the top of the Processing tab's input normalization, shown for such a raw and named by its OME-Zarr ``omero`` channel labels when it has them. A pick applies at once, and the models, the raw layer, the finetune trainer, the ranking, Label it and AI annotation all read that channel; a model's start and *Use this model* keep it in front of the normalization they set.
+
 .. _resampling:
 
 Data at Another Voxel Size
@@ -906,6 +918,25 @@ How the data is resampled:
 ``cellmap_flow yaml`` starts each server with ``--resample`` (``--no-resample`` for ``resample: false``), and ``cellmap_flow blockwise`` reads the data the same way. ``cellmap_flow infer <type>`` resamples too, unless given ``--no-resample`` (:doc:`cli`).
 
 In the dashboard it is the Models tab's *Resample if no scale matches the model* box, ticked unless ``resample: false`` (or ``cellmap_flow view --no-resample``) starts it unticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
+
+.. _run-voxel-size:
+
+Running a model at another voxel size
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``run_voxel_size`` runs a model at a voxel size of your choosing instead of its own: one number for every axis, or ``[z, y, x]`` in nm. Each axis is scaled by the run voxel size over the model's input voxel size: the model reads the data at the run voxel size, writes at its output voxel size scaled alike, and its read and write shapes in nm scale with them, while its block sizes in voxels stay its own. A 16 nm mitochondria model run on the 32 nm level:
+
+.. code-block:: yaml
+
+    models:
+      mito_at_32nm:
+        type: huggingface
+        repo: cellmap/mito-aff-unet-setup-16
+        run_voxel_size: 32        # or [32, 16, 16]
+
+The level read is then the one at 32 nm, as for a 32 nm model (and :ref:`resampling` when there is none), and everything downstream takes the model as a 32 nm one: its layer, a finetune's annotation volume and training data, the ranking, blockwise, and what a finetune of it declares, which is a 32 nm model. Left out, the model runs at its own voxel size.
+
+A model that reads its input itself, through its own ``process_chunk`` or ``predict`` (a TensorFlow script, a Cellpose or BioImage Model Zoo model), works out what to read in nm at its own voxel size, and refuses ``run_voxel_size``; give Cellpose and zoo models their ``voxel_size`` instead. In the dashboard it is the *Run at (nm)* field under a ticked Local Catalog or Hugging Face model on the Models tab, and ``cellmap_flow add REF -v 32`` writes it for a model that has no voxel size argument of its own.
 
 Extra Layers
 ------------

@@ -5,9 +5,9 @@
 // voxel size. Submit sends the ticked models as selected_bioimage_models,
 // each {id, voxel_size}.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
-import { h } from "../../lib/dom.js";
+import { h, hint } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
-import { listControls, modelSection, notice, trainedNm, untickBox, zooRow } from "../../shared/model-list.js";
+import { listControls, modelSection, notice, trainedNm, untickBox, voxelField, zooRow } from "../../shared/model-list.js";
 
 // The zoo models already running, ticked on load, with the voxel size each
 // was given; one removed from the Loaded models list is taken out.
@@ -40,21 +40,15 @@ function row(model, voxelSize) {
   const trainedAt = trainedNm(model);
   if (voxelSize === undefined && trained && trained.voxel_size) voxelSize = trained.voxel_size;
 
-  const shown = [h("div", { class: "zoo-voxel-row d-flex align-items-center gap-2 mt-1" },
-    h("label", { for: id + "_voxel" }, "Voxel (nm)"),
-    h("input", {
-      type: "text", class: "form-control form-control-sm zoo-voxel", id: id + "_voxel", placeholder: "from model",
-      title: VOXEL_TITLE, value: Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || ""),
-    }))];
-  if (trained) {
-    shown.push(h("div", { class: "zoo-trained", title: trained.confidence + " confidence: " + trained.source },
-      (trainedAt ? "Trained at " + trainedAt + " (z,y,x) on " : "Trained on ")
-      + trained.trained_on + "." + (trained.note ? " " + trained.note : "")
-      + (trainedAt ? "" : " Enter the voxel size of the data to run it on.")));
-  }
-  const showTicked = (on) => shown.forEach((el) => { el.style.display = on ? "" : "none"; });
-  showTicked(checked);
-  return zooRow(model, { id, checked, onTick: showTicked, boxClass: "zoo-model-checkbox", below: shown });
+  // What else to know before running it (its note) under the "i".
+  const note = trained && h("div", { class: "zoo-trained", title: trained.confidence + " confidence: " + trained.source },
+    hint((trainedAt ? "Trained at " + trainedAt + " (z,y,x) on " : "Trained on ")
+      + trained.trained_on + "." + (trainedAt ? "" : " Enter the voxel size of the data to run it on."),
+    trained.note));
+  const voxel = voxelField({
+    id: id + "_voxel", label: "Voxel (nm)", value: voxelSize, placeholder: "from model", title: VOXEL_TITLE, note, checked,
+  });
+  return zooRow(model, { id, checked, onTick: voxel.show, boxClass: "zoo-model-checkbox", below: voxel.element });
 }
 
 // Search words (all must match), EM only, and 2D/3D (neither ticked: any).

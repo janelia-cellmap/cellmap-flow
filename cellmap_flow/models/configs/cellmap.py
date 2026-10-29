@@ -42,6 +42,24 @@ def runs_at(model, input_shape, output_shape) -> bool:
     return tuple(int(s) for s in out.shape[-len(output_shape):]) == tuple(int(s) for s in output_shape)
 
 
+def export_finetune_modes(file_names) -> tuple:
+    """How a cellmap_models export whose top-level files are ``file_names``
+    can be finetuned, from their names alone: LoRA and full with a
+    ``model.pt2``, which cellmap_models' ``train()`` unflattens into a module
+    adapters attach to; full only without one, as ``train()`` then hands the
+    trainer the TorchScript, a compiled network that takes no adapter.
+
+    The one rule for an export's folder (CellMapModelConfig.finetune_modes),
+    its Hugging Face repository (HuggingFaceModelConfig's) and the model
+    lists' facts (hf_catalog.weight_facts). fly_organelles' copies under
+    /nrs/cellmap/models/saalfeldlab (model.pt and model.ts; their Hugging
+    Face copies have a model.pt2) and cellmap/jrc_mus-livers_16nm_to_8nm_mito
+    (model.pt, model.ts and model.onnx) have none: offered LoRA, their jobs
+    failed at their start.
+    """
+    return ("lora", "full") if "model.pt2" in file_names else ("full",)
+
+
 def _other_shapes(metadata):
     """The metadata's inference shapes (input, output), when it gives them and
     they are not its training ones; else None. The export runs at one of the
@@ -67,6 +85,7 @@ def metadata_geometry(metadata):
         names = channel_names_of(metadata)
         return {
             "write_shape": list(Coordinate(metadata.output_shape) * voxel_size),
+            "input_voxel_size": list(Coordinate(metadata.input_voxel_size)),
             "output_voxel_size": list(voxel_size),
             "output_channels": int(metadata.out_channels),
             "channels": list(names) if names else None,
@@ -137,18 +156,14 @@ class CellMapModelConfig(ModelConfig):
         return config
 
     def finetune_modes(self):
-        """LoRA and full when its export has a ``model.pt2``, which
-        cellmap_models' ``train()`` unflattens into a module adapters attach
-        to; full only without one, as ``train()`` then hands the trainer the
-        TorchScript, a compiled network that takes no adapter. fly_organelles'
-        copies under /nrs/cellmap/models/saalfeldlab have model.pt and
-        model.ts but no model.pt2: offered LoRA, a job failed at its start
-        (their Hugging Face copies have one). Read from the folder's files,
-        without loading them: the model list asks on every poll."""
+        """``export_finetune_modes`` of its folder's files, read from their
+        names without loading them: the model list asks on every poll. Both
+        while the folder cannot be listed."""
         folder = getattr(self.cellmap_model, "folder_path", None)
-        if folder and os.path.isdir(folder) and not os.path.exists(os.path.join(folder, "model.pt2")):
-            return ("full",)
-        return ("lora", "full")
+        try:
+            return export_finetune_modes(os.listdir(folder)) if folder else ("lora", "full")
+        except OSError:  # not a folder, or not one this process may list
+            return ("lora", "full")
 
     def declared_geometry(self):
         """Its export's metadata.json's (``metadata_geometry``), read without the model."""

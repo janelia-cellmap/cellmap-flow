@@ -6,42 +6,7 @@
 import { fileURLToPath } from "node:url";
 import { afterAll, expect, it, vi } from "vitest";
 
-// The few DOM calls the panel makes, on plain objects: the unit tests run in
-// node, which has no DOM.
-class FakeElement {
-  children: FakeElement[] = [];
-  parent: FakeElement | null = null;
-  className = "";
-  textContent = "";
-  hidden = false;
-  dataset: Record<string, string> = {};
-  scrollTop = 0;
-  scrollHeight = 0;
-  clientHeight = 0;
-  parts: Record<string, FakeElement> = {};
-  classList = { toggle: () => {} };
-
-  querySelector(selector: string): FakeElement {
-    return this.parts[selector];
-  }
-  setAttribute(): void {}
-  addEventListener(): void {}
-  appendChild(child: FakeElement): FakeElement {
-    child.parent = this;
-    this.children.push(child);
-    return child;
-  }
-  remove(): void {
-    if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this);
-    this.parent = null;
-  }
-  get childElementCount(): number {
-    return this.children.length;
-  }
-  get firstElementChild(): FakeElement | undefined {
-    return this.children[0];
-  }
-}
+import { FakeElement } from "./dashboard-dom";
 
 class FakeEventSource {
   static CLOSED = 2;
@@ -73,17 +38,20 @@ afterAll(() => {
 
 it("reopens its one stream from the last record shown, and keeps the last 1,000", async () => {
   vi.useFakeTimers();
-  vi.stubGlobal("document", { getElementById: () => null, createElement: () => new FakeElement() });
+  vi.stubGlobal("document", { getElementById: () => null, createElement: (tag: string) => new FakeElement(tag) });
   vi.stubGlobal("location", { pathname: "/" });
   vi.stubGlobal("EventSource", FakeEventSource);
   vi.stubGlobal("requestAnimationFrame", () => 0);
   const { mountLogPanel } = (await import(/* @vite-ignore */ LOG_PANEL)) as { mountLogPanel: (panel: FakeElement) => void };
 
-  const panel = new FakeElement();
-  for (const part of [".log-header", ".log-latest", ".log-status", ".log-content", ".log-output"]) {
-    panel.parts[part] = new FakeElement();
+  // templates/_log_panel.html's parts.
+  const panel = new FakeElement("section");
+  for (const part of ["log-header", "log-latest", "log-status", "log-content", "log-output"]) {
+    const el = new FakeElement("div");
+    el.className = part;
+    panel.append(el);
   }
-  const output = panel.parts[".log-output"];
+  const output = panel.querySelector(".log-output")!;
   const shown = () => output.children.map((line) => line.textContent);
   mountLogPanel(panel);
   expect(FakeEventSource.opened.map((s) => s.url)).toEqual(["/api/logs/stream"]);
@@ -91,7 +59,7 @@ it("reopens its one stream from the last record shown, and keeps the last 1,000"
   const first = FakeEventSource.opened[0];
   first.send(101, "2026-10-27 21:03:05 INFO cellmap_flow.x: one");
   first.send(102, "2026-10-27 21:03:06 ERROR cellmap_flow.x: two");
-  expect(panel.parts[".log-latest"].textContent).toBe("2026-10-27 21:03:06 ERROR cellmap_flow.x: two");
+  expect(panel.querySelector(".log-latest")!.textContent).toBe("2026-10-27 21:03:06 ERROR cellmap_flow.x: two");
 
   // An error answer: the browser closes the stream for good.
   first.readyState = FakeEventSource.CLOSED;

@@ -46,7 +46,7 @@
   finetuned model is served beside the original to compare. *Seed from
   Prediction*, AI-assisted annotation and *Mark as Good* make the painting quick.
 - **Whole volumes.** Blockwise runs over a volume on the cluster, or the
-  browser's *Run* tab over a box you draw, saved as OME-Zarr.
+  browser's *Save predictions* tab over a box you draw, saved as OME-Zarr.
 - **Share.** In the browser app, *Share* copies a link that opens the volume,
   the models, the view and the settings they run with.
 - **In the browser too.** The dashboard as a web page, with the models running

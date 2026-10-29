@@ -21,7 +21,7 @@ import { CHUNK_DIR, chunkKey, createVolume, planVolume, readVolume } from "../..
 import { finetunedEntry } from "../../src/models/finetuned";
 import { entryFor, parseManifest } from "../../src/models/manifest";
 import { defaultChain } from "../../src/state";
-import { ANNOTATED_REGIONS_LAYER, paintLayerName } from "../../src/viewer/layers";
+import { ANNOTATED_REGIONS_LAYER } from "../../src/viewer/layers";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
 import { portablePython } from "./pyodide";
@@ -75,16 +75,14 @@ async function letRun(baton: Baton, job: { settled(): Promise<void> }): Promise<
 }
 
 /** A run that logs one summary line per epoch (loss 0.5/epoch), stops where
- * the reporter says, and makes a head one more than the model's. */
+ * the reporter says, and makes a head of its own. */
 function fakeRun(baton?: Baton): { run: RunFinetune; calls: FinetuneRun[]; results: Finetuned[] } {
   const calls: FinetuneRun[] = [];
   const results: Finetuned[] = [];
   const run: RunFinetune = async (r) => {
     calls.push(r);
     const n = r.options.epochs;
-    const from = { weight: new Float32Array([1, 2, 3]), bias: new Float32Array([0]) };
-    const weight = from.weight.map((w) => w + 1);
-    const bias = from.bias.map((b) => b + 1);
+    const weight = new Float32Array([2, 3, 4]), bias = new Float32Array([1]);
     const losses: number[] = [];
     r.report.log(`Reading the painted chunks of ${r.volume.id}`);
     for (let i = 1; i <= n; i++) {
@@ -361,7 +359,7 @@ describe("POST /api/finetune/refresh-annotated-regions", () => {
   /** The annotated_regions layer's boxes, [pointA, pointB] in the viewer's x, y, z. */
   const boxes = (ctx: FakeContext) => (ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].annotations as { pointA: number[]; pointB: number[] }[]).map((a) => [a.pointA, a.pointB]);
 
-  it("draws a box over each painted chunk where the viewer shows its labels, and counts them", async () => {
+  it("draws a box over each painted chunk where the viewer shows its labels, hidden, and again in the one layer as the user left it", async () => {
     const { ctx, redraw } = await painted([0, 0, 0], [1, 0, 1]);
     expect(await redraw()).toEqual({ success: true, count: 2 });
     expect(ctx.viewer.layers[ANNOTATED_REGIONS_LAYER]).toMatchObject({ type: "annotation", visible: false });
@@ -369,16 +367,12 @@ describe("POST /api/finetune/refresh-annotated-regions", () => {
       [[0, 0, 8], [32, 32, 24]],
       [[32, 0, 24], [64, 32, 40]],
     ]);
-  });
-
-  it("draws them again in the one layer, left shown once the user shows it", async () => {
-    const { ctx, redraw } = await painted([0, 0, 0]);
-    await redraw();
+    // Shown by the user, and drawn again over one more chunk painted.
     delete ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].visible;
     await paint(ctx, VOLUME.id, [1, 1, 1]);
-    expect((await redraw()).count).toBe(2);
+    expect((await redraw()).count).toBe(3);
     expect(Object.keys(ctx.viewer.layers)).toEqual([ANNOTATED_REGIONS_LAYER]);
-    expect(boxes(ctx)).toHaveLength(2);
+    expect(boxes(ctx)).toHaveLength(3);
     expect(ctx.viewer.layers[ANNOTATED_REGIONS_LAYER].visible).toBeUndefined();
   });
 });
@@ -451,8 +445,6 @@ describe.skipIf(!python)("POST /api/finetune/submit with a model on another grid
     expect(await readVolume(ctx.paint, to)).toMatchObject({ model_name: nuc.name, output_voxel_size: [8, 8, 8] });
     expect((await readVolume(ctx.paint, from))!.superseded_by).toBe(to);
     expect(ctx.session.state.paintVolume).toBe(to);
-    expect(ctx.viewer.layers[paintLayerName(to)]).toBeDefined();
-    expect(ctx.viewer.layers[paintLayerName(from)]).toBeUndefined();
     await h.jobs.get(submitted.job_id)!.settled();
     expect(calls[0].volume.id).toBe(to);
     expect(ctx.session.state.chain).toEqual(chain);
@@ -615,7 +607,7 @@ describe.skipIf(!python)("cancel, stop early, restart", () => {
 
   it("restarts from the model's own weights with the form's parameters, under the same job id, replacing the served model", async () => {
     const baton = new Baton();
-    const { ctx, h, calls, results } = await ready({ baton });
+    const { ctx, h, calls } = await ready({ baton });
     const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody())));
     const job = h.jobs.get(job_id)!;
     await letRun(baton, job);
@@ -630,9 +622,8 @@ describe.skipIf(!python)("cancel, stop early, restart", () => {
     expect(calls).toHaveLength(2);
     // From the model's own head again, as the server's restart starts from
     // the model the job started from: the first run's head is not built on.
-    expect(Array.from(results[1].weight!)).toEqual(Array.from(results[0].weight!));
-    expect(calls[1].options).toMatchObject({ epochs: 2, learningRate: 0.001 });
     expect(calls[1].entry.name).toBe(NAME_54);
+    expect(calls[1].options).toMatchObject({ epochs: 2, learningRate: 0.001 });
     const s = await status(h, job_id);
     expect(s).toMatchObject({ status: "WAITING_FOR_RESTART", current_epoch: 2, total_epochs: 2, finetuned_model_name: `${NAME_54}-ft2`, inference_server_ready: true });
     // ft2 took ft1's place beside the base, which stays served

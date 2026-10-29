@@ -148,6 +148,8 @@ FP32_REL_TOL = 1e-3
 # protobuf's cap on one serialized message, which an .onnx file is.
 ONNX_FILE_LIMIT = 2**31
 EXPORTER = "cellmap_models.model_export.onnx_web (torch.onnx.export, TorchScript, dynamo=False)"
+# The --variants flag's help, export_web's and distill's.
+VARIANTS_HELP = "comma-separated onnx_web precisions (fp32,fp16,int8w,int8w_fp16; all by default)"
 # probe_output_class's classes (portable.label_it), as the manifest's
 # ``output`` says them; the browser reads "probab" as [0, 1] and "unbounded"
 # as no output activation (backend/routes/models.ts, advice).
@@ -201,30 +203,47 @@ def folder_name(model_name: str) -> str:
 
 def start_export(yaml_path, corrections_dir, run_dir) -> WebExport:
     """Start exporting the model ``yaml_path`` serves, trained on the session
-    ``corrections_dir``, into ``<run_dir>/web_export/<YAML's name>/``.
-
-    The job runs in the environment the model finetunes in
-    (submit.module_command) on the YAML's queue and charge group, which are
-    its finetune job's. A result an earlier export of the same YAML left is
-    removed first, so that ``export_status`` does not read it as this one's.
+    ``corrections_dir``, into ``<run_dir>/web_export/<YAML's name>/``, as a
+    job (start_job).
 
     Raises:
         ValueError: the YAML serves no finetuned model, or its environment
             cannot run the export.
         RuntimeError: the job could not be submitted.
     """
+    return start_job(MODULE, "web_export", yaml_path, corrections_dir,
+                     Path(run_dir) / "web_export" / Path(yaml_path).stem, WALLTIME)
+
+
+def start_job(module, job_name, yaml_path, corrections_dir, output_dir, walltime, flags=()) -> WebExport:
+    """Start ``python -m <module>`` on the model ``yaml_path`` serves,
+    trained on the session ``corrections_dir``, writing into ``output_dir``
+    (the export's job, and distill's), and return at once.
+
+    The job, ``<job_name>_<model's folder>``, runs in the environment the
+    model finetunes in (submit.module_command) on the YAML's queue and
+    charge group, which are its finetune job's, with ``flags`` after the
+    module's --yaml, --corrections and --output. A result an earlier job
+    left in ``output_dir`` is removed first, so that ``export_status`` does
+    not read it as this one's.
+
+    Raises:
+        ValueError: the YAML serves no finetuned model, or its environment
+            cannot run the job.
+        RuntimeError: the job could not be submitted.
+    """
     from cellmap_flow.finetune.job_manager import submit
     from cellmap_flow.finetune.model_loading import model_config_from_entry
 
     config, entry = serving_entry(yaml_path)
-    output_dir = Path(run_dir) / "web_export" / Path(yaml_path).stem
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / RESULT_NAME).unlink(missing_ok=True)
-    args = ["--yaml", str(yaml_path), "--corrections", str(corrections_dir), "--output", str(output_dir)]
-    command = submit.module_command(model_config_from_entry(entry), MODULE, args, output_dir / LOG_NAME)
+    args = ["--yaml", str(yaml_path), "--corrections", str(corrections_dir), "--output", str(output_dir), *flags]
+    command = submit.module_command(model_config_from_entry(entry), module, args, output_dir / LOG_NAME)
     job = submit.launch(
-        f"web_export_{folder_name(entry.get('name') or 'model')}", command,
-        queue=config.get("queue"), charge_group=config.get("charge_group"), walltime=WALLTIME,
+        f"{job_name}_{folder_name(entry.get('name') or 'model')}", command,
+        queue=config.get("queue"), charge_group=config.get("charge_group"), walltime=walltime,
     )
     return WebExport(output_dir, job)
 
@@ -262,6 +281,23 @@ def export_status(export: WebExport) -> dict:
     return answer
 
 
+def training_manifest(corrections_dir) -> dict:
+    """The training manifest of the session ``corrections_dir``
+    (session.manifest.read_manifest): where the raw the model was trained
+    on is, and how the trainer reads it.
+
+    Raises:
+        ValueError: the session has none.
+    """
+    from cellmap_flow.finetune.session.manifest import VIRTUAL_MANIFEST_FILENAME, read_manifest
+
+    manifest = read_manifest(str(corrections_dir))
+    if manifest is None:
+        raise ValueError(f"{corrections_dir} has no {VIRTUAL_MANIFEST_FILENAME}, so the raw the model "
+                         "was trained on is not known")
+    return manifest
+
+
 def training_block(corrections_dir, input_block, output_block, input_norm):
     """A block of the raw the model was trained on, ``[1, 1, *input_block]``
     float32, normalized by ``input_norm``.
@@ -277,14 +313,9 @@ def training_block(corrections_dir, input_block, output_block, input_norm):
     import numpy as np
 
     from cellmap_flow.finetune.data.loader import dataset_from_manifest
-    from cellmap_flow.finetune.session.manifest import VIRTUAL_MANIFEST_FILENAME, read_manifest
 
-    manifest = read_manifest(str(corrections_dir))
-    if manifest is None:
-        raise ValueError(f"{corrections_dir} has no {VIRTUAL_MANIFEST_FILENAME}, so the raw the model "
-                         "was trained on is not known")
     dataset = dataset_from_manifest(
-        {**manifest, "input_norm": input_norm, "anchor_fraction": 0.0},
+        {**training_manifest(corrections_dir), "input_norm": input_norm, "anchor_fraction": 0.0},
         patch_voxels=(input_block, output_block),
     )
     centre, _, depth = dataset.sampler.draw(np.random.default_rng(0))
@@ -563,28 +594,46 @@ def _write_result(output_dir: Path, result: dict) -> None:
     os.replace(partial, output_dir / RESULT_NAME)
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+def job_parser(description: str, output_help: str) -> argparse.ArgumentParser:
+    """The command line start_job gives a job: ``--yaml``, ``--corrections``
+    and ``--output`` (``output_help``); the module adds its own flags."""
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--yaml", required=True, help="the finetuned model's serving YAML")
     parser.add_argument("--corrections", required=True,
                         help="the session's corrections directory, which the model was trained on")
-    parser.add_argument("--output", required=True, help="the directory to export into")
-    parser.add_argument("--variants", default=None,
-                        help="comma-separated onnx_web precisions (fp32,fp16,int8w,int8w_fp16; all by default)")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    parser.add_argument("--output", required=True, help=output_help)
+    return parser
 
+
+def run_job(args, work, log: logging.Logger, failed: str) -> int:
+    """A job's body (export_web's and distill's ``main``): ``work(output_dir,
+    variants)``'s result, or ``{"error"}`` when it raises (logged to ``log``
+    after ``failed``), written to result.json (_write_result), which
+    export_status reads, and printed as the output's last line. Returns
+    the exit code: 1 on an error, else 0.
+
+    ``args`` is job_parser's, with ``--variants`` (VARIANTS_HELP) besides.
+    """
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     variants = [v.strip() for v in args.variants.split(",") if v.strip()] if args.variants else None
     try:
-        result = export(args.yaml, args.corrections, output_dir, variants)
+        result = work(output_dir, variants)
     except Exception as e:
-        logger.exception("The export failed")
+        log.exception(failed)
         result = {"error": _said(e)}
     _write_result(output_dir, result)
     print(json.dumps(result), flush=True)
     return 1 if "error" in result else 0
+
+
+def main(argv=None) -> int:
+    parser = job_parser(__doc__.split("\n\n")[0], "the directory to export into")
+    parser.add_argument("--variants", default=None, help=VARIANTS_HELP)
+    args = parser.parse_args(argv)
+    return run_job(args, lambda output_dir, variants: export(args.yaml, args.corrections, output_dir, variants),
+                   logger, "The export failed")
 
 
 if __name__ == "__main__":

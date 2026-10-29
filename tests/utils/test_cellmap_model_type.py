@@ -82,8 +82,9 @@ def test_reads_at_the_shape_the_export_runs_at(monkeypatch, model, shapes, voxel
     assert model_config.geometry.output_shape == (voxels_out,) * 3
     assert list(model_config.config.block_shape) == [voxels_out] * 3 + [1]
     config = model_config.config
-    served = {"write_shape": list(config.write_shape), "output_voxel_size": list(config.output_voxel_size),
-              "output_channels": config.output_channels, "channels": list(config.channels_names)}
+    served = {"write_shape": list(config.write_shape), "input_voxel_size": list(config.input_voxel_size),
+              "output_voxel_size": list(config.output_voxel_size), "output_channels": config.output_channels,
+              "channels": list(config.channels_names)}
     assert declared == (None if shapes else served)
 
 

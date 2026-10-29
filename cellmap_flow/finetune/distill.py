@@ -76,12 +76,11 @@ The dashboard starts it and follows it as an export, with export_web's
     run = start_distill(yaml_path, corrections_dir, run_dir)
     export_web.export_status(run)   # the answer start_export's gets
 
-``start_distill`` submits the job as start_export does (job_manager.submit's
-module_command and launch, in the environment the model finetunes in, on
-its YAML's queue), into ``<run_dir>/web_export/<YAML's name>-small/``, with
-the training's time limit (the longer, a random start's, unless given) and
-an hour for the rest as its walltime, and returns at once. From the command
-line::
+``start_distill`` submits the job as start_export does (export_web.start_job:
+in the environment the model finetunes in, on its YAML's queue), into
+``<run_dir>/web_export/<YAML's name>-small/``, with the training's time
+limit (the longer, a random start's, unless given) and an hour for the rest
+as its walltime, and returns at once. From the command line::
 
     python -m cellmap_flow.finetune.distill --yaml <serving yaml> \\
         --corrections <session>/corrections --output <dir> \\
@@ -111,8 +110,6 @@ Needs cellmap-models with ``model_export.student`` and ``model_export.onnx_web``
 onnxruntime, where it runs.
 """
 
-import argparse
-import json
 import logging
 import math
 import os
@@ -284,7 +281,6 @@ def distill(yaml_path, corrections_dir, output_dir, *, parameters=None, epochs=N
 
     from cellmap_flow.finetune.data.loader import dataset_from_manifest, make_training_loader
     from cellmap_flow.finetune.losses import distillation_loss
-    from cellmap_flow.finetune.session.manifest import VIRTUAL_MANIFEST_FILENAME, read_manifest
     from cellmap_flow.finetune.trainer.recovery import Precision
     from cellmap_flow.finetune.trainer.supervised import probe_output_class
     from cellmap_flow.models.geometry import ModelGeometry
@@ -295,10 +291,7 @@ def distill(yaml_path, corrections_dir, output_dir, *, parameters=None, epochs=N
     teacher, finetuned, input_norm = export_web.finetuned_network(yaml_path)
     geometry = finetuned.base_model_config.geometry
     _check_distillable(finetuned, geometry)
-    manifest = read_manifest(str(corrections_dir))
-    if manifest is None:
-        raise ValueError(f"{corrections_dir} has no {VIRTUAL_MANIFEST_FILENAME}, so the raw the model "
-                         "was trained on is not known")
+    manifest = export_web.training_manifest(corrections_dir)
 
     # The teacher, on the GPU when there is one, and what its output is.
     device = best_device()
@@ -410,10 +403,10 @@ def distill(yaml_path, corrections_dir, output_dir, *, parameters=None, epochs=N
     )
     # The block it trained at, and the larger (and for a slice, smaller)
     # ones it computes too, as the catalog's models are exported.
-    blocks = [student.input_size, *student.blocks(BROWSER_SIDES["2d" if student.input_size[0] == 1 else "3d"])]
-    largest = tuple(max(b[i] for b in blocks) for i in range(3))
+    sizes = [student.input_size, *student.blocks(BROWSER_SIDES["2d" if student.input_size[0] == 1 else "3d"])]
+    largest = tuple(max(b[i] for b in sizes) for i in range(3))
     logger.info(f"Exporting the student of step {best_checkpoint['steps']} ({_format(best)}) at "
-                f"{', '.join('x'.join(map(str, b)) for b in blocks)} voxels")
+                f"{', '.join('x'.join(map(str, b)) for b in sizes)} voxels")
     validation = export_web.training_block(corrections_dir, largest, student.output_size, input_norm)
     network.eval()
     with torch.no_grad():
@@ -436,7 +429,7 @@ def distill(yaml_path, corrections_dir, output_dir, *, parameters=None, epochs=N
         },
     }
     manifest = export_web._export_browser(network, output_dir / folder, folder, student_geometry, validation,
-                                          scale, description, variants, blocks)
+                                          scale, description, variants, sizes)
     return {"folder": folder, "manifest": manifest}
 
 
@@ -454,42 +447,26 @@ def start_distill(yaml_path, corrections_dir, run_dir, *, parameters=None, hours
     ``parameters``: the student's largest size (by default make_student's);
     ``hours``: the training's time limit (by default HOURS of how the
     student starts, which the job decides; the walltime allows the longer).
-    The job runs as start_export's does, in the environment the model
-    finetunes in on the YAML's queue and charge group, and a result an
-    earlier run left there is removed first, so that export_status does not
-    read it as this one's; its best student is kept, for this run to
-    continue from.
+    The job runs as start_export's does (export_web.start_job), in the
+    environment the model finetunes in on the YAML's queue and charge
+    group, and a result an earlier run left there is removed first, so that
+    export_status does not read it as this one's; its best student is kept,
+    for this run to continue from.
 
     Raises:
         ValueError: the YAML serves no finetuned model, or its environment
             cannot run the job.
         RuntimeError: the job could not be submitted.
     """
-    from cellmap_flow.finetune.job_manager import submit
-    from cellmap_flow.finetune.model_loading import model_config_from_entry
-
-    config, entry = export_web.serving_entry(yaml_path)
     # The student's folder, and its export's directory, are the finetuned model's with SMALL_SUFFIX after them.
     output_dir = Path(run_dir) / "web_export" / f"{Path(yaml_path).stem}{SMALL_SUFFIX}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / export_web.RESULT_NAME).unlink(missing_ok=True)
-    args = ["--yaml", str(yaml_path), "--corrections", str(corrections_dir), "--output", str(output_dir),
-            *(["--hours", str(hours)] if hours else []), *(["--parameters", str(parameters)] if parameters else [])]
-    command = submit.module_command(model_config_from_entry(entry), MODULE, args, output_dir / export_web.LOG_NAME)
-    job = submit.launch(
-        f"distill_{export_web.folder_name(entry.get('name') or 'model')}", command,
-        queue=config.get("queue"), charge_group=config.get("charge_group"),
-        walltime=_walltime(hours or max(HOURS.values())),
-    )
-    return export_web.WebExport(output_dir, job)
+    flags = [*(["--hours", str(hours)] if hours else []), *(["--parameters", str(parameters)] if parameters else [])]
+    return export_web.start_job(MODULE, "distill", yaml_path, corrections_dir, output_dir,
+                                _walltime(hours or max(HOURS.values())), flags)
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--yaml", required=True, help="the finetuned model's serving YAML")
-    parser.add_argument("--corrections", required=True,
-                        help="the session's corrections directory, which the model was trained on")
-    parser.add_argument("--output", required=True, help="the directory to distill and export into")
+    parser = export_web.job_parser(__doc__.split("\n\n")[0], "the directory to distill and export into")
     parser.add_argument("--parameters", type=int, default=None,
                         help="the student's largest number of parameters (default: a tenth of the teacher's, "
                              f"at most {BROWSER_PARAMETERS:,})")
@@ -502,26 +479,17 @@ def main(argv=None) -> int:
                              f"{HOURS['random']:g} from a random one)")
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE, help="AdamW's")
     parser.add_argument("--workers", type=int, default=WORKERS, help="data loader workers")
-    parser.add_argument("--variants", default=None,
-                        help="comma-separated onnx_web precisions (fp32,fp16,int8w,int8w_fp16; all by default)")
+    parser.add_argument("--variants", default=None, help=export_web.VARIANTS_HELP)
     args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    variants = [v.strip() for v in args.variants.split(",") if v.strip()] if args.variants else None
-    try:
-        result = distill(
+    def work(output_dir, variants):
+        return distill(
             args.yaml, args.corrections, output_dir, parameters=args.parameters, epochs=args.epochs,
             steps_per_epoch=args.steps_per_epoch, hours=args.hours, learning_rate=args.learning_rate,
             workers=args.workers, variants=variants,
         )
-    except Exception as e:
-        logger.exception("The distillation failed")
-        result = {"error": export_web._said(e)}
-    export_web._write_result(output_dir, result)
-    print(json.dumps(result), flush=True)
-    return 1 if "error" in result else 0
+
+    return export_web.run_job(args, work, logger, "The distillation failed")
 
 
 if __name__ == "__main__":

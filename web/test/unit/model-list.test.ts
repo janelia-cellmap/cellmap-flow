@@ -9,150 +9,16 @@
 // listed on both tabs. In the ranking, a section's search hides the rows that
 // do not match but a ticked one, which Rank scores: nothing is ranked unseen.
 // On a server, a Hugging Face section shows only the models with a copy that
-// runs in the browser to start, and a ticked one whatever it has.
+// runs in the browser to start, and a ticked one whatever it has. A ticked
+// row of the Models tab's catalog or Hugging Face list takes the voxel size to
+// run the model at, which Submit sends; the ranking's rows take none.
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { FakeElement, FakeNode } from "./dashboard-dom";
+
 const JS = "../../../cellmap_flow/dashboard/static/js/";
 const module = (path: string) => fileURLToPath(new URL(JS + path, import.meta.url));
-
-// What dom.js h() tells a child node from a string by.
-class FakeNode {
-  parentNode: FakeElement | null = null;
-}
-
-// A text node.
-class FakeText extends FakeNode {
-  constructor(public textContent: string) {
-    super();
-  }
-}
-
-// The few DOM calls the lists make, on plain objects: the unit tests run in
-// node, which has no DOM. An attribute set on an element sets the property
-// a browser derives from it (checked, value, hidden, disabled, id), and a
-// selector is tags, ids, classes and :checked, joined by spaces.
-class FakeElement extends FakeNode {
-  childNodes: (FakeElement | FakeText)[] = [];
-  attributes = new Map<string, string>();
-  className = "";
-  id = "";
-  value = "";
-  checked = false;
-  disabled = false;
-  hidden = false;
-  open = false;
-  dataset: Record<string, string> = {};
-  style: Record<string, string> = {};
-  listeners = new Map<string, ((event: unknown) => void)[]>();
-  classList = {
-    contains: (name: string) => this.className.split(/\s+/).includes(name),
-    toggle: (name: string, on: boolean) => {
-      const names = this.className.split(/\s+/).filter((n) => n && n !== name);
-      this.className = (on ? [...names, name] : names).join(" ");
-    },
-  };
-
-  constructor(public tagName: string) {
-    super();
-  }
-
-  get children(): FakeElement[] {
-    return this.childNodes.filter((node): node is FakeElement => node instanceof FakeElement);
-  }
-
-  get textContent(): string {
-    return this.childNodes.map((node) => node.textContent).join("");
-  }
-
-  set textContent(text: string) {
-    this.replaceChildren(text);
-  }
-
-  setAttribute(name: string, value: string): void {
-    this.attributes.set(name, value);
-    if (name === "id" || name === "value") this[name] = value;
-    if (name === "checked" || name === "hidden" || name === "disabled") this[name] = true;
-  }
-
-  getAttribute(name: string): string | null {
-    return this.attributes.get(name) ?? null;
-  }
-
-  append(...nodes: (FakeElement | FakeText | string)[]): void {
-    for (const node of nodes) {
-      const child = typeof node === "string" ? new FakeText(node) : node;
-      child.parentNode?.removeChild(child);
-      child.parentNode = this;
-      this.childNodes.push(child);
-    }
-  }
-
-  prepend(node: FakeElement): void {
-    this.append(node);
-    this.childNodes.unshift(this.childNodes.pop()!);
-  }
-
-  replaceChildren(...nodes: (FakeElement | FakeText | string)[]): void {
-    for (const child of this.childNodes) child.parentNode = null;
-    this.childNodes = [];
-    this.append(...nodes);
-  }
-
-  removeChild(child: FakeElement | FakeText): void {
-    this.childNodes = this.childNodes.filter((node) => node !== child);
-    child.parentNode = null;
-  }
-
-  remove(): void {
-    this.parentNode?.removeChild(this);
-  }
-
-  addEventListener(type: string, listener: (event: unknown) => void): void {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
-  }
-
-  // As a browser dispatches it, bubbling: the listeners get the element
-  // it happened to as the event's target.
-  dispatchEvent(event: { type: string; key?: string }): void {
-    const passed = { type: event.type, key: event.key, target: this, preventDefault: () => {} };
-    for (let el: FakeElement | null = this; el; el = el.parentNode) {
-      for (const listener of el.listeners.get(event.type) ?? []) listener(passed);
-    }
-  }
-
-  get descendants(): FakeElement[] {
-    return this.children.flatMap((child) => [child, ...child.descendants]);
-  }
-
-  querySelectorAll(selector: string): FakeElement[] {
-    const parts = selector.trim().split(/\s+/);
-    return this.descendants.filter((el) => matches(el, parts, this));
-  }
-
-  querySelector(selector: string): FakeElement | null {
-    return this.querySelectorAll(selector)[0] ?? null;
-  }
-}
-
-function matchesOne(el: FakeElement, part: string): boolean {
-  return (part.match(/^[a-z0-9]+|[#.:][\w-]+/gi) ?? []).every((token) =>
-    token[0] === "#" ? el.id === token.slice(1)
-      : token[0] === "." ? el.classList.contains(token.slice(1))
-        : token === ":checked" ? el.checked
-          : el.tagName === token.toLowerCase());
-}
-
-// Whether `el` matches the last of `parts` and has ancestors, under `root`,
-// matching the others in order.
-function matches(el: FakeElement, parts: string[], root: FakeElement): boolean {
-  if (!matchesOne(el, parts[parts.length - 1])) return false;
-  let rest = parts.slice(0, -1);
-  for (let up = el.parentNode; up && up !== root && rest.length; up = up.parentNode) {
-    if (matchesOne(up, rest[rest.length - 1])) rest = rest.slice(0, -1);
-  }
-  return rest.length === 0;
-}
 
 // The page: the Models tab's form, with its sections' containers, and the
 // ranking's beside it, all under one root, so a lookup by id finds the first
@@ -212,16 +78,20 @@ const CANDIDATES = {
   ],
 };
 
+// The Local Catalog's page data: one group, its first model running.
+const CATALOG = { groups: [["cellmap", ["mito_16nm", "nuc_8nm"]]], ticked: ["mito_16nm"] };
+
 let page: ReturnType<typeof fakePage>;
 
 // The page in `mode`, the server's or the browser's, whose ranking lists
 // `candidates` and whose Hugging Face list is `hf`, with the repos of
-// `running` running (ticked on the Models tab).
-function setUp(mode: string, candidates: unknown, hf: unknown = HF, running: string[] = []) {
+// `running` running (ticked on the Models tab), and whose Local Catalog is
+// `catalog`.
+function setUp(mode: string, candidates: unknown, hf: unknown = HF, running: string[] = [], catalog: unknown = CATALOG) {
   vi.resetModules();
   page = fakePage({
     "page-data": { mode, default_hf_repos: running },
-    "model-catalog-data": { groups: [["cellmap", ["mito_16nm", "nuc_8nm"]]], ticked: ["mito_16nm"] },
+    "model-catalog-data": catalog,
   });
   const answers: Record<string, unknown> = { "/api/huggingface-models": hf, "/api/finetune/rank/candidates": candidates };
   vi.stubGlobal("document", page);
@@ -278,15 +148,15 @@ it("lists both tabs' models with the same pieces, each tab's ticks its own", asy
   expect(["rankZooEmOnly", "rankZoo2d", "rankZoo3d"].map((id) => page.getElementById(id).tagName)).toEqual(["input", "input", "input"]);
 
   // Submit runs what the Models tab ticks: the running model, from its catalog.
-  expect(catalog.payload()).toEqual({ selected_models: ["mito_16nm"] });
-  expect(huggingface.payload()).toEqual({ selected_hf_models: [] });
+  expect(catalog.payload()).toEqual({ selected_models: ["mito_16nm"], run_voxel_sizes: {} });
+  expect(huggingface.payload()).toEqual({ selected_hf_models: [], run_voxel_sizes: {} });
 
   // nuc-model ticked to score: the ranking counts it, Submit does not run it.
   const nuc = rowsOf("Hugging Face")["nuc_model"].querySelector("input")!;
   nuc.checked = true;
   nuc.dispatchEvent({ type: "change" });
   expect(page.getElementById("rankTickedCount").textContent).toBe("2 ticked");
-  expect(huggingface.payload()).toEqual({ selected_hf_models: [] });
+  expect(huggingface.payload()).toEqual({ selected_hf_models: [], run_voxel_sizes: {} });
 
   // Ticked to run on the Models tab, then unticked in the ranking: Submit
   // runs it, and Rank does not score it.
@@ -298,7 +168,7 @@ it("lists both tabs' models with the same pieces, each tab's ticks its own", asy
   ranked.checked = false;
   ranked.dispatchEvent({ type: "change" });
   expect(page.getElementById("rankTickedCount").textContent).toBe("1 ticked");
-  expect(huggingface.payload()).toEqual({ selected_hf_models: ["cellmap/nuc-model"] });
+  expect(huggingface.payload()).toEqual({ selected_hf_models: ["cellmap/nuc-model"], run_voxel_sizes: {} });
 
   // Each label is for its own box: the page's first element of that id,
   // though the same models are listed on both tabs.
@@ -396,4 +266,80 @@ it("shows on a server the Hugging Face models with a browser copy and the ticked
   expect(onTab()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "fly-organelles", "unknown"]);
   change("rankHfSort", (select) => { select.value = "size"; });
   expect(inRanking()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "unknown"]);
+});
+
+// The Models tab with mito_16nm running at 32 nm from the catalog, where it is
+// listed twice while it runs (its group's row and "User"'s), and mito-aff from
+// Hugging Face at 32,16,16 nm, as the page data and the listing say.
+async function runningAtOtherSizes() {
+  const hf = { ...HF, "cellmap/mito-aff": { ...HF["cellmap/mito-aff"], run_voxel_size: [32, 16, 16] } };
+  setUp("server", CANDIDATES, hf, ["cellmap/mito-aff"], {
+    groups: [["cellmap", ["mito_16nm", "nuc_8nm"]], ["User", ["mito_16nm"]]],
+    ticked: ["mito_16nm"],
+    run_voxel_sizes: { mito_16nm: [32, 32, 32] },
+  });
+  const tabs = await bothTabs();
+  const { submitBody } = await import(/* @vite-ignore */ module("dashboard/models/index.js"));
+  const catalogRows = page.querySelectorAll("#modelAccordion .form-check");
+  const hfRows = page.querySelectorAll("#hfModelAccordion .hf-model-item");
+  const rowOf = (rows: FakeElement[], name: string, nth = 0) => rows.filter((row) => nameOf(row) === name)[nth];
+  // A row's box, and the field under it to type a voxel size in.
+  const box = (row: FakeElement) => row.querySelector("input")!;
+  const field = (row: FakeElement) => row.querySelectorAll("input").find((input) => input.type === "text");
+  const tick = (row: FakeElement, on: boolean) => {
+    box(row).checked = on;
+    box(row).dispatchEvent({ type: "change" });
+  };
+  const type = (row: FakeElement, text: string) => {
+    field(row)!.value = text;
+    field(row)!.dispatchEvent({ type: "input" });
+  };
+  // Whether nothing between `el` and the page hides it.
+  const visible = (el: FakeElement) => {
+    for (let up: FakeElement | null = el; up; up = up.parentNode) if (up.style.display === "none" || up.hidden) return false;
+    return true;
+  };
+  const sent = () => submitBody([tabs.catalog.payload(), tabs.huggingface.payload()], false);
+  return { ...tabs, catalogRows, hfRows, rowOf, field, tick, type, visible, sent };
+}
+
+it("runs the ticked catalog and Hugging Face models at the voxel sizes typed under them, and ranks each as it is", async () => {
+  const { catalogRows, hfRows, rowOf, field, tick, type, visible, sent, rowsOf } = await runningAtOtherSizes();
+
+  // The running models' fields show the sizes they run at; an unticked row's is hidden.
+  expect(field(rowOf(catalogRows, "mito_16nm"))!.value).toBe("32,32,32");
+  expect(field(rowOf(hfRows, "mito-aff"))!.value).toBe("32,16,16");
+  expect(visible(field(rowOf(hfRows, "mito-aff"))!)).toBe(true);
+  expect(visible(field(rowOf(catalogRows, "nuc_8nm"))!)).toBe(false);
+
+  // Ticked, a row shows its field; Submit sends what is typed, trimmed, by
+  // the model's name or repo, both lists' in one.
+  tick(rowOf(catalogRows, "nuc_8nm"), true);
+  expect(visible(field(rowOf(catalogRows, "nuc_8nm"))!)).toBe(true);
+  type(rowOf(catalogRows, "nuc_8nm"), "16");
+  tick(rowOf(hfRows, "nuc-model"), true);
+  type(rowOf(hfRows, "nuc-model"), " 16,8,8 ");
+  const body = sent();
+  expect(body.selected_hf_models).toEqual(["cellmap/mito-aff", "cellmap/nuc-model"]);
+  expect(body.run_voxel_sizes).toEqual({ mito_16nm: "32,32,32", nuc_8nm: "16", "cellmap/mito-aff": "32,16,16", "cellmap/nuc-model": "16,8,8" });
+
+  // The ranking scores a model as it is: none of its rows takes a voxel size.
+  for (const row of [...Object.values(rowsOf("Running")), ...Object.values(rowsOf("Hugging Face"))]) {
+    expect(field(row)).toBe(undefined);
+  }
+});
+
+it("sends no voxel size for a field left blank or a row unticked: the model runs at its own", async () => {
+  const { huggingface, catalogRows, hfRows, rowOf, field, type, visible, sent } = await runningAtOtherSizes();
+
+  // Blank under one of mito_16nm's rows is blank under the other too.
+  type(rowOf(catalogRows, "mito_16nm"), "");
+  expect(field(rowOf(catalogRows, "mito_16nm", 1))!.value).toBe("");
+  // mito-aff removed from the Loaded models list: unticked, its field hidden.
+  huggingface.untick({ hf_id: "cellmap/mito-aff" });
+  expect(visible(field(rowOf(hfRows, "mito-aff"))!)).toBe(false);
+
+  const body = sent();
+  expect([body.selected_models, body.selected_hf_models]).toEqual([["mito_16nm", "mito_16nm"], []]);
+  expect(body.run_voxel_sizes).toEqual({});
 });

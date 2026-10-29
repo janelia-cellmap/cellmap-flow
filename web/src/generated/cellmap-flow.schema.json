@@ -121,6 +121,12 @@
       "request": "PipelineUpdate"
     },
     {
+      "method": "GET",
+      "path": "/api/raw/channels",
+      "availability": "both",
+      "request": null
+    },
+    {
       "method": "POST",
       "path": "/api/pipeline/apply",
       "availability": "server",
@@ -2462,7 +2468,7 @@
       "type": "object"
     },
     "SubmitModels": {
-      "description": "The Models tab's Submit: the catalog models, Hugging Face repos,\nBioImage Model Zoo and Cellpose models to run. Every other running model\nis stopped (services.launch). ``resample``, when given, becomes the\nsession's (``Session.resample``) before the models are started.",
+      "description": "The Models tab's Submit: the catalog models, Hugging Face repos,\nBioImage Model Zoo and Cellpose models to run. Every other running model\nis stopped (services.launch). ``resample``, when given, becomes the\nsession's (``Session.resample``) before the models are started.\n\n``run_voxel_sizes``: the voxel size (nm, z, y, x) to run a ticked\ncatalog or Hugging Face model at, by its row's value (a\n``selected_models`` name or a ``selected_hf_models`` repo), as typed\nbeside it (\"32\", \"32,16,16\", 32 or [32, 16, 16]). A model left out, or\nleft blank, runs at its own (``ModelConfig.run_voxel_size``).",
       "properties": {
         "selected_models": {
           "default": [],
@@ -2502,6 +2508,27 @@
             }
           ],
           "default": null
+        },
+        "run_voxel_sizes": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "type": "object"
         }
       },
       "title": "SubmitModels",

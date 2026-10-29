@@ -42,7 +42,7 @@ import type { Chain, ModelEntry, Step } from "../contracts";
 import { canonicalJson } from "../shared/args";
 import { asDtype } from "./dtype";
 import { type BlockGeometry, clipBox, halo as haloOf, inputShape, outputShape, ratio } from "./geometry";
-import { applyNormalizers } from "./norms";
+import { applyNormalizers, missingChannel, selectedChannel } from "./norms";
 import { type NdArray, outputChannels, outputDtype, type Postprocessor, runPostprocessors } from "./post";
 
 /** What a forward pass returns: the output tensor's values, dims and type,
@@ -63,7 +63,17 @@ const prod = (shape: readonly number[]) => shape.reduce((a, b) => a * b, 1);
  * output whatever their postprocessing, and another normalizer is another
  * key. The steps as the dashboard sent them (strings), canonically ordered;
  * the Python server builds the steps first so "0.0" and 0 agree, which the
- * blob does for a layer's URL (shared/args.ts) and would do here too. */
+ * blob does for a layer's URL (shared/args.ts) and would do here too.
+ *
+ * The voxel size the model is run at (ModelEntry.runVoxelSize) is not in
+ * it, and need not be: the engine keys a stage's output by the level's
+ * voxel size and the box as well, and what the model computes depends on
+ * nothing else of it. Its voxel counts and its halo in voxels are its own at
+ * every voxel size, and so is the ratio of its output to its input voxel
+ * size, so two run voxel sizes reading the same raw level compute the same
+ * blocks on the same grid, and two reading different levels serve levels
+ * of different voxel sizes. The view's name carries it (shared/args.ts
+ * viewName), for the caches that go by URL. */
 export function modelStageKey(entry: ModelEntry, chain: Chain): string {
   return `${entry.id}|${entry.variant.file}|norm:${canonicalJson(chain.input_norm)}|model`;
 }
@@ -135,7 +145,10 @@ export function modelStage(spec: ModelStageSpec): Stage {
 
 /** The model's input block for the chunk `at` describes, float32 and
  * normalized: the engine's `input` (the chunk's box grown by the halo, on
- * the raw level's grid) converted, the voxels inside the volume normalized
+ * the raw level's grid; of a volume whose reader reads its channels
+ * together, all of them first, of which the one the normalizers' channel
+ * pick names is taken, as the server reads one: norms.ts selectedChannel)
+ * converted, the voxels inside the volume normalized
  * and placed in a block of the model's input shape (the engine's block is
  * that, or its leading part for a chunk the volume ends in), every voxel past
  * the volume the nearest one inside it (edgePadded). A flat fill there is a
@@ -143,8 +156,9 @@ export function modelStage(spec: ModelStageSpec): Stage {
  * cuts through: on jrc_jurkat-1, setup_56 found 28% of the nuclei the edge
  * cuts with zeros there and 60% with the edge repeated. */
 export function modelInput(spec: Pick<ModelStageSpec, "normalizers" | "rawShape">, input: Block, at: StageAt, halo: number[], r: number[], inShape: number[]): Float32Array {
-  const lead = input.shape.slice(0, -3);
-  if (prod(lead) !== 1) throw new Error(`the raw volume has ${prod(lead)} channels; a model reads one (the browser mode does not select a channel yet)`);
+  const channels = prod(input.shape.slice(0, -3)), channel = channels > 1 ? selectedChannel(spec.normalizers) : 0;
+  const missing = missingChannel(channel, channels);
+  if (missing) throw new Error(missing);
   const read = input.shape.slice(-3);
   // Where the engine's block lies on the raw level: the box it read for this
   // stage, as stages.ts computes it (Engine.input).
@@ -162,7 +176,8 @@ export function modelInput(spec: Pick<ModelStageSpec, "normalizers" | "rawShape"
     throw new Error(`the model reads voxels ${inside.lo.join(",")} to ${inside.hi.join(",")} of the raw level, outside the block read for it (to ${inHi.join(",")})`);
   }
   if (!inside) return new Float32Array(prod(inShape));  // nothing of the volume to repeat: zeros
-  const data = Float32Array.from(input.data as ArrayLike<number>);  // the engine's block, in the model's dtype
+  const n = prod(read), picked = channels > 1 ? input.data.subarray(channel * n, (channel + 1) * n) : input.data;
+  const data = Float32Array.from(picked as ArrayLike<number>);  // the engine's block, in the model's dtype
   const span = inside.hi.map((h, a) => h - inside.lo[a]);
   if (span.every((n, a) => n === inShape[a])) return applyNormalizers(data, spec.normalizers);  // the whole block is data
   // Only the data is normalized: it is cut out, normalized and its edge

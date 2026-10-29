@@ -3,6 +3,7 @@ or ticked and submitted, the Models tab's Loaded models list with its ✕, the
 exported config and the job logs. Its commands are in test_launch_command, its
 layers in test_layer_sources_snapshot."""
 
+import json
 import shlex
 import threading
 from types import SimpleNamespace
@@ -109,14 +110,21 @@ DECLARED = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
             {"name": "LambdaNormalizer", "expression": "2*x-1"}]
 
 
-@pytest.mark.parametrize("chain", [[], [{"name": "LambdaNormalizer", "expression": "x/255"}]],
-                         ids=["no input normalization", "the user's"])
+CHANNEL = [{"name": "ChannelSelector", "channel": 1}]
+
+
+@pytest.mark.parametrize("chain, expected", [
+    pytest.param([], DECLARED, id="no input normalization"),
+    pytest.param(CHANNEL, CHANNEL + DECLARED, id="a channel picked"),
+    pytest.param([{"name": "LambdaNormalizer", "expression": "x/255"}], None, id="the user's"),
+])
 def test_a_model_started_without_input_normalization_sets_the_one_it_declares(dashboard, monkeypatch, tmp_path,
-                                                                              chain):
+                                                                              chain, expected):
     """Its start sets them, as the chain's setter sets a chain, before its
     layer is drawn, so the layer is drawn through them; the postprocessing
     stays. A chain that has input normalizers is the user's, and is left as
-    it is. The page reads the chain back, and whose declaration it is, from
+    it is; a raw channel picked is no normalization, and is kept in front of
+    them. The page reads the chain back, and whose declaration it is, from
     the Loaded models list."""
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
@@ -132,13 +140,13 @@ def test_a_model_started_without_input_normalization_sets_the_one_it_declares(da
     session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", [model]
 
     assert dashboard.post("/api/models", json={"selected_models": ["mine"]}).status_code == 200
-    expected = chain or DECLARED
+    expected = expected or chain
     assert session.pipeline_spec == PipelineSpec(expected, postprocess)
     assert drawn_through == [PipelineSpec(expected, postprocess)]
     session.jobs = [_Job("mine")]
     loaded = dashboard.get("/api/models/loaded").get_json()
     assert loaded["pipeline"] == {"input_norm": expected, "postprocess": postprocess}
-    assert loaded["input_norm_from"] == (None if chain else "mine")
+    assert loaded["input_norm_from"] == (None if expected == chain else "mine")
 
 
 def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(dashboard, monkeypatch, tmp_path):
@@ -215,6 +223,55 @@ def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one
     session.jobs = [_Job(name)]
     loaded = dashboard.get("/api/models/loaded").get_json()
     assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
+
+
+def test_submit_runs_a_model_at_the_voxel_size_typed_beside_it(viewer, dashboard, monkeypatch):
+    """POST /api/models' run_voxel_sizes: a ticked Hugging Face model's server
+    builds it at the voxel size typed in its row, which the listing gives
+    that row back while it runs; a blank one starts it again at its own."""
+    from cellmap_flow.models import hf_catalog
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    repo = "cellmap/mito-aff-unet-setup-16"
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {})
+    monkeypatch.setattr(hf_catalog, "list_huggingface_models", lambda: {repo: {"input_voxel_size": [16] * 3}})
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    process_chain().input_norms, process_chain().postprocess = [], []
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    def served():
+        """The model entry the last server was started with."""
+        argv = shlex.split(commands[-1])
+        return json.loads(argv[argv.index("--model") + 1])
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [repo], "run_voxel_sizes": {repo: "32,16,16"}})
+    assert answer.status_code == 200 and served()["run_voxel_size"] == [32, 16, 16]
+    running = _Job("mito_aff_unet_setup_16")
+    session.jobs = [running]
+    assert dashboard.get("/api/huggingface-models").get_json()[repo]["run_voxel_size"] == [32, 16, 16]
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [repo], "run_voxel_sizes": {repo: ""}})
+    assert answer.status_code == 200 and running.killed
+    assert len(commands) == 2 and "run_voxel_size" not in served()
+
+
+def test_submit_refuses_another_voxel_size_for_a_model_that_reads_its_input_itself(dashboard, monkeypatch, tmp_path):
+    """A script with its own process_chunk (a TensorFlow model's) is refused
+    before anything starts: from its server, the page showed nothing."""
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    script = tmp_path / "tf.py"
+    script.write_text("def process_chunk(idi, roi):\n    return None\n")
+    session = get_session()
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
+    session.models_config = [build_model({"type": "script", "script_path": str(script)}, "tf")]
+
+    answer = dashboard.post("/api/models", json={"selected_models": ["tf"], "run_voxel_sizes": {"tf": "32"}})
+    assert answer.status_code == 400 and "tf" in answer.get_json()["error"] and commands == []
+    assert session.models_config[0].run_voxel_size is None
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):

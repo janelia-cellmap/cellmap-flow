@@ -2,18 +2,18 @@
 // model (planVolume, by cellmap_flow/portable/volume.py, the Python the
 // server plans with, run in the engine's Pyodide worker), or before any model
 // on the raw's grid (planPaintVolume: not trained on, its paint carried onto
-// a model's grid by Use this model), written as zarr v2
-// files into the paint store (volumeFiles), read back for training
-// (readVolume, the painted chunks) and for the annotated regions' boxes
-// (chunkBoxes), and retired, kept but no longer the
-// session's, once Use this model has carried its paint to another
-// (supersedeVolume, currentVolume). This file reads what the plan is made
-// from (the raw level the model reads, the model's blocks) and writes and
-// reads the files; the plan, the grid and the labels' dtype, is the
-// Python's. See PLAN_browser_finetune.md, "The volume's layout".
+// a model's grid by Use this model), written as zarr v2 files into the
+// paint store (volumeFiles), read back for training (readVolume, the
+// painted chunks) and for the annotated regions' boxes (chunkBoxes), and
+// retired, kept but no longer the session's, once Use this model has
+// carried its paint to another (supersedeVolume, currentVolume). This file
+// reads what the plan is made from (the raw level the model reads, the
+// model's blocks) and writes and reads the files; the plan, the grid and the
+// labels' dtype, is the Python's. See PLAN_browser_finetune.md, "The
+// volume's layout".
 import { volumeCornerNm } from "../ai-annotate/fill";
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
-import { chooseRawLevel, geometryOf } from "../infer/geometry";
+import { chooseRawLevel, geometryOf, sameVoxelSize } from "../infer/geometry";
 import { stamp } from "../shared/format";
 import type { RegionBox } from "../viewer/layers";
 import { decodeState } from "../viewer/share";
@@ -71,11 +71,9 @@ type PaintPlan = Omit<Plan, "claimed_output_voxel_size" | "claimed_input_voxel_s
  * and padded to whole chunks) and the labels' dtype (uint16 for a model
  * trained on instances, here an affinity model: hasAffinityChannels, as the
  * browser trains it). A refusal comes back as its sentence, thrown here.
- *
- * Refused for a dataset with more than one channel, as serve() refuses it:
- * the browser mode reads single-channel volumes. */
+ * The volume keeps `chain`'s input steps, its channel pick among them: it
+ * trains on the channel it was painted over. */
 export async function planVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: VolumeOptions = {}): Promise<PaintVolume> {
-  refuseChannels(dataset);
   const model = geometryOf(entry);
   const raw = dataset.levels[chooseRawLevel(dataset.levels, model.input_voxel_size)];
   const plan = await infer.python<Plan | { error: string }>(`${VOLUME_CALLS}:plan_volume`, {
@@ -99,11 +97,9 @@ export interface VolumeOptions { id?: string; now?: Date }
  * voxel size, the level the viewer shows at a screen pixel of `pixelNm`
  * (shownVoxelSize; null, the finest). Its model_name and model_id are null:
  * it is not trained on (trainingRefusal), and Which model to start from's
- * Use this model carries its paint onto a model's grid. Refused as
- * planVolume is for a dataset of more than one channel, and with the
+ * Use this model carries its paint onto a model's grid. Refused with the
  * Python's sentence for a voxel size it cannot plan at. */
 export async function planPaintVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, voxelSize: number[] | null, chain: Chain, options: VolumeOptions & { pixelNm?: number | null } = {}): Promise<PaintVolume> {
-  refuseChannels(dataset);
   const size = voxelSize ?? (await shownVoxelSize(infer, dataset, options.pixelNm ?? null));
   const raw = dataset.levels[chooseRawLevel(dataset.levels, size)];
   const plan = await infer.python<PaintPlan | { error: string }>(`${VOLUME_CALLS}:plan_paint_volume`, { level: levelOf(raw), voxel_size: size });
@@ -150,14 +146,6 @@ export async function trainingRefusal(infer: Pick<Inference, "python">, volume: 
   return answer.error ?? null;
 }
 
-/** Refused for a dataset with more than one channel, as serve() refuses it:
- * the browser mode reads single-channel volumes. */
-function refuseChannels(dataset: DatasetInfo): void {
-  if (dataset.channels > 1) {
-    throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode paints and trains on single-channel volumes (it does not select a channel yet)`);
-  }
-}
-
 /** A raw level as the plans take it: its shape, voxel size and voxel-0 lower corner (the engine's origin is the centre). */
 function levelOf(raw: DatasetInfo["levels"][number]): { shape: number[]; voxel: number[]; corner: number[] } {
   return { shape: raw.shape, voxel: raw.voxel, corner: volumeCornerNm(raw.origin, raw.voxel) };
@@ -176,6 +164,16 @@ function volumeOf(plan: Plan, dataset: DatasetInfo, entry: ModelEntry | null, ch
     postprocess: chain.postprocess.map((step) => ({ ...step })),
     created_at: (options.now ?? new Date()).toISOString(),
   };
+}
+
+/** Whether `volume` was planned for `entry` as it runs now: for its model,
+ * and at the voxel size it reads (the model's sizes the plan was given, its
+ * claimed ones), so a model run at another voxel size since lies on another
+ * grid, and its paint is carried onto that one, as onto another model's. A
+ * volume that does not say its claimed sizes is its model's at any. */
+export function plannedFor(volume: PaintVolume, entry: ModelEntry): boolean {
+  if (volume.model_id !== entry.id) return false;
+  return !volume.claimed_input_voxel_size || sameVoxelSize(volume.claimed_input_voxel_size, geometryOf(entry).input_voxel_size);
 }
 
 /** Whether a model's channels are affinities (`mito_aff_z`, `mito_aff_y`,
@@ -289,10 +287,10 @@ export async function readVolume(store: PaintStore, id: string): Promise<PaintVo
 /** Retire volume `id` in favour of `by`, the volume Use this model carried
  * its paint to: its root `.zattrs` gains `superseded_by`, and nothing else
  * of it changes. A session has one current volume, the one it trains on, so
- * a superseded one is no longer listed as a session, and resuming it
- * resumes the volume that took its place (currentVolume): David found the
- * Finetune tab listing every copy of one paint, on different grids, and
- * counting the chunks of each. It is kept, never deleted: its paint as it
+ * a superseded one is not listed as a session of its own (the Finetune tab
+ * would otherwise list every copy of one paint, on different grids, and
+ * count the chunks of each), and resuming it resumes the volume that took
+ * its place (currentVolume). It is kept, never deleted: its paint as it
  * was painted, on its own grid, is what the carry was made from. The server
  * moves such a volume into its corrections directory's superseded/; here a
  * volume's id is its key prefix in the store (paintKey), so it stays where
@@ -307,9 +305,8 @@ export async function supersedeVolume(store: PaintStore, id: string, by: string)
  * that took its place (superseded_by), followed to the last; null when the
  * store does not have `id`, or the last was deleted since (Delete volume
  * deletes the one named, not those it took the place of). Each id is
- * followed once, so a store whose
- * volumes name each other in a ring answers the last one reached rather
- * than looping. */
+ * followed once, so a store whose volumes name each other in a ring answers
+ * the last one reached rather than looping. */
 export async function currentVolume(store: PaintStore, id: string): Promise<PaintVolume | null> {
   const followed = new Set<string>();
   let volume = await readVolume(store, id);

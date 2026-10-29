@@ -259,7 +259,8 @@ def trains_one_channel(output_type, output_channels) -> bool:
     ``output_type``, trains one channel at a time (``select_channel``): more
     than one channel, on a target that is not one of EVERY_CHANNEL_TARGETS.
     The paint is then about one channel: the binary target on every channel
-    taught the paint's class to each (er and nucleus learned "mito")."""
+    would teach the paint's class to each (er and nucleus would learn
+    "mito")."""
     return int(output_channels or 1) > 1 and output_type not in EVERY_CHANNEL_TARGETS
 
 
@@ -280,9 +281,8 @@ def _channel_names_for_autodetect(model_config):
     the model's geometry (resolve_model_geometry: its server's, the cache's,
     or the model built here).
 
-    Read as channel_names_of reads them: a string is one name. They were
-    iterated as they came, so a single "x_aff" channel was the letters "x",
-    "_", "a"... and never an affinity model.
+    Read as channel_names_of reads them: a string is one name, so a single
+    "x_aff" channel is not the letters "x", "_", "a"...
     """
     channels = None
     try:
@@ -296,10 +296,9 @@ def _channel_names_for_autodetect(model_config):
     if channels:
         return channels
     # _config is only populated once something has built the model in this
-    # process. The dashboard deliberately no longer does that -- it asks the
-    # running server, or the geometry cache -- so _config is normally None
-    # here and this check silently fell through to "binary" for an affinity
-    # model. Ask the same sources, which now carry the channel names.
+    # process, which the dashboard does not do: it asks the running server,
+    # or the geometry cache, so ask those, which carry the channel names.
+    # Without them an affinity model would train as "binary".
     from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
     try:
@@ -459,9 +458,10 @@ def write_volume_manifest(volume):
 
     A volume painted before any model gets none (portable/volume.py
     training_refusal: it is on no model's grid), and any manifest in its
-    corrections dir is removed: one naming the volume before it kept that
-    one the session's, so Rank and Use this model read the old paint while
-    the user painted the new, and a restart or a resumed copy trained on it.
+    corrections dir is removed: one naming the volume before it would keep
+    that one the session's, so Rank and Use this model would read the old
+    paint while the user paints the new, and a restart or a resumed copy
+    would train on it.
     """
     from cellmap_flow.finetune.session.manifest import remove_manifest, write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest

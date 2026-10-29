@@ -5,7 +5,8 @@
 // loss down and recovers the labels, its epoch line the one the dashboard's
 // loss plot parses, its steps at the schedule's rates, the form's first and
 // the shared floor of it last; and with a distillation set and λ the head is
-// held to the teacher (the head it is given, whatever it starts from).
+// held to the teacher, the head it is given and starts from, against the
+// paint.
 import { describe, expect, it } from "vitest";
 
 import { PYTHON } from "../../src/generated/python-data";

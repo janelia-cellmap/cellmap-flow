@@ -31,7 +31,7 @@ message is pydantic's, after the field's name.
 """
 
 import logging
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, Union
 
 from flask import jsonify
 from pydantic import (
@@ -220,17 +220,38 @@ class CellposeSelection(BaseModel):
         else _number(v, float, "stitch_threshold"))] = None
 
 
+def _run_voxel_sizes(value):
+    """{row: [z, y, x]} from the Run at (nm) fields' {row: text}, each read as
+    ``_voxel_size`` reads one; a blank one is left out (the model's own)."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("must be an object of each model to the voxel size it is run at")
+    sizes = {}
+    for row, size in value.items():
+        if not model_entry.blank(size):
+            sizes[row] = list(model_entry.voxel_size(size, f"{row}'s run voxel size"))
+    return sizes
+
+
 class SubmitModels(BaseModel):
     """The Models tab's Submit: the catalog models, Hugging Face repos,
     BioImage Model Zoo and Cellpose models to run. Every other running model
     is stopped (services.launch). ``resample``, when given, becomes the
-    session's (``Session.resample``) before the models are started."""
+    session's (``Session.resample``) before the models are started.
+
+    ``run_voxel_sizes``: the voxel size (nm, z, y, x) to run a ticked
+    catalog or Hugging Face model at, by its row's value (a
+    ``selected_models`` name or a ``selected_hf_models`` repo), as typed
+    beside it ("32", "32,16,16", 32 or [32, 16, 16]). A model left out, or
+    left blank, runs at its own (``ModelConfig.run_voxel_size``)."""
 
     selected_models: list[str] = []
     selected_hf_models: list[str] = []
     selected_bioimage_models: list[BioimageSelection] = []
     selected_cellpose_models: list[CellposeSelection] = []
     resample: Optional[bool] = None
+    run_voxel_sizes: Annotated[dict[str, Union[str, float, list, None]], BeforeValidator(_run_voxel_sizes)] = {}
 
 
 class RemoveModel(BaseModel):

@@ -2,6 +2,8 @@
 
 - ``PUT /api/pipeline``: set the chain and redraw the viewer through it (the
   dashboard page's Apply, and the pipeline builder after each edit).
+- ``GET /api/raw/channels``: the raw's channels, which the Processing tab's
+  Channel picks among (the chain's ChannelSelector).
 - ``set_declared_input_norm()``: a model's start sets the input normalization
   it declares, or its kind of model's convention, when the chain has none
   (services.launch.update_run_models).
@@ -27,6 +29,7 @@ from pydantic import BaseModel, ValidationInfo, field_validator
 from cellmap_flow.dashboard.requests import BlockwiseSettings, Equivalences, parse
 from cellmap_flow.dashboard.routes import model_advice
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.io.raw import raw_channels, selected_channel
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.portable import rank
@@ -269,10 +272,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 
     # A raw layer built again is a new source, with a token of its own, so
     # the browser drops every raw chunk it has and fetches them all again
-    # through this process: the raw stayed black for a long while after an
-    # Apply that changed only the postprocessing. Its chunks only change
-    # with the input normalization, so otherwise the one shown stays, with
-    # the shader and controls the user has on it.
+    # through this process, and the raw is black for a long while. Its
+    # chunks only change with the input normalization, so otherwise the one
+    # shown stays, with the shader and controls the user has on it.
     # .state, not .txn(): this only reads.
     redraw_raw = input_changed or "data" not in session.viewer.state.layers
     # Without a contrast of the user's to restore, the raw's is sampled where
@@ -370,7 +372,10 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
     whose models all declare theirs (their manifests).
     """
     session = get_session()
-    if session.pipeline_spec.input_norm:
+    chain = session.pipeline_spec.input_norm
+    # A channel picked (the Processing tab's Channel) is no normalization:
+    # the model's steps go after it.
+    if rank.normalizers(chain):
         return None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
@@ -384,7 +389,7 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
         if unknown:
             logger.warning(f"{name}'s {what} is not used: {unknown}")
             continue
-        spec = PipelineSpec(steps, session.pipeline_spec.postprocess)
+        spec = PipelineSpec(rank.on_channel(steps, chain), session.pipeline_spec.postprocess)
         try:
             built = spec.build()
         except (TypeError, ValueError) as e:
@@ -408,7 +413,8 @@ def input_norm_set_by(model_configs):
     (set_declared_input_norm sets the steps as they are).
     """
     session = get_session()
-    live = [dict(step) for step in session.pipeline_spec.input_norm]
+    # Without the channel picked, which a start keeps (set_declared_input_norm).
+    live = rank.normalizers(session.pipeline_spec.input_norm)
     if not live:
         return None, None
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
@@ -534,8 +540,9 @@ def put_pipeline():
     chain as it is now configured, its digest (which names the layers'
     source, so the same chain sent again leaves neuroglancer's chunks and
     each server's built chain as they are), and the prediction layers drawn.
-    A body that is not a PipelineUpdate, or a step its op's class refuses,
-    is a 400 ``{"success": false, "error"}`` that changes nothing.
+    A body that is not a PipelineUpdate, a step its op's class refuses, or
+    a ChannelSelector past the raw's channels (_channel_problems), is a 400
+    ``{"success": false, "error"}`` that changes nothing.
     """
     body, error = parse(PipelineUpdate, request.get_json(silent=True))
     if error:
@@ -545,12 +552,53 @@ def put_pipeline():
         built = spec.build()
     except (TypeError, ValueError) as e:
         return jsonify({"success": False, "error": str(e)}), 400
-    problems = _problems_with_models(built[1])
+    problems = _channel_problems(built[0]) + _problems_with_models(built[1])
     if problems:
         return jsonify({"success": False, "error": "; ".join(problems)}), 400
     builder = body.builder.model_dump() if body.builder is not None else None
     layers = _set_chain_and_redraw(spec, request.host_url, built=built, builder=builder)
     return jsonify({"success": True, "pipeline": spec.to_json_data(), "digest": spec.digest(), "layers": layers})
+
+
+def _channel_problems(input_norms):
+    """Why the channel ``input_norms`` picks (its ChannelSelector's) is not
+    one of the open raw's, in a line, or none: every read of it would fail,
+    deep in a model's server. None with no dataset open either, or one whose
+    channels cannot be read."""
+    channel = selected_channel(input_norms)
+    path = get_session().dataset_path
+    if channel == 0 or not path:
+        return []
+    try:
+        count, _ = raw_channels(path)
+    except Exception as e:
+        logger.debug(f"Could not count the channels of {path}: {e}")
+        return []
+    if 0 <= channel < count:
+        return []
+    return [f"ChannelSelector picks channel {channel}, but the raw has "
+            + ("one channel, 0" if count == 1 else f"{count} channels, 0 to {count - 1}")]
+
+
+@pipeline_bp.route("/api/raw/channels", methods=["GET"])
+def get_raw_channels():
+    """The raw's channels, for the Processing tab's Channel:
+    ``{"success": true, "channels", "labels", "selected"}``. ``channels`` is
+    how many there are (1 for a raw with no channel axis, or no dataset
+    open), ``labels`` their names (io.raw.raw_channels: an OME-Zarr's
+    omero labels) or null, and ``selected`` the one the models read, the
+    chain's ChannelSelector's, else 0. A raw that cannot be read is a 400
+    ``{"success": false, "error"}``. The browser's twin answers the same.
+    """
+    session = get_session()
+    count, labels = 1, None
+    if session.dataset_path:
+        try:
+            count, labels = raw_channels(session.dataset_path)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Could not read the raw's channels: {e}"}), 400
+    return jsonify({"success": True, "channels": count, "labels": labels,
+                    "selected": selected_channel(session.input_norms)})
 
 
 # The routes PUT /api/pipeline replaced, kept for one release as its aliases.

@@ -40,43 +40,66 @@ function isRestartKey(event) {
 
 // The confirm Restart asks, to check the form's values first, as rows of
 // [label, the request's key or a function of it, shown if the key is not
-// sent]. The browser's run reads only the head's parameters (the rest of the
-// form is hidden there), so its rows are only those, or the whole network's.
+// sent]; a function's null leaves its row out. Each mode's rows are what its
+// run reads: the server's trainer the whole form, the browser's last layer
+// and whole network the loss fields (loss, distillation, label smoothing,
+// class balance: web/src/backend/routes/finetune.ts readLoss) beside their
+// own, and every run the channel picked, for a model trained a channel at a
+// time.
+const LOSS_ROW = ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")];
+const RATE_ROW = ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`];
+const DISTILLATION_ROW = ["distillation", (body) => `${body.distillation_lambda} (${body.distillation_scope})`];
+const CHANNEL_ROW = ["channel", (body) => (body.select_channel === undefined ? null : channelText(body.select_channel))];
 const RESTART_SUMMARY_ROWS = {
   server: [
-    ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")],
-    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
+    LOSS_ROW,
+    RATE_ROW,
     ["lora_r", "lora_r"],
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
     ["patches/epoch", "patches_per_epoch", "manifest"],
     ["rehearsal", "rehearsal_fraction", "manifest"],
-    ["distillation", (body) => `${body.distillation_lambda} (${body.distillation_scope})`],
+    DISTILLATION_ROW,
     ["label_smoothing", "label_smoothing"],
     ["balance_classes", "balance_classes"],
     ["augment", "augment"],
+    CHANNEL_ROW,
   ],
   head: [
-    ["loss", "loss_type"],
-    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
+    LOSS_ROW,
+    RATE_ROW,
     ["epochs", "num_epochs"],
+    DISTILLATION_ROW,
     ["label_smoothing", "label_smoothing"],
     ["balance_classes", "balance_classes"],
+    CHANNEL_ROW,
   ],
   full: [
     ["training", () => "whole network"],
-    ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`],
+    LOSS_ROW,
+    RATE_ROW,
     ["epochs", "num_epochs"],
     ["batch_size", "batch_size"],
     ["tile_size", "tile_size", "default"],
+    DISTILLATION_ROW,
+    ["label_smoothing", "label_smoothing"],
+    ["balance_classes", "balance_classes"],
+    ["augment", "augment"],
+    CHANNEL_ROW,
   ],
 };
 
-function restartSummary(requestBody, browser) {
+// The channel `index` as the training form's Channel names it.
+function channelText(index) {
+  const option = [...(document.getElementById("trainChannel")?.options || [])].find((o) => o.value === String(index));
+  return option ? option.text : `channel ${index}`;
+}
+
+export function restartSummary(requestBody, browser) {
   const mode = !browser ? "server" : requestBody.finetune_mode === "full" ? "full" : "head";
-  const rows = RESTART_SUMMARY_ROWS[mode].map(([label, key, fallback]) => {
+  const rows = RESTART_SUMMARY_ROWS[mode].flatMap(([label, key, fallback]) => {
     const value = typeof key === "function" ? key(requestBody) : requestBody[key];
-    return `  ${(label + ":").padEnd(16)}${value !== undefined ? value : fallback}\n`;
+    return value === null ? [] : [`  ${(label + ":").padEnd(16)}${value !== undefined ? value : fallback}\n`];
   });
   return "Restart training with current form values?\n\n" + rows.join("");
 }

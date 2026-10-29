@@ -3,14 +3,13 @@
 // fixture's 1×6×6 output) and the real feature runner, head finder, trainer
 // and weight writer. The run trains the epochs asked with the dashboard's
 // epoch lines, and the Finetuned's bytes, the trained head in them, run in
-// onnxruntime; a volume with no paint is refused; a cancel ends it
-// early; the runner is released
-// however the run ends. Distillation, on by default, holds the painted
-// chunks' unpainted voxels; with good regions it holds their unpainted
-// voxels instead, running the model on a region's block nothing was painted
-// in, and skips what is not a region in the volume. A run of one channel
-// trains that channel's row of the head and leaves the other rows as it
-// started them, bit for bit.
+// onnxruntime; a volume with no paint is refused; a cancel ends it early;
+// the runner is released however the run ends. Distillation, on by default,
+// holds the painted chunks' unpainted voxels; with good regions it holds
+// their unpainted voxels instead, running the model on a region's block
+// nothing was painted in, and skips what is not a region in the volume. A
+// run of one channel trains that channel's row of the head and leaves the
+// other rows as it started them, bit for bit.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
@@ -55,7 +54,7 @@ const VOLUME: PaintVolume = {
   dataset_shape_voxels: [1, 12, 12], dtype: "uint8", input_norm: [], postprocess: [], created_at: "2026-10-15T00:00:00Z",
 };
 const CHAIN: Chain = { input_norm: [], postprocess: [] };
-const DATASET: DatasetInfo = { url: "mem://raw", dtype: "uint8", channels: 1, axes: [], levels: [{ shape: [1, 12, 12], voxel: [8, 8, 8], origin: [0, 0, 0] }] };
+const DATASET: DatasetInfo = { url: "mem://raw", dtype: "uint8", channels: 1, channelLabels: null, axes: [], levels: [{ shape: [1, 12, 12], voxel: [8, 8, 8], origin: [0, 0, 0] }] };
 
 /** A chunk whose labels come from `label(v)`: 0 unpainted, 1 background, 2 object. */
 function chunk(index: number[], label: (v: number) => number): PaintedChunk {
@@ -234,6 +233,5 @@ describe("runFinetune of one channel", () => {
     expect(Array.from(written.weight.subarray(cin))).not.toEqual(Array.from(base.weight.subarray(cin)));
     expect(written.bias[1]).not.toBe(base.bias[1]);
     expect(finetuned.losses[7]).toBeLessThan(finetuned.losses[0]);
-
   }, 60000);
 });

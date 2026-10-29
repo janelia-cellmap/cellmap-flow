@@ -14,14 +14,14 @@
 // the postprocessing its output needs when the chain has none
 // (setNeededPostprocess).
 import { ARGS_KEY } from "../contracts";
-import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
-import { SUPPORTED_NORMALIZERS } from "../infer/norms";
+import type { AppContext, Chain, DatasetInfo, ModelEntry, ServedModel, Step } from "../contracts";
+import { selectedChannel, SUPPORTED_NORMALIZERS, withChannelPick, withoutChannelPick } from "../infer/norms";
 import { withVariant } from "../models";
 import { finetuneNumber } from "../models/finetuned";
-import { chainDigest, encodeArgs } from "../shared/args";
+import { chainDigest, encodeArgs, viewName } from "../shared/args";
 import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
-import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer } from "../viewer/layers";
+import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer, RAW_LAYER_NAME, rawChannelShown } from "../viewer/layers";
 
 /** The dashboard's address as the Python routes put it in the blob
  * (request.host_url: the scheme, host and the page's base, with the
@@ -45,24 +45,33 @@ export function blobOf(served: ServedModel): string {
   return served.view.split(ARGS_KEY)[1] ?? "";
 }
 
+/** Whether `served` is `entry` served through `blob`, at the voxel size
+ * `entry` is run at (its view's name says both: shared/args.ts viewName). */
+export function servesAs(served: ServedModel, entry: ModelEntry, blob: string): boolean {
+  return served.entry.id === entry.id && served.view === viewName(entry.name, blob, entry.runVoxelSize);
+}
+
 /** Whether every one of `entries` is served through `blob` already: then a
  * redraw would show nothing new (pipeline.py's _shows). */
 export function allServed(ctx: AppContext, entries: ModelEntry[], blob: string): boolean {
   const served = ctx.infer.served();
-  return entries.every((e) => served.some((s) => s.entry.id === e.id && blobOf(s) === blob));
+  return entries.every((e) => served.some((s) => servesAs(s, e, blob)));
 }
 
 /** Make `chain` the session's and draw its models' layers through it
  * (pipeline.py's _set_chain_and_redraw): the models drawn, or null when no
  * dataset is open (the chain is kept and nothing drawn). The same chain
  * again over layers that carry it already draws nothing (it would reset
- * what the user set in the viewer, a layer hidden, an opacity). */
+ * what the user set in the viewer, a layer hidden, an opacity). A chain
+ * that picks another raw channel shows that one in the raw layer too. */
 export async function setChain(ctx: AppContext, chain: Chain): Promise<ServedModel[] | null> {
   const previous = ctx.session.state.chain;
   const [{ blob, digest }, previousDigest] = await Promise.all([blobFor(chain), blobFor(previous).then((b) => b.digest)]);
   const entries = ctx.session.state.models;
   await ctx.session.update({ chain });
-  if (!ctx.infer.dataset()) return null;
+  const dataset = ctx.infer.dataset();
+  if (!dataset) return null;
+  if (selectedChannel(chain.input_norm) !== selectedChannel(previous.input_norm)) showRawChannel(ctx, dataset, selectedChannel(chain.input_norm));
   if (digest === previousDigest && allServed(ctx, entries, blob)) return ctx.infer.served().filter((s) => entries.some((e) => e.id === s.entry.id));
   const postprocessChanged = JSON.stringify(previous.postprocess) !== JSON.stringify(chain.postprocess);
   const served = await serveModels(ctx, entries, chain, { blob, postprocessChanged });
@@ -79,8 +88,9 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
 
 /** Set the input normalization a model declares as the chain's, as part of
  * starting it, when the chain has none (pipeline.py's
- * set_declared_input_norm). Returns the name of the model whose declaration
- * it is, or null when nothing changed.
+ * set_declared_input_norm; a channel pick is no normalization, and stays
+ * first). Returns the name of the model whose declaration it is, or null
+ * when nothing changed.
  *
  * The Models tab's Submit and Add (routes/models.ts) call this with the
  * models they are about to serve that are not served yet, before serving
@@ -95,16 +105,16 @@ export function declaredInputNorm(entry: ModelEntry): Step[] {
  * is skipped, saying so, and the next model's is tried. */
 export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly ModelEntry[]): Promise<string | null> {
   const { chain } = ctx.session.state;
-  if (chain.input_norm.length) return null;
+  if (withoutChannelPick(chain.input_norm).length) return null;
   for (const entry of starting) {
-    const steps = declaredInputNorm(entry);
+    const steps = withoutChannelPick(declaredInputNorm(entry));
     if (!steps.length) continue;
     const unsupported = steps.find((step) => !SUPPORTED_NORMALIZERS.includes(step.name));
     if (unsupported) {
       ctx.log(`${entry.name}'s declared input normalization is not used: ${unsupported.name} is not available in the browser`);
       continue;
     }
-    await setChain(ctx, { input_norm: steps, postprocess: chain.postprocess });
+    await setChain(ctx, { input_norm: withChannelPick(steps, chain.input_norm), postprocess: chain.postprocess });
     ctx.log(`Input normalization set from ${entry.name}'s declaration: ${stepNames(steps).join(" → ")}`);
     return entry.name;
   }
@@ -175,32 +185,33 @@ async function servedOutputClass(ctx: AppContext, entry: ModelEntry): Promise<st
 }
 
 /** `entry` in the variant it is served in: the one it is served in already
- * (through another chain: the same variant again, so the onnxruntime
- * session is shared), else the one for this machine's GPU (the catalog's
- * entries carry a default variant, fp32 and the smallest block, and
- * Catalog.chooseVariant picks the precision and block size the GPU's
- * limits allow). */
+ * (through another chain, or at another voxel size: the same variant again,
+ * so the onnxruntime session is shared), else the one for this machine's
+ * GPU (the catalog's entries carry a default variant, fp32 and the smallest
+ * block, and Catalog.chooseVariant picks the precision and block size the
+ * GPU's limits allow). Either way at the voxel size `entry` is run at. */
 async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelEntry> {
   const previous = ctx.infer.served().find((s) => s.entry.id === entry.id);
-  if (previous) return previous.entry;
-  return withVariant(entry, ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()));
+  return withVariant(entry, previous ? previous.entry.variant : ctx.catalog.chooseVariant(entry.manifest, await ctx.infer.gpuLimits()));
 }
 
 /** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
 export const PORTABLE = "cellmap_flow.portable.calls";
 
 /** The name of the first of `entries` whose declared input normalization is
- * `chain`'s input part, step for step; null when none is, or the chain has
- * no input normalizers (pipeline.py's input_norm_set_by). GET
+ * `chain`'s input part (its channel pick aside), step for step; null when
+ * none is, or the chain has no input normalizers (pipeline.py's
+ * input_norm_set_by). GET
  * /api/models/loaded answers it beside the chain, so the page can say where
  * an input normalization a model's start set came from. Every model here
  * declares its own (its manifest), so the answer has no
  * input_norm_declared, which the Flask dashboard's says false for a
  * convention it set; the page reads none as declared. */
 export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
-  if (!chain.input_norm.length) return null;
-  const live = JSON.stringify(chain.input_norm);
-  return entries.find((entry) => JSON.stringify(declaredInputNorm(entry)) === live)?.name ?? null;
+  const steps = withoutChannelPick(chain.input_norm);
+  if (!steps.length) return null;
+  const live = JSON.stringify(steps);
+  return entries.find((entry) => JSON.stringify(withoutChannelPick(declaredInputNorm(entry))) === live)?.name ?? null;
 }
 
 export interface ServeOptions {
@@ -218,8 +229,9 @@ export interface ServeOptions {
 }
 
 /** Serve `entries` through `chain`, in their order, and nothing else: a
- * model already served through this chain is kept as it is; one served
- * through another chain is served anew and the old view disposed of (after
+ * model already served through this chain, at the voxel size its entry is
+ * run at (servesAs), is kept as it is; one served through another chain, or
+ * at another voxel size, is served anew and the old view disposed of (after
  * the new one exists, so the two share the onnxruntime session rather than
  * rebuilding it); one no longer in `entries` is disposed of and its layer
  * removed. Then the viewer shows one layer per entry, coloured by position.
@@ -234,7 +246,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
   const kept = new Set<ServedModel>();
   const result: ServedModel[] = [];
   for (const entry of entries) {
-    const current = before.find((s) => s.entry.id === entry.id && blobOf(s) === blob);
+    const current = before.find((s) => servesAs(s, entry, blob));
     if (current) {
       kept.add(current);
       result.push(current);
@@ -334,6 +346,14 @@ export function showChannel(ctx: AppContext, model: string): boolean {
     changed = true;
   }
   return changed;
+}
+
+/** The raw layer shown on channel `channel` of `dataset` (layers.ts
+ * rawChannelShown), otherwise as it is; nothing for a volume of one
+ * channel, or with no raw layer. */
+export function showRawChannel(ctx: AppContext, dataset: DatasetInfo, channel: number): void {
+  const layer = ctx.viewer.layer(RAW_LAYER_NAME);
+  if (layer && dataset.channels > 1) ctx.viewer.setLayers({ [RAW_LAYER_NAME]: rawChannelShown(layer, dataset, channel) });
 }
 
 /** "148" for a cubic block, "148x148x64" otherwise. */

@@ -30,7 +30,7 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.portable.rank import same_steps
+from cellmap_flow.portable.rank import normalizers, same_steps
 from cellmap_flow.serving.probe import activation_evidence, input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
@@ -82,7 +82,8 @@ def _declared_input_norm(model_config, data_range):
 
 
 # Reading the dataset costs a metadata fetch (and, for float data, a sample),
-# and it cannot change while the dashboard runs.
+# and it cannot change while the dashboard runs; each channel of it is
+# sampled on its own.
 _raw_range_cache = {}
 
 
@@ -91,13 +92,17 @@ def raw_dtype_and_range(dataset_path):
 
     Integer data has an exact range from its dtype. Float data does not -- the
     dtype permits anything -- so sample percentiles instead, the same way the
-    raw layer's auto-contrast does. Returns (dtype_name, (lo, hi)); either part
-    may be None when it could not be determined.
+    raw layer's auto-contrast does, on the channel the chain picks. Returns
+    (dtype_name, (lo, hi)); either part may be None when it could not be
+    determined.
     """
+    from cellmap_flow.io.raw import selected_channel
+
     if not dataset_path:
         return None, None
-    if dataset_path in _raw_range_cache:
-        return _raw_range_cache[dataset_path]
+    key = (dataset_path, selected_channel(get_session().input_norms))
+    if key in _raw_range_cache:
+        return _raw_range_cache[key]
 
     dtype_name, value_range = None, None
     try:
@@ -116,7 +121,7 @@ def raw_dtype_and_range(dataset_path):
     except Exception as e:
         logger.debug(f"Could not read raw dtype/range for {dataset_path}: {e}")
 
-    _raw_range_cache[dataset_path] = (dtype_name, value_range)
+    _raw_range_cache[key] = (dtype_name, value_range)
     return dtype_name, value_range
 
 
@@ -132,8 +137,8 @@ def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
     convention for its kind of model (routes.pipeline.set_declared_input_norm).
     """
     if getattr(model_config, "normalizes_input", False):
-        # No suggestion, so the page shows none: [-1, 1] was suggested
-        # for a Cellpose model, which normalizes each slice itself.
+        # No suggestion, so the page shows none: not [-1, 1] for a
+        # Cellpose model, which normalizes each slice itself.
         return {"input_norm": None, "order": [], "reason": "The model normalizes its input itself",
                 "confidence": "high"}, None
     declared = _declared_input_norm(model_config, raw_range)
@@ -152,34 +157,31 @@ def _fetch_probe(host: str) -> dict:
     return fetch_model_info(host)
 
 
-def _launching() -> bool:
-    """Whether a model's launch has not returned yet (services/launch.py):
-    its job may be listed already while its start is still to set the
-    chain's postprocessing (routes.pipeline.set_needed_postprocess)."""
-    from cellmap_flow.dashboard.services.launch import _launching, _launching_lock
-
-    with _launching_lock:
-        return bool(_launching)
-
-
 @model_advice_bp.route("/api/model_advice", methods=["GET"])
 def model_advice():
     """Per-model verdicts on the currently configured input/output handling.
 
     ``{"success": true, "models": [...], "starting", "digest"}``: an entry
     per served model; ``starting``, whether a model's start is still on its
-    way (_launching), and ``digest``, the chain's (PipelineSpec.digest). The
-    page asks again while ``starting``, and reads the chain again when the
-    digest moves: a model's start sets the postprocessing its output needs
-    once its server answers, after the Submit that started it.
+    way (services/launch.py launching: its job may be listed already while
+    its start is still to set the chain's postprocessing,
+    routes.pipeline.set_needed_postprocess), and ``digest``, the chain's
+    (PipelineSpec.digest). The page asks again while ``starting``, and reads
+    the chain again when the digest moves: a model's start sets the
+    postprocessing its output needs once its server answers, after the
+    Submit that started it.
     """
+    from cellmap_flow.dashboard.services.launch import launching
+
     session = get_session()
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
     ]
-    configured_steps = [
+    # The channel picked (a ChannelSelector) is the raw's, not the model's
+    # normalization: the steps compared with the model's are the rest.
+    configured_steps = normalizers([
         n.to_dict() for n in (session.input_norms or []) if hasattr(n, "to_dict")
-    ]
+    ])
     configured_norm = [step.get("name") for step in configured_steps]
 
     raw_dtype, raw_range = raw_dtype_and_range(session.dataset_path)
@@ -260,8 +262,8 @@ def model_advice():
         # to the letter (its x*2-1 is anyone's 2*x-1).
         # The steps the ranking fitted to the paint for this model, which Use
         # this model, Fit to Paint or Use these settings set (a MinMax
-        # stretched to the raw under the paint, say), match as they are:
-        # suggested the declared ones back, a second Apply undid the ranking.
+        # stretched to the raw under the paint, say), match as they are: the
+        # declared ones suggested back, a second Apply would undo the ranking.
         fitted = (session.rank_fits.get(name) or {}).get("input_norm")
         entry["input_norm_fitted"] = bool(fitted) and same_steps(fitted, [dict(s) for s in session.pipeline_spec.input_norm])
         entry["input_norm_differences"] = [] if entry["input_norm_fitted"] else input_norm_differences(configured_steps, declared)
@@ -271,5 +273,5 @@ def model_advice():
         )
         results.append(entry)
 
-    return jsonify({"success": True, "models": results, "starting": _launching(),
+    return jsonify({"success": True, "models": results, "starting": launching(),
                     "digest": session.pipeline_spec.digest()})

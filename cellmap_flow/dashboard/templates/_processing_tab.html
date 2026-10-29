@@ -89,9 +89,10 @@
    as the bar's Apply does. #}
 <div id="processingAdvice"></div>
 <div class="alert alert-info" role="alert">
-  Drag to reorder: steps run in the order shown, the input normalization
+  Drag to reorder; edits take effect on Apply.
+  <details class="more"><summary aria-label="More">i</summary><span class="more-body">Steps run in the order shown, the input normalization
   before the model and the postprocessing after it. An edit in either list
-  takes effect when you press Apply.
+  takes effect when you press Apply.</span></details>
 </div>
 
 {# The two lists as sub-tabs, as the Finetune tab's Annotation Crops and
@@ -112,6 +113,14 @@
 <div class="tab-content" id="processingTabContent">
   <div class="tab-pane fade show active" id="inputNormPane" role="tabpanel">
     {{ notice("inputNormNotice", "info", "mb-2") }}
+    {# The raw channel every model reads, for a raw of several: the list's
+       ChannelSelector, which a pick puts first and applies
+       (js/dashboard/raw-channel.js). Shown with the `hidden` attribute. #}
+    <div class="mb-3" id="rawChannelRow" hidden>
+      <label class="form-label mb-1" for="rawChannel">Channel</label>
+      <select class="form-select form-select-sm" id="rawChannel"></select>
+      <div class="form-text">The raw channel every model reads.</div>
+    </div>
     {{ op_list("inputNormForm", "inputNormList", "inputNorm", "normalizer-item", "inputNormCheckbox", input_norm_items) }}
   </div>
   <div class="tab-pane fade" id="postProcessPane" role="tabpanel">

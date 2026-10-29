@@ -38,11 +38,12 @@
          ranking lists the same models with them. -->
 
     <!-- Local Catalog Section: a section for each group, from the data
-         below. server-only: it lists paths on the cluster's file systems;
-         in the browser mode (web/) the models come from the Hugging Face
-         section below. -->
+         below, with the voxel size a model runs at when it is not its own
+         (run_voxel_sizes, by name). server-only: it lists paths on the
+         cluster's file systems; in the browser mode (web/) the models come
+         from the Hugging Face section below. -->
     <h5 class="server-only">Local Catalog</h5>
-    <script type="application/json" id="model-catalog-data">{{ {"groups": catalog_groups, "ticked": default_models} | tojson }}</script>
+    <script type="application/json" id="model-catalog-data">{{ {"groups": catalog_groups, "ticked": default_models, "run_voxel_sizes": run_voxel_sizes} | tojson }}</script>
     <div class="accordion server-only" id="modelAccordion"></div>
 
     <!-- Hugging Face Section: loaded when it opens. -->
@@ -85,9 +86,10 @@
           <div class="accordion-body" id="cellposeModelsContainer">
             <div class="cellpose-model-list" id="cellposeModelList"></div>
             <div class="cellpose-note">
-              Each z slice is segmented in 2D. The DINO models (cpdino, cpdino-vitb) are
+              Each z slice is segmented in 2D, unless 3D is ticked.
+              <details class="more"><summary aria-label="More">i</summary><span class="more-body">The DINO models (cpdino, cpdino-vitb) are
               not listed: they need the dinov3 package, which the cellpose4 environment
-              does not have. Cellpose-SAM's weights are for non-commercial use.
+              does not have. Cellpose-SAM's weights are for non-commercial use.</span></details>
             </div>
           </div>
         </div>
@@ -117,7 +119,7 @@
         >
           <div class="accordion-body" id="serverConfigContainer">
             {% if not on_cluster %}
-            <p class="text-muted small mb-2">No cluster here (no <code>bsub</code>): models and finetuning run on this machine, and these settings are not used.</p>
+            <div class="text-muted small mb-2">No cluster here: these settings are not used. <details class="more"><summary aria-label="More">i</summary><span class="more-body">No <code>bsub</code> here: models and finetuning run on this machine.</span></details></div>
             {% endif %}
             <div class="mb-2">
               {# The GPU queues a job may run on: a dropdown of checkboxes (shared/gpu-queues.js). #}
@@ -132,18 +134,20 @@
               <label class="form-label" for="cfg_walltime">Time Limit</label>
               <input type="text" class="form-control form-control-sm" id="cfg_walltime" placeholder="08:00" />
               <div class="form-text">
-                LSF run limit, <code>HH:MM</code> or minutes. Jobs are killed at
-                this point. Leave blank for the queue default, which is 2 hours.
+                <code>HH:MM</code> or minutes; blank for the queue default.
+                <details class="more"><summary aria-label="More">i</summary><span class="more-body">LSF run limit: jobs are killed at
+                this point. The queue default is 2 hours.</span></details>
               </div>
             </div>
             <div class="mb-2 form-check">
               <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
               <label class="form-check-label" for="cfg_cycle_gpu_queues">Move a job that has not started</label>
               <div class="form-text">
-                A job goes to the queue ticked above with the most free GPUs;
+                Tries the next queue ticked if a job waits 3 minutes.
+                <details class="more"><summary aria-label="More">i</summary><span class="more-body">A job goes to the queue ticked above with the most free GPUs;
                 if it has not started there in 3 minutes, it moves to the next
                 one ticked. Uncheck to always use the first queue ticked,
-                however long it takes to start.
+                however long it takes to start.</span></details>
               </div>
             </div>
             <div class="mb-2">
@@ -173,11 +177,13 @@
       {# The browser mode (web/build/render.py sets mode); Flask passes no mode
          and shows the text below. #}
       <div class="text-muted small mb-1" style="max-width: 20rem">
-        Models run in this browser, on its GPU through WebGPU, or else on its CPU.
+        Models run in this browser.
+        <details class="more"><summary aria-label="More">i</summary><span class="more-body">On its GPU through WebGPU, or else on its CPU.</span></details>
       </div>
       {% else %}
       <div class="text-muted small mb-1" style="max-width: 20rem">
-        No cluster here (no <code>bsub</code>): models run on this machine, on its GPU (CUDA, or Apple's on a Mac) or else its CPU.
+        No cluster here: models run on this machine.
+        <details class="more"><summary aria-label="More">i</summary><span class="more-body">No <code>bsub</code> here, so models run on this machine's GPU (CUDA, or Apple's on a Mac) or else its CPU.</span></details>
       </div>
       {% endif %}
       <div class="form-check mb-1"

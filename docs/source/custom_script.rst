@@ -31,12 +31,12 @@ Your script must define the following **global-level** variables or attributes:
 
 - **model** *(optional)*: PyTorch model instance. Required if predict is not defined.
 - **predict** *(optional)*: Custom callable to run predictions. Required if model is not defined.
-- **read_shape** *(required)*: The shape of the input block (in world units or voxels).
-- **write_shape** *(required)*: The shape of the output block (i.e., prediction size).
+- **read_shape** *(required)*: The shape of the input block, in nm (its size in voxels times the input voxel size); or ``input_size``, in voxels.
+- **write_shape** *(required)*: The shape of the output block (i.e., prediction size), in nm; or ``output_size``, in voxels.
 - **input_voxel_size** *(required)*: Size of a voxel in the input data.
 - **output_voxel_size** *(required)*: Size of a voxel in the model output.
 - **output_channels** *(required)*: Number of channels in the output prediction.
-- **block_shape** *(required)*: Shape of each output block (must match write_shape + channels).
+- **block_shape** *(optional)*: Shape of each output block, the output size in voxels plus the channels; made from those when not given.
 
 Testing Your Script
 -------------------
@@ -88,7 +88,7 @@ If you're using PyTorch and your model is compatible with direct inference via `
     block_shape = np.array((56, 56, 56, output_channels))
 
 .. note::
-   You **must define** the `model` and `block_shape` variables in the global scope. CellMap Flow will use these automatically.
+   You **must define** the `model` variable in the global scope (or `predict`). CellMap Flow will use it automatically.
 
 Advanced Usage: Custom Process Function (TensorFlow)
 ----------------------------------------------------

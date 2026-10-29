@@ -53,6 +53,7 @@ import { AIAnnotateError, PLANE_NAMES, STAGE_LABELS } from "../ai-annotate/types
 import type { Usage } from "../ai-annotate/usage";
 import type { AppContext, PaintStore, PaintVolume } from "../contracts";
 import { hasAffinityChannels, readVolume } from "../finetune/volume";
+import { selectedChannel } from "../infer/norms";
 import { paintLayerName } from "../viewer/layers";
 import { message } from "./router";
 
@@ -245,7 +246,7 @@ export class AiAnnotateJob {
       const plan = planned.plan;
       this.plan = plan;
       this.writeBox = { lo: plan.write_lo.map((v) => Math.trunc(v)), hi: plan.write_hi.map((v) => Math.trunc(v)) };
-      const image = await readImage(ctx.infer, dataset, planned);
+      const image = await readImage(ctx.infer, dataset, planned, selectedChannel(ctx.session.state.chain.input_norm));
       const request: SegmentRequest = buildRequest(image, planned, args.profile, args.override);
       this.request = request;
       await this.askAndStage(request);

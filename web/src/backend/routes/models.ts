@@ -15,6 +15,8 @@ import type { ApiRequest, ApiResponse, AppContext, Chain, FinetunedRecord, Model
 import { hasAffinityChannels } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
 import { compileExpression } from "../../infer/expression";
+import { modelVoxelSizes, parseVoxelSize, withRunVoxelSize } from "../../infer/geometry";
+import { withoutChannelPick } from "../../infer/norms";
 import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
@@ -29,15 +31,22 @@ import { serverParams } from "./config";
  * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing
- * has no such field, so its rows start unticked as before. `refresh` reads
- * the repository again instead of the cached listing. A listing that fails
- * is {error} with a 500, as the Flask route answers; the tab shows the
+ * has no such field, so its rows start unticked as before. One the session
+ * runs at another voxel size than its own has it as `run_voxel_size`
+ * ([z, y, x] nm, as the server's listing says it), which the row's Run at
+ * (nm) shows; the metadata's voxel sizes stay the model's own. `refresh`
+ * reads the repository again instead of the cached listing. A listing that
+ * fails is {error} with a 500, as the Flask route answers; the tab shows the
  * message. */
 async function listModels(ctx: AppContext, refresh: boolean) {
   try {
     const entries = refresh ? await ctx.catalog.refresh() : await ctx.catalog.list();
-    const serving = new Set(ctx.session.state.models.map((m) => m.id));
-    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
+    const serving = new Map(ctx.session.state.models.map((m) => [m.id, m]));
+    return json(200, Object.fromEntries(entries.map((e) => {
+      const served = serving.get(e.id);
+      const runAt = served?.runVoxelSize ? { run_voxel_size: served.runVoxelSize } : {};
+      return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(served ? { selected: true, ...runAt } : {}) }];
+    })));
   } catch (e) {
     return json(500, { error: message(e) });
   }
@@ -67,16 +76,39 @@ async function resolveOne(ctx: AppContext, ref: string): Promise<{ entry: ModelE
 }
 
 /** The catalog entries for the references the dashboard sent (repo ids from
- * the Hugging Face list, names of models added by hand), one per model, or
- * the first reference that is not a model the browser can run. */
-async function resolveAll(ctx: AppContext, refs: string[]): Promise<{ entries: ModelEntry[] } | { error: string }> {
+ * the Hugging Face list, names of models added by hand), one per model,
+ * each run at the voxel size `runAt` gives its reference (none: its own),
+ * or the first reference that is not a model the browser can run. */
+async function resolveAll(ctx: AppContext, refs: string[], runAt: Record<string, number[]> = {}): Promise<{ entries: ModelEntry[] } | { error: string }> {
   const entries: ModelEntry[] = [];
   for (const ref of refs) {
     const resolved = await resolveOne(ctx, ref);
     if ("error" in resolved) return resolved;
-    if (!entries.some((e) => e.id === resolved.entry.id)) entries.push(resolved.entry);
+    if (!entries.some((e) => e.id === resolved.entry.id)) entries.push(withRunVoxelSize(resolved.entry, runAt[ref] ?? null));
   }
   return { entries };
+}
+
+/** Submit's `run_voxel_sizes`: from a ticked row's value (an entry of
+ * `refs`, the body's selected_models and selected_hf_models) to the voxel
+ * size typed beside it, read as the server reads one (parseVoxelSize: "32",
+ * "32,16,16", 32 or [32, 16, 16]); a blank one, and a key that is no ticked
+ * row's, says nothing. Or the error that names the model whose size is not
+ * one. */
+function runVoxelSizes(value: unknown, refs: readonly string[]): { sizes: Record<string, number[]> } | { error: string } {
+  if (value === undefined || value === null) return { sizes: {} };
+  if (typeof value !== "object" || Array.isArray(value)) return { error: "run_voxel_sizes: expected an object from a ticked model to its voxel size" };
+  const sizes: Record<string, number[]> = {};
+  for (const [ref, typed] of Object.entries(value)) {
+    if (!refs.includes(ref)) continue;
+    try {
+      const size = parseVoxelSize(typed, `${ref}'s run voxel size`);
+      if (size) sizes[ref] = size;
+    } catch (e) {
+      return { error: message(e) };
+    }
+  }
+  return { sizes };
 }
 
 /** One model of the Loaded models list, as services/launch.py's
@@ -174,7 +206,11 @@ export function modelRoutes(router: Router): void {
     if (Array.isArray(body.selected_bioimage_models) && body.selected_bioimage_models.length) ignored.push("BioImage Model Zoo");
     if (Array.isArray(body.selected_cellpose_models) && body.selected_cellpose_models.length) ignored.push("Cellpose");
     if (typeof body.resample === "boolean" && body.resample !== ctx.session.state.resample) await ctx.session.update({ resample: body.resample });
-    const resolved = await resolveAll(ctx, [...selected, ...hf]);
+    // Each ticked model at the voxel size typed beside it, and one with
+    // none at its own, also when an earlier Submit ran it at another.
+    const runAt = runVoxelSizes(body.run_voxel_sizes, [...selected, ...hf]);
+    if ("error" in runAt) return badRequest(runAt.error);
+    const resolved = await resolveAll(ctx, [...selected, ...hf], runAt.sizes);
     if ("error" in resolved) return badRequest(resolved.error);
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
     // A chain with no input normalizers takes the ones the first model
@@ -245,7 +281,7 @@ export function modelRoutes(router: Router): void {
       how: "an ONNX export run in the browser (onnxruntime-web)",
       needs: [],
       notes: [
-        `${entry.manifest.task}: ${entry.manifest.channels.join(", ")} at ${entry.manifest.output_voxel_size_nm.join("x")} nm.`,
+        `${entry.manifest.task}: ${entry.manifest.channels.join(", ")} at ${modelVoxelSizes(entry).output.join("x")} nm.`,
         `Variants ${entry.manifest.variants.map((x) => x.variant).filter((x, i, a) => a.indexOf(x) === i).join(", ")}; ${v.variant} at ${sizeText(v.input_size)} voxels is ${v.file_mb} MB. The one run is chosen for this GPU.`,
         ...(entry.repo !== HF_REPO && !isFinetuned(entry) ? [`${entry.repo}'s models are listed under Hugging Face from now on.`] : []),
       ],
@@ -302,7 +338,7 @@ function numeric(value: unknown): number | null {
 }
 
 /** Where two expressions are compared: a declared "x*2-1" and a typed
- * "2*x-1" are one map, which the text alone did not say. probe.py's
+ * "2*x-1" are one map, which the text alone does not say. probe.py's
  * EXPRESSION_SAMPLES. */
 const EXPRESSION_SAMPLES = [-2, -1, -0.5, 0, 0.25, 0.5, 1, 2, 255];
 
@@ -484,7 +520,9 @@ function postprocessReview(served: ServedModel, names: string[], threshold: numb
  * which Use this model, Fit to Paint and Use these settings set, stretched
  * to the raw under the paint, say) matches as it is, while it is the
  * chain's (input_norm_fitted): suggested the declared ones back, a second
- * Apply undid the ranking. */
+ * Apply undid the ranking. The chain's channel pick is the raw's, no
+ * model's, and is left out of the steps compared with the declared ones (the
+ * ranking's steps hold it: rank.on_channel). */
 export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
   const manifest = served.entry.manifest;
   const declared: Record<string, Record<string, unknown>> = {};
@@ -493,9 +531,10 @@ export function advice(served: ServedModel, chain: Chain, fit?: RankFit) {
     declared[name] = params;
   }
   const order = Object.keys(declared);
-  const configuredNorm = stepNames(chain.input_norm);
+  const inputNorm = withoutChannelPick(chain.input_norm);
+  const configuredNorm = stepNames(inputNorm);
   const fitted = !!fit?.input_norm.length && sameSteps(fit.input_norm, chain.input_norm);
-  const differences = fitted ? [] : inputNormDifferences(chain.input_norm, declared);
+  const differences = fitted ? [] : inputNormDifferences(inputNorm, declared);
   const { output_class, output_class_from, output_op } = served.info;
   const configuredPost = stepNames(chain.postprocess);
   return {

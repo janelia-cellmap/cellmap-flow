@@ -9,10 +9,15 @@ portable/calls.py; numpy and the standard library only. In short:
 - A model is scored on the targets its own finetune trains on, over the
   painted voxels: an object or not on each channel of a binary model, the
   painted pairs of an affinity model.
-- The score is the balanced accuracy, the mean of the share of object
-  targets called object and of background targets called background. A
-  binary model's painted voxels next to one of the other class are not
-  counted (rough strokes are forgiven along their edges).
+- The score is the geometric mean of the share of object targets called
+  object and of background targets called background: each share is of its
+  own class, so the paint's mix of the two does not tilt it, and a model
+  must get both right, as one that calls everything background scores 0
+  however much of the paint is background (their plain mean, the balanced
+  accuracy, gave that model 0.5, read as half right). With one class
+  painted, it is that class's share. A binary model's painted voxels next
+  to one of the other class are not counted (rough strokes are forgiven
+  along their edges).
 - It is read at the model's own cut-off: the logit, among CUTOFFS, with the
   best Dice of its calls against the painted objects (the nearest to 0
   among equals; 0 when only one class is painted). The score at 0 is given
@@ -26,7 +31,8 @@ portable/calls.py; numpy and the standard library only. In short:
   sets: its declaration, or its kind's convention) and through the
   session's when that is another (``norm_tries``), and the better score is
   kept (``best_try``, its own among equals). Read through none, or another
-  model's, a model's score is noise.
+  model's, a model's score is noise. Each is read on the raw channel the
+  session's chain picks (``on_channel``).
 - Where the raw under the paint is narrower than NARROW_WINDOW of the
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
@@ -161,7 +167,7 @@ def _score_of(t: dict, channel: Optional[str], channel_index: Optional[int]) -> 
         right = 1 - wrong / t["background"] if t["background"] else None
         rates = [r for r in (found_share, right) if r is not None]
         dice = 2 * found / max(found + t["objects"] + wrong, 1)
-        return found_share, right, sum(rates) / len(rates), dice
+        return found_share, right, float(np.prod(rates)) ** (1 / len(rates)), dice
 
     zero = int(np.flatnonzero(CUTOFFS == 0)[0])
     k = zero
@@ -227,6 +233,24 @@ def same_steps(a: Sequence[dict], b: Sequence[dict]) -> bool:
         x.keys() == y.keys() and all(_value(x[k]) == _value(y[k]) for k in x) for x, y in zip(a, b))
 
 
+# The step that picks which channel of a multi-channel raw a model reads
+# (norm/input_normalize.py), first in the session's chain when there is one.
+CHANNEL_STEP = "ChannelSelector"
+
+
+def normalizers(steps: Sequence[dict]) -> List[dict]:
+    """``steps`` (normalizer specs) without those that pick the raw's channel."""
+    return [dict(s) for s in steps if s.get("name") != CHANNEL_STEP]
+
+
+def on_channel(steps: Sequence[dict], chain: Sequence[dict]) -> List[dict]:
+    """``steps``' normalizers read on the raw channel ``chain`` picks: its
+    first ChannelSelector, then them. The channel is the raw's, picked by
+    the user, so a model's start, its advice and the ranking, which put a
+    model's normalization in the chain, keep it."""
+    return [dict(s) for s in chain or [] if s.get("name") == CHANNEL_STEP][:1] + normalizers(steps)
+
+
 def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> List[dict]:
     """The input normalizations a model is scored through, each once, its own
     first: ``{"input_norm": steps, "from": where}``.
@@ -240,17 +264,19 @@ def norm_tries(own: Sequence[dict], own_from: str, session: Sequence[dict]) -> L
     scores as noise (fly_organelles fed raw 0 to 255 matched 51%, its best
     channel nucleus for paint of mitochondria). The session's is tried too,
     as one the user set may fit this raw better. With neither, the raw as it
-    is ("none").
+    is ("none"). Every one reads the channel the session's chain picks
+    (``on_channel``), which alone is no normalization of the session's.
     """
     tries = []
     # An assumption is tried after the session's, which someone chose, so it
     # loses a tie to it (best_try keeps the first among equals).
     order = ((own, own_from), (session, "session"))
     for steps, where in (order[::-1] if own_from == "assumed" else order):
-        steps = [dict(s) for s in steps or []]
-        if steps and not any(same_steps(steps, t["input_norm"]) for t in tries):
-            tries.append({"input_norm": steps, "from": where})
-    return tries or [{"input_norm": [], "from": "none"}]
+        if normalizers(steps or []):
+            steps = on_channel(steps, session)
+            if not any(same_steps(steps, t["input_norm"]) for t in tries):
+                tries.append({"input_norm": steps, "from": where})
+    return tries or [{"input_norm": on_channel([], session), "from": "none"}]
 
 
 def best_try(scores: Sequence[Optional[dict]]) -> Optional[int]:

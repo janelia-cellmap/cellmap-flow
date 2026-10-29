@@ -2,7 +2,6 @@
 // that records what it serves, a Catalog of two models, a ViewerController
 // that records its layers, and the in-memory session. Each implements its
 // contract (src/contracts.ts) and nothing more.
-import { ARGS_KEY } from "../../src/contracts";
 import type {
   AppContext,
   Catalog,
@@ -25,6 +24,7 @@ import type {
   ViewerController,
 } from "../../src/contracts";
 import { entryFor } from "../../src/models";
+import { viewName } from "../../src/shared/args";
 import { networkActivation, outputClass } from "../../src/shared/model-info";
 import { memorySession } from "../../src/state";
 import { MemoryPaintStore } from "../../src/state/paint-store";
@@ -68,6 +68,7 @@ export const DATASET: DatasetInfo = {
   url: "https://example.org/data.zarr",
   dtype: "uint8",
   channels: 1,
+  channelLabels: null,
   axes: [
     { name: "z", unit: "nanometer" },
     { name: "y", unit: "nanometer" },
@@ -122,7 +123,7 @@ export class FakeInference implements Inference {
       ...outputClass(entry.manifest, await this.outputActivation(entry, modelBytes)),
       engine: "browser",
     };
-    const view = `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`;
+    const view = viewName(entry.name, blob, entry.runVoxelSize);
     const served: ServedModel = {
       entry,
       view,

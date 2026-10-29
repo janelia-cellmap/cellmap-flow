@@ -298,10 +298,10 @@ def wrap_model_with_lora(
         target_modules: List of layer names to adapt. If None, auto-detects.
         lora_r: LoRA rank (number of low-rank dimensions)
                 Higher = more capacity, more parameters
-                Typical values: 4-32, default 8
+                Typical values: 4-64, default 64
         lora_alpha: LoRA alpha (scaling factor)
                     Controls strength of LoRA updates
-                    Typical: 2*r, default 16
+                    Typical: 2*r, default 128
         lora_dropout: Dropout probability for LoRA layers (0.0-0.5, default 0.1)
         lora_min_channels: When auto-detecting, skip layers narrower than this
                 on either side; see detect_adaptable_layers. Ignored when

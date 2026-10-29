@@ -4,50 +4,16 @@ The weights are a LoRA adapter or, from a full finetune, a whole state
 dict. Either is loaded onto the module the trainer trained
 (``finetune.model_loading.load_trainable_model``), and the served model
 keeps the base model's geometry, at the voxel sizes the finetune was
-trained at when those differ (``trained_at_geometry``).
+trained at when those differ (``models.geometry.trained_at_geometry``).
 """
 
 import logging
 
-import numpy as np
-
 from cellmap_flow.models import entry
 from cellmap_flow.models.configs.base import Config, ModelConfig
-from cellmap_flow.models.geometry import _numbers, _voxels
+from cellmap_flow.models.geometry import _at_voxel_size, trained_at_geometry
 
 logger = logging.getLogger(__name__)
-
-
-def _at_voxel_size(shape, voxel_size, trained):
-    """``(voxel size, shape)``: ``shape`` (nm) of ``voxel_size`` voxels, as
-    many voxels of ``trained`` instead; as they are when ``trained`` is None."""
-    if trained is None:
-        return voxel_size, shape
-    voxels = np.asarray(_voxels(shape, voxel_size), dtype=float)
-    return _numbers(trained), _numbers(voxels * np.asarray(trained, dtype=float))
-
-
-def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict:
-    """The base model's geometry at the voxel sizes a finetune was trained at.
-
-    A volume made without resampling lies on the raw level nearest the
-    model's voxel size, and the trainer read that level as it is: the model
-    learnt that scale, so the finetuned model really is a model at the
-    level's voxel size (16 nm data read as 8 nm by an 8 nm model gives a 16
-    nm model). Declaring it, the served model reads that level exactly,
-    instead of the nearest one relabelled with a warning. The shapes in nm
-    scale with the voxel size; the voxel counts are the base's.
-
-    Returns ``input_voxel_size``, ``output_voxel_size``, ``read_shape`` and
-    ``write_shape``; each size None keeps the base's.
-    """
-    geometry = {}
-    for which, trained in (("input", input_voxel_size), ("output", output_voxel_size)):
-        shape_key = "read_shape" if which == "input" else "write_shape"
-        geometry[f"{which}_voxel_size"], geometry[shape_key] = _at_voxel_size(
-            getattr(base_cfg, shape_key), getattr(base_cfg, f"{which}_voxel_size"), trained
-        )
-    return geometry
 
 
 class FinetuneModelConfig(ModelConfig):
@@ -178,7 +144,7 @@ class FinetuneModelConfig(ModelConfig):
         return self.base_model_config.finetune_modes()
 
     def declared_geometry(self):
-        """Its base's, at the output voxel size the finetune was trained at
+        """Its base's, at the voxel sizes the finetune was trained at
         (``trained_at_geometry``); None when the base declares none."""
         try:
             base = self.base_model_config.declared_geometry()
@@ -189,7 +155,10 @@ class FinetuneModelConfig(ModelConfig):
         if base is None:
             return None
         voxel_size, shape = _at_voxel_size(base["write_shape"], base["output_voxel_size"], self.output_voxel_size)
-        return {**base, "write_shape": list(shape), "output_voxel_size": list(voxel_size)}
+        declared = {**base, "write_shape": list(shape), "output_voxel_size": list(voxel_size)}
+        if self.input_voxel_size is not None:
+            declared["input_voxel_size"] = list(self.input_voxel_size)
+        return declared
 
     def output_graph(self):
         """Its base's: a finetune's weights (an adapter beside each layer, or

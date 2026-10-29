@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
+from tests.threads import patch_sleep
 
 
 class _Statuses(FinetuneJob):
@@ -103,7 +104,7 @@ def bpeek_then_file(tmp_path, client, monkeypatch):
     manager.jobs["j"] = job
     monkeypatch.setattr(training.subprocess, "run", lambda argv, **kw: SimpleNamespace(
         stdout=b"<< output from stdout >>\n" + EARLY.encode(), stderr=b""))
-    monkeypatch.setattr(training.time, "sleep", lambda s: job.log_file.write_bytes(LATER.encode()))
+    patch_sleep(monkeypatch, training, lambda s: job.log_file.write_bytes(LATER.encode()))
     return http
 
 

@@ -11,6 +11,7 @@ import zarr
 
 from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
 from cellmap_flow.finetune.data import VirtualPatchDataset, dataset_from_manifest
+from cellmap_flow.finetune.data.reader import PatchReader
 
 
 def _labels(size, **boxes):
@@ -39,6 +40,18 @@ def test_patches_are_normalized_as_inference_sees_them_in_a_spawned_worker_too(a
     assert 110 < float(raw.min()) and float(raw.max()) < 140  # 128, as stored
     raw, _ = pickle.loads(pickle.dumps(volume.dataset(input_norm_config=norms)))[0]
     assert float(raw.abs().max()) < 0.05  # 128 / 255 * 2 - 1
+
+
+def test_the_trainer_reads_the_raw_channel_the_chain_picks(ome_pyramid):
+    """The trainer is its own process, whose process_chain() is empty: it read
+    channel 0 of a multi-channel raw whatever channel the session's
+    ChannelSelector picked for inference."""
+    raw = ome_pyramid(((16, 8),), channels=2)  # 16^3 voxels of 16 nm, corner 0; each holds z + 1
+    zarr.open(raw + "/s0", mode="r+")[1] += 100
+    reader = PatchReader("unused", raw, (4,) * 3, (4,) * 3, (16.0,) * 3, (16.0,) * 3, np.zeros(3), np.full(3, 16),
+                         input_norm_config=[{"name": "ChannelSelector", "channel": 1}])
+    # Around output voxel 8: raw voxels 6 to 9, which hold z + 1 + 100 in channel 1.
+    assert reader.raw(np.full(3, 8.0))[:, 0, 0].tolist() == [107, 108, 109, 110]
 
 
 FAR_APART = _labels(64, fg=(2, np.s_[2:4, 2:4, 2:4]), fix=(1, np.s_[50:52, 50:52, 50:52]))

@@ -11,15 +11,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionState, SessionStore } from "../../src/contracts";
 import type { DatasetInfo } from "../../src/contracts";
+import { defaultState } from "../../src/state";
 import { createViewer, NG_PAGE } from "../../src/viewer/index";
 import { decodeState, TAB_STATE_KEY } from "../../src/viewer/share";
 import type { NgLayer, NgState } from "../../src/viewer/state";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
-  const current: SessionState = {
-    datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [],
-    rankFits: {}, startPostprocess: null, ...state,
-  };
+  const current: SessionState = { ...defaultState(), chain: { input_norm: [], postprocess: [] }, ...state };
   return {
     get state() { return current; },
     async update(change) { Object.assign(current, change); },
@@ -106,6 +104,7 @@ const LIVER: DatasetInfo = {
   url: "https://example.org/liver.zarr",
   dtype: "uint8",
   channels: 1,
+  channelLabels: null,
   axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
   levels: [
     { shape: [8932, 12728, 12747], voxel: [8, 8, 8], origin: [0, 0, 0] },

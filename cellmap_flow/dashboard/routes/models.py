@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import (
-    NotRemovable, configs_by_name, loaded_models, remove_model, update_run_models,
+    NotRemovable, configs_by_name, loaded_models, remove_model, served_at_run_voxel_size, update_run_models,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
@@ -58,6 +58,20 @@ def create_model_config():
     })
 
 
+def _with_run_voxel_sizes(hf_models: dict) -> dict:
+    """The Hugging Face listing, {repo: metadata}, with ``run_voxel_size``
+    ([z, y, x]) on each repo a model is running or starting from at a voxel
+    size not its own (services.launch.served_at_run_voxel_size), for its
+    row's Run at (nm). The browser's listing (web/src/backend/routes/models.ts)
+    answers the same key."""
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    served = {mc.repo: list(mc.run_voxel_size) for mc in served_at_run_voxel_size()
+              if isinstance(mc, HuggingFaceModelConfig)}
+    return {repo: {**meta, "run_voxel_size": served[repo]} if repo in served else meta
+            for repo, meta in hf_models.items()}
+
+
 @models_bp.route("/api/huggingface-models")
 def get_huggingface_models():
     """Get available models from Hugging Face (uses cache if available)"""
@@ -66,7 +80,7 @@ def get_huggingface_models():
     try:
         hf_models = list_huggingface_models()
         logger.info(f"Hugging Face models: {list(hf_models.keys())}")
-        return jsonify(hf_models)
+        return jsonify(_with_run_voxel_sizes(hf_models))
     except Exception as e:
         logger.error(f"Error fetching Hugging Face models: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -80,7 +94,7 @@ def refresh_huggingface_models_route():
     try:
         hf_models = refresh_huggingface_models()
         logger.info(f"Refreshed Hugging Face models: {list(hf_models.keys())}")
-        return jsonify(hf_models)
+        return jsonify(_with_run_voxel_sizes(hf_models))
     except Exception as e:
         logger.error(f"Error refreshing Hugging Face models: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -120,8 +134,10 @@ def refresh_bioimage_models_route():
 @models_bp.route("/api/models", methods=["POST"])
 def submit_models():
     """Run the models the Models tab has ticked (a SubmitModels), and stop
-    the others: services.launch.update_run_models. A zoo model that needs a
-    voxel size and was given none, or a Cellpose model without one, is a
+    the others: services.launch.update_run_models, each catalog and Hugging
+    Face model at its ``run_voxel_sizes`` entry, if it has one. A zoo model
+    that needs a voxel size and was given none, a Cellpose model without
+    one, or a run voxel size for a model that reads its input itself, is a
     400, and nothing changes. A chain with no input normalizers takes the
     ones the first model started declares, if any (get_loaded_models says
     so to the page)."""
@@ -134,7 +150,8 @@ def submit_models():
     if body.resample is not None:
         get_session().resample = body.resample
     try:
-        update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose)
+        update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose,
+                          body.run_voxel_sizes)
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "

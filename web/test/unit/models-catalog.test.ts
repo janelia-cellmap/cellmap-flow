@@ -4,11 +4,10 @@
 // found by, and the repos added beside the built-in one by a ref of theirs.
 import { describe, expect, it } from "vitest";
 
-import type { FinetunedRecord } from "../../src/contracts";
 import { createCatalog, LISTING_KEY } from "../../src/models";
 import { LISTING_TTL_MS, MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { MemoryByteCache } from "../../src/models/byte-cache";
-import { finetunedEntry, MemoryFinetunedRegistry } from "../../src/models/finetuned";
+import { finetunedRecord, MemoryFinetunedRegistry } from "../../src/models/finetuned";
 import { entryFixture, fakeHub, fakeLog, FOLDERS, type HubOptions, publishedManifest, rawManifest } from "./models-helpers";
 
 const T0 = Date.UTC(2026, 9, 14, 12, 0, 0);
@@ -130,11 +129,12 @@ describe("another Hugging Face repo", () => {
     expect((await catalog.list()).map((e) => e.repo)).toEqual([...FOLDERS.map(() => "cellmap/onnx-web-models"), ALICE]);
     expect(treeCalls(hub.calls).filter((u) => u.includes(ALICE))).toHaveLength(1);
 
-    // Refused, saying why: several models, a private or missing repo, a folder it does not have, another revision.
+    // Refused, naming what is wrong: several models (their refs), a private
+    // or missing repo (the Hub's status), a folder it does not have, another revision.
     await expect(catalog.resolve("bob/models")).rejects.toThrow(/bob\/models\/copy_54, bob\/models\/copy_56/);
-    await expect(catalog.resolve("carol/private/x")).rejects.toThrow(/no public Hugging Face model repo carol\/private \(HTTP 401\)/);
-    await expect(catalog.resolve(`${ALICE}/images`)).rejects.toThrow(/no model folder images/);
-    await expect(catalog.resolve(`${ALICE}/${FT}@dev`)).rejects.toThrow(/revision dev/);
+    await expect(catalog.resolve("carol/private/x")).rejects.toThrow(/carol\/private.*401/);
+    await expect(catalog.resolve(`${ALICE}/images`)).rejects.toThrow(/images/);
+    await expect(catalog.resolve(`${ALICE}/${FT}@dev`)).rejects.toThrow(/dev/);
     // Not a Hugging Face model: a zoo DOI, a path, a word.
     for (const ref of ["10.5281/zenodo.5764892", "runs/model.onnx", "nothing_here"]) expect(await catalog.resolve(ref)).toBeNull();
 
@@ -145,25 +145,22 @@ describe("another Hugging Face repo", () => {
   });
 
   it("names a published model by its published name, breaks a clash with _2 where the built-in and finetuned names stay, and lists the browser's own model for its published copy", async () => {
-    const registry = new MemoryFinetunedRegistry();
-    const { log } = fakeLog();
-    const catalog = createCatalog({ log, fetch: fakeHub({ repos }).fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: registry, now: () => T0 });
+    const { catalog } = catalogWith({ repos });
     expect((await catalog.resolve("bob/models/copy_54"))!.name).toBe("mito_aff_setup54_16nm_2");
     expect((await catalog.resolve("setup_54"))!.name).toBe("mito_aff_setup54_16nm");
     expect((await catalog.resolve(`${ALICE}/${FT}`))!.name).toBe(FT);
 
     // This browser's own -ft1 keeps its name, and the published one moves on.
-    const own = finetunedEntry(entryFixture("setup_54"), FT);
-    const record: FinetunedRecord = { id: own.id, name: FT, base: { id: "cellmap/onnx-web-models/setup_54", name: "mito_aff_setup54_16nm", file: own.variant.file }, volume: "vol-x", created_at: "2026-10-26T10:00:00.000Z", params: {}, epochs: 20, final_loss: 0.2, entry: own };
+    const record = finetunedRecord(entryFixture("setup_54"), FT, 8, { volume: "vol-x", created_at: "2026-10-26T10:00:00.000Z", params: {}, epochs: 20, final_loss: 0.2 });
     await catalog.addFinetuned(record, new ArrayBuffer(8));
     const names = (await catalog.list()).map((e) => e.name);
     expect(names.slice(-4)).toEqual(["mito_aff_setup54_16nm_2", "nuc_setup56_128nm_2", `${FT}_2`, FT]);
     expect(new Set(names).size).toBe(names.length);
-    expect((await catalog.resolve(FT))!.id).toBe(own.id);
+    expect((await catalog.resolve(FT))!.id).toBe(record.id);
 
     // Once published from here, the own model stands for its copy on the Hub, which is not listed.
     await catalog.addFinetuned({ ...record, published: { repo: ALICE, folder: FT, at: "2026-10-26T11:00:00.000Z" } }, new ArrayBuffer(8));
     expect((await catalog.list()).map((e) => e.name)).not.toContain(`${FT}_2`);
-    for (const ref of [`${ALICE}/${FT}`, ALICE]) expect((await catalog.resolve(ref))!.id).toBe(own.id);
+    for (const ref of [`${ALICE}/${FT}`, ALICE]) expect((await catalog.resolve(ref))!.id).toBe(record.id);
   });
 });

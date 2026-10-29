@@ -4,6 +4,7 @@
 // A module runs once the page is parsed and before DOMContentLoaded, so the
 // page's elements are all there.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
+import { tooltipHints } from "../lib/dom.js";
 import { CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { createQueuePicker, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { chainChanges, mountOpChain } from "../shared/op-chain.js";
@@ -12,6 +13,7 @@ import { initConnect } from "./connect.js";
 import { initFinetuneTab } from "./finetune/index.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 import { initModelsTab } from "./models/index.js";
+import { initRawChannel } from "./raw-channel.js";
 import { initReviewTab } from "./review/index.js";
 
 // The header's "Toggle Dashboard" button: the dashboard column the other way
@@ -283,9 +285,12 @@ const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind
 const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });
 const applyBar = initApply(inputChain, postChain);
 initModelAdvice({ input: inputChain, postprocess: postChain, apply: applyBar.apply });
+initRawChannel({ input: inputChain, apply: applyBar.apply });
 document.addEventListener("keydown", (event) => applyOnEnter(event, applyBar.apply));
 initServerConfigModal();
 initReviewTab();
+// A hint's "i" shows the rest of its hint as a tooltip too (lib/dom.js).
+tooltipHints();
 // The Finetune tab starts last, so its first requests go after the other
 // tabs' (the Models tab asks for the GPU queues only once the server config
 // has answered): on DOMContentLoaded while the page is still being parsed,

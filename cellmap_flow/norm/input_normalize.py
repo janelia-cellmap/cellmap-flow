@@ -167,6 +167,8 @@ class InputNormalizer(SerializableInterface):
 
 
 class ChannelSelector(InputNormalizer):
+    browser = True
+
     def __init__(self, channel=0):
         self.channel = int(channel)
 

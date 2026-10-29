@@ -19,6 +19,7 @@ import { FINETUNED_REPO } from "../contracts";
 import type { FinetunedRecord, ModelEntry, ModelManifest, ModelVariant } from "../contracts";
 
 import { sourceOf } from "../finetune/modes";
+import { modelVoxelSizes } from "../infer/geometry";
 import { MODEL_DB_NAME, ModelDatabase } from "./byte-cache";
 import { entryFor } from "./manifest";
 
@@ -36,6 +37,33 @@ export function isFinetuned(entry: ModelEntry): boolean {
   return entry.repo === FINETUNED_REPO;
 }
 
+/** The ref of the place a model was published to, `<owner>/<repo>/<folder>`. */
+export function publishedRef(published: NonNullable<FinetunedRecord["published"]>): string {
+  return `${published.repo}/${published.folder}`;
+}
+
+/** Where `record` came from, up its records' bases through the models
+ * finetuned in this browser (`records`): those on the way, `record` first
+ * (`ancestry`), and the base the way ends at (`base`). That is the first
+ * base that is not a model finetuned here (a Hugging Face model, or a file:
+ * the id "" of a model opened from one), or the first that was published
+ * from here, whose bytes are on Hugging Face (`published`, its ref there);
+ * or, with `kept` false, one this browser no longer keeps, as a ring of
+ * records ends too. A link rebuilds a model on that base (share-link.ts),
+ * and a publish names it as what the model was finetuned from
+ * (publish/model.ts). */
+export function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): { ancestry: FinetunedRecord[]; base: FinetunedRecord["base"]; published: string | null; kept: boolean } {
+  const ancestry = [record];
+  for (let base = record.base; ; ) {
+    if (!base.id.startsWith(`${FINETUNED_REPO}/`)) return { ancestry, base, published: null, kept: true };
+    const parent = records.find((r) => r.id === base.id);
+    if (!parent || ancestry.includes(parent)) return { ancestry, base, published: null, kept: false };
+    if (parent.published) return { ancestry, base, published: publishedRef(parent.published), kept: true };
+    ancestry.push(parent);
+    base = parent.base;
+  }
+}
+
 /** The entry a model finetuned from `base` is served as, named `name`
  * (nextFinetunedName): repo FINETUNED_REPO, id `finetuned/<name>`, folder
  * and name both `name`, the base's manifest under the new name with one
@@ -49,7 +77,14 @@ export function isFinetuned(entry: ModelEntry): boolean {
  * rest measure the base export against its PyTorch model), and the manifest
  * says in `checkpoint` where the weights came from, since the base's
  * checkpoint name no longer describes them; a published base's `published`
- * block is not this model's and is left out. */
+ * block is not this model's and is left out.
+ *
+ * A base run at another voxel size than its own (ModelEntry.runVoxelSize)
+ * was trained at that size, so the manifest declares the voxel sizes it
+ * ran at (modelVoxelSizes), as the server's finetune declares the ones it
+ * was trained at (trained_at_geometry): a model run at 32 nm and finetuned
+ * there is a 32 nm model, which runs there wherever its manifest goes (its
+ * download, its publish, a link that rebuilds it) without being told. */
 export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number): ModelEntry {
   const variant: ModelVariant = {
     variant: base.variant.variant,
@@ -62,8 +97,11 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
     source: sourceOf(base),
   };
   const { published: _published, ...inherited } = base.manifest;
+  const trainedAt = modelVoxelSizes(base);
   const manifest: ModelManifest = {
     ...inherited,
+    input_voxel_size_nm: trainedAt.input,
+    output_voxel_size_nm: trainedAt.output,
     model: name,
     checkpoint: `finetuned in the browser from ${base.manifest.checkpoint || base.name}`,
     variants: [variant],

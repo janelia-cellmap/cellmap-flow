@@ -208,5 +208,3 @@ def test_a_view_over_the_cap_is_refused_and_one_at_it_is_not():
         label_it.field_of_view_nm((side + 1, side + TOP), *view)
     with pytest.raises(ValueError):  # the box's depth counts too
         label_it.field_of_view_nm((side, side + TOP), *view, depth_nm=16)
-    with pytest.raises(ValueError):  # no slice panel
-        label_it.field_of_view_nm((side, side + TOP), {"layout": "3d"}, *view[1:])

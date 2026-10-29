@@ -52,8 +52,7 @@ tabs, the same normalizers and postprocessing steps, a Finetune
 tab that paints and trains in the browser, and a Save predictions tab of
 its own that saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
-TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model's whole
-network (the 2D models' can train in the browser), crops imported from disk,
+TensorFlow, DaCapo, BioImage.io, Cellpose), crops imported from disk,
 the Pipeline Builder and blockwise runs on the cluster. Those are the server
 mode's (:doc:`cli`).
 
@@ -81,6 +80,16 @@ the connect panel says so; the setting is under *Local network access* in
 the site-information panel beside the address bar (or at
 ``chrome://settings/content/localNetworkAccess``). Running the app locally
 on ``http://localhost`` (below) is not gated.
+
+**A volume of several channels.** Light-microscopy volumes often have more
+than one channel: an OME-Zarr's ``c`` axis, or a precomputed volume's
+channels. The Processing tab then shows a *Channel*, its channels named by
+the volume's ``omero`` labels when it has them, and everything reads the
+channel picked: the models, the raw layer in the viewer, painting and
+training, AI annotation and the ranking. The pick is the input
+normalization's first step, ``ChannelSelector``, as in the server mode;
+without one the first channel is read. A volume painted on one channel trains
+on that channel.
 
 Running the models over a region
 --------------------------------
@@ -209,11 +218,12 @@ matches the volume's paint: open the card (it starts closed, and stays as you
 leave it), tick the models, press *Rank models*, and each is scored in turn,
 a few seconds to half a minute each, and listed best first.
 
-- **Match**, which ranks them, is the share of the painted voxels the model
-  gets right, objects and background counting equally, so that paint mostly
-  of background does not reward a model that calls everything background:
-  such a model matches 50%. Beside it are the share of painted objects it
-  calls object and of painted background it calls background.
+- **Match**, which ranks them, is the share of painted objects the model
+  calls object and the share of painted background it calls background,
+  multiplied and square-rooted (their geometric mean). Each share is of its
+  own class, so paint mostly of background does not tilt it, and a model has
+  to get both right: one that calls everything background matches 0%.
+  Beside it are the two shares.
 - Each model is scored at its own cut-off: the threshold on its output that
   fits the paint best. The row's *Threshold* gives it as a probability, as
   *Seed from Prediction* takes it (0.5 is the model's own boundary), with the
@@ -520,7 +530,7 @@ Browsers and devices
   instead of well under one.
 - **Phones.** The viewer fills the screen and the *Dashboard* button in the
   header opens the controls over it.
-- **Memory.** Model files are 11–43 MB each, kept in IndexedDB; the page
+- **Memory.** Model files are 4–43 MB each, kept in IndexedDB; the page
   picks a smaller variant (fp16, int8 weights) when the GPU's limits call for
   it.
 

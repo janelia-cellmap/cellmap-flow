@@ -107,8 +107,9 @@ export function rawSource(url: string): string {
 /** The raw data's layer (layers.py's raw_layer over raw.py's get_raw_layer
  * with wrap_raw=False): an image layer reading `url` itself, with the raw
  * shader over the dtype's range, or with the user's `keep` shader and
- * controls in place of it. */
-export function rawLayer(url: string, info: DatasetInfo, keep?: KeptShader): LayerSpec {
+ * controls in place of it; on `channel` (the chain's: norms.ts
+ * selectedChannel) of a volume of several, the one the models read. */
+export function rawLayer(url: string, info: DatasetInfo, channel: number, keep?: KeptShader): LayerSpec {
   const layer: LayerSpec = {
     type: "image",
     name: RAW_LAYER_NAME,
@@ -117,7 +118,23 @@ export function rawLayer(url: string, info: DatasetInfo, keep?: KeptShader): Lay
   };
   const controls = keptControls(keep);
   if (controls) layer.shaderControls = controls;
-  return layer;
+  return rawChannelShown(layer, info, channel);
+}
+
+/** The raw layer `layer` showing channel `channel` of `info`'s, otherwise as
+ * it is; as it is for a volume of one, or a channel past its channels. The
+ * server serves the raw itself, on the chain's channel (raw.py's
+ * LazyNormalization); here Neuroglancer reads the volume, every channel of
+ * it, and is told which to show: an OME-Zarr's channel axis is a local
+ * dimension (c') whose position is the channel shown (channelPosition), a
+ * precomputed volume's channels are its image's own (c^), of which the raw
+ * shader's invlerp control `normalized` shows the one its `channel` names. */
+export function rawChannelShown(layer: LayerSpec, info: DatasetInfo, channel: number): LayerSpec {
+  if (info.channels === 1 || channel >= info.channels) return layer;
+  if (!rawSource(info.url).startsWith("precomputed://")) return { ...layer, localPosition: channelPosition(channel) };
+  const controls = (layer.shaderControls ?? {}) as Record<string, unknown>;
+  const normalized = controls.normalized && typeof controls.normalized === "object" ? controls.normalized : {};
+  return { ...layer, shaderControls: { ...controls, normalized: { ...normalized, channel: [channel] } } };
 }
 
 // ---------------------------------------------------------------------------
@@ -215,8 +232,8 @@ export function predictionLayer(served: ServedModel, chain: Chain, color: string
 /** A layer's `localPosition` showing `channel` of its channel axis: the
  * channel's centre. The served array's OME translation is 0 on its channel
  * axis, a voxel centre, so channel k lies over [k - 0.5, k + 0.5) and its
- * centre is k (layers.py's channel_position): at k + 0.5 the layer showed
- * the channel after the one picked. */
+ * centre is k (layers.py's channel_position): at k + 0.5 the layer would
+ * show the channel after the one picked. */
 export function channelPosition(channel: number): number[] {
   return [channel];
 }
