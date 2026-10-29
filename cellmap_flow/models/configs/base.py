@@ -25,6 +25,11 @@ describes it. What the rest of cellmap-flow reads:
 - ``env``: the environment its entry names for its server, when not this
   one (``models.envs``). Set after construction, never a constructor
   argument; to_dict() and launch_entry carry it.
+- ``run_voxel_size``: the voxel size its entry runs it at, when not its
+  own; ``config`` and ``declared_geometry()`` are then scaled to it
+  (``geometry.run_at_geometry``). Set after construction, as ``env`` is, and
+  carried alike. A model that reads its input itself refuses it
+  (``reads_input_itself``).
 - ``default_env``: the environment a type's models run in when their
   entry names none; ``effective_env``: the one a model runs in, of the two.
 """
@@ -38,7 +43,15 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _voxels
+from cellmap_flow.models import entry
+from cellmap_flow.models.geometry import (
+    DEFAULT_OUTPUT_AXES,
+    ModelGeometry,
+    _at_voxel_size,
+    _voxels,
+    run_at_geometry,
+    run_voxel_sizes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -205,18 +218,62 @@ class Config:
         return self.kwargs.get(key, default)
 
 
-def _with_env(to_dict):
-    """``to_dict`` with the config's ``env`` added to the entry it returns."""
+def _with_entry_keys(config, result):
+    """``result``, a model entry of ``config``, with the keys that are not
+    constructor arguments, which ``registry.build_model`` sets on the config
+    it builds: its ``env`` and ``run_voxel_size``, when it has them."""
+    if isinstance(result, dict):
+        if getattr(config, "env", None):
+            result["env"] = config.env
+        if getattr(config, "run_voxel_size", None) is not None:
+            result["run_voxel_size"] = list(config.run_voxel_size)
+    return result
+
+
+def _adding_entry_keys(to_dict):
+    """``to_dict`` with ``_with_entry_keys`` applied to the entry it returns."""
 
     @functools.wraps(to_dict)
-    def to_dict_with_env(self):
-        result = to_dict(self)
-        if getattr(self, "env", None) and isinstance(result, dict):
-            result["env"] = self.env
-        return result
+    def to_dict_with_entry_keys(self):
+        return _with_entry_keys(self, to_dict(self))
 
-    to_dict_with_env._adds_env = True
-    return to_dict_with_env
+    to_dict_with_entry_keys._adds_entry_keys = True
+    return to_dict_with_entry_keys
+
+
+def _at_run_voxel_size(declared_geometry):
+    """``declared_geometry`` answering at the config's ``run_voxel_size``, when
+    it has one: the output voxel size scaled as the input's is, the write
+    shape with it (``geometry.run_voxel_sizes``). None when what it declares
+    gives no input voxel size to scale from, as it is then not certain."""
+
+    @functools.wraps(declared_geometry)
+    def declared_at_run_voxel_size(self):
+        declared = declared_geometry(self)
+        run = getattr(self, "run_voxel_size", None)
+        if declared is None or run is None:
+            return declared
+        if not declared.get("input_voxel_size"):
+            return None
+        input_voxel_size, output_voxel_size = run_voxel_sizes(
+            declared["input_voxel_size"], declared["output_voxel_size"], run
+        )
+        voxel_size, shape = _at_voxel_size(declared["write_shape"], declared["output_voxel_size"], output_voxel_size)
+        return {**declared, "write_shape": list(shape), "input_voxel_size": list(input_voxel_size),
+                "output_voxel_size": list(voxel_size)}
+
+    declared_at_run_voxel_size._at_run_voxel_size = True
+    return declared_at_run_voxel_size
+
+
+def _reads_input_itself(config) -> bool:
+    """Whether ``config``, a built Config, reads its model's input itself: it
+    has its own ``process_chunk``, or a ``predict`` other than the server's
+    (``inference.runner.predict``). The server then hands it only the chunk
+    to write, and what it reads around that is its own code's business."""
+    from cellmap_flow.inference.runner import predict
+
+    return callable(getattr(config, "process_chunk", None)) or getattr(config, "predict", predict) is not predict
 
 
 class ModelConfig:
@@ -226,6 +283,10 @@ class ModelConfig:
     # `env`; it is not a constructor argument, because the server rebuilds
     # the model from the same entry and must not get it back.
     env = None
+    # The voxel size (nm, z, y, x) the model is run at, when its entry gives
+    # one (``run_voxel_size``); None: its own. Behind the ``run_voxel_size``
+    # property, which registry.build_model sets after construction, as env.
+    _run_voxel_size = None
     # The environment this type's models run in when their entry gives no
     # `env` (`env: current` opts out). A subclass sets a name, or makes it a
     # property that decides per model. Never written by to_dict(), which
@@ -278,9 +339,11 @@ class ModelConfig:
 
     def declared_geometry(self):
         """What the model says of its output without being built: ``{"write_shape"
-        (nm, z, y, x), "output_voxel_size" (nm), "output_channels", "channels"
-        (their names, None when it names none)}``, as its server reports them;
-        None when it says none, or not for certain.
+        (nm, z, y, x), "input_voxel_size" and "output_voxel_size" (nm),
+        "output_channels", "channels" (their names, None when it names
+        none)}``, as its server reports them; None when it says none, or not
+        for certain. At ``run_voxel_size``, when it has one: every type's is
+        scaled to it (``__init_subclass__``), so a type declares its own sizes.
 
         For the finetune tab's model list, which asks on every poll while
         the model's server is not up: building the model there loaded its
@@ -307,10 +370,9 @@ class ModelConfig:
         itself (an onnx model's file, a bioimage.io model's postprocessing).
         """
         from cellmap_flow.inference.graph import module_graph
-        from cellmap_flow.inference.runner import predict
 
         config = self.config
-        if callable(getattr(config, "process_chunk", None)) or getattr(config, "predict", predict) is not predict:
+        if _reads_input_itself(config):
             return None
         return module_graph(getattr(config, "model", None))
 
@@ -340,13 +402,19 @@ class ModelConfig:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        # No type's to_dict() knows env, which is not among the arguments it
-        # writes, so add it to each type's own, plugins' included: an
-        # exported YAML, a finetuned model's base_model and the trainer's
-        # model entry then keep the environment.
+        # No type's to_dict() knows env or run_voxel_size, which are not among
+        # the arguments it writes, so add them to each type's own, plugins'
+        # included: an exported YAML, a finetuned model's base_model and the
+        # trainer's model entry then keep the environment and the voxel size
+        # the model is run at.
         own = cls.__dict__.get("to_dict")
-        if own is not None and not getattr(own, "_adds_env", False):
-            cls.to_dict = _with_env(own)
+        if own is not None and not getattr(own, "_adds_entry_keys", False):
+            cls.to_dict = _adding_entry_keys(own)
+        # And each type's declared geometry is its own, which is scaled to the
+        # run voxel size here rather than by every type.
+        declared = cls.__dict__.get("declared_geometry")
+        if declared is not None and not getattr(declared, "_at_run_voxel_size", False):
+            cls.declared_geometry = _at_run_voxel_size(declared)
 
     def __new__(cls, *args, **kwargs):
         # Remember the constructor arguments, for the default to_dict().
@@ -383,6 +451,61 @@ class ModelConfig:
         return self.__str__()
 
     @property
+    def run_voxel_size(self):
+        """The voxel size (nm, z, y, x) the model is run at, or None for its
+        own: its entry's ``run_voxel_size``.
+
+        Its ``config`` then reads at it, and writes at its output voxel size
+        scaled as the input's is (``geometry.run_at_geometry``): a 16 nm
+        model run on the 32 nm level. The voxel counts are the model's own,
+        so the shapes in nm scale with it. Set from one number, three or the
+        text a form sends; a blank clears it. Setting another one forgets the
+        config built at the old one.
+
+        Raises:
+            ValueError: not a voxel size, or the model reads its input itself
+                (``reads_input_itself``), and so cannot be run at another.
+        """
+        return self._run_voxel_size
+
+    @run_voxel_size.setter
+    def run_voxel_size(self, value):
+        size = None if entry.blank(value) else entry.voxel_size(value, "run_voxel_size")
+        if size is not None and self.reads_input_itself():
+            raise ValueError(self._run_voxel_size_refusal(size))
+        if size != self._run_voxel_size:
+            self._config = None
+        self._run_voxel_size = size
+
+    def reads_input_itself(self) -> bool:
+        """Whether the model reads its input itself: its config's own
+        ``process_chunk`` or ``predict`` works out in nm, at the model's own
+        voxel size, what to read around each chunk, so it cannot be run at
+        another from outside (``run_voxel_size``).
+
+        Its built config says for certain. Unbuilt, a type that defines a
+        ``process_chunk`` of its own does (Cellpose, a BioImage Model Zoo
+        model), and a type whose models decide it says so for each (a
+        script); any other is taken not to until it is built, which then
+        refuses a run voxel size.
+        """
+        if self._config is not None:
+            return _reads_input_itself(self._config)
+        return callable(getattr(type(self), "process_chunk", None))
+
+    def _run_voxel_size_refusal(self, run_voxel_size) -> str:
+        """Why the model cannot be run at ``run_voxel_size``, naming the
+        constructor's own voxel size argument when the type has one."""
+        label = getattr(self, "name", None) or type(self).__name__
+        parameters = inspect.signature(type(self).__init__).parameters
+        own = next((name for name in ("voxel_size", "input_voxel_size") if name in parameters), None)
+        return (
+            f"Model {label} reads its input itself (its own process_chunk or predict, which works out "
+            f"in nm what to read at its own voxel size), so it runs only at its own voxel size, not at "
+            f"{list(run_voxel_size)} nm" + (f": give it {own} instead" if own else "")
+        )
+
+    @property
     def effective_env(self):
         """The environment this model's server and finetuning job run in, or
         None for this one: ``env``, else ``default_env`` (``envs.effective``)."""
@@ -397,7 +520,7 @@ class ModelConfig:
     def config(self):
         if self._config is None:
             try:
-                self._config = self._get_config()
+                config = self._get_config()
             except Exception as e:
                 from cellmap_flow.models import envs
 
@@ -414,6 +537,14 @@ class ModelConfig:
                         "running server instead."
                     ) from e
                 raise
+            if self.run_voxel_size is not None:
+                # Here, rather than in each type: what a type builds is at its
+                # own voxel size, and every type is run at another alike.
+                if _reads_input_itself(config):
+                    raise ValueError(self._run_voxel_size_refusal(self.run_voxel_size))
+                for key, value in run_at_geometry(config, self.run_voxel_size).items():
+                    setattr(config, key, value)
+            self._config = config
             self._validate_config()
         return self._config
 
@@ -607,9 +738,7 @@ class ModelConfig:
 
         result = {"type": cli_name_of(type(self))}
         result.update({k: _plain(v) for k, v in params.items() if v is not None})
-        if self.env:
-            result["env"] = self.env
-        return result
+        return _with_entry_keys(self, result)
 
     def _with_name_scale(self, result: dict) -> dict:
         """``result`` with name and scale added after its keys, when they are set."""
@@ -632,13 +761,11 @@ class ModelConfig:
         class under (``registry.cli_name_of``), so that the server rebuilds
         this class and not a parent it inherited cli_name from. With the
         entry's own ``env``, if it has one, which ``serving.launch`` takes off
-        again; the server's environment is ``effective_env``, which it reads
-        from the config.
+        again (the server's environment is ``effective_env``, which it reads
+        from the config), and its ``run_voxel_size``, which the server's
+        config is built at.
         """
-        entry = model_entry(type(self), self._launch_params())
-        if self.env:
-            entry["env"] = self.env
-        return entry
+        return _with_entry_keys(self, model_entry(type(self), self._launch_params()))
 
     @property
     def command(self) -> str:

@@ -1,5 +1,6 @@
 """Model configs: the server rebuilds each from its command, each type's
-default environment, and when a script is refused as unsafe."""
+default environment, a model run at another voxel size, and when a script
+is refused as unsafe."""
 
 import json
 import shlex
@@ -19,7 +20,9 @@ from cellmap_flow.models.models_config import (
     OnnxModelConfig,
     ScriptModelConfig,
 )
+from cellmap_flow.config.yaml import ConfigError
 from cellmap_flow.models.configs.script import load_safe_config
+from cellmap_flow.models.registry import build_model
 
 
 # Each way a server is started: what launchers run since 0.3.0, the same
@@ -84,10 +87,72 @@ def test_a_finetune_declares_its_bases_geometry_at_the_voxel_size_it_was_trained
     monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
     base = {"type": "huggingface", "repo": "cellmap/mito"}
     assert FinetuneModelConfig(weights_path="/w.pt", base_model=base).declared_geometry() == {
-        "write_shape": [896] * 3, "output_voxel_size": [16] * 3, "output_channels": 3, "channels": None}
+        "write_shape": [896] * 3, "input_voxel_size": [16] * 3, "output_voxel_size": [16] * 3, "output_channels": 3,
+        "channels": None}
     at_8 = FinetuneModelConfig(weights_path="/w.pt", base_model=base, input_voxel_size=8, output_voxel_size=8)
-    assert at_8.declared_geometry() == {"write_shape": [448] * 3, "output_voxel_size": [8] * 3, "output_channels": 3,
-                                        "channels": None}
+    assert at_8.declared_geometry() == {"write_shape": [448] * 3, "input_voxel_size": [8] * 3,
+                                        "output_voxel_size": [8] * 3, "output_channels": 3, "channels": None}
+
+
+# A script model reading 16 nm voxels and writing 8 nm ones, 10 in and 8 out.
+SCRIPT_16_TO_8 = """
+import torch
+from funlib.geometry import Coordinate
+
+model = torch.nn.Conv3d(1, 2, 3)
+input_voxel_size = Coordinate((16, 16, 16))
+output_voxel_size = Coordinate((8, 8, 8))
+read_shape = Coordinate((10, 10, 10)) * input_voxel_size
+write_shape = Coordinate((8, 8, 8)) * output_voxel_size
+output_channels = 2
+block_shape = (8, 8, 8, 2)
+"""
+
+
+def test_a_model_run_at_another_voxel_size_reads_and_writes_at_it(tmp_path, monkeypatch):
+    """An entry's run_voxel_size: a 16 nm model writing 8 nm voxels, run at
+    32 nm on z, reads 32 nm voxels there and writes 16 nm ones, as many as
+    before, built or declared; its entry, its server's and the trainer's
+    keep it, and a finetune of it declares it."""
+    from cellmap_flow.finetune.job_manager.submit import model_entry
+
+    script = tmp_path / "m.py"
+    script.write_text(SCRIPT_16_TO_8)
+    model = build_model({"type": "script", "script_path": str(script), "run_voxel_size": "32,16,16"}, "m")
+    geometry = model.geometry
+    assert (geometry.input_voxel_size, geometry.output_voxel_size) == ((32, 16, 16), (16, 8, 8))
+    assert (geometry.read_shape, geometry.write_shape) == ((320, 160, 160), (128, 64, 64))
+    assert (geometry.input_shape, geometry.output_shape) == ((10, 10, 10), (8, 8, 8))
+    for entry in (model.to_dict(), model.launch_entry, model_entry(model, "script", None)):
+        assert build_model(entry).geometry == geometry
+
+    metadata = {"input_shape": [178] * 3, "output_shape": [56] * 3, "input_voxel_size": [16] * 3,
+                "output_voxel_size": [8] * 3, "out_channels": 3}
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
+    hf = build_model({"type": "huggingface", "repo": "cellmap/mito", "run_voxel_size": [32, 16, 16]})
+    declared = {"write_shape": [896, 448, 448], "input_voxel_size": [32, 16, 16], "output_voxel_size": [16, 8, 8],
+                "output_channels": 3, "channels": None}
+    assert hf.declared_geometry() == declared
+    assert FinetuneModelConfig(weights_path="/w.pt", base_model=hf.to_dict()).declared_geometry() == declared
+    assert model_entry(hf, "huggingface", None)["run_voxel_size"] == [32, 16, 16]
+
+
+def test_a_model_that_reads_its_input_itself_refuses_another_voxel_size(tmp_path):
+    """Its own process_chunk works out in nm, at its own voxel size, what it
+    reads: a script's is seen in its text, before anything is built, and
+    one its text does not show when it is built; a Cellpose model is told
+    to use its own voxel_size."""
+    script = tmp_path / "tf.py"
+    script.write_text("def process_chunk(idi, roi):\n    return None\n" + SCRIPT_16_TO_8)
+    with pytest.raises(ConfigError, match="tf"):
+        build_model({"type": "script", "script_path": str(script), "run_voxel_size": 32}, "tf")
+    hidden = tmp_path / "hidden.py"
+    hidden.write_text(SCRIPT_16_TO_8 + "globals()['process_chunk'] = lambda idi, roi: None\n")
+    model = build_model({"type": "script", "script_path": str(hidden), "run_voxel_size": 32}, "hidden")
+    with pytest.raises(ValueError, match="hidden"):
+        model.config
+    with pytest.raises(ConfigError, match="voxel_size"):
+        build_model({"type": "cellpose", "pretrained_model": "cpsam", "voxel_size": 8, "run_voxel_size": 16})
 
 
 @pytest.mark.parametrize("config, env", [

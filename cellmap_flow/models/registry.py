@@ -26,7 +26,9 @@ A model entry's ``env`` (the environment its server runs in, see
 ``models.envs``) is not a constructor argument: ``build_model`` checks it
 and sets it on the built config, and the dashboard's form offers it beside
 each type's arguments. Left out, the type's ``default_env`` applies
-(``ModelConfig.effective_env``).
+(``ModelConfig.effective_env``). Its ``run_voxel_size`` (the voxel size the
+model is run at, when not its own) is not one either, and is set alike
+(``ModelConfig.run_voxel_size``).
 
 Importing this module imports neither torch, flask, huggingface_hub nor
 ``cellmap_flow.globals``. The model config classes, which bring numpy and
@@ -41,7 +43,7 @@ import os
 from typing import Any, Dict, List, Tuple
 
 from cellmap_flow.config.yaml import ConfigError
-from cellmap_flow.models.entry import coerce
+from cellmap_flow.models import entry as model_entry
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +64,13 @@ YAML_ALIASES = {
 # default: a YAML entry's key supplies the name, and scale is optional.
 _NEVER_REQUIRED = ("name", "scale")
 
-# The model-entry key that is not a constructor argument (models.envs).
+# The model-entry keys that are not constructor arguments, which build_model
+# sets on the config it builds: the environment its server runs in
+# (models.envs), and the voxel size it is run at when not its own
+# (ModelConfig.run_voxel_size).
 ENV_KEY = "env"
+RUN_VOXEL_SIZE_KEY = "run_voxel_size"
+ENTRY_KEYS = (ENV_KEY, RUN_VOXEL_SIZE_KEY)
 
 
 def _checked_env(env, model_name: str):
@@ -212,7 +219,7 @@ def build_model(entry: Dict[str, Any], name: str = None, base_dir: str = None):
             f"Valid types are: {', '.join(sorted(types))}"
         )
 
-    kwargs = {YAML_ALIASES.get(key, key): value for key, value in entry.items() if key not in ("type", ENV_KEY)}
+    kwargs = {YAML_ALIASES.get(key, key): value for key, value in entry.items() if key not in ("type", *ENTRY_KEYS)}
     if kwargs.get("name") is None and name is not None:
         kwargs["name"] = name
     for param_name in getattr(config_class, "config_relative_paths", ()):
@@ -225,7 +232,11 @@ def build_model(entry: Dict[str, Any], name: str = None, base_dir: str = None):
     env = _checked_env(entry.get(ENV_KEY), model_name)
 
     try:
-        arguments = coerce(config_class, kwargs)
+        run_voxel_size = model_entry.voxel_size(
+            None if model_entry.blank(entry.get(RUN_VOXEL_SIZE_KEY)) else entry[RUN_VOXEL_SIZE_KEY],
+            RUN_VOXEL_SIZE_KEY,
+        )
+        arguments = model_entry.coerce(config_class, kwargs)
     except ValueError as e:
         raise ConfigError(f"Model '{model_name}' ({mtype}): {e}") from e
 
@@ -264,6 +275,11 @@ def build_model(entry: Dict[str, Any], name: str = None, base_dir: str = None):
         raise ConfigError(f"Error creating model '{model_name}' ({mtype}): {e}") from e
     if env:
         model.env = env
+    if run_voxel_size is not None:
+        try:
+            model.run_voxel_size = run_voxel_size
+        except ValueError as e:  # a model that reads its input itself
+            raise ConfigError(str(e)) from e
     return model
 
 
