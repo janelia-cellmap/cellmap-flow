@@ -85,6 +85,9 @@ export class FakeInference implements Inference {
   serves: { name: string; variant: string; blob: string; chain: Chain }[] = [];
   limits: GpuLimits = { maxBufferSize: null, maxStorageBufferBindingSize: null, shaderF16: false };
   disposed: string[] = [];
+  /** Every view parked (ServedModel.park), and the ones parked now, which a serve through their chain brings back. */
+  parked: string[] = [];
+  private parkedViews = new Map<string, ServedModel>();
   /** How many times each entry's bytes were asked for. */
   bytesAsked = new Map<string, number>();
   stats: InferenceStats = { provider: null, device: null, blocks: 0, inflight: 0, lastMs: null, avgMs: null, status: "idle" };
@@ -124,11 +127,22 @@ export class FakeInference implements Inference {
       engine: "browser",
     };
     const view = viewName(entry.name, blob, entry.runVoxelSize);
+    const back = this.parkedViews.get(view);
+    if (back) {
+      this.parkedViews.delete(view);
+      this.views.push(back);
+      return back;
+    }
     const served: ServedModel = {
       entry,
       view,
       url: `zarr3://http://localhost/virtual/page/${view}/`,
       info,
+      park: async () => {
+        this.views = this.views.filter((s) => s !== served);
+        this.parkedViews.set(view, served);
+        this.parked.push(view);
+      },
       dispose: async () => {
         this.views = this.views.filter((s) => s !== served);
         this.disposed.push(view);

@@ -376,11 +376,12 @@ describe("PUT /api/pipeline", () => {
     expect(answer.digest).toMatch(/^[0-9a-f]{16}$/);
     expect(answer.layers).toEqual([NAME_54, NAME_56]);
     expect(ctx.session.state.chain).toEqual(CHAIN);
-    // new views carrying the new chain; the old ones disposed of after
+    // new views carrying the new chain; the old ones parked after, still served
     const after = ctx.infer.served().map((s) => s.view);
     expect(after).toHaveLength(2);
     expect(after.every((v) => !before.includes(v))).toBe(true);
-    expect(ctx.infer.disposed.sort()).toEqual(before.sort());
+    expect(ctx.infer.parked.sort()).toEqual(before.sort());
+    expect(ctx.infer.disposed).toEqual([]);
     expect(decodeArgs(after[0].split(ARGS_KEY)[1]).chain).toEqual(CHAIN);
     expect(decodeArgs(after[0].split(ARGS_KEY)[1]).extras.digest).toBe(answer.digest);
   });

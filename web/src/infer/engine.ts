@@ -98,6 +98,9 @@ export class InferenceEngine implements Inference {
   private servedList: ServedModel[] = [];
   /** How many times each view name has been served on this engine (servingName). */
   private servings = new Map<string, number>();
+  /** The views of chains no layer shows any more (ServedModel.park), still
+   * served while their model is, by their viewName, with what unserves each. */
+  private parked = new Map<string, { served: ServedModel; unserve: () => void }>();
   /** The output view of each served model, by the served view's name. */
   private outputs = new Map<string, OutputView>();
   private runner: ModelRunner;
@@ -147,6 +150,7 @@ export class InferenceEngine implements Inference {
       this.channels = null;
       this.channelViews.clear();
       this.servings.clear();
+      this.parked.clear();
     }
     // start() registers the service worker (the one relay.ts registered, by
     // the same name) and opens the source with its reader worker. The raw
@@ -182,6 +186,20 @@ export class InferenceEngine implements Inference {
     // exists, rather than failing on every chunk.
     validateNormalizers(chain.input_norm);
     validatePostprocessors(chain.postprocess);
+    // A chain this model was served through before (park: another chain
+    // applied since) comes back as it was, under the URL it had: the viewer
+    // shows what it kept of it and asks again for any chunks it cancelled.
+    const named = viewName(entry.name, blob, entry.runVoxelSize);
+    const parked = this.parked.get(named);
+    if (parked) {
+      this.parked.delete(named);
+      if (sessionKey(parked.served.entry) === sessionKey(entry)) {
+        this.runner.retain(sessionKey(entry));
+        this.servedList.push(parked.served);
+        return parked.served;
+      }
+      parked.unserve();  // another model file under that name: not this one's chain
+    }
     // What its network ends in, before anything of the layer exists: the
     // layer's display range, the ranking's cut-offs and a seed's
     // probabilities read the class from its info. The engine and dataset are
@@ -208,9 +226,8 @@ export class InferenceEngine implements Inference {
     const dtype = outputDtype(chain.postprocess, "float32");
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
-    // Served before on this engine (an Apply back to a chain used before),
+    // Unserved before on this engine (its model removed, then added back),
     // the view takes a new name, so the viewer fetches its chunks afresh.
-    const named = viewName(entry.name, blob, entry.runVoxelSize);
     const servings = (this.servings.get(named) ?? 0) + 1;
     this.servings.set(named, servings);
     const view = servingName(named, servings);
@@ -275,20 +292,34 @@ export class InferenceEngine implements Inference {
     };
     this.outputs.set(view, output);
 
+    // The view's chunks go (viewers cache by URL, and an edit is a new
+    // name); its stages' outputs stay in the engine's staged cache for a
+    // view served again with a later stage changed.
+    const unserve = () => {
+      engine.unserve(view);
+      if (this.outputs.get(view) === output) {
+        if (output.registered) engine.unserve(output.name);
+        this.outputs.delete(view);
+      }
+    };
     const served: ServedModel = {
       entry, view, url: `zarr3://${engine.url(view)}`, info,
+      park: async () => {
+        const i = this.servedList.indexOf(served);
+        if (i < 0) return;
+        this.servedList.splice(i, 1);
+        this.parked.set(named, { served, unserve });
+        await this.runner.release(model.key);
+        this.dropParked(model.key);
+      },
       dispose: async () => {
         const i = this.servedList.indexOf(served);
         if (i >= 0) this.servedList.splice(i, 1);
-        // The view's chunks go (viewers cache by URL, and an edit is a new
-        // name); its stages' outputs stay in the engine's staged cache for a
-        // view served again with a later stage changed.
-        engine.unserve(view);
-        if (this.outputs.get(view) === output) {
-          if (output.registered) engine.unserve(output.name);
-          this.outputs.delete(view);
-        }
-        await this.runner.release(model.key);
+        const wasParked = this.parked.get(named)?.served === served;  // its session released when parked
+        if (wasParked) this.parked.delete(named);
+        unserve();
+        if (!wasParked) await this.runner.release(model.key);
+        this.dropParked(model.key);
       },
     };
     this.servedList.push(served);
@@ -297,6 +328,20 @@ export class InferenceEngine implements Inference {
   }
 
   served(): ServedModel[] { return [...this.servedList]; }
+
+  /** Unserve the parked views of model file `key` once none of its views is
+   * shown (its model removed, or replaced by another file under its name),
+   * as a model server stops with its model, and every chain it served with
+   * it: a finetuned model's name, and so its views' names, can come back
+   * later for other weights. */
+  private dropParked(key: string) {
+    if (this.servedList.some((s) => sessionKey(s.entry) === key)) return;
+    for (const [named, { served, unserve }] of this.parked) {
+      if (sessionKey(served.entry) !== key) continue;
+      this.parked.delete(named);
+      unserve();
+    }
+  }
 
   /** What each model file's network ends in, by its session key (sessionKey):
    * read once, by the first serve or the start that asks before it. */

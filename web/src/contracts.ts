@@ -566,7 +566,17 @@ export interface ServedModel {
   /** The layer's source URL for Neuroglancer (zarr3://...). */
   url: string;
   info: ModelInfo;
-  /** Stop serving it and free its session if no other served model shares it. */
+  /** Stop showing it, its model now shown through another chain (an
+   * Apply), but keep serving it while the model is served, as a model
+   * server goes on serving a chain no layer shows: the chunks its layer
+   * still waits for are computed (or cancelled by the viewer), not failed,
+   * and the viewer keeps them by URL; the model served through this chain
+   * again (serve) is this view, under its URL, with what the viewer and
+   * the engine kept of it. Off the served() list meanwhile. */
+  park(): Promise<void>;
+  /** Stop serving it, and its model's parked chains once none of the
+   * model's views is shown, and free its session if no other served model
+   * shares it. */
   dispose(): Promise<void>;
 }
 

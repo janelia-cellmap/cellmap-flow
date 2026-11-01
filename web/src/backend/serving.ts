@@ -232,10 +232,11 @@ export interface ServeOptions {
 /** Serve `entries` through `chain`, in their order, and nothing else: a
  * model already served through this chain, at the voxel size its entry is
  * run at (servesAs), is kept as it is; one served through another chain, or
- * at another voxel size, is served anew and the old view disposed of (after
- * the new one exists, so the two share the onnxruntime session rather than
- * rebuilding it); one no longer in `entries` is disposed of and its layer
- * removed. Then the viewer shows one layer per entry, coloured by position.
+ * at another voxel size, is served anew (or its view of that chain parked
+ * before comes back) and the old view parked (after the new one exists, so
+ * the two share the onnxruntime session rather than rebuilding it); one no
+ * longer in `entries` is disposed of and its layer removed. Then the viewer
+ * shows one layer per entry, coloured by position.
  * Returns the served models in `entries` order.
  *
  * A model is served in the variant for this machine's GPU (servedVariant),
@@ -262,9 +263,14 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
   const handedOver = new Set(Object.values(replacing));
   for (const old of before) {
     if (kept.has(old)) continue;
-    // A layer handed over goes when its successor's is set, below.
+    // A layer handed over goes when its successor's is set, below. A model
+    // still served, through another chain now, keeps its old one served
+    // (park), as its server would in server mode: stopped, the chunks the
+    // old layer still waits for would fail, and the viewer, which keeps
+    // chunks by URL failures included, would never ask for them again when
+    // the chain is applied back.
     if (!names.has(old.entry.name)) await stopServing(ctx, old.entry.name, [old], { keepLayer: handedOver.has(old.entry.name) });
-    else await old.dispose();
+    else await old.park();
   }
   showLayers(ctx, result, chain, options.postprocessChanged ?? false, replacing);
   return result;
