@@ -41,7 +41,7 @@ import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, OutputActivation, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
-import { viewModelName, viewName } from "../shared/args";
+import { servingName, viewModelName, viewName } from "../shared/args";
 import { modelInfo, networkActivation } from "../shared/model-info";
 import { type RawChannels, rawChannels } from "./channels";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
@@ -96,6 +96,8 @@ export class InferenceEngine implements Inference {
   /** The raw view each channel is read from, by channel (rawView). */
   private channelViews = new Map<number, Promise<string>>();
   private servedList: ServedModel[] = [];
+  /** How many times each view name has been served on this engine (servingName). */
+  private servings = new Map<string, number>();
   /** The output view of each served model, by the served view's name. */
   private outputs = new Map<string, OutputView>();
   private runner: ModelRunner;
@@ -144,6 +146,7 @@ export class InferenceEngine implements Inference {
       this.info = null;
       this.channels = null;
       this.channelViews.clear();
+      this.servings.clear();
     }
     // start() registers the service worker (the one relay.ts registered, by
     // the same name) and opens the source with its reader worker. The raw
@@ -205,7 +208,12 @@ export class InferenceEngine implements Inference {
     const dtype = outputDtype(chain.postprocess, "float32");
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
-    const view = viewName(entry.name, blob, entry.runVoxelSize);
+    // Served before on this engine (an Apply back to a chain used before),
+    // the view takes a new name, so the viewer fetches its chunks afresh.
+    const named = viewName(entry.name, blob, entry.runVoxelSize);
+    const servings = (this.servings.get(named) ?? 0) + 1;
+    this.servings.set(named, servings);
+    const view = servingName(named, servings);
 
     // One level at the output voxel size, as the Python server serves it, in
     // the source's units and axes (the engine reads the raw level at the

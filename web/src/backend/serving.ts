@@ -18,7 +18,7 @@ import type { AppContext, Chain, DatasetInfo, ModelEntry, ServedModel, Step } fr
 import { selectedChannel, SUPPORTED_NORMALIZERS, withChannelPick, withoutChannelPick } from "../infer/norms";
 import { withVariant } from "../models";
 import { finetuneNumber } from "../models/finetuned";
-import { chainDigest, encodeArgs, viewName } from "../shared/args";
+import { chainDigest, encodeArgs, servedViewName, viewName } from "../shared/args";
 import { outputClass } from "../shared/model-info";
 import { shaderColor } from "../viewer/display";
 import { channelPosition, displayChannel, PREDICTION_COLORS, predictionLayer, RAW_LAYER_NAME, rawChannelShown } from "../viewer/layers";
@@ -46,9 +46,10 @@ export function blobOf(served: ServedModel): string {
 }
 
 /** Whether `served` is `entry` served through `blob`, at the voxel size
- * `entry` is run at (its view's name says both: shared/args.ts viewName). */
+ * `entry` is run at (its view's name says both: shared/args.ts viewName),
+ * however many times that view has been served (servingName). */
 export function servesAs(served: ServedModel, entry: ModelEntry, blob: string): boolean {
-  return served.entry.id === entry.id && served.view === viewName(entry.name, blob, entry.runVoxelSize);
+  return served.entry.id === entry.id && servedViewName(served.view) === viewName(entry.name, blob, entry.runVoxelSize);
 }
 
 /** Whether every one of `entries` is served through `blob` already: then a

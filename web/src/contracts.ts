@@ -559,7 +559,9 @@ export interface DatasetInfo {
 
 export interface ServedModel {
   entry: ModelEntry;
-  /** The engine view's name: `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`. */
+  /** The engine view's name: `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`
+   * (shared/args.ts viewName), and `~<n>` after it when that view is served
+   * again on the same engine (servingName). */
   view: string;
   /** The layer's source URL for Neuroglancer (zarr3://...). */
   url: string;
