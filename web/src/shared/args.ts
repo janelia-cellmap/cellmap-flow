@@ -100,11 +100,27 @@ export function viewName(modelName: string, blob: string, runVoxelSize?: readonl
   return `${modelName}${ARGS_KEY}${blob}${ARGS_KEY}${runVoxelSize ? `~${runVoxelSize.join("x")}nm` : ""}`;
 }
 
+/** The name the `n`th serving of view `view` on one engine goes by: `view`
+ * the first time, then `view~2`, `view~3`, ... A chain served again (Apply
+ * back to one used before) must not take its old name: the viewer keeps
+ * what it fetched by URL, failures included, and the engine failed the
+ * chunks still computing when it stopped serving the old one, so they would
+ * stay empty (chunkmirage's Engine.unserve: a volume served again goes
+ * under a new name). */
+export function servingName(view: string, n: number): string {
+  return n > 1 ? `${view}~${n}` : view;
+}
+
+/** The view name `serving` is a serving of (servingName undone). */
+export function servedViewName(serving: string): string {
+  return serving.replace(/~\d+$/, "");
+}
+
 /** The model name and blob of a view name (protocol.split_dataset_url): the
  * blob is null when the name carries none, and any other number of markers
  * than two is a malformed name; what follows the second marker (viewName's
- * run voxel size) is neither. The name is percent-decoded in case the viewer
- * encoded it on the way. */
+ * run voxel size, servingName's count) is neither. The name is
+ * percent-decoded in case the viewer encoded it on the way. */
 export function parseViewName(view: string): { name: string; blob: string | null } {
   const parts = view.split(ARGS_KEY);
   if (parts.length === 1) return { name: decodeSegment(view), blob: null };
