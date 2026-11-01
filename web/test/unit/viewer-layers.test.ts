@@ -65,6 +65,7 @@ function served(name: string, infoOverrides: Partial<ModelInfo> = {}): ServedMod
     view: `${name}__CFLOW_ARGS__BLOB__CFLOW_ARGS__`,
     url: `zarr3://https://h/app/virtual/page/${name}__CFLOW_ARGS__BLOB__CFLOW_ARGS__/`,
     info: modelInfo,
+    park: async () => {},
     dispose: async () => {},
   };
 }
