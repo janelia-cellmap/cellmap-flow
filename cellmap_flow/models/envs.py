@@ -14,10 +14,11 @@ model's inference server, and its finetuning job, run instead::
 ``env`` is one of:
 
 - the name of an environment in cellmap-flow's ``pixi.toml``. The program
-  runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``,
-  which installs the environment from the lockfile on first use (a
-  server's launcher installs it before submitting the job:
-  ``jobs.launch._install_env_first``). The
+  runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``.
+  A server's launcher refuses to submit the job if the environment is not
+  installed yet (``jobs.launch._install_env_first``), rather than install
+  it as part of submitting: install it explicitly first with
+  ``cellmap_flow envs install <name>``. The
   manifest is the one in the checkout cellmap-flow is installed from, or
   ``CELLMAP_FLOW_PIXI_MANIFEST``; pixi is ``PIXI_EXE`` (which ``pixi run``
   sets), else the ``pixi`` on PATH.
@@ -242,7 +243,7 @@ def prefix(env: str) -> str:
 
 
 def is_installed(env: str) -> bool:
-    """Whether ``env`` has a python yet (a pixi one is installed on first use)."""
+    """Whether ``env`` has a python yet (a pixi one must be installed explicitly first)."""
     return os.path.exists(os.path.join(prefix(env), "bin", "python"))
 
 
@@ -270,10 +271,11 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     without pixi (a conda-only cluster account), the model runs here, as
     it did before its type had a default, and the warning says how to
     provide one (an alias). A pixi environment that is declared but not
-    installed is used anyway, as it is installed on first use: the warning
-    is that the first start then takes minutes, and how to install it
-    first. A path or an alias is the user's own, so one that cannot be
-    used is an error, as an explicit ``env`` is.
+    installed is named anyway: the warning says to install it first, and
+    the actual launch (``jobs.launch._install_env_first``) refuses until it
+    is, rather than installing it as a side effect of submitting. A path or
+    an alias is the user's own, so one that cannot be used is an error, as
+    an explicit ``env`` is.
     """
     if is_path(env) or env in aliases():
         return validate(env, model_name)
@@ -287,8 +289,8 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     else:
         if not is_installed(env):
             _warn_once(env, (
-                f"Model '{model_name}' runs in env {env!r}, which is not installed: it is installed "
-                f"before its first job (several minutes). To install it now: cellmap_flow envs install {env}"
+                f"Model '{model_name}' runs in env {env!r}, which is not installed yet. "
+                f"Install it before running this model: cellmap_flow envs install {env}"
             ))
         return env
     _warn_once(env, (
