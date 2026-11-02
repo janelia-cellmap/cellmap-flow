@@ -24,7 +24,6 @@ import logging
 import os
 import shlex
 import signal
-import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -40,7 +39,7 @@ from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.ready import READY_ENV, ready_path
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus, tail
+from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -112,42 +111,22 @@ def _while_starting(job):
             _starting.discard(job)
 
 
-class _Installing:
-    """A job's stand-in while the pixi environment its server runs in is
-    installed, before it is submitted: listed among the starting jobs with
-    pixi's output as its log, so the page says what the minutes go on."""
-
-    job_id = host = None
-
-    def __init__(self, model_name, env, log_file):
-        self.model_name, self.env, self.log_file = model_name, env, log_file
-
-    def get_status(self):
-        return None
-
-    def peek(self, max_chars: int = 4000):
-        text = tail(self.log_file, max_chars) or ""
-        return (f"Installing the pixi environment {self.env!r} its server runs in "
-                f"(once; several minutes)...\n{text}").rstrip()
-
-    def kill(self):
-        pass  # pixi finishes the install; the job is not submitted after a Ctrl+C
-
-
-_install_locks: dict = {}
-
-
 def _install_env_first(command: str, job_name: str) -> None:
-    """Install the pixi environment ``command`` runs in, when it is not yet.
+    """Refuse to submit ``command`` when the pixi environment it runs in is
+    not installed yet, rather than install it here.
 
     ``pixi run --frozen`` would install it in the job itself, but a job gets
-    STARTUP_TIMEOUT_SECONDS to report a server, and installing torch and
-    its company takes longer: a first model in an environment nobody had
-    used yet (a new Fileglancer user's) was killed while installing. One
-    install per environment at a time; the others wait for it.
+    STARTUP_TIMEOUT_SECONDS to report a server, and installing torch and its
+    company takes longer: a first model in an environment nobody had used
+    yet (a new Fileglancer user's) was killed while installing. Installing
+    it here instead, before submitting, traded that for a submission that
+    silently blocks for the same several minutes -- a surprise on a GPU
+    queue a user is actively waiting on. Refuse instead, and say how to
+    install it first: a deliberate, visible step rather than an implicit one.
 
     Raises:
-        JobStartError: the install failed; the message ends with pixi's output.
+        JobStartError: ``command`` runs in a pixi environment that is not
+            installed yet.
     """
     from cellmap_flow.models import envs
 
@@ -158,25 +137,10 @@ def _install_env_first(command: str, job_name: str) -> None:
     env = envs.pixi_env_of(argv)
     if env is None or envs.is_installed(env):
         return
-    with _starting_lock:
-        lock = _install_locks.setdefault(env, threading.Lock())
-    with lock:
-        if envs.is_installed(env):
-            return
-        log_file = SERVER_LOG_DIR / f"{job_name}_install_{env}.log"
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Installing the pixi environment {env!r} for {job_name} before submitting it "
-                    f"(once; several minutes); pixi's output is in {log_file}")
-        with _while_starting(_Installing(job_name, env, log_file)):
-            with open(log_file, "w") as out:
-                result = subprocess.run([argv[0], *envs.install_argv(env)[1:]], stdout=out,
-                                        stderr=subprocess.STDOUT)
-            if result.returncode:
-                raise _logged(JobStartError(
-                    f"Could not install the pixi environment {env!r} for {job_name} "
-                    f"(pixi exited {result.returncode}): {tail(log_file, 2000)}"
-                ))
-        logger.info(f"Installed the pixi environment {env!r}")
+    raise _logged(JobStartError(
+        f"The pixi environment {env!r} for {job_name} is not installed yet. "
+        f"Install it first: cellmap_flow envs install {env}"
+    ))
 
 
 def starting_jobs() -> list:
