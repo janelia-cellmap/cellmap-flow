@@ -1,5 +1,6 @@
 """max_block_size_cache's model+queue-keyed cache."""
 
+import os
 import types
 
 import pytest
@@ -72,7 +73,12 @@ def test_editing_the_checkpoint_misses_the_cache(tmp_path):
     model_config = types.SimpleNamespace(checkpoint_path=str(checkpoint))
     cache.store(model_config, "gpu_h100", _result())
 
-    checkpoint.write_text("v2, a different mtime")
+    checkpoint.write_text("v2")
+    # Dated a second on, as an edit after a minutes-long probe is: a rewrite
+    # this soon after the first write usually keeps its mtime, the
+    # filesystem's clock ticking only every few milliseconds.
+    stat = checkpoint.stat()
+    os.utime(checkpoint, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
     assert cache.load_cached(model_config, "gpu_h100") is None
 
 
