@@ -70,13 +70,13 @@ def seed_instance_volume(
     """
     from scipy.ndimage import binary_dilation
 
-    from cellmap_flow.io.metadata import snap_integral
+    from cellmap_flow.io.metadata import AXES_ORDER, snap_integral
 
     s0_path = os.path.join(instance_zarr_path, "s0")
     try:
         # Placed by OME multiscales or resolution/offset attributes alike,
         # in nm on its spatial axes.
-        source = wa.open(s0_path, strict_units=False)
+        source = wa.open(s0_path, strict_units=False, axes_order=AXES_ORDER)
     except Exception as e:
         return False, f"Failed to open instance zarr s0: {e}"
     if source.meta.placed_by is None:

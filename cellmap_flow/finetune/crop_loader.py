@@ -29,6 +29,8 @@ import worldarray as wa
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from cellmap_flow.io.metadata import AXES_ORDER
+
 logger = logging.getLogger(__name__)
 
 
@@ -210,7 +212,7 @@ def _read_voxel_size_and_offset(
         raise FileNotFoundError(f"Crop path not found: {zarr_path}.{detail}")
 
     node = wa.detect(zarr_path)
-    meta = wa.metadata(zarr_path, level=None if node.kind == "array" else 0, units=None, open=False)
+    meta = wa.metadata(zarr_path, level=None if node.kind == "array" else 0, units=None, open=False, axes_order=AXES_ORDER)
     subpath = tuple(meta.path[len(node.path):].strip("/").split("/")) if meta.path != node.path else ()
     return subpath, np.array(meta.voxel_size, dtype=float), np.array(meta.corner, dtype=float)
 

@@ -12,6 +12,8 @@ from typing import Optional
 
 import worldarray as wa
 
+from cellmap_flow.io.metadata import AXES_ORDER
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:
     (OME-NGFF, COSEM N5, precomputed); no level is opened then.
     """
     try:
-        pyramid = wa.open_pyramid(dataset_path, units="nanometer", strict_units=False)
+        pyramid = wa.open_pyramid(dataset_path, units="nanometer", strict_units=False, axes_order=AXES_ORDER)
         _, voxel_size = wa.select_level(pyramid.voxel_sizes(), target_voxel_size, "floor")
         return tuple(float(v) for v in voxel_size)
     except Exception as e:
