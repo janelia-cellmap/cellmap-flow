@@ -218,6 +218,36 @@
     },
     {
       "method": "POST",
+      "path": "/api/blockwise/max-block-size/check",
+      "availability": "server",
+      "request": "MaxBlockSizeRequest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/blockwise/max-block-size/compute",
+      "availability": "server",
+      "request": "MaxBlockSizeRequest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/blockwise/max-block-size/status",
+      "availability": "server",
+      "request": "MaxBlockSizeStatus"
+    },
+    {
+      "method": "POST",
+      "path": "/api/blockwise/max-block-size/cancel",
+      "availability": "server",
+      "request": "MaxBlockSizeCancel"
+    },
+    {
+      "method": "POST",
+      "path": "/api/blockwise/output-dtype",
+      "availability": "server",
+      "request": "OutputDtypeRequest"
+    },
+    {
+      "method": "POST",
       "path": "/api/bbx-generator",
       "availability": "server",
       "request": "BbxGenerator"
@@ -1230,14 +1260,17 @@
       "type": "object"
     },
     "BlockwiseTaskSettings": {
-      "description": "A blockwise-config node's params: what a task and its master are\nsubmitted with. Each is required, and taken as sent (precheck checks\nthe task's).",
+      "description": "A blockwise-config node's params: what a task and its master are\nsubmitted with. Each of the first six is required, and taken as sent\n(precheck checks the task's). The rest are optional: blank, walltime is\nthe dashboard's, blockwise_tasks_dir the dashboard's tasks directory,\nand block_size -- the output's chunk shape -- the model's output tile\n(blockwise_processor.py's default), which must be a multiple of it.",
       "properties": {
         "charge_group": {},
         "queue": {},
         "nb_workers": {},
         "nb_cores_worker": {},
         "nb_cores_master": {},
-        "tmp_dir": {}
+        "tmp_dir": {},
+        "walltime": {},
+        "blockwise_tasks_dir": {},
+        "block_size": {}
       },
       "required": [
         "charge_group",
@@ -2155,6 +2188,78 @@
       "title": "LoadCrops",
       "type": "object"
     },
+    "MaxBlockSizeCancel": {
+      "description": "A probe job to bkill: the queue was full, or the answer is no longer\nwanted.",
+      "properties": {
+        "job_id": {
+          "default": null,
+          "type": "string"
+        }
+      },
+      "title": "MaxBlockSizeCancel",
+      "type": "object"
+    },
+    "MaxBlockSizePipeline": {
+      "description": "Just enough of the builder's pipeline for a max-block-size check or\nprobe: the first model node, and the blockwise-config node's queue\n(and charge_group, for the probe job's billing). Unlike\nBlockwisePipeline, inputs and outputs are not required -- a block size\ncan be checked before the rest of the pipeline is wired up.",
+      "properties": {
+        "models": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/ModelNode"
+          },
+          "type": "array"
+        },
+        "blockwise_config": {
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/BlockwiseConfigNode"
+          },
+          "type": "array"
+        }
+      },
+      "title": "MaxBlockSizePipeline",
+      "type": "object"
+    },
+    "MaxBlockSizeRequest": {
+      "description": "A model and queue to check the max-block-size cache for, or to probe.",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/$defs/MaxBlockSizePipeline",
+          "default": {}
+        }
+      },
+      "title": "MaxBlockSizeRequest",
+      "type": "object"
+    },
+    "MaxBlockSizeStatus": {
+      "description": "A submitted probe job to poll: compute's own answer, sent back.",
+      "properties": {
+        "job_id": {
+          "default": null,
+          "type": "string"
+        },
+        "result_path": {
+          "default": null,
+          "type": "string"
+        },
+        "model_entry": {
+          "additionalProperties": true,
+          "default": {},
+          "type": "object"
+        },
+        "queue": {},
+        "log_path": {
+          "default": "",
+          "type": "string"
+        },
+        "submitted_at": {
+          "default": 0,
+          "type": "number"
+        }
+      },
+      "title": "MaxBlockSizeStatus",
+      "type": "object"
+    },
     "ModelNode": {
       "description": "A model node. It may carry the config the model was defined with (its\nModelConfig.to_dict()), which stands in for params when it has none.",
       "properties": {
@@ -2171,6 +2276,38 @@
         }
       },
       "title": "ModelNode",
+      "type": "object"
+    },
+    "OutputDtypePipeline": {
+      "description": "What decides a task's output dtype: its postprocessors (the last that\ndeclares one), else the model's own. The models are taken for when a\ntype can say its dtype without being built; none can yet.",
+      "properties": {
+        "models": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ModelNode"
+          },
+          "type": "array"
+        },
+        "postprocessors": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ChainNode"
+          },
+          "type": "array"
+        }
+      },
+      "title": "OutputDtypePipeline",
+      "type": "object"
+    },
+    "OutputDtypeRequest": {
+      "description": "The dtype a task's output would be written in, for the Output node's\ndtype field to show as its default.",
+      "properties": {
+        "pipeline": {
+          "$ref": "#/$defs/OutputDtypePipeline",
+          "default": {}
+        }
+      },
+      "title": "OutputDtypeRequest",
       "type": "object"
     },
     "PipelineNode": {
@@ -2276,6 +2413,21 @@
         },
         "POST /api/blockwise/submit": {
           "$ref": "#/$defs/BlockwiseSubmit"
+        },
+        "POST /api/blockwise/max-block-size/check": {
+          "$ref": "#/$defs/MaxBlockSizeRequest"
+        },
+        "POST /api/blockwise/max-block-size/compute": {
+          "$ref": "#/$defs/MaxBlockSizeRequest"
+        },
+        "POST /api/blockwise/max-block-size/status": {
+          "$ref": "#/$defs/MaxBlockSizeStatus"
+        },
+        "POST /api/blockwise/max-block-size/cancel": {
+          "$ref": "#/$defs/MaxBlockSizeCancel"
+        },
+        "POST /api/blockwise/output-dtype": {
+          "$ref": "#/$defs/OutputDtypeRequest"
         },
         "POST /api/bbx-generator": {
           "$ref": "#/$defs/BbxGenerator"

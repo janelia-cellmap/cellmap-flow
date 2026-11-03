@@ -30,6 +30,15 @@ export const palette = {
   postprocessor: asList(PAGE.output_postprocessors),
 };
 
+// The single-GPU LSF queues (bqueues -w on login1, 2026-11-02) a blockwise
+// worker (num_gpus=1 each) can use. LSF also offers a "_parallel" variant of
+// each for multi-node MPI-style jobs, not listed here: a blockwise worker is
+// never one. Re-check occasionally -- Janelia adds and retires GPU queues.
+export const GPU_QUEUE_NAMES = [
+  "gpu_h100", "gpu_h200", "gpu_a100", "gpu_b300", "gpu_rtx6000",
+  "gpu_l4", "gpu_l4_large", "gpu_l4_16", "gpu_short",
+];
+
 // The settings a blockwise-config node holds, as the blockwise job takes them.
 export const BLOCKWISE_FIELDS = [
   { key: "queue", label: "Queue" },
@@ -37,8 +46,15 @@ export const BLOCKWISE_FIELDS = [
   { key: "nb_cores_master", label: "Cores Master" },
   { key: "nb_cores_worker", label: "Cores Worker" },
   { key: "nb_workers", label: "Workers" },
+  // The task's -W, master and workers; starts as the dashboard's walltime.
+  { key: "walltime", label: "Walltime (HH:MM)" },
   { key: "tmp_dir", label: "Temp Directory" },
   { key: "blockwise_tasks_dir", label: "Tasks Directory" },
+  // The output's chunk shape. Blank: the model's output tile. Set, the tile
+  // must be a multiple of it (84 chunks of a 336 tile, for readers that
+  // want small chunks). The tile itself is the model node's output_size,
+  // which "Compute Max GPU Block Size" sets to the largest that fits.
+  { key: "block_size", label: "Block Size (chunks, optional)" },
 ];
 
 // Those settings picked out of an object that has them (and maybe more).

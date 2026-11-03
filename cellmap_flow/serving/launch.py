@@ -131,7 +131,10 @@ def launch(model, data_path: str, *, queue=None, charge_group=None, resample: bo
         queue = queue if queue is not None else settings.queue
         charge_group = charge_group if charge_group is not None else settings.charge_group
     command = server_command(model, path, resample)
-    logger.info(f"Starting a server for {name}: {command}")
+    logger.info(f"Starting a server for {name}")
+    # The whole command is in the job's own log too (LSF's "Your job looked
+    # like"); here it is a 600-character line that buried the lines around it.
+    logger.debug(f"Server command for {name}: {command}")
     # Through the module, so that a test's stand-in for start_hosts stands in here too.
     return jobs_launch.start_hosts(command, job_name=name, queue=queue, charge_group=charge_group,
                                    wait_for_host=wait_for_host)

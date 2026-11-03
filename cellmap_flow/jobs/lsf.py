@@ -192,7 +192,7 @@ class LSFJob(Job):
         if self.host:
             return self.host
 
-        logger.info(f"Monitoring LSF job {self.job_id} for host information...")
+        logger.debug(f"Monitoring LSF job {self.job_id} for host information...")
 
         # Model load dominates this wait -- weights off /nrs, a torch.export,
         # sometimes a HuggingFace fetch -- and it is the part people ask about
@@ -465,7 +465,12 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
     job_name = spec.name
     bsub_command = bsub_argv(spec)
 
-    logger.info(f"Submitting bsub job: {' '.join(bsub_command)}")
+    # The bsub options at INFO; the command they run, long and in the job's
+    # own log anyway (LSF's "Your job looked like"), at DEBUG.
+    payload = 3 if spec.shell is not None else len(spec.argv or ())  # as bsub_argv appends it
+    options = bsub_command[1:len(bsub_command) - payload] if payload else bsub_command[1:]
+    logger.info(f"Submitting {job_name}: bsub {' '.join(options)}")
+    logger.debug(f"Full bsub command: {' '.join(bsub_command)}")
 
     # LSF copies the submitting environment into the job, so anything the
     # job needs to be told travels as environment. Left out when there is
@@ -510,7 +515,7 @@ def submit(spec: JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECOND
         job_id = parse_job_id(result.stdout) or parse_job_id(result.stderr)
         if job_id is None:
             raise JobIdMissingError(result.stdout.strip())
-        logger.info(f"Job {job_id} submitted successfully")
+        logger.info(f"Job {job_id} submitted")
 
     log_file = log_dir / f"{log_stem(job_name)}_{job_id}.log"
     ready_file = (spec.env or {}).get(READY_ENV)
@@ -557,3 +562,20 @@ def statuses(job_ids) -> dict:
         if match.group(1) in wanted:
             reported.setdefault(match.group(1), None)
     return reported
+
+
+def kill(job_id) -> Optional[str]:
+    """bkill ``job_id``; None when LSF took it, else what went wrong, for a
+    caller that has to tell someone (LSFJob.kill only logs). A job that
+    already ended is "took it" too: bkill says so and exits non-zero, but
+    the job is as gone as the caller wanted."""
+    try:
+        result = subprocess.run(["bkill", str(job_id)], capture_output=True, text=True, timeout=10)
+    except Exception as e:
+        return f"could not run bkill: {e}"
+    if result.returncode == 0:
+        return None
+    output = f"{result.stdout}\n{result.stderr}"
+    if "already finished" in output or "is not found" in output:
+        return None
+    return (result.stderr or result.stdout).strip() or f"bkill exited with {result.returncode}"

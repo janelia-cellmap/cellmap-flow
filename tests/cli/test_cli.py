@@ -70,6 +70,22 @@ def test_a_server_that_never_came_up_exits_non_zero_with_the_reason(monkeypatch)
     assert viewers == [] and started_jobs() == []
 
 
+@pytest.mark.parametrize("name", ["app", "dashboard"])
+def test_app_opens_the_dashboard_alone_under_either_name(name, monkeypatch):
+    """`cellmap_flow app` is the dashboard with no data and no model, as
+    `cellmap_flow_app` was before 0.3.0; `dashboard`, its name since, still
+    works."""
+    started = []
+    monkeypatch.setattr("cellmap_flow.jobs.launch.install_cleanup_handlers", lambda: True)
+    monkeypatch.setattr("cellmap_flow.dashboard.app.create_and_run_app", lambda **kw: started.append(kw))
+
+    result = CliRunner().invoke(cli, [name, "-n", "http://viewer:1234/v/abc/"])
+
+    assert result.exit_code == 0, result.output
+    assert started == [{"neuroglancer_url": "http://viewer:1234/v/abc/"}]
+    assert "no data and no model" in CliRunner().invoke(cli, [name, "--help"]).output
+
+
 def test_an_old_console_script_says_what_replaces_it_and_runs_it(capsys):
     """An environment installed before 0.3.0 still has `cellmap_flow_yaml`
     and the other console scripts (cli/aliases.py) until the release after."""

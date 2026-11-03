@@ -28,6 +28,10 @@ message is pydantic's, after the field's name.
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
+- ``MaxBlockSizeRequest``: POST /api/blockwise/max-block-size/{check,compute},
+  ``MaxBlockSizeStatus``: POST /api/blockwise/max-block-size/status,
+  ``MaxBlockSizeCancel``: POST /api/blockwise/max-block-size/cancel, and
+  ``OutputDtypeRequest``: POST /api/blockwise/output-dtype
 """
 
 import logging
@@ -554,8 +558,11 @@ class ModelNode(PipelineNode):
 
 class BlockwiseTaskSettings(BaseModel):
     """A blockwise-config node's params: what a task and its master are
-    submitted with. Each is required, and taken as sent (precheck checks
-    the task's)."""
+    submitted with. Each of the first six is required, and taken as sent
+    (precheck checks the task's). The rest are optional: blank, walltime is
+    the dashboard's, blockwise_tasks_dir the dashboard's tasks directory,
+    and block_size -- the output's chunk shape -- the model's output tile
+    (blockwise_processor.py's default), which must be a multiple of it."""
 
     charge_group: Any
     queue: Any
@@ -563,6 +570,11 @@ class BlockwiseTaskSettings(BaseModel):
     nb_cores_worker: Any
     nb_cores_master: Any
     tmp_dir: Any
+    # The task's -W (master and workers), "HH:MM" or minutes.
+    walltime: Any = None
+    # Where the task YAML, and the master's and probes' logs, are written.
+    blockwise_tasks_dir: Any = None
+    block_size: Any = None
 
 
 class BlockwiseConfigNode(PipelineNode):
@@ -596,6 +608,63 @@ class BlockwisePipeline(BaseModel):
         if not self.outputs[0].params.get("dataset_path"):
             raise ValueError("Output node missing dataset_path")
         return self
+
+
+class MaxBlockSizePipeline(BaseModel):
+    """Just enough of the builder's pipeline for a max-block-size check or
+    probe: the first model node, and the blockwise-config node's queue
+    (and charge_group, for the probe job's billing). Unlike
+    BlockwisePipeline, inputs and outputs are not required -- a block size
+    can be checked before the rest of the pipeline is wired up."""
+
+    models: Annotated[list[ModelNode], _required("models", message="No models defined")] = Field(
+        None, validate_default=True)
+    blockwise_config: Annotated[list[BlockwiseConfigNode], _required(
+        "blockwise_config", message="No blockwise configuration defined")] = Field(None, validate_default=True)
+
+
+class MaxBlockSizeRequest(BaseModel):
+    """A model and queue to check the max-block-size cache for, or to probe."""
+
+    pipeline: MaxBlockSizePipeline = Field({}, validate_default=True)
+
+
+class MaxBlockSizeStatus(BaseModel):
+    """A submitted probe job to poll: compute's own answer, sent back."""
+
+    job_id: Annotated[str, _required("job_id")] = Field(None, validate_default=True)
+    result_path: Annotated[str, _required("result_path")] = Field(None, validate_default=True)
+    model_entry: dict = {}
+    queue: Any = None
+    # Named in the error when the job ends without a result, so the user can
+    # go read why.
+    log_path: str = ""
+    # When compute submitted it (epoch seconds): a cache entry the probe
+    # stored since then is this job's answer.
+    submitted_at: float = 0
+
+
+class MaxBlockSizeCancel(BaseModel):
+    """A probe job to bkill: the queue was full, or the answer is no longer
+    wanted."""
+
+    job_id: Annotated[str, _required("job_id")] = Field(None, validate_default=True)
+
+
+class OutputDtypePipeline(BaseModel):
+    """What decides a task's output dtype: its postprocessors (the last that
+    declares one), else the model's own. The models are taken for when a
+    type can say its dtype without being built; none can yet."""
+
+    models: list[ModelNode] = []
+    postprocessors: list[ChainNode] = []
+
+
+class OutputDtypeRequest(BaseModel):
+    """The dtype a task's output would be written in, for the Output node's
+    dtype field to show as its default."""
+
+    pipeline: OutputDtypePipeline = Field({}, validate_default=True)
 
 
 class BlockwiseValidate(BaseModel):

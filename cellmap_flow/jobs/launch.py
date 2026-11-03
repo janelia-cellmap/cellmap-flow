@@ -325,9 +325,11 @@ def start_hosts(
     if local:
         logger.info("Running locally, as requested")
     elif is_bsub_available():
-        logger.info("Using bsub for job submission")
+        logger.debug("Using bsub for job submission")
         candidates = gpu_queue_candidates(queue, cycle=cycle_queues)
-        logger.info(f"Queue order: {' -> '.join(candidates)}")
+        # One queue: "Running on <it>" below says as much.
+        if len(candidates) > 1:
+            logger.info(f"Queue order: {' -> '.join(candidates)}")
         submit_errors = []
         for index, candidate in enumerate(candidates):
             # A new file for every submission, so a job that started late on
