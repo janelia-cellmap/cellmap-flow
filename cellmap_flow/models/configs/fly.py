@@ -379,6 +379,11 @@ class FlyModelConfig(ModelConfig):
         # One number is every axis's.
         self.input_size = entry.per_axis(entry.sizes(input_size, what="input_size"), 3, "input_size")
         self.output_size = entry.per_axis(entry.sizes(output_size, what="output_size"), 3, "output_size")
+        # The tile the network is known to answer right at: served at
+        # another, ModelRunner's warmup holds that tile's answer against this
+        # one's (_check_tile_agreement), since a tile past the GPU kernels'
+        # indexing range runs and returns a constant.
+        self.reference_input_size = (TRAINING_TILE,) * 3
 
     def _not_found(self, argument):
         return (

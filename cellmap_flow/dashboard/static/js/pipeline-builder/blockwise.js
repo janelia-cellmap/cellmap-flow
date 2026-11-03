@@ -231,6 +231,103 @@ async function submitBlockwiseTask() {
   }
 }
 
+// --- max block size: how big a block this model's forward pass fits on the
+// blockwise-config node's queue. Unlike the four steps above, this is not a
+// pipeline-wide gate -- it only reads/writes the one node's own block_size
+// field, so it is driven from nodes.js (the node's own UI), not the bar.
+
+const maxBlockSizeBody = () => ({ pipeline: { models: pipeline.models, blockwise_config: pipeline.blockwise_config } });
+
+// How often to ask /status while a probe job is running: it is a real GPU
+// job search (several forward passes, each possibly minutes), not a quick
+// LSF query, so this does not need to be fast.
+const MAX_BLOCK_SIZE_POLL_MS = 8000;
+// The probe itself takes about a minute on the GPU; the rest is the queue.
+// Past this, stop asking: the job keeps going and writes its answer to the
+// cache itself (max_block_size_cli --queue), so the next Compute click finds
+// it, and the error says which job to look at meanwhile.
+const MAX_BLOCK_SIZE_WAIT_MS = 30 * 60 * 1000;
+
+// The dtype the task would write without the Output node saying one:
+// {success: true, dtype: "uint8" | null, source: "ThresholdPostprocessor" |
+// "model"}, or {success: false, error}. null: only the model decides, which
+// the dashboard does not build to ask.
+export async function fetchOutputDtype() {
+  const response = await post("/api/blockwise/output-dtype", {
+    pipeline: { models: pipeline.models, postprocessors: pipeline.postprocessors },
+  });
+  return response.json();
+}
+
+// {cached: true, result} | {cached: false, error?}
+export async function checkMaxBlockSizeCache() {
+  const response = await post("/api/blockwise/max-block-size/check", maxBlockSizeBody());
+  return response.json();
+}
+
+// Submits the probe job, then polls /status until it is done, calling
+// `onProgress(message)` once submission succeeds (so the caller can show
+// "probing..." before the first poll answers). Returns {done, cancel}:
+// `done` resolves to /status's last answer, {done: true, result} or {done:
+// true, error}, or to {done: true, cancelled: true} once `cancel()` has
+// bkilled the job (a full queue can hold it for longer than anyone wants to
+// wait). cancel() resolves when the kill request has been answered; a
+// cancel before bsub has answered kills the job as soon as its id is known.
+export function computeMaxBlockSize(onProgress) {
+  let cancelled = false;
+  let submitted = null;
+  let wake = null;  // ends the current poll sleep early
+  const killJob = async () => {
+    const response = await post("/api/blockwise/max-block-size/cancel", { job_id: submitted.job_id });
+    const answer = await response.json();
+    if (!answer.success) throw new Error(answer.error || `Could not kill job ${submitted.job_id}`);
+  };
+  const cancel = async () => {
+    cancelled = true;
+    if (wake) wake();
+    if (submitted?.success) await killJob();
+  };
+
+  const done = (async () => {
+    const submitResponse = await post("/api/blockwise/max-block-size/compute", maxBlockSizeBody());
+    submitted = await submitResponse.json();
+    if (!submitted.success) return { done: true, error: submitted.error };
+    if (cancelled) {
+      await killJob();
+      return { done: true, cancelled: true, job_id: submitted.job_id };
+    }
+    if (onProgress) onProgress(`${submitted.message} (job ${submitted.job_id})`);
+
+    const pollBody = {
+      job_id: submitted.job_id, result_path: submitted.result_path,
+      model_entry: submitted.model_entry, queue: submitted.queue, log_path: submitted.log_path,
+      submitted_at: submitted.submitted_at,
+    };
+    const deadline = Date.now() + MAX_BLOCK_SIZE_WAIT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => {
+        const timer = setTimeout(() => { wake = null; resolve(); }, MAX_BLOCK_SIZE_POLL_MS);
+        wake = () => { clearTimeout(timer); wake = null; resolve(); };
+      });
+      if (cancelled) return { done: true, cancelled: true, job_id: submitted.job_id };
+      const statusResponse = await post("/api/blockwise/max-block-size/status", pollBody);
+      const status = await statusResponse.json();
+      if (cancelled) return { done: true, cancelled: true, job_id: submitted.job_id };
+      if (status.done) return status;
+      // "Job ended; waiting for its result to show up here" and the like.
+      if (status.note && onProgress) onProgress(status.note);
+    }
+    return {
+      done: true,
+      error: `Still no answer from job ${submitted.job_id} after ${MAX_BLOCK_SIZE_WAIT_MS / 60000} minutes `
+        + `(it may be waiting for a free GPU on ${submitted.queue}). It writes its result to the cache `
+        + `when it finishes: click Compute again later. Log: ${submitted.log_path}`,
+    };
+  })();
+
+  return { done, cancel };
+}
+
 export function initBlockwise() {
   onEdit(invalidateBlockwiseSteps);
   initModelMergerDropdown();

@@ -128,7 +128,8 @@ stderr, ```<old>` is deprecated and goes in the release after 0.3.0; use
    * - ``cellmap_flow_blockwise_multiple A.yaml B.yaml``
      - ``cellmap_flow blockwise A.yaml B.yaml``
    * - ``cellmap_flow_app``
-     - ``cellmap_flow dashboard``
+     - ``cellmap_flow app`` (the dashboard with no data and no model;
+       ``cellmap_flow dashboard`` is the same command)
    * - ``cellmap_flow_server <type> ...``, ``cellmap_flow_server --model``
      - ``cellmap_flow serve --model`` (launchers before 0.3.0 still start
        servers with the per-type form)

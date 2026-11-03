@@ -8,6 +8,7 @@
   dashboard      serve the dashboard alone, for a viewer already running
   serve          serve one model's predictions (the launchers run this)
   blockwise      run models over a whole volume, writing predictions to disk
+  max-block-size probe the biggest block size a model fits on this GPU
   finetune       the finetune tools: train, export-merged, build-corrections
   models         list the model types and their arguments
   plugins        register, unregister and list plugins
@@ -26,6 +27,7 @@ import sys
 import click
 
 from cellmap_flow.blockwise.cli import cli as blockwise
+from cellmap_flow.blockwise.max_block_size_cli import max_block_size_cli
 from cellmap_flow.cli import add_cli, doctor, envs_cli, server_cli, viewer_cli, yaml_cli
 from cellmap_flow.cli.common import deprecated, log_level_option
 from cellmap_flow.cli.infer import infer, run_generic
@@ -55,6 +57,7 @@ def cli():
     options.
 
     \b
+      cellmap_flow app
       cellmap_flow view -d /path/to/data.zarr
       cellmap_flow yaml config.yaml
       cellmap_flow infer dacapo -r my_run -i 100 -d /path/to/data
@@ -62,16 +65,17 @@ def cli():
     """
 
 
-@click.command()
+@click.command(name="app")
 @click.option("-n", "--neuroglancer-url", default=None, help="The viewer the dashboard's page embeds.")
 def dashboard(neuroglancer_url):
-    """Serve the dashboard alone, for a viewer already running.
+    """Open the dashboard with no data and no model: the models tab,
+    the pipeline builder and blockwise, for a viewer started later.
 
     `view`, `yaml` and `infer` start the dashboard with the viewer they
     open; this is the dashboard on its own, as `cellmap_flow_app` served it
-    before 0.3.0. It prints its URL, and writes it to the file named by
-    SERVICE_URL_PATH when that is set. Ctrl+C stops it and kills the models
-    it launched.
+    before 0.3.0 (`cellmap_flow dashboard` is the same command). It prints
+    its URL, and writes it to the file named by SERVICE_URL_PATH when that
+    is set. Ctrl+C stops it and kills the models it launched.
     """
     # Imported here: the dashboard's routes pull in flask and the rest.
     from cellmap_flow.dashboard.app import create_and_run_app
@@ -200,9 +204,11 @@ cli.add_command(infer)
 cli.add_command(yaml_cli.main)
 cli.add_command(add_cli.add)
 cli.add_command(viewer_cli.main)
-cli.add_command(dashboard)
+cli.add_command(dashboard)  # `app`
+cli.add_command(dashboard, name="dashboard")  # its name from 0.3.0 to now
 cli.add_command(server_cli.serve)
 cli.add_command(blockwise)
+cli.add_command(max_block_size_cli)
 cli.add_command(finetune)
 cli.add_command(models)
 cli.add_command(plugins_group)

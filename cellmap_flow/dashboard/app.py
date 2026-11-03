@@ -66,6 +66,31 @@ app.register_blueprint(model_resolve_bp)
 app.register_blueprint(review_bp)
 
 
+def _only_failed_requests(record) -> bool:
+    """A filter for werkzeug's access log: keep a request whose response was
+    a 4xx or 5xx, drop the rest. A dashboard page loads sixty static files
+    and the builder polls every few seconds, and every one of those was a
+    line in the terminal, burying the lines that said something. werkzeug
+    logs each request as ``'"%s" %s %s'`` with (request line, status, size).
+    """
+    args = record.args if isinstance(record.args, tuple) else ()
+    if len(args) < 2:
+        return True
+    return not str(args[1]).startswith(("1", "2", "3"))
+
+
+def _startup_banner(dashboard_url, viewer_url=None) -> str:
+    """The lines the startup log is read for, set apart from the rest: the
+    dashboard's URL and, when there is one, the viewer's, each on a line of
+    its own with nothing after it, so a terminal makes the whole of it a
+    link (a line's worth of log text around it once hid it)."""
+    lines = ["Dashboard is up", "", f"    Dashboard  {dashboard_url}"]
+    if viewer_url:
+        lines.append(f"    Viewer     {viewer_url}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _announce_service_url(url):
     """Tell whoever launched the dashboard where it is.
 
@@ -93,6 +118,7 @@ def bind_dashboard():
     """
     from werkzeug.serving import make_server
 
+    logging.getLogger("werkzeug").addFilter(_only_failed_requests)
     # threaded=True is not optional. make_server defaults to one request at a
     # time, and the dashboard has long POSTs (a YAML crop load ran for three
     # minutes) and open SSE log streams, each of which would then block every
@@ -131,8 +157,7 @@ def create_and_run_app(neuroglancer_url=None, server=None):
     if server is None:
         server = bind_dashboard()
     url = get_session().dashboard_url
-    logger.info(f"Dashboard running at: {url}")
-    print(f"\n * Dashboard URL: {url}\n", flush=True)
+    logger.info(_startup_banner(url, neuroglancer_url))
     _announce_service_url(url)
     server.serve_forever()
 

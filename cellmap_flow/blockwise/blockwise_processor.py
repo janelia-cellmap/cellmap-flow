@@ -287,6 +287,17 @@ class CellMapFlowBlockwiseProcessor:
         # this is zyx
         block_shape = list(geometry.block_shape())[:3]
         self.block_shape = tuple(self.config.get("block_size", block_shape))
+        # The output's chunks (block_size) against the model's tile, which
+        # is what a block writes: the blocks are laid on the chunk grid so
+        # that each writes chunks of its own (_blocks_roi, run), which holds
+        # only when the tile is a whole number of chunks on every axis.
+        tile = tuple(int(v) for v in geometry.output_shape)
+        if len(self.block_shape) != len(tile) or any(t % int(b) for t, b in zip(tile, self.block_shape)):
+            raise ValueError(
+                f"block_size {list(self.block_shape)} must divide the model's output tile {list(tile)} on every "
+                f"axis: a block is one tile, laid on the output's chunk grid, and a chunk two blocks share is "
+                f"written by both at once. Leave block_size out for chunks the size of the tile."
+            )
 
         self.input_voxel_size = Coordinate(geometry.input_voxel_size)
         self.output_voxel_size = Coordinate(geometry.output_voxel_size)
@@ -324,7 +335,14 @@ class CellMapFlowBlockwiseProcessor:
             spec = PipelineSpec.from_json_data(json_data, strict=True)
             self.input_norms, self.postprocess = spec.build()
             process_chain().set(spec, built=(self.input_norms, self.postprocess))
-        self.dtype = process_chain().output_dtype(geometry.output_dtype, self.postprocess)
+        # The task's own dtype when it names one (the builder's Output node),
+        # else the chain's: the last postprocessor's that declares one, or
+        # the model's.
+        self.dtype = (
+            np.dtype(self.config["dtype"])
+            if self.config.get("dtype")
+            else process_chain().output_dtype(geometry.output_dtype, self.postprocess)
+        )
 
         self.inferencers = []
         self.inferencer = None

@@ -30,6 +30,7 @@ from cellmap_flow.dashboard.requests import BlockwiseSettings, Equivalences, par
 from cellmap_flow.dashboard.routes import model_advice
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.io.raw import raw_channels, selected_channel
+from cellmap_flow.jobs.site import current_site
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.portable import rank
@@ -717,6 +718,11 @@ def blockwise_config_api():
         for key, value in body.model_dump().items():
             setattr(session, key, value)
     settings = {key: getattr(session, key) for key in BlockwiseSettings.model_fields}
+    # What a new Blockwise Config node starts with for its Walltime: the
+    # dashboard's. Not a BlockwiseSettings field: the node's walltime is the
+    # task's own (requests.BlockwiseTaskSettings), and posting it here must
+    # not move the dashboard's.
+    settings["walltime"] = session.walltime or current_site().default_walltime
     if request.method == "GET":
         return jsonify(settings)
     logger.debug(f"Blockwise config updated: {settings}")

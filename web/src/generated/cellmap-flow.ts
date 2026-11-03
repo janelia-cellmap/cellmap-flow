@@ -28,6 +28,11 @@ export interface RequestBodies {
   "POST /api/blockwise/generate"?: BlockwiseGenerate;
   "POST /api/blockwise/precheck"?: BlockwisePrecheck;
   "POST /api/blockwise/submit"?: BlockwiseSubmit;
+  "POST /api/blockwise/max-block-size/check"?: MaxBlockSizeRequest;
+  "POST /api/blockwise/max-block-size/compute"?: MaxBlockSizeRequest;
+  "POST /api/blockwise/max-block-size/status"?: MaxBlockSizeStatus;
+  "POST /api/blockwise/max-block-size/cancel"?: MaxBlockSizeCancel;
+  "POST /api/blockwise/output-dtype"?: OutputDtypeRequest;
   "POST /api/bbx-generator"?: BbxGenerator;
   "POST /api/create-model-config"?: CreateModelConfig;
   "POST /api/finetune/create-volume"?: CreateVolume;
@@ -249,8 +254,11 @@ export interface BlockwiseConfigNode {
 }
 /**
  * A blockwise-config node's params: what a task and its master are
- * submitted with. Each is required, and taken as sent (precheck checks
- * the task's).
+ * submitted with. Each of the first six is required, and taken as sent
+ * (precheck checks the task's). The rest are optional: blank, walltime is
+ * the dashboard's, blockwise_tasks_dir the dashboard's tasks directory,
+ * and block_size -- the output's chunk shape -- the model's output tile
+ * (blockwise_processor.py's default), which must be a multiple of it.
  */
 export interface BlockwiseTaskSettings {
   charge_group: unknown;
@@ -259,6 +267,9 @@ export interface BlockwiseTaskSettings {
   nb_cores_worker: unknown;
   nb_cores_master: unknown;
   tmp_dir: unknown;
+  walltime?: unknown;
+  blockwise_tasks_dir?: unknown;
+  block_size?: unknown;
 }
 /**
  * A normalizer or postprocessor node, whose params may be null for none.
@@ -325,6 +336,59 @@ export interface BlockwisePipeline2 {
   normalizers?: ChainNode[];
   postprocessors?: ChainNode[];
   model_mode?: unknown;
+}
+/**
+ * A model and queue to check the max-block-size cache for, or to probe.
+ */
+export interface MaxBlockSizeRequest {
+  pipeline?: MaxBlockSizePipeline;
+}
+/**
+ * Just enough of the builder's pipeline for a max-block-size check or
+ * probe: the first model node, and the blockwise-config node's queue
+ * (and charge_group, for the probe job's billing). Unlike
+ * BlockwisePipeline, inputs and outputs are not required -- a block size
+ * can be checked before the rest of the pipeline is wired up.
+ */
+export interface MaxBlockSizePipeline {
+  models?: ModelNode[];
+  blockwise_config?: BlockwiseConfigNode[];
+}
+/**
+ * A submitted probe job to poll: compute's own answer, sent back.
+ */
+export interface MaxBlockSizeStatus {
+  job_id?: string;
+  result_path?: string;
+  model_entry?: {
+    [k: string]: unknown;
+  };
+  queue?: unknown;
+  log_path?: string;
+  submitted_at?: number;
+}
+/**
+ * A probe job to bkill: the queue was full, or the answer is no longer
+ * wanted.
+ */
+export interface MaxBlockSizeCancel {
+  job_id?: string;
+}
+/**
+ * The dtype a task's output would be written in, for the Output node's
+ * dtype field to show as its default.
+ */
+export interface OutputDtypeRequest {
+  pipeline?: OutputDtypePipeline;
+}
+/**
+ * What decides a task's output dtype: its postprocessors (the last that
+ * declares one), else the model's own. The models are taken for when a
+ * type can say its dtype without being built; none can yet.
+ */
+export interface OutputDtypePipeline {
+  models?: ModelNode[];
+  postprocessors?: ChainNode[];
 }
 /**
  * The box tool's viewer on ``dataset_path``, showing the boxes the
@@ -814,6 +878,11 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/blockwise/generate", availability: "server", request: "BlockwiseGenerate" },
   { method: "POST", path: "/api/blockwise/precheck", availability: "server", request: "BlockwisePrecheck" },
   { method: "POST", path: "/api/blockwise/submit", availability: "server", request: "BlockwiseSubmit" },
+  { method: "POST", path: "/api/blockwise/max-block-size/check", availability: "server", request: "MaxBlockSizeRequest" },
+  { method: "POST", path: "/api/blockwise/max-block-size/compute", availability: "server", request: "MaxBlockSizeRequest" },
+  { method: "POST", path: "/api/blockwise/max-block-size/status", availability: "server", request: "MaxBlockSizeStatus" },
+  { method: "POST", path: "/api/blockwise/max-block-size/cancel", availability: "server", request: "MaxBlockSizeCancel" },
+  { method: "POST", path: "/api/blockwise/output-dtype", availability: "server", request: "OutputDtypeRequest" },
   { method: "POST", path: "/api/bbx-generator", availability: "server", request: "BbxGenerator" },
   { method: "POST", path: "/api/bbx-generator/finalize", availability: "server", request: null },
   { method: "GET", path: "/api/bbx-generator/status", availability: "server", request: null },

@@ -674,8 +674,8 @@ class ScalePyramid(neuroglancer.LocalVolume):
                 _nm(finest),
             )
 
-        logger.info("scale keys: %s", list(self.volume_layers))
-        logger.info(self.info())
+        logger.debug("scale keys: %s", list(self.volume_layers))
+        logger.debug(self.info())
 
     @property
     def volume_type(self):

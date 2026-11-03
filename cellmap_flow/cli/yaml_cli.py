@@ -26,6 +26,20 @@ if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
 
 logger = logging.getLogger(__name__)
 
+
+def _step_names(chain) -> str:
+    """The names of a json_data chain's steps, for a log line: the dict form
+    is keyed by name, the list form names each step. "none" for an empty
+    chain. (The whole json_data was logged, parameters and all: one line of
+    dicts nobody read.)"""
+    if isinstance(chain, dict):
+        names = list(chain)
+    elif isinstance(chain, (list, tuple)):
+        names = [str(step.get("name", "?")) if isinstance(step, dict) else str(step) for step in chain]
+    else:
+        names = []
+    return ", ".join(names) if names else "none"
+
 EXTRA_LAYER_TYPES = ("image", "segmentation")
 
 
@@ -257,7 +271,8 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     # Handle optional json_data for normalization/postprocessing
     if "json_data" in config:
         json_data = config["json_data"]
-        logger.info(f"Loading normalization/postprocessing from: {json_data}")
+        logger.info(f"Input normalization: {_step_names(json_data.get('input_norm'))}; "
+                    f"postprocessing: {_step_names(json_data.get('postprocess'))}")
         from cellmap_flow.pipeline_spec import PipelineSpec
 
         # The dashboard's chain, as if submitted there: the live steps and
@@ -288,14 +303,12 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     if cycle_gpu_queues is not None:
         settings.cycle_gpu_queues = bool(cycle_gpu_queues)
 
-    logger.info(f"Data path: {data_path}")
-    logger.info(f"Charge group: {charge_group}")
-    logger.info(f"Queues: {', '.join(queue)}")
+    logger.info(f"Data {data_path}; charge group {charge_group}; queues {', '.join(queue)}")
     if not settings.cycle_gpu_queues:
         logger.info(f"GPU queue cycling: off (jobs wait for {queue[0]})")
 
     # Build model configuration objects dynamically
-    logger.info("Building model configurations...")
+    logger.debug("Building model configurations...")
     session = get_session()
     if config["models"]:
         from cellmap_flow.models.registry import build_models

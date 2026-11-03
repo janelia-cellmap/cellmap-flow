@@ -36,6 +36,69 @@ GPU_SLOTS_ENV = "CELLMAP_FLOW_GPU_SLOTS"
 # the fp32 output's range (1% is under 3 levels of a uint8 display).
 HALF_PRECISION_TOLERANCE = 0.01
 
+# How far a tile's answer may differ from the model's native tile's over the
+# voxels they share before it is wrong rather than merely offset: the mean
+# absolute difference in units of the native output's spread (its standard
+# deviation). A tile a UNet takes slightly off its pooling grid differs by a
+# fraction of the spread; a tensor past the GPU kernels' indexing range (16
+# feature maps of 570^3 voxels is 2^31 elements) comes back a constant,
+# hundreds of spreads away, and fits in memory all the same. See
+# ModelRunner._check_tile_agreement and blockwise.max_block_size.
+MAX_DISAGREEMENT = 2.0
+
+
+def smooth_field(coordinates) -> np.ndarray:
+    """A smooth synthetic image in [-1, 1] over ``coordinates``, one 1-D array
+    of world positions (nm) per axis: a sum of sinusoid products at three
+    wavelengths, a function of position alone, so a voxel reads the same in
+    any tile that holds it. It varies over a few voxels of 4 to 16 nm data,
+    so a network's output varies over it too, where random noise saturates
+    most networks and zeros give a constant.
+    """
+    coordinates = [np.asarray(c, dtype=np.float32) for c in coordinates]
+    field = None
+    for wavelength, weight, phase in ((97.0, 0.5, 0.0), (251.0, 0.3, 0.7), (613.0, 0.2, 1.9)):
+        term = np.float32(weight)
+        for axis, positions in enumerate(coordinates):
+            wave = np.sin(2 * np.pi * positions / np.float32(wavelength) + np.float32(phase * (axis + 1)))
+            term = term * wave.reshape([-1 if i == axis else 1 for i in range(len(coordinates))])
+        field = term if field is None else field + term
+    return np.asarray(field, dtype=np.float32)
+
+
+def disagreement(reference, output):
+    """How a tile's ``output`` compares with the native tile's ``reference``
+    over the voxels they share, both ``(C, *spatial)`` arrays, ``output`` the
+    bigger and centred on ``reference``: ``(correlation, difference, wrong)``.
+
+    The correlation is Pearson's between the reference-sized centre of
+    ``output`` and ``reference``, None when either is flat. The difference
+    is their mean absolute difference in units of the reference's spread
+    (its standard deviation, at least 1e-3); infinite when the centre has a
+    non-finite value. ``wrong`` is whether the output is another answer
+    rather than the same one slightly offset: the difference is past
+    MAX_DISAGREEMENT, or the centre is flat where the reference varies (a
+    constant, whatever its value), or not finite. ``(None, 0.0, False)``
+    when there is nothing to compare: no reference, or shapes that do not
+    nest.
+    """
+    if reference is None or output is None:
+        return None, 0.0, False
+    ref = np.asarray(reference, dtype=np.float64)
+    out = np.asarray(output, dtype=np.float64)
+    if ref.ndim != out.ndim or any(o < r for o, r in zip(out.shape, ref.shape)):
+        return None, 0.0, False
+    start = [(o - r) // 2 for o, r in zip(out.shape, ref.shape)]
+    core = out[tuple(slice(s, s + r) for s, r in zip(start, ref.shape))]
+    if not np.isfinite(core).all():
+        return None, float("inf"), True
+    spread, flat = float(ref.std()), float(core.std()) == 0
+    difference = float(np.abs(core - ref).mean()) / max(spread, 1e-3)
+    wrong = difference > MAX_DISAGREEMENT or (spread > 0 and flat)
+    if spread == 0 or flat:
+        return None, difference, wrong
+    return float(np.corrcoef(ref.ravel(), core.ravel())[0, 1]), difference, wrong
+
 
 class DeviceSlots:
     """Lets at most ``n`` chunks use the device at once, in the order they asked.
@@ -339,8 +402,59 @@ class ModelRunner:
         if check is not None and getattr(self.model_config, "validate_model_shapes", True):
             check(out.shape)
         self._record_output_class(out)
+        del out
+        self._check_tile_agreement(shape[2:])
         if self.half_precision:
             self._check_half_precision(shape)
+
+    def _check_tile_agreement(self, input_size):
+        """Refuse an ``input_size`` the network answers differently at than at
+        the tile it is known to be right at (``ModelConfig.reference_input_size``,
+        a fly model's training tile; configs without one skip this).
+
+        Both tiles are run on the same smooth synthetic image (smooth_field),
+        the reference centred in the bigger tile, and their outputs compared
+        over the voxels they share (disagreement). A tile off a UNet's
+        pooling grid differs a little; a tensor past the GPU kernels'
+        indexing range comes back a constant, which fits in memory, passes
+        the shape check and is wrong in every block: a blockwise task at
+        570^3 on a B300 wrote 1 everywhere for an hour before anyone looked.
+        Raises ValueError, as the shape check does, so the server or worker
+        fails at its start instead.
+        """
+        import torch
+
+        reference = getattr(self.model_config, "reference_input_size", None)
+        if reference is None:
+            return
+        reference = tuple(int(v) for v in reference)
+        input_size = tuple(int(v) for v in input_size)
+        if (reference == input_size or len(reference) != len(input_size)
+                or any(r > n for r, n in zip(reference, input_size))):
+            return
+        config = self.model_config.config
+        voxel_size = np.asarray(getattr(config, "input_voxel_size", None) or [1.0] * len(input_size), dtype=float)
+        start = [(n - r) // 2 for n, r in zip(input_size, reference)]
+
+        def forward(begin, size):
+            field = smooth_field([voxel_size[i] * (begin[i] + np.arange(size[i]) + 0.5) for i in range(len(size))])
+            x = torch.from_numpy(field)[None, None].to(self.device)
+            x = x.half() if self.use_half_prediction else x.float()
+            with torch.no_grad():
+                return config.model.forward(x).float().cpu().numpy()[0]
+
+        big = forward([0] * len(input_size), input_size)
+        small = forward(start, reference)
+        correlation, difference, wrong = disagreement(small, big)
+        shown = "none" if correlation is None else f"{correlation:.3f}"
+        if wrong:
+            raise ValueError(
+                f"input_size {list(input_size)}: the network answers differently there than at {list(reference)}, "
+                f"the tile it is known to be right at, over the same voxels (correlation {shown}, difference "
+                f"{difference:.1f}x the output's spread, on {self.device}). A tensor this size is past what the "
+                f"GPU kernels index correctly, so every block would be wrong. Use a smaller input_size."
+            )
+        logger.info(f"Tile check: {list(input_size)} answers as {list(reference)} does (correlation {shown})")
 
     def _check_half_precision(self, shape):
         """Turn autocast on if it agrees with fp32 on the model's output.

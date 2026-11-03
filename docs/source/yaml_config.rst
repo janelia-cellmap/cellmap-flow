@@ -73,6 +73,15 @@ A configuration file has the following top-level fields:
    * - ``tmp_dir``
      - No
      - Temporary directory for intermediate files.
+   * - ``walltime``
+     - No
+     - The LSF run limit (``bsub -W``) of the blockwise master and each worker, ``HH:MM`` or minutes; without it a GPU worker is killed at the queue's two-hour default.
+   * - ``block_size``
+     - No
+     - The output's chunk shape in voxels, z, y, x (blockwise); the default is the model's output tile. A block is one model tile, so the tile must be a whole number of chunks on every axis: a 336 tile may be written in 84s, for readers that want small chunks, but not in 100s. The tile itself is the model entry's (``input_size``/``output_size`` for ``fly`` and ``onnx``); the pipeline builder's "Compute Max GPU Block Size" sets it to the largest that fits a queue's GPU and answers as the model's own tile does (a tile past the GPU kernels' indexing range runs and returns a constant; the probe refuses it, and a ``fly`` model's worker refuses such an ``input_size`` at its start).
+   * - ``dtype``
+     - No
+     - The dtype the output is written in (blockwise), a numpy name such as ``uint8``; the default is the last postprocessor's that declares one, else the model's own.
    * - ``bounding_boxes``
      - No
      - Regions to process instead of the whole volume, each ``{offset, shape}`` in nm, z, y, x; the output covers only them (blockwise, see :ref:`bounding-boxes`).

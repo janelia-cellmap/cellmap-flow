@@ -427,6 +427,126 @@ body {
   color: white;
 }
 
+/* The Blockwise Config node's max-block-size probe (nodes.js
+   maxBlockSizeSection): Compute and, once there is an answer, a quieter
+   Recompute beside it; then the answer, one option per block size that fit,
+   or why none did. */
+.max-block-size {
+  margin-top: 8px;
+}
+
+.max-block-size-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.max-block-size-buttons .configure-btn {
+  width: auto;
+}
+
+.max-block-size-buttons .configure-btn.primary {
+  flex: 1 1 auto;
+}
+
+.max-block-size-buttons .configure-btn.secondary {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--pb-text-secondary);
+}
+
+.max-block-size-buttons .configure-btn.cancel {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--pb-accent-red);
+  border-color: var(--pb-accent-red);
+}
+
+.max-block-size-buttons .configure-btn.cancel:hover {
+  background: var(--pb-accent-red);
+  border-color: var(--pb-accent-red);
+  color: white;
+}
+
+.max-block-size-buttons .configure-btn:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.max-block-size-buttons .configure-btn:disabled:hover {
+  background: var(--pb-bg-tertiary);
+  border-color: var(--pb-border-color);
+  color: var(--text-primary);
+}
+
+.max-block-size-result {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.max-block-size-result:empty {
+  display: none;
+}
+
+.max-block-size-note,
+.max-block-size-error {
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--pb-text-secondary);
+}
+
+.max-block-size-error {
+  color: var(--pb-accent-red);
+}
+
+.max-block-size-why {
+  margin-top: 4px;
+  color: var(--pb-text-secondary);
+  white-space: pre-wrap;
+}
+
+/* One row per tile the probe tried, in order, so the list reads as a table:
+   tile, peak memory, and how its answer compared with the model's own. */
+.max-block-size-options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.max-block-size-options .configure-btn {
+  width: auto;
+  padding: 4px 8px;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: pre;
+  text-align: left;
+}
+
+.max-block-size-options .configure-btn.selected {
+  border-color: var(--pb-accent-blue);
+  color: var(--pb-accent-blue);
+  font-weight: 600;
+}
+
+/* A tile off the network's pooling grid: usable, with a slightly different answer. */
+.max-block-size-options .configure-btn.offset {
+  border-color: #d9a441;
+}
+
+/* The tile the search stopped at: out of memory, or one the GPU ran but
+   answered wrong at. Kept in the list so the limit is visible, not clickable. */
+.max-block-size-options .configure-btn.refused,
+.max-block-size-options .configure-btn.refused:hover {
+  border-color: var(--pb-accent-red);
+  color: var(--pb-accent-red);
+  background: transparent;
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
 .selected-channels {
   padding: 4px;
   background: rgba(0, 0, 0, 0.2);

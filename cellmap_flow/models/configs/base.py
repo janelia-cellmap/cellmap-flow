@@ -287,6 +287,13 @@ class ModelConfig:
     # one (``run_voxel_size``); None: its own. Behind the ``run_voxel_size``
     # property, which registry.build_model sets after construction, as env.
     _run_voxel_size = None
+    # The input tile (voxels per axis) the network is known to answer right
+    # at, when the type knows one (a fly model's training tile). Served at a
+    # bigger tile, ModelRunner's warmup holds that tile's answer against this
+    # one's over the voxels they share (_check_tile_agreement): a tensor past
+    # the GPU kernels' indexing range runs and returns a constant. None: not
+    # checked.
+    reference_input_size = None
     # The environment this type's models run in when their entry gives no
     # `env` (`env: current` opts out). A subclass sets a name, or makes it a
     # property that decides per model. Never written by to_dict(), which
