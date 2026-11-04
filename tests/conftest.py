@@ -173,7 +173,9 @@ def ome_pyramid(tmp_path):
     z, y, x tuple; the translation is OME's, voxel 0's centre, and None leaves
     it out. Level i is ``shape >> i`` voxels, chunked in halves, and each voxel
     holds its z index + 1, so a read shows which voxels it hit and padding
-    cannot pass for data. ``channels`` adds a leading channel axis.
+    cannot pass for data. ``channels`` adds a leading channel axis. ``stored``
+    is the order the spatial axes are stored and named in; ``shape``, the
+    voxel sizes and the translations are z, y, x whatever it is.
     """
     import json
 
@@ -185,19 +187,22 @@ def ome_pyramid(tmp_path):
         return [float(v) for v in (value if isinstance(value, (tuple, list)) else [value] * 3)]
 
     def make(levels=((8, 0), (16, 4)), shape=(16, 16, 16), zarr_format=2, name="pyramid.zarr",
-             channels=0, unit="nanometer"):
+             channels=0, unit="nanometer", stored="zyx"):
         path = str(tmp_path / name)
         lead = [1.0] if channels else []
         axes = [{"name": "c", "type": "channel"}] * bool(channels)
-        axes += [{"name": a, "type": "space", "unit": unit} for a in "zyx"]
+        axes += [{"name": a, "type": "space", "unit": unit} for a in stored]
+        order = ["zyx".index(a) for a in stored]
         datasets, arrays = [], {}
         for i, (scale, translation) in enumerate(levels):
             spatial = [max(1, s >> i) for s in shape]
             data = np.broadcast_to(np.arange(1, spatial[0] + 1, dtype=np.uint8)[:, None, None], spatial)
+            data = data.transpose(order)
             arrays[f"s{i}"] = np.ascontiguousarray(np.stack([data] * channels) if channels else data)
-            transforms = [{"type": "scale", "scale": lead + per_axis(scale)}]
+            transforms = [{"type": "scale", "scale": lead + [per_axis(scale)[a] for a in order]}]
             if translation is not None:
-                transforms.append({"type": "translation", "translation": [0.0] * len(lead) + per_axis(translation)})
+                translation = [per_axis(translation)[a] for a in order]
+                transforms.append({"type": "translation", "translation": [0.0] * len(lead) + translation})
             datasets.append({"path": f"s{i}", "coordinateTransformations": transforms})
         multiscales = [{"version": "0.4" if zarr_format == 2 else "0.5", "axes": axes, "datasets": datasets}]
         if zarr_format == 2:
