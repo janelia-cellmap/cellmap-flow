@@ -7,7 +7,8 @@ give an ``ArrayMeta`` (every axis in the array's order, the store's units,
 in nanometers. This module keeps the two things cellmap-flow adds on top:
 
 - ``open_level``: the one way every reader opens a path, so that a group is
-  read at its first level when no voxel size asks for another;
+  read at its first level when no voxel size asks for another, its axes in
+  ``AXES_ORDER``;
 - ``nm_per_unit`` and ``_NM_PER_UNIT``: worldarray's unit table as nanometers
   per unit, forgiving of a missing or unknown unit, which the browser shares
   (``web/build/export_data.py``).
@@ -28,6 +29,14 @@ from cellmap_flow.io import paths
 logger = logging.getLogger(__name__)
 
 NANOMETER = "nanometer"
+
+# The order cellmap-flow takes every volume it is given in: the axes named z,
+# y and x last, in that order, whatever order the store keeps them in
+# (worldarray's axes_order). Models, voxel sizes, boxes and blocks are all
+# z, y, x by position. OME-Zarr recommends zyx and allows others, such as the
+# x, y, z TensorSwitch writes; a store already z, y, x, or naming no axes, is
+# read as it is.
+AXES_ORDER = "zyx"
 
 # ---------------------------------------------------------------------------
 # Units
@@ -94,7 +103,7 @@ def open_level(path: str, voxel_size=None, **kwargs) -> "wa.WorldArray":
     (worldarray chooses it from the group's document), its first without one.
     ``kwargs`` are ``wa.open``'s (``on_mismatch``, ``padding``, ``units``,
     ``context``, ...); units it cannot convert are left as they are rather
-    than refused."""
+    than refused. The axes, and ``voxel_size`` with them, are in AXES_ORDER."""
     path = paths.normalize_path(path)
     level = None if voxel_size is not None else "first"
-    return wa.open(path, level=level, voxel_size=voxel_size, strict_units=False, **kwargs)
+    return wa.open(path, level=level, voxel_size=voxel_size, strict_units=False, axes_order=AXES_ORDER, **kwargs)

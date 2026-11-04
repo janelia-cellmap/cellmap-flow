@@ -176,13 +176,13 @@ def raw_voxel_sizes(raw_dataset_path: str) -> list:
     as ``open_raw`` reads it. Unit conversion's float noise is snapped away
     (0.009 um is 9 nm, not 8.999999999999998).
     """
-    from cellmap_flow.io.metadata import open_level, snap_integral
+    from cellmap_flow.io.metadata import AXES_ORDER, open_level, snap_integral
     from cellmap_flow.io.paths import normalize_path
 
     path = normalize_path(raw_dataset_path)
     node = wa.detect(path)
     if node.kind == "group" and node.scale_key is None:
-        sizes = [size for _, size in wa.open_pyramid(path, units="nanometer", strict_units=False).voxel_sizes()]
+        sizes = [size for _, size in wa.open_pyramid(path, units="nanometer", strict_units=False, axes_order=AXES_ORDER).voxel_sizes()]
     else:
         sizes = [open_level(path).voxel_size]
     sizes = [[float(v) for v in snap_integral(size)][-3:] for size in sizes]

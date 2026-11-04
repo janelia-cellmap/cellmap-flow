@@ -140,6 +140,12 @@ READS = {
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), zarr_format=3),
         {"voxel_size": (16, 16, 16)}, (-4, -4, -4), Roi((-4, -4, -4), (32, 16, 16)), ((2, 1, 1), "uint8", [1, 2]),
     ),
+    # Stored and named x, y, z, as OME-Zarr allows and TensorSwitch writes: read
+    # z, y, x, with the level for a model at 32, 16, 16 nm chosen on those axes.
+    "ome-v3-xyz": (
+        lambda f: f.ome_pyramid((((16, 8, 8), 0), ((32, 16, 16), (8, 4, 4))), zarr_format=3, stored="xyz"),
+        {"voxel_size": (32, 16, 16)}, (-8, -4, -4), Roi((-8, -4, -4), (64, 16, 16)), ((2, 1, 1), "uint8", [1, 2]),
+    ),
     # Relabelled voxel for voxel: s1's first voxel, at 120 nm on 12 nm voxels, is at 160 on 16.
     "relabelled-level": (
         lambda f: f.ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4)),
