@@ -48,7 +48,10 @@ function isRestartKey(event) {
 // time.
 const LOSS_ROW = ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")];
 const RATE_ROW = ["learning_rate", (body) => `${body.learning_rate} (${body.learning_rate_schedule})`];
-const DISTILLATION_ROW = ["distillation", (body) => `${body.distillation_lambda} (${body.distillation_scope})`];
+// The form's Anchor to Original and Anchor Where (distillation_lambda and
+// distillation_scope, as a YAML and the CLI name them).
+const DISTILLATION_ROW = ["anchor", (body) =>
+  `${body.distillation_lambda} (${body.distillation_scope === "all" ? "all voxels" : "unpainted only"})`];
 const CHANNEL_ROW = ["channel", (body) => (body.select_channel === undefined ? null : channelText(body.select_channel))];
 const RESTART_SUMMARY_ROWS = {
   server: [

@@ -93,10 +93,10 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
       // The painted chunks in the store's order, as without regions, then
       // the regions' blocks nothing was painted in.
       indices = [...paintedIndices, ...regionChunks.filter((c) => !paintedKeys.has(chunkKey(c.index))).map((c) => c.index)];
-      report.log(`Distillation, λ ${lambda}: held to the starting head in ${plural(boxes.length, "good region")} (${plural(regionChunks.length, "block")}), their unpainted voxels, at most ${count(DISTILLATION_VOXELS)}; the form's scope (${options.distillationScope}) does not apply while good regions are marked, as on the server`);
+      report.log(`Anchor to the original, λ ${lambda}: held to the starting head in ${plural(boxes.length, "good region")} (${plural(regionChunks.length, "block")}), their unpainted voxels, at most ${count(DISTILLATION_VOXELS)}; the form's scope (${options.distillationScope}) does not apply while good regions are marked, as on the server`);
     } else if (lambda > 0) {
       pick = options.distillationScope;
-      report.log(`Distillation, λ ${lambda}: held to the starting head on ${pick === "all" ? "every voxel" : "the unpainted voxels"} of the painted chunks, at most ${count(DISTILLATION_VOXELS)} (${count(Math.ceil(DISTILLATION_VOXELS / Math.max(chunks, 1)))} a chunk)`);
+      report.log(`Anchor to the original, λ ${lambda}: held to the starting head on ${pick === "all" ? "every voxel" : "the unpainted voxels"} of the painted chunks, at most ${count(DISTILLATION_VOXELS)} (${count(Math.ceil(DISTILLATION_VOXELS / Math.max(chunks, 1)))} a chunk)`);
     } else if (boxes.length) {
       report.log(`${plural(boxes.length, "good region")} marked, but distillation is off (λ 0), so they hold nothing: give distillation a weight to use them`);
     }
@@ -133,7 +133,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
       if (!painted) throw new Error("no painted voxels: paint background (1) and objects (2 and up) on the annotation layer first, then train");
       // The run's steps, and so its schedule, are known only now: the epochs pass over every painted voxel.
       report.log(`${count(painted)} painted voxels in ${count(paintedChunks)} chunk${paintedChunks === 1 ? "" : "s"}; training the head at learning rate ${scheduleWords(options.learningRate, headSteps(painted, options), options.learningRateSchedule)}`);
-      if (pick && !held) report.log(`Distillation has no voxel to hold (${pick === "anchor" ? "every voxel of the good regions is painted" : "every voxel of the painted chunks is painted"}); training on the paint alone`);
+      if (pick && !held) report.log(`The anchor to the original has no voxel to hold (${pick === "anchor" ? "every voxel of the good regions is painted" : "every voxel of the painted chunks is painted"}); training on the paint alone`);
       const pixels = concatPixels(sets, trainee);
       const heldSet = held ? concatDistillation(heldSets, trainee) : null;
       // The teacher is the head in the base's bytes, the one it starts from.

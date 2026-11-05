@@ -917,18 +917,18 @@
           />
           <small class="text-muted">Smaller = stricter.</small>
           <small class="text-info d-block server-only" id="distanceModelHint" hidden
-                 title="Each painted voxel is kept between the nearest voxel not painted as its own class and the nearest painted as the other: exact where the paint is dense. The slope is limited to a distance field's, and distillation of at least 0.5 holds the rest.">Distance model: scribbles train on distance bounds, whatever the loss above.</small>
+                 title="Each painted voxel is kept between the nearest voxel not painted as its own class and the nearest painted as the other: exact where the paint is dense. The slope is limited to a distance field's, and an anchor to the original of at least 0.5 holds the rest.">Distance model: scribbles train on distance bounds, whatever the loss above.</small>
         </div>
       </div>
       <div class="col-md-6">
         <div class="mb-3">
           {% if mode == "browser" %}
-          <label for="distillationLambda" class="form-label" title="Adds this weight times the mean squared distance of the model's logits from the starting model's, on the voxels the scope below picks (for the last layer, once good regions are marked, their unpainted voxels): what the paint does not ask to change stays as the model had it. 0.01 is a light hold; a head moves freely, so 0.1 to 1 holds it firmly. The whole network is held on the same tile it trains on, as the server holds it.">
-            Distillation Weight
+          <label for="distillationLambda" class="form-label" title="Adds this weight times the mean squared distance of the model's logits from the starting model's, on the voxels the scope below picks (for the last layer, once good regions are marked, their unpainted voxels): what the paint does not ask to change stays as the model had it. 0.01 is a light hold; a head moves freely, so 0.1 to 1 holds it firmly. The whole network is held on the same tile it trains on, as the server holds it. distillation_lambda in a YAML and the CLI.">
+            Anchor to Original
           </label>
           {% else %}
-          <label for="distillationLambda" class="form-label" title="Keeps the model close to its original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight mostly cancels the correction you are making.">
-            Distillation Weight
+          <label for="distillationLambda" class="form-label" title="Keeps the model close to its original predictions. A little goes a long way: LoRA cannot move the model far to begin with, so a heavy weight mostly cancels the correction you are making. distillation_lambda in a YAML and the CLI.">
+            Anchor to Original
           </label>
           {% endif %}
           <select id="distillationLambda" class="form-select">
@@ -944,9 +944,9 @@
             <option value="10.0">10.0</option>
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted">Keeps the model near its own output where nothing is painted.</small>
+          <small class="text-muted">Holds the model near its own output where nothing is painted.</small>
           {% else %}
-          <small class="text-muted">Keeps the model near its original output. Keep it small.</small>
+          <small class="text-muted">Holds the model near its original output. Keep it small.</small>
           {% endif %}
         </div>
       </div>
@@ -954,18 +954,18 @@
     <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
-          <label for="distillationScope" class="form-label">
-            Distillation Scope
+          <label for="distillationScope" class="form-label" title="distillation_scope in a YAML and the CLI.">
+            Anchor Where
             <span class="badge bg-secondary">Advanced</span>
           </label>
           <select id="distillationScope" class="form-select">
-            <option value="unlabeled" selected>Unlabeled voxels only</option>
+            <option value="unlabeled" selected>Unpainted voxels only</option>
             <option value="all">All voxels</option>
           </select>
           {% if mode == "browser" %}
-          <div class="form-text text-muted">Where distillation applies. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Of the painted chunks, up to 32,768 voxels. Good regions, once marked, decide instead.</span></details></div>
+          <div class="form-text text-muted">Where the anchor holds. <details class="more"><summary aria-label="More">i</summary><span class="more-body">Of the painted chunks, up to 32,768 voxels. Good regions, once marked, decide instead.</span></details></div>
           {% else %}
-          <small class="text-muted">Where distillation applies.</small>
+          <small class="text-muted">Where the anchor holds.</small>
           {% endif %}
         </div>
         <div class="mb-3">

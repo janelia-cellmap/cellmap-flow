@@ -250,7 +250,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     report.log(`Finetuning ${entry.name}'s whole network on volume ${volume.id}: ${count(painted)} painted voxels (${inPlanes}) in ${plural(tiles.length, "tile")} of ${side}² (output ${output}²)`);
     report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of ${plural(Math.min(options.batchPatches, tiles.length), "tile")} per step, ${lossWords(options)}, Adam`);
     report.log(lambda > 0
-      ? `Distillation, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each tile's output`
+      ? `Anchor to the original, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each tile's output`
       : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
     if (holds) report.log(channelWords(entry, options.selectChannel!, "tile"));
     if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);
@@ -440,7 +440,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   report.log(`Finetuning ${entry.name}'s whole network on volume ${volume.id}: ${count(painted)} painted voxels in ${plural(blocks.length, "block")} of ${side}³ (output ${output}³)`);
   report.log(`The network: ${count(trainableValues)} weights in ${plural(trainable.size, "tensor")} train${frozen.size ? `, ${plural(frozen.size, "frozen statistic")} held` : ""}; ${plural(options.epochs, "epoch")} of one block per step, ${lossWords(options)}, Adam`);
   report.log(lambda > 0
-    ? `Distillation, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each block's output`
+    ? `Anchor to the original, λ ${lambda}: held to the starting network on ${options.distillationScope === "all" ? "every voxel" : "the unpainted voxels"} of each block's output`
     : `Distillation off (λ 0)${holds ? "" : ": trained on the paint alone"}`);
   if (holds) report.log(channelWords(entry, options.selectChannel!, "block"));
   if (run.goodRegions?.length) report.log(`${plural(run.goodRegions.length, "good region")} marked: whole-network training does not use them (the last layer's training holds the model in them)`);

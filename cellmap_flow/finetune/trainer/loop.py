@@ -704,7 +704,7 @@ class Finetuner:
             if self.distillation.teacher_needed:
                 terms.append(f"sup: {epoch_supervised_loss / max(supervised_batches, 1):.6f}")
             if self.distillation.on:
-                terms.append(f"distill: {epoch_distill_loss / (batch_idx + 1):.6f}")
+                terms.append(f"anchor: {epoch_distill_loss / (batch_idx + 1):.6f}")
             if self.distillation.holds_others:
                 terms.append(f"other channels: {epoch_others_loss / (batch_idx + 1):.6f}")
             self.log(

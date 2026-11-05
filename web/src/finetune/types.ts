@@ -117,7 +117,7 @@ export interface ModelFeatures {
 export type HeadLoss = "bce" | "mse" | "margin";
 
 /** Where the distillation term holds the head to the one it started from,
- * as the form's Distillation Scope says it (the server's
+ * as the form's Anchor Where says it (the server's
  * distillation_all_voxels): the voxels of the painted chunks that are not
  * painted, or every voxel of them. Good regions, when the volume has any,
  * decide instead (the server's "anchor" scope): run.ts. */
