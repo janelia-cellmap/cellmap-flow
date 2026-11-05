@@ -130,6 +130,12 @@ def _dims(input_shape):
         return None
 
 
+def _finetunes_in_more_ways(copy, kept):
+    """Whether ``copy`` (a candidate's fields) can be finetuned in every way
+    ``kept`` can and in more (its ``finetune_modes``)."""
+    return set(copy.get("finetune_modes") or ()) > set(kept.get("finetune_modes") or ())
+
+
 def _folder_input_shape(folder):
     """A cellmap export folder's ``input_shape`` (metadata.json), or None."""
     import json
@@ -211,8 +217,16 @@ def rank_candidates():
     candidates = {}
 
     def add(name, group, **fields):
-        # A model listed twice is kept where it was first listed.
-        if name and name not in candidates:
+        # A model listed twice is kept where it was first listed, unless a
+        # list's copy is followed by one that finetunes in more ways, which
+        # Use this model then starts: fly_organelles' copies under
+        # /nrs/cellmap/models/saalfeldlab (the catalog's) have no model.pt2
+        # and train in full alone, their Hugging Face copies take LoRA too.
+        # A running model or one added by hand is the one meant.
+        if not name:
+            return
+        kept = candidates.get(name)
+        if kept is None or (kept["group"] not in (RUNNING, ADDED) and _finetunes_in_more_ways(fields, kept)):
             candidates[name] = _candidate(name, group, name in hosts, volume, **fields)
 
     for config in session.models_config:

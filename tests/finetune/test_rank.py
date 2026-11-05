@@ -466,6 +466,26 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
     assert "entry" not in rows["determined_chipmunk"] and rows["determined_chipmunk"]["needs"] == ["voxel_size"]
 
 
+def test_a_model_listed_twice_is_the_copy_that_finetunes_in_more_ways(dashboard, painted, cached, monkeypatch):
+    """fly_organelles' copies under /nrs/cellmap/models/saalfeldlab have no
+    model.pt2 and train in full alone; their Hugging Face copies take LoRA
+    too. The ranking showed the catalog's, and Use this model started it."""
+    from cellmap_flow.models import hf_catalog
+
+    session = _serve_model()
+    session.model_catalog = {"saalfeldlab": {"fly_organelles_run08_438000": "/nrs/fly08", "setup_16": "/nrs/setup16"}}
+    monkeypatch.setattr(hf_catalog, "folder_facts", lambda folder: {"formats": ["TorchScript"], "finetune_modes": ["full"]})
+    cached.hf({"cellmap/fly_organelles_run08_438000": {"formats": ["TorchScript", "torch.export"], "finetune_modes": ["lora", "full"]},
+               "cellmap/setup_16": {"formats": ["TorchScript"], "finetune_modes": ["full"]}})
+    rows = {c["name"]: c for c in dashboard.get("/api/finetune/rank/candidates").get_json()["candidates"]}
+
+    fly = rows["fly_organelles_run08_438000"]
+    assert (fly["group"], fly["finetune_modes"]) == ("Hugging Face", ["lora", "full"])
+    assert fly["entry"] == {"type": "huggingface", "repo": "cellmap/fly_organelles_run08_438000", "name": "fly_organelles_run08_438000"}
+    # A copy that finetunes in no more ways leaves the first listed.
+    assert rows["setup_16"]["entry"] == {"type": "cellmap", "folder_path": "/nrs/setup16", "name": "setup_16"}
+
+
 def test_a_zoo_model_listed_is_scored_served_from_its_own_environment(dashboard, painted, cached, monkeypatch, tmp_path):
     from tests.utils.test_bioimage_zoo import MANIFEST
     from tests.utils.test_cellpose_list import pixi_manifest, served_entry
