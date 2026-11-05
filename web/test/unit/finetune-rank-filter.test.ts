@@ -29,4 +29,6 @@ it("finds a Hugging Face repo by its words and by 2d, as the ranking does", asyn
   const text = searchText("cellmap/mito-aff-unetiso-setup-53-2d", "16nm", dimsWord([1, 556, 556]));
   for (const query of ["mito aff", "setup 53 2d", "16 nm", "MITO-AFF"]) expect(matchesWords(text, query), query).toBe(true);
   expect(matchesWords(searchText("cellmap/nuc-resunet-setup-56", dimsWord([148, 148, 148])), "2d")).toBe(false);
+  // Batch and channel first: still a 3D model.
+  expect(dimsWord([1, 1, 178, 178, 178])).toBe("3d");
 });

@@ -436,7 +436,9 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
             "browser_copy": "cellmap/onnx-web-models/setup_56", "variants": [{"variant": "fp32", "file_mb": 42.91}]}
     cached.hf({"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8], **copy},
                # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
-               "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
+               "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]},
+               # A 3D export whose input shape has batch and channel first.
+               "org/fly": {"spatial_dims": 3, "input_shape": [1, 1, 178, 178, 178]}})
     cached.zoo([SHRIMP, SHARK, CHIPMUNK])
     body = dashboard.get("/api/finetune/rank/candidates").get_json()
 
@@ -446,11 +448,11 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
     assert [(n, c["group"], c["ticked"], c["volume_model"]) for n, c in rows.items()] == [
         ("model", "Running", True, True), ("mito_16nm", "mito", False, False),
         ("nuc_model", "Hugging Face", False, False), ("mito_2d", "Hugging Face", False, False),
-        ("impartial_shrimp", "BioImage Zoo", False, False), ("affable_shark", "BioImage Zoo", False, False),
+        ("fly", "Hugging Face", False, False), ("impartial_shrimp", "BioImage Zoo", False, False), ("affable_shark", "BioImage Zoo", False, False),
         ("determined_chipmunk", "BioImage Zoo", False, False)]
     # Its dims are what the filter's "2d" finds; the zoo's EM tag what its "EM only" does.
-    assert [(rows[n]["dims"], rows[n]["em"]) for n in ("mito_2d", "nuc_model", "impartial_shrimp", "affable_shark")] == [
-        (2, True), (None, True), (3, True), (2, False)]
+    assert [(rows[n]["dims"], rows[n]["em"]) for n in ("mito_2d", "fly", "nuc_model", "impartial_shrimp", "affable_shark")] == [
+        (2, True), (3, True), (None, True), (3, True), (2, False)]
     assert rows["mito_16nm"]["entry"] == {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}
     assert rows["nuc_model"]["entry"] == {"type": "huggingface", "repo": "org/nuc-model", "name": "nuc_model"}
     # What its row shows of it, as the Models tab's list cached it.
