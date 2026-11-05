@@ -277,6 +277,14 @@ describe("POST /api/finetune/channel", () => {
     // Another chain is another source, whose layer opened on the first channel.
     await setChain(ctx, { ...ctx.session.state.chain, postprocess: [] });
     expect(ctx.viewer.layers[many.name].localPosition).toEqual([2]);
+    // A threshold (Use this model's) makes its channels labels: the
+    // segmentation layer opens on the pick too, and moves to the next.
+    await setChain(ctx, { ...ctx.session.state.chain, postprocess: [{ name: "ThresholdPostprocessor", threshold: 0.5 }] });
+    expect(ctx.viewer.layers[many.name]).toMatchObject({ type: "segmentation", localPosition: [2] });
+    expect(body(await pick(many.name, 1))).toEqual({ success: true, shown: true });
+    expect(ctx.viewer.layers[many.name].localPosition).toEqual([1]);
+    await pick(many.name, 2);
+    await setChain(ctx, { ...ctx.session.state.chain, postprocess: [] });
     // A finetune of it has its channels, and opens on its pick.
     const tuned = finetunedEntry(many, `${many.name}-ft1`);
     await ctx.session.update({ models: [many, tuned] });

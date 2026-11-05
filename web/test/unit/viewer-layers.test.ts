@@ -110,6 +110,10 @@ describe("predictionLayer (layers.prediction_layer)", () => {
     const model = served("mito");
     expect(predictionLayer(model, chain(sigmoid, threshold), "red", { shader: "s" })).toEqual({ type: "segmentation", name: "mito", source: model.url });
   });
+  it("opens a segmentation layer of several channels on the one shown", () => {
+    const organelles = served("organelles", { channels: ["all_mem", "organelle", "mito"], has_channel: true });
+    expect(predictionLayer(organelles, chain(threshold), "red", undefined, 1)).toMatchObject({ type: "segmentation", localPosition: [1] });
+  });
   it("transforms a three-channel affinity model drawn at another voxel size than declared", () => {
     const affinities = served("affs", {
       channels: ["z", "y", "x"], output_voxel_size: [16, 16, 16], effective_output_voxel_size: [8, 8, 8], has_channel: true,

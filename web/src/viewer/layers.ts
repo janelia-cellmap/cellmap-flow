@@ -205,14 +205,19 @@ export function displayChannel(info: ModelInfo, postprocess: Step[], shown: numb
  * (`served.url`, zarr3://...), transformed when the output must be drawn at
  * another voxel size than declared. With a display channel (displayChannel:
  * `shown`, the channel the session shows for the model, or the engine's),
- * the layer opens on it: Neuroglancer's channel axis is a local dimension
+ * either layer opens on it (a threshold, Use this model's, makes
+ * fly_organelles' eight channels labels, and its layer opened on
+ * Neuroglancer's middle one): Neuroglancer's channel axis is a local dimension
  * whose position is the channel shown, at the channel's centre as
  * Neuroglancer places them (channelPosition). */
 export function predictionLayer(served: ServedModel, chain: Chain, color: string, keep?: KeptShader, shown: number | null = null): LayerSpec {
   const { info } = served;
   const source = predictionSource(served.url, predictionVoxelOverride(info), info.has_channel ?? true);
+  const channel = displayChannel(info, chain.postprocess, shown);
   if (isSegmentation(chain.postprocess) === true) {
-    return { type: "segmentation", name: served.entry.name, source };
+    const layer: LayerSpec = { type: "segmentation", name: served.entry.name, source };
+    if (channel !== null) layer.localPosition = channelPosition(channel);
+    return layer;
   }
   let shader = keptShader(keep);
   if (shader === undefined) {
@@ -224,7 +229,6 @@ export function predictionLayer(served: ServedModel, chain: Chain, color: string
   const layer: LayerSpec = { type: "image", name: served.entry.name, source, shader };
   const controls = keptControls(keep);
   if (controls) layer.shaderControls = controls;
-  const channel = displayChannel(info, chain.postprocess, shown);
   if (channel !== null) layer.localPosition = channelPosition(channel);
   return layer;
 }

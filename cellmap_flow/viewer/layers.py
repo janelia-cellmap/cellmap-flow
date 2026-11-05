@@ -181,9 +181,11 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     A SegmentationLayer when ``postprocess`` ends in labels. Otherwise an
     ImageLayer with ``shader_controls`` and ``shader``, the user's; without
     one, prediction_shader_for's in ``previous_shader``'s colour or
-    ``color``. It opens on ``channel`` when given (the one the Finetune tab
-    picked to show, dashboard Session.shown_channel), else on the one its
-    server names (channel_position).
+    ``color``. Either opens on ``channel`` when given (the one the Finetune
+    tab picked to show, dashboard Session.shown_channel), else on the one its
+    server names (channel_position): a threshold (Use this model's) makes
+    fly_organelles' eight channels labels, and its layer opened on
+    Neuroglancer's middle one, nucleus, while the paint was for organelle.
     """
     info = fetch_model_info(host) if info is None else info
     override = prediction_voxel_override(host, dataset_path, info, fallback_output_voxel_size)
@@ -191,15 +193,14 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     # A server too old to say is taken to have one, as it always was.
     source = prediction_source(host, model, url_blob, override, has_channel=info.get("has_channel", True),
                                channels_shaded=flows is not None)
+    position = channel_position(info, postprocess, channel)
+    opens_on = {} if position is None else {"local_position": position}
     if chain_is_segmentation(postprocess):
-        return neuroglancer.SegmentationLayer(source=source)
+        return neuroglancer.SegmentationLayer(source=source, **opens_on)
     shader = shader or prediction_shader_for(model, host, postprocess, previous_shader, color, info=info)
-    layer = {"source": source, "shader": shader}
+    layer = {"source": source, "shader": shader, **opens_on}
     if shader_controls:
         layer["shaderControls"] = shader_controls
-    position = channel_position(info, postprocess, channel)
-    if position is not None:
-        layer["local_position"] = position
     return neuroglancer.ImageLayer(**layer)
 
 
@@ -219,7 +220,7 @@ def display_channel(info, postprocess, shown=None):
 
 
 def channel_position(info, postprocess, shown=None):
-    """The local position an image layer of a model opens at: the channel
+    """The local position a layer of a model opens at: the channel
     display_channel gives, at its centre (neuroglancer's channel axis is a
     local dimension, its position the channel shown). The served array's
     OME translation is 0 on its channel axis, a voxel centre, so channel k

@@ -417,15 +417,15 @@ def rank_use():
     if from_volume.get("model_name") == name:
         return _refused(f"{from_id} is {name}'s volume already: finetune it as it is.")
     try:
+        if channel is not None:
+            # First, so the layer the chain's redraw builds for a model
+            # running already, and the one its start builds otherwise
+            # (services/launch.py, both on Session.shown_channel), opens on
+            # the channel the paint matched, not on Neuroglancer's middle one.
+            session.shown_channels[name] = channel
         # Before the model starts, so it is served through them.
         input_norm, postprocess = _install_chain(data.get("input_norm"), data.get("postprocess"))
         config = _model_config(name, data.get("entry"))
-        if channel is not None:
-            # Before the model starts too, so the layer its start builds
-            # (services/launch.py, on Session.shown_channel) opens on the
-            # channel the paint matched, not on Neuroglancer's middle one
-            # until the page's pick arrives.
-            session.shown_channels[name] = channel
         if name not in running_names():
             _start_for_good(name, config, queue_list(data.get("queue")))
         # One volume a session: the one its manifest now trains on. The old

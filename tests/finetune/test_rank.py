@@ -547,7 +547,10 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
         (name, session.pipeline_spec.to_json_data(), session.shown_channel(name))))
     monkeypatch.setattr(launch, "launching", lambda name: name == "mito_16nm")
-    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
+    # The redraw a chain set makes, and the channel the layers it builds open on.
+    redrawn = []
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw",
+                        lambda spec, url: (session.set_pipeline(spec), redrawn.append(session.shown_channel("mito_16nm"))))
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
     stretched, sigmoid = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}, {"name": "SigmoidPostprocessor"}
@@ -563,6 +566,9 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     # Served through both, its layer opening on the channel the paint matched
     # (not Neuroglancer's middle one, until the page's pick arrived).
     assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]}, 2)]
+    # The channel was picked before the chain's redraw, which rebuilds the
+    # layer of a model running already.
+    assert redrawn == [2]
     assert [c.name for c in session.models_config][-1] == "mito_16nm"
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
 
@@ -639,6 +645,18 @@ def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_
 
     body = dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 2}).get_json()
     assert body == {"success": True, "shown": True} and position("m") == [2]
+    # A threshold (Use this model's) makes its channels labels: the
+    # segmentation layer opens on the pick too, and moves to the next.
+    from cellmap_flow.post.postprocessors import ThresholdPostprocessor
+
+    layer = prediction_layer("m", "http://gpu:8000", "blob", dataset_path=None, postprocess=[ThresholdPostprocessor()], info=info,
+                             channel=get_session().shown_channel("m"))
+    assert (layer.type, layer.to_json().get("localPosition")) == ("segmentation", [2])
+    with viewer.txn() as s:
+        s.layers["m"] = layer
+    assert dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 1}).get_json()["shown"]
+    assert position("m") == [1]
+    dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 2})
     # A finetune of it opens on the same channel.
     finetune_layers.add_finetuned_layer(make_job(inference_server_url="http://gpu:9000"), "m_finetuned_1")
     assert position("m_finetuned_1") == [2]
