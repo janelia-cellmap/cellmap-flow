@@ -190,8 +190,43 @@ small, .text-muted, .form-text {
   outline: none;
 }
 
+/* A select keeps the room on its right that Bootstrap leaves for its arrow
+   (2.25rem), which the padding above took: "8 (Default)" ran under it. */
+.form-select,
+.form-select:focus {
+  padding-right: 2.25rem;
+}
+
 .form-control::placeholder {
   color: var(--text-placeholder);
+}
+
+/* The Training Configuration pairs its fields in two columns (col-md-6,
+   half the row once the window is 768px wide), but the dashboard is a
+   column much narrower than the window, and the pairs cut off their
+   selects, numbers and help text. Where the card is too narrow for two,
+   each field takes the row, as in the browser mode always (browser.css). */
+#training .card-body {
+  container-type: inline-size;
+}
+
+@container (max-width: 560px) {
+  #training .col-md-6 {
+    width: 100%;
+  }
+
+  /* A learning rate and its presets, side by side, left "1e-4 (Standard)"
+     under 90px: the presets go under the rate, each the full width. */
+  #training .input-group:has(> select[id$="Presets"]) {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  #training .input-group:has(> select[id$="Presets"]) > * {
+    width: 100%;
+    margin-left: 0 !important;
+    border-radius: var(--radius-sm) !important;
+  }
 }
 
 .form-control-sm {

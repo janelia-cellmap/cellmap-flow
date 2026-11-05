@@ -691,7 +691,7 @@
         Checkpoint Path (Optional)
         <span class="badge bg-secondary">Advanced</span>
       </label>
-      <input type="text" id="checkpointPath" class="form-control" placeholder="Leave empty to auto-detect from model config">
+      <input type="text" id="checkpointPath" class="form-control" placeholder="From the model config">
       <small class="text-muted">Empty: taken from the model config.</small>
     </div>
 
@@ -703,10 +703,10 @@
             <option value="4">4 (Fast, lower capacity)</option>
             <option value="8">8 (Balanced)</option>
             <option value="16">16 (High capacity)</option>
-            <option value="64" selected>64 (Very high capacity) - Recommended</option>
-            <option value="0">0 (Full finetune: every parameter, no adapter)</option>
+            <option value="64" selected>64 (Recommended)</option>
+            <option value="0">0 (Full finetune)</option>
           </select>
-          <div class="form-text text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune.</div>
+          <div class="form-text text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune: every weight, no adapter.</div>
         </div>
       </div>
       <div class="col-md-6">
@@ -782,7 +782,7 @@
             <select id="learningRatePresets" class="form-select" aria-label="Learning rate presets">
               <option value="">Typed</option>
               {% if mode == "browser" %}
-              <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
+              <option value="0.01" selected>1e-2 (Standard)</option>
               <option value="0.003">3e-3 (Gentler)</option>
               <option value="0.001">1e-3 (Gentle)</option>
               {% else %}
