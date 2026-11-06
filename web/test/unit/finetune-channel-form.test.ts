@@ -143,13 +143,13 @@ it("lists in Restart's confirm what the run reads: the browser's loss and distil
     finetune_mode: "full", loss_type: "bce", learning_rate: 0.0001, learning_rate_schedule: "cosine", num_epochs: 20, batch_size: 1,
     tile_size: 172, distillation_lambda: 0, distillation_scope: "unlabeled", label_smoothing: 0, balance_classes: true, augment: false,
   };
-  // The confirm's rows, label to value ("distillation:  0 (unlabeled)").
+  // The confirm's rows, label to value ("anchor:  0 (unpainted only)").
   const rows = (text: string) => Object.fromEntries(text.split("\n").slice(2).filter(Boolean).map((line) => line.trim().split(/:\s+/)));
 
   const full = rows(restartSummary(body, true));
-  expect(full).toMatchObject({ training: "whole network", loss: "bce", distillation: "0 (unlabeled)", augment: "false" });
+  expect(full).toMatchObject({ training: "whole network", loss: "bce", anchor: "0 (unpainted only)", augment: "false" });
   expect(full).not.toHaveProperty("channel");  // the model trains its channels together
-  expect(rows(restartSummary({ ...body, finetune_mode: "head" }, true)).distillation).toBe("0 (unlabeled)");
+  expect(rows(restartSummary({ ...body, finetune_mode: "head" }, true)).anchor).toBe("0 (unpainted only)");
   expect(rows(restartSummary({ ...body, select_channel: 1 }, false)).channel).toBe("mito (1)");
 });
 

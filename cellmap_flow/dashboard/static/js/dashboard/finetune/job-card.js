@@ -148,7 +148,7 @@ export function createJobCard(lossPlot) {
       if (params.batch_size != null) parts.push(`batch ${params.batch_size}`);
     }
     if (params.loss_type === "margin" && params.margin != null) parts.push(`margin ${params.margin}`);
-    if (params.distillation_lambda != null) parts.push(`distillation ${params.distillation_lambda}`);
+    if (params.distillation_lambda != null) parts.push(`anchor ${params.distillation_lambda}`);
     if (params.augment === true) parts.push("augmented");
     const line = $("jobTraining");
     line.textContent = parts.join(", ");

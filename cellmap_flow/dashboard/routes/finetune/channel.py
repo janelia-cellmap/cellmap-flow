@@ -62,7 +62,9 @@ def channel_refusal(channel):
 
 def _move_layer(name, channel):
     """Whether a layer was there to move to ``channel``, and was moved: the
-    image layer of ``name`` and those of its running finetunes that follow
+    layer of ``name`` (an image layer, or a segmentation one when the chain
+    ends in a threshold, as Use this model's does) and those of its running
+    finetunes that follow
     its pick (Session.shown_channel), as the browser's showChannel moves
     them. After a finetune the base model's layer may be gone, its place
     taken by ``<name>_finetuned_1``'s, and the training form still names the
@@ -87,7 +89,7 @@ def _move_layer(name, channel):
     moved = False
     with session.viewer.txn() as s:
         for model, position in positions.items():
-            if model in s.layers and s.layers[model].type == "image":
+            if model in s.layers and s.layers[model].type in ("image", "segmentation"):
                 s.layers[model].local_position = position
                 moved = True
     return moved

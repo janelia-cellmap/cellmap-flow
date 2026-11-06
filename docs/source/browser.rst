@@ -186,8 +186,8 @@ above 0 or pick a preset; with *Ease down to a tenth over the run* ticked,
 the default, each run eases it down along half a cosine to a tenth of it by
 its last step, as on the server, and unticked every step takes it), the loss
 (BCE by default, MSE or margin; Dice scores whole patches and needs the
-server), label smoothing, class balance, and *Distillation Weight* and
-*Scope*, which keep the layer
+server), label smoothing, class balance, and *Anchor to Original* and
+*Anchor Where*, which keep the layer
 close to the model's own output where you painted nothing: the loss adds the
 weight times the mean squared distance of the layer's logits from the
 original's, on the unpainted voxels of the painted chunks (or all of their
@@ -196,7 +196,7 @@ holds firmly. *Voxels per Step* is the browser's own batch: how many painted
 voxels each step of the training averages over. *Mark as Good*, under *Patch
 on screen*, marks the output block where the viewer looks as one the model
 already gets right; it shows as the ``good_regions`` box layer and is kept
-with the volume. Once there are good regions, distillation holds the model to
+with the volume. Once there are good regions, the anchor holds the model to
 its own output inside them, wherever you have not painted, instead of over
 the scope, as on the server; *clear* removes them.
 
@@ -319,8 +319,8 @@ epochs, its own learning rate (1e-4 by default, a hundredth of the last
 layer's) and *Ease down* box, which eases it down to a tenth of it over the
 run, or not, as the last layer's does,
 the server's *Batch Size*, in tiles per step (1 by default), *Tile
-Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
-balance fields, which it reads as the last layer does. Distillation holds the
+Size*, *Augmentation*, and the last layer's loss, anchor, smoothing and
+balance fields, which it reads as the last layer does. The anchor holds the
 model to the starting network's output on the voxels its scope picks in each
 tile, worked out on the same tile it trains on. Good regions are not used.
 

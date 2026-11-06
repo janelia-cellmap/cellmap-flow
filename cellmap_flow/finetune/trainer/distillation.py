@@ -104,8 +104,8 @@ class Distillation:
                 elif self.all_voxels:
                     scope = "all voxels"
                 else:
-                    scope = "unlabeled voxels only"
-                logger.info(f"Teacher distillation enabled: lambda={self.weight} ({scope})")
+                    scope = "unpainted voxels only"
+                logger.info(f"Anchored to the original model: weight {self.weight} ({scope})")
             if self.holds_others:
                 logger.info(
                     f"Training channel {self.select_channel}: every other channel is held to the "

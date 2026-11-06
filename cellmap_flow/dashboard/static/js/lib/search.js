@@ -18,9 +18,10 @@ export function matchesWords(text, query) {
 }
 
 // "2d" for a model that reads one slice, "3d" for one that reads more, by
-// its input shape (z first); null when the shape is not known. The cellmap
-// exports' metadata says spatial_dims 3 for their 2D models too:
-// setup-53-2d's input is 1 x 556 x 556.
+// its input shape's z (the first of its last three entries); null when the
+// shape is not known. The cellmap exports' metadata says spatial_dims 3 for
+// their 2D models too: setup-53-2d's input is 1 x 556 x 556. Some put batch
+// and channel first: 1 x 1 x 178 x 178 x 178, a 3D model.
 export function dimsWord(inputShape) {
-  return Array.isArray(inputShape) && inputShape.length ? (Number(inputShape[0]) === 1 ? "2d" : "3d") : null;
+  return Array.isArray(inputShape) && inputShape.length >= 3 ? (Number(inputShape.at(-3)) === 1 ? "2d" : "3d") : null;
 }

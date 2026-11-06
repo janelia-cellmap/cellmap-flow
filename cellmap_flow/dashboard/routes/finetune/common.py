@@ -372,7 +372,7 @@ def autodetect_output_type(model_config, output_type, offsets):
     return resolved_output_type, resolved_offsets
 
 
-SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
+SPARSE_MSE_NOTE = "Auto-switched to margin loss, anchored to the original at 0.5, for sparse annotations"
 
 
 def settings_note(asked: TrainingOptions, used: TrainingOptions) -> Optional[str]:

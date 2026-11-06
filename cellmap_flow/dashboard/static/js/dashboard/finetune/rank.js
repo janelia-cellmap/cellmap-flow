@@ -606,8 +606,11 @@ export function initRank({ form }) {
   // it (`voxelSize`); one that needs more is the Models tab's to add.
   const addField = addModelField({
     id: "rankAddRef", button: "Add",
-    placeholder: isBrowserMode() ? "Hugging Face repo: owner/repo, owner/repo/folder" : "Hugging Face repo, zoo model, path...",
-    title: "Any model the Models tab's Add a model takes but a Cellpose model; it joins the list, ticked, without starting",
+    // Short enough for the dashboard's column; the title says the rest.
+    placeholder: isBrowserMode() ? "owner/repo[/folder]" : "Repo, zoo id or path",
+    title: isBrowserMode()
+      ? "A Hugging Face repo (owner/repo) or a folder in one (owner/repo/folder); it joins the list, ticked, without starting"
+      : "A Hugging Face repo, a BioImage Model Zoo id, a path: any model the Models tab's Add a model takes but a Cellpose model; it joins the list, ticked, without starting",
     onSubmit: (ref) => addModel(ref),
   });
   document.getElementById("rankAdd").append(addField.element);

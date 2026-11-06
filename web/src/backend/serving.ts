@@ -336,17 +336,17 @@ export function shownChannel(shown: Readonly<Record<string, number>>, name: stri
 /** The channel picked for `model` (the session's shownChannels) shown now
  * on the layers that open on it (shownChannel: the model's own, and those
  * of its finetunes that follow its pick), each layer otherwise as it is:
- * its position on its channel axis is all that changes. A segmentation
- * layer, an output with no channel axis and a chain that changes the
- * channel count show none (displayChannel). Answers whether a layer was
- * changed. */
+ * its position on its channel axis is all that changes, an image layer's or
+ * a segmentation layer's (a chain ending in a threshold). An output with no
+ * channel axis and a chain that changes the channel count show none
+ * (displayChannel). Answers whether a layer was changed. */
 export function showChannel(ctx: AppContext, model: string): boolean {
   const { shownChannels, chain } = ctx.session.state;
   let changed = false;
   for (const s of ctx.infer.served()) {
     const shown = shownChannel(shownChannels, s.entry.name);
     const layer = shown?.model === model ? ctx.viewer.layer(s.entry.name) : null;
-    if (!shown || layer?.type !== "image") continue;
+    if (!shown || (layer?.type !== "image" && layer?.type !== "segmentation")) continue;
     const channel = displayChannel(s.info, chain.postprocess, shown.channel);
     if (channel === null) continue;
     ctx.viewer.setLayers({ [s.entry.name]: { ...layer, localPosition: channelPosition(channel) } });

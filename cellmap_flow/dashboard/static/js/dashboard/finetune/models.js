@@ -101,7 +101,7 @@ function applyFinetuneModes(modes) {
   } else if (!lora) {
     setHint(note, "Full finetune only: rank 0.", "This model's network is compiled (TorchScript), so LoRA adapters cannot be attached.");
   } else {
-    note.textContent = "Higher = more capacity. 0 = full finetune.";
+    note.textContent = "Higher = more capacity. 0 = full finetune: every weight, no adapter.";
   }
 }
 

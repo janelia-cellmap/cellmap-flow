@@ -6,7 +6,7 @@ tab's ranking (static/js/dashboard/finetune/rank.js) works the same in both.
   offers them, each with the ``group`` of the tab's it is listed under, in
   the tab's order: the session's ("Running", running or not; not a
   Cellpose model, whose flows the ranking does not score), each catalog
-  group's (models.yaml's "cellmap", "saalfeldlab"), cellmap's on Hugging
+  group's (models.yaml's, such as "cellmap"), cellmap's on Hugging
   Face ("Hugging Face") and the BioImage Model Zoo's ("BioImage Zoo", with
   its ``em`` tag, which the others are), from the lists the tab last
   cached (``hf_cached`` and ``zoo_cached`` say whether there were any: none
@@ -116,16 +116,24 @@ VOXEL_NEEDS = {"voxel_size", "input_voxel_size"}
 
 
 def _dims(input_shape):
-    """2 for a model that reads one slice (its input shape's z is 1), 3 for
-    one that reads more, None when the shape is not known: a candidate's
-    ``dims``, which the ranking's filter takes ("2d"), as the browser's
-    (web/src/finetune/modes.ts readsOneSlice). The cellmap exports' metadata
-    says ``spatial_dims`` 3 for their 2D models too (setup-53-2d's input is
-    1 x 556 x 556), so the shape is what tells."""
+    """2 for a model that reads one slice (its input shape's z, the first of
+    its last three entries, is 1), 3 for one that reads more, None when the
+    shape is not known: a candidate's ``dims``, which the ranking's filter
+    takes ("2d"), as the browser's (web/src/finetune/modes.ts readsOneSlice).
+    The cellmap exports' metadata says ``spatial_dims`` 3 for their 2D models
+    too (setup-53-2d's input is 1 x 556 x 556), so the shape is what tells;
+    some put batch and channel first (fly_organelles' copies under
+    /nrs/cellmap/models/saalfeldlab: 1 x 1 x 178 x 178 x 178)."""
     try:
-        return 2 if int(input_shape[0]) == 1 else 3
+        return 2 if int(input_shape[-3]) == 1 else 3
     except (TypeError, ValueError, IndexError):
         return None
+
+
+def _finetunes_in_more_ways(copy, kept):
+    """Whether ``copy`` (a candidate's fields) can be finetuned in every way
+    ``kept`` can and in more (its ``finetune_modes``)."""
+    return set(copy.get("finetune_modes") or ()) > set(kept.get("finetune_modes") or ())
 
 
 def _folder_input_shape(folder):
@@ -209,8 +217,17 @@ def rank_candidates():
     candidates = {}
 
     def add(name, group, **fields):
-        # A model listed twice is kept where it was first listed.
-        if name and name not in candidates:
+        # A model listed twice is kept where it was first listed, unless a
+        # list's copy is followed by one that finetunes in more ways, which
+        # Use this model then starts: a catalog folder exported without a
+        # model.pt2 trains in full alone, its Hugging Face copy with one
+        # takes LoRA too (fly_organelles' copies under
+        # /nrs/cellmap/models/saalfeldlab, when the catalog listed them).
+        # A running model or one added by hand is the one meant.
+        if not name:
+            return
+        kept = candidates.get(name)
+        if kept is None or (kept["group"] not in (RUNNING, ADDED) and _finetunes_in_more_ways(fields, kept)):
             candidates[name] = _candidate(name, group, name in hosts, volume, **fields)
 
     for config in session.models_config:
@@ -415,15 +432,15 @@ def rank_use():
     if from_volume.get("model_name") == name:
         return _refused(f"{from_id} is {name}'s volume already: finetune it as it is.")
     try:
+        if channel is not None:
+            # First, so the layer the chain's redraw builds for a model
+            # running already, and the one its start builds otherwise
+            # (services/launch.py, both on Session.shown_channel), opens on
+            # the channel the paint matched, not on Neuroglancer's middle one.
+            session.shown_channels[name] = channel
         # Before the model starts, so it is served through them.
         input_norm, postprocess = _install_chain(data.get("input_norm"), data.get("postprocess"))
         config = _model_config(name, data.get("entry"))
-        if channel is not None:
-            # Before the model starts too, so the layer its start builds
-            # (services/launch.py, on Session.shown_channel) opens on the
-            # channel the paint matched, not on Neuroglancer's middle one
-            # until the page's pick arrives.
-            session.shown_channels[name] = channel
         if name not in running_names():
             _start_for_good(name, config, queue_list(data.get("queue")))
         # One volume a session: the one its manifest now trains on. The old

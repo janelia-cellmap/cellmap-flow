@@ -436,7 +436,9 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
             "browser_copy": "cellmap/onnx-web-models/setup_56", "variants": [{"variant": "fp32", "file_mb": 42.91}]}
     cached.hf({"org/nuc-model": {"channels_names": ["nuc"], "output_voxel_size": [8, 8, 8], **copy},
                # A 2D export: its metadata says spatial_dims 3, its input is one slice deep.
-               "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]}})
+               "org/mito-2d": {"spatial_dims": 3, "input_shape": [1, 556, 556]},
+               # A 3D export whose input shape has batch and channel first.
+               "org/fly": {"spatial_dims": 3, "input_shape": [1, 1, 178, 178, 178]}})
     cached.zoo([SHRIMP, SHARK, CHIPMUNK])
     body = dashboard.get("/api/finetune/rank/candidates").get_json()
 
@@ -446,11 +448,11 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
     assert [(n, c["group"], c["ticked"], c["volume_model"]) for n, c in rows.items()] == [
         ("model", "Running", True, True), ("mito_16nm", "mito", False, False),
         ("nuc_model", "Hugging Face", False, False), ("mito_2d", "Hugging Face", False, False),
-        ("impartial_shrimp", "BioImage Zoo", False, False), ("affable_shark", "BioImage Zoo", False, False),
+        ("fly", "Hugging Face", False, False), ("impartial_shrimp", "BioImage Zoo", False, False), ("affable_shark", "BioImage Zoo", False, False),
         ("determined_chipmunk", "BioImage Zoo", False, False)]
     # Its dims are what the filter's "2d" finds; the zoo's EM tag what its "EM only" does.
-    assert [(rows[n]["dims"], rows[n]["em"]) for n in ("mito_2d", "nuc_model", "impartial_shrimp", "affable_shark")] == [
-        (2, True), (None, True), (3, True), (2, False)]
+    assert [(rows[n]["dims"], rows[n]["em"]) for n in ("mito_2d", "fly", "nuc_model", "impartial_shrimp", "affable_shark")] == [
+        (2, True), (3, True), (None, True), (3, True), (2, False)]
     assert rows["mito_16nm"]["entry"] == {"type": "cellmap", "folder_path": "/models/mito", "name": "mito_16nm"}
     assert rows["nuc_model"]["entry"] == {"type": "huggingface", "repo": "org/nuc-model", "name": "nuc_model"}
     # What its row shows of it, as the Models tab's list cached it.
@@ -462,6 +464,26 @@ def test_the_candidates_are_the_models_tabs_in_its_groups_from_the_lists_it_cach
         "type": "bioimage", "model": "impartial-shrimp", "voxel_size": [40, 4, 4], "name": "impartial_shrimp"}
     assert rows["affable_shark"]["entry"] == {"type": "bioimage", "model": "affable-shark", "name": "affable_shark"}
     assert "entry" not in rows["determined_chipmunk"] and rows["determined_chipmunk"]["needs"] == ["voxel_size"]
+
+
+def test_a_model_listed_twice_is_the_copy_that_finetunes_in_more_ways(dashboard, painted, cached, monkeypatch):
+    """fly_organelles' copies under /nrs/cellmap/models/saalfeldlab have no
+    model.pt2 and train in full alone; their Hugging Face copies take LoRA
+    too. The ranking showed the catalog's, and Use this model started it."""
+    from cellmap_flow.models import hf_catalog
+
+    session = _serve_model()
+    session.model_catalog = {"saalfeldlab": {"fly_organelles_run08_438000": "/nrs/fly08", "setup_16": "/nrs/setup16"}}
+    monkeypatch.setattr(hf_catalog, "folder_facts", lambda folder: {"formats": ["TorchScript"], "finetune_modes": ["full"]})
+    cached.hf({"cellmap/fly_organelles_run08_438000": {"formats": ["TorchScript", "torch.export"], "finetune_modes": ["lora", "full"]},
+               "cellmap/setup_16": {"formats": ["TorchScript"], "finetune_modes": ["full"]}})
+    rows = {c["name"]: c for c in dashboard.get("/api/finetune/rank/candidates").get_json()["candidates"]}
+
+    fly = rows["fly_organelles_run08_438000"]
+    assert (fly["group"], fly["finetune_modes"]) == ("Hugging Face", ["lora", "full"])
+    assert fly["entry"] == {"type": "huggingface", "repo": "cellmap/fly_organelles_run08_438000", "name": "fly_organelles_run08_438000"}
+    # A copy that finetunes in no more ways leaves the first listed.
+    assert rows["setup_16"]["entry"] == {"type": "cellmap", "folder_path": "/nrs/setup16", "name": "setup_16"}
 
 
 def test_a_zoo_model_listed_is_scored_served_from_its_own_environment(dashboard, painted, cached, monkeypatch, tmp_path):
@@ -545,7 +567,10 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     monkeypatch.setattr(launch, "_launch", lambda name, target, *args, daemon=False: launched.append(
         (name, session.pipeline_spec.to_json_data(), session.shown_channel(name))))
     monkeypatch.setattr(launch, "launching", lambda name: name == "mito_16nm")
-    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
+    # The redraw a chain set makes, and the channel the layers it builds open on.
+    redrawn = []
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw",
+                        lambda spec, url: (session.set_pipeline(spec), redrawn.append(session.shown_channel("mito_16nm"))))
     monkeypatch.setattr("cellmap_flow.models.registry.build_model", lambda entry, name: _model(name))
 
     stretched, sigmoid = {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}, {"name": "SigmoidPostprocessor"}
@@ -561,6 +586,9 @@ def test_use_this_model_starts_it_and_carries_the_paint_to_a_volume_of_its_own(d
     # Served through both, its layer opening on the channel the paint matched
     # (not Neuroglancer's middle one, until the page's pick arrived).
     assert launched == [("mito_16nm", {"input_norm": [stretched], "postprocess": [sigmoid]}, 2)]
+    # The channel was picked before the chain's redraw, which rebuilds the
+    # layer of a model running already.
+    assert redrawn == [2]
     assert [c.name for c in session.models_config][-1] == "mito_16nm"
     assert [layer.name for layer in viewer.state.layers] == ["annotation_vol-2"]
 
@@ -637,6 +665,18 @@ def test_the_channel_picked_is_shown_now_and_by_the_layers_of_the_model_and_its_
 
     body = dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 2}).get_json()
     assert body == {"success": True, "shown": True} and position("m") == [2]
+    # A threshold (Use this model's) makes its channels labels: the
+    # segmentation layer opens on the pick too, and moves to the next.
+    from cellmap_flow.post.postprocessors import ThresholdPostprocessor
+
+    layer = prediction_layer("m", "http://gpu:8000", "blob", dataset_path=None, postprocess=[ThresholdPostprocessor()], info=info,
+                             channel=get_session().shown_channel("m"))
+    assert (layer.type, layer.to_json().get("localPosition")) == ("segmentation", [2])
+    with viewer.txn() as s:
+        s.layers["m"] = layer
+    assert dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 1}).get_json()["shown"]
+    assert position("m") == [1]
+    dashboard.post("/api/finetune/channel", json={"model_name": "m", "select_channel": 2})
     # A finetune of it opens on the same channel.
     finetune_layers.add_finetuned_layer(make_job(inference_server_url="http://gpu:9000"), "m_finetuned_1")
     assert position("m_finetuned_1") == [2]
