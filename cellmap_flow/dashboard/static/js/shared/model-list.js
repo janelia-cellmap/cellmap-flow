@@ -228,7 +228,8 @@ export function runVoxelSizes(boxes) {
 // sections have them: a search bar (every word typed, lib/search.js) with a
 // Refresh beside it; for the zoo (`zoo`) EM only, ticked to start, 2D and
 // 3D; for a list of Hugging Face models, Runs in the browser (`browser`, a
-// server's: in the browser every model does), ticked to start, and the
+// server's: in the browser every model does), unticked to start, as a
+// server runs them all, and the
 // order of its rows (`sort`: by name, or by size, smallest first); and with
 // any of those the count of the rows shown (count). `id` prefixes their ids
 // (<id>SearchBar, <id>RefreshBtn, <id>EmOnly, <id>2d, <id>3d, <id>Browser,
@@ -257,7 +258,7 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
   const [only2d, box2d] = zoo ? box("2d", "2D", "Models tagged 2D", false) : [];
   const [only3d, box3d] = zoo ? box("3d", "3D", "Models tagged 3D", false) : [];
   const [browserOnly, browserBox] = browser
-    ? box("Browser", "Runs in the browser", "Only models with a copy that runs in the browser (an ONNX export, cellmap/onnx-web-models' or a folder of the repo's own). Ticked models are always shown.", true)
+    ? box("Browser", "Runs in the browser", "Only models with a copy that runs in the browser (an ONNX export, cellmap/onnx-web-models' or a folder of the repo's own). Ticked models are always shown.", false)
     : [];
   const order = sort && h("select", {
     class: "form-select form-select-sm w-auto", id: `${id}Sort`, title: "The order of the models: by name, or by size (the largest weights file), smallest first", onChange,

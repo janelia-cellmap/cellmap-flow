@@ -227,7 +227,7 @@ it("gives the browser's Hugging Face list, cellmap's repo, the search bar, and l
   expect(page.body.querySelector("#hfBrowser")).toBe(null);
 });
 
-it("shows on a server the Hugging Face models with a browser copy and the ticked ones, by name or by size", async () => {
+it("shows on a server every Hugging Face model, or with Runs in the browser those with a browser copy and the ticked ones, by name or by size", async () => {
   // As models/hf_catalog.py lists them: two with a copy that runs in the
   // browser, two known to have none (one of them running), one its listing
   // says nothing of.
@@ -254,18 +254,19 @@ it("shows on a server the Hugging Face models with a browser copy and the ticked
     el.dispatchEvent({ type: "change" });
   };
 
-  // Runs in the browser is ticked to start: fly-organelles is hidden, and
-  // jrc-livers, running and ticked, stays, as one its listing says nothing of.
-  const shownByName = ["jrc-livers", "setup-54", "setup-54-2d", "unknown"];
-  expect(onTab()).toEqual(shownByName);
-  expect(inRanking()).toEqual(shownByName);
+  // Runs in the browser is unticked to start: a server runs every one.
+  const everyOne = ["fly-organelles", "jrc-livers", "setup-54", "setup-54-2d", "unknown"];
+  expect(onTab()).toEqual(everyOne);
+  expect(inRanking()).toEqual(everyOne);
 
-  // Unticked, every one; by size, the smallest first, the one of no size last.
-  change("hfBrowser", (box) => { box.checked = false; });
+  // Ticked, fly-organelles is hidden, and jrc-livers, running and ticked,
+  // stays, as one its listing says nothing of; by size, the smallest first,
+  // the one of no size last.
+  change("hfBrowser", (box) => { box.checked = true; });
   change("hfSort", (select) => { select.value = "size"; });
-  expect(onTab()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "fly-organelles", "unknown"]);
+  expect(onTab()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "unknown"]);
   change("rankHfSort", (select) => { select.value = "size"; });
-  expect(inRanking()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "unknown"]);
+  expect(inRanking()).toEqual(["setup-54-2d", "setup-54", "jrc-livers", "fly-organelles", "unknown"]);
 });
 
 // The Models tab with mito_16nm running at 32 nm from the catalog, where it is
