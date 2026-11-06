@@ -1,0 +1,313 @@
+cellmap_flow.finetune.trainer.loop
+==================================
+
+.. py:module:: cellmap_flow.finetune.trainer.loop
+
+.. autoapi-nested-parse::
+
+   The finetune's training loop: epochs, the best epoch, Stop Early.
+
+   ``Finetuner`` trains a model on a session's corrections with the settings of
+   a ``TrainingOptions``: a LoRA adapter, or every weight (which of the two the
+   model decides, see adaptation.strategy_for). An epoch is: fetch a batch,
+   make its target, forward, the supervised term (supervised.SupervisedLoss),
+   the distillation term and, when one channel trains (select_channel), the
+   hold on the others (distillation.Distillation), step, record. The learning
+   rate eases from the form's down to LEARNING_RATE_FLOOR of it over the run's
+   steps, or stays at the form's, as learning_rate_schedule says
+   (learning_rate_factor). Around it:
+
+   - recovery from an OOM (halve the batch, then drop distillation and the
+     hold) and from a NaN under mixed precision (restart in fp32): recovery.py;
+   - a best checkpoint, chosen by the supervised loss alone, which the export
+     loads first; the strategies write and read the files (adaptation.py);
+   - TensorBoard, continuing across a job's iterations: tensorboard.py;
+   - the single-class warning, the first batch's summary and the
+     gradient-flow watch: diagnostics.py.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.loop.logger
+   cellmap_flow.finetune.trainer.loop.LoRAFinetuner
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.loop.Finetuner
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.loop.learning_rate_factor
+   cellmap_flow.finetune.trainer.loop.rate_words
+   cellmap_flow.finetune.trainer.loop.schedule_words
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: learning_rate_factor(step: int, steps: int, schedule: str) -> float
+
+   The share of the run's learning rate that optimizer step ``step``
+   (0 to ``steps`` - 1) of a run of ``steps`` takes under ``schedule``
+   (TrainingOptions.learning_rate_schedule). "cosine": 1 at the first,
+   LEARNING_RATE_FLOOR at the last, along half a cosine between them, so
+   a run takes big steps while the model is far from the paint and small
+   ones once it is close. "constant": 1 at every step, the form's rate
+   throughout. A run of one step takes the rate itself.
+
+   A step past the last stays at the floor rather than going back up the
+   cosine: an OOM that halves the batch mid-run gives the epochs left more
+   steps than the run counted at its start. The browser's trainers compute
+   the same rate (web/src/finetune/schedule.ts learningRateAt).
+
+
+.. py:function:: rate_words(rate: float) -> str
+
+   A learning rate as the form's presets write it: 1e-4, 3e-5, 1.5e-3.
+
+
+.. py:function:: schedule_words(rate: float, steps: int, schedule: str) -> str
+
+   What a run's learning rate does under ``schedule``, for its start
+   line: "1e-4, cosine to 1e-5 over 40 steps", or "1e-4, constant over 40
+   steps" (web/src/finetune/schedule.ts scheduleWords).
+
+
+.. py:class:: Finetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, options: Optional[cellmap_flow.finetune.options.TrainingOptions] = None, *, device: Optional[str] = None, target_transform=None, teacher_model: Optional[torch.nn.Module] = None, initial_state: Optional[Dict[str, torch.Tensor]] = None, tb_start_step: int = 0, tb_start_epoch: int = 0, stop_requested: Optional[Callable[[], bool]] = None, **settings)
+
+   Trains a model on user corrections: a LoRA adapter, or every weight.
+
+   Which of the two the model decides: a PEFT model trains its adapter, a
+   plain module trains in full (see adaptation.strategy_for).
+
+   Features:
+   - Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a
+     GradScaler; it falls back to fp32 when the model NaNs under either
+   - Gradient accumulation to simulate larger batch sizes
+   - The learning rate eased from the form's down to LEARNING_RATE_FLOOR
+     of it over the run, or kept at the form's (learning_rate_schedule,
+     learning_rate_factor)
+   - Partial annotation support (mask unannotated regions)
+   - Distillation toward the starting model, on unlabeled voxels, on all
+     voxels, or on the good regions' rehearsal patches
+   - One channel of a multi-channel model trained (select_channel), every
+     other one held to the starting model's prediction
+   - A best checkpoint, chosen by the supervised loss alone; the export
+     loads it first
+   - Recovery from an OOM (halve the batch, then drop distillation and the
+     hold) and from a NaN under mixed precision (restart in fp32)
+   - TensorBoard logging, continuing across a job's iterations
+
+   :param model: The model to train: a PEFT model (LoRA) or a plain module (full finetune)
+   :param dataloader: DataLoader for training data
+   :param output_dir: Directory to save checkpoints and logs
+   :param options: The training settings (finetune/options.py); the defaults if None.
+                   Every one of them is read here: the epochs, batch, learning rate and its
+                   schedule, the loss and its margin, smoothing and class balance, the
+                   distillation weight and scope, mask_unannotated, select_channel, mixed_precision,
+                   tensorboard, and output_class, what the model's output is (None reads
+                   it as logits; the training job probes the model when nothing declared it)
+   :param device: Training device ("cuda" or "cpu", auto-detected if None)
+   :param target_transform: Optional TargetTransform instance that converts raw annotations
+                            to (target, mask) pairs. Overrides mask_unannotated when provided.
+                            See cellmap_flow.finetune.target_transforms.
+   :param teacher_model: A full finetune's frozen teacher from a previous iteration, to reuse
+   :param initial_state: A full finetune's starting weights, to reset to; copied from the model if None
+   :param tb_start_step: Where the previous iteration's TensorBoard curves ended
+   :param tb_start_epoch: Where the previous iteration's TensorBoard curves ended
+   :param stop_requested: Asked before each epoch, the first included, whether
+                          to stop there (Stop Early); the training job's says whether the
+                          dashboard asked (session_loop.TrainingSession). None: never
+   :param \*\*settings: Fields of TrainingOptions to set over ``options`` (``num_epochs=3``, say)
+
+   .. rubric:: Examples
+
+   >>> lora_model = wrap_model_with_lora(model)
+   >>> dataloader = create_dataloader("corrections.zarr")
+   >>> trainer = Finetuner(lora_model, dataloader, output_dir="output/fly_organelles_v1.1")
+   >>> trainer.train()
+   >>> trainer.save_adapter()
+
+
+   .. py:attribute:: options
+
+
+   .. py:attribute:: model
+
+
+   .. py:attribute:: dataloader
+
+
+   .. py:attribute:: output_dir
+
+
+   .. py:attribute:: num_epochs
+
+
+   .. py:attribute:: gradient_accumulation_steps
+
+
+   .. py:attribute:: select_channel
+
+
+   .. py:attribute:: stop_requested
+      :value: None
+
+
+
+   .. py:attribute:: device
+
+
+   .. py:attribute:: strategy
+
+
+   .. py:attribute:: initial_state
+
+
+   .. py:attribute:: precision
+
+
+   .. py:attribute:: supervised
+
+
+   .. py:attribute:: distillation
+
+
+   .. py:attribute:: current_epoch
+      :value: 0
+
+
+
+   .. py:attribute:: global_step
+      :value: 0
+
+
+
+   .. py:attribute:: best_loss
+
+
+   .. py:attribute:: last_supervised_loss
+
+
+   .. py:attribute:: last_others_loss
+
+
+   .. py:attribute:: training_stats
+      :value: []
+
+
+
+   .. py:attribute:: tb
+
+
+   .. py:property:: distillation_lambda
+      :type: float
+
+
+      The distillation term's weight as used (see Distillation).
+
+
+   .. py:property:: teacher_model
+      :type: Optional[torch.nn.Module]
+
+
+      A full finetune's distillation teacher, the frozen copy of its starting weights; else None.
+
+
+   .. py:method:: log(msg)
+      :staticmethod:
+
+
+      Log to console (the job's tee writes the log file).
+
+      Timestamped like the logger's lines so epoch duration can be read
+      off the log: the 2026-09-23 A/B runs had none on the per-epoch
+      summaries, and per-arm speed had to come from LSF's start/end
+      times instead. The progress parsers in finetune/job_manager use
+      unanchored re.findall, so the prefix does not affect them.
+
+
+
+   .. py:method:: close()
+
+      Close the TensorBoard writer; the CLI calls this when an iteration is done.
+
+
+
+   .. py:property:: schedule_steps
+      :type: int
+
+
+      The optimizer steps the run takes, which the learning rate eases
+      over: an epoch's batches over the gradient accumulation, its last
+      partial accumulation a step of its own (see _train_epoch), times the
+      epochs.
+
+
+   .. py:method:: train() -> Dict[str, Any]
+
+      Run the training loop.
+
+      :returns:
+
+                - final_loss: Final epoch loss
+                - best_loss: Best loss achieved
+                - total_epochs: Number of epochs trained
+                - total_steps: Total training steps
+      :rtype: Training statistics dictionary with
+
+
+
+   .. py:method:: save_checkpoint(is_best: bool = False)
+
+      Save training checkpoint.
+
+      :param is_best: If True, saves as "best_checkpoint.pth", which save_adapter
+                      exports; otherwise as "checkpoint_epoch_<N>.pth"
+
+
+
+   .. py:method:: save_adapter(adapter_path: Optional[str] = None, export_dir: Optional[str] = None)
+
+      Export the finetune: only the LoRA adapter, or a full finetune's weights.
+
+      Automatically loads the best checkpoint weights before saving
+      so the exported adapter reflects the best training epoch. Without one
+      from this run -- no epoch supervised anything, or none ran -- it
+      exports the weights as they are, those of the last epoch.
+
+      :param adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter.
+                           A full finetune ignores it and writes output_dir/full_finetune.
+      :param export_dir: Instead, the directory to export into: the adapter
+                         goes to export_dir/lora_adapter, full weights to
+                         export_dir/full_finetune/model_state_dict.pt. The CLI gives
+                         every iteration its own.
+
+      :returns: The adapter directory, or the full-finetune weights file.
+
+
+
+   .. py:method:: load_checkpoint(checkpoint_path: str)
+
+      Load training checkpoint to resume training.
+
+      :param checkpoint_path: Path to checkpoint file
+
+
+
+.. py:data:: LoRAFinetuner
+

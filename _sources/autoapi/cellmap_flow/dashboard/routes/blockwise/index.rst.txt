@@ -1,0 +1,131 @@
+cellmap_flow.dashboard.routes.blockwise
+=======================================
+
+.. py:module:: cellmap_flow.dashboard.routes.blockwise
+
+.. autoapi-nested-parse::
+
+   The pipeline builder's blockwise steps: validate, generate (the task YAML
+   the blockwise CLI runs), precheck, and submit (the task's master, to LSF).
+
+   Each answers 200 whatever happens, with "valid" (validate) or "success"
+   false beside an "error" when it cannot go on: the builder reads that flag at
+   each step and shows the error. A body a step cannot take is refused before
+   anything is done (the requests.Blockwise* models); a failure after that,
+   writing the YAML, a precheck or bsub, is answered the same way.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.blockwise.logger
+   cellmap_flow.dashboard.routes.blockwise.blockwise_bp
+   cellmap_flow.dashboard.routes.blockwise.RESULT_GRACE_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.blockwise.validate_blockwise
+   cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task
+   cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task
+   cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task
+   cellmap_flow.dashboard.routes.blockwise.check_max_block_size
+   cellmap_flow.dashboard.routes.blockwise.compute_max_block_size
+   cellmap_flow.dashboard.routes.blockwise.max_block_size_status
+   cellmap_flow.dashboard.routes.blockwise.cancel_max_block_size
+   cellmap_flow.dashboard.routes.blockwise.output_dtype
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: blockwise_bp
+
+.. py:function:: validate_blockwise()
+
+   Whether the builder's pipeline is ready for blockwise processing, as
+   requests.BlockwisePipeline describes it: {"valid": True, "message"}, or
+   {"valid": False, "error"}.
+
+
+.. py:function:: generate_blockwise_task()
+
+   Write the task YAML the blockwise CLI runs, for the builder's pipeline.
+
+   {"success": True, "task_paths", "task_name", "task_yaml", "task_config",
+   "message"}, or {"success": False, "error"}.
+
+
+.. py:function:: precheck_blockwise_task()
+
+   Check the task YAMLs generate wrote, as blockwise_processor.precheck
+   does: {"success": True, "message": "success"}, or {"success": False,
+   "error"} with the first one's problem.
+
+
+.. py:function:: submit_blockwise_task()
+
+   Submit the task's master to LSF, which runs the task's workers.
+
+   {"success": True, "job_id", "task_name", "task_paths", "log_path",
+   "command", "message"}, or {"success": False, "error"}; "job_id" is
+   "unknown" when bsub accepted the job without naming it.
+
+
+.. py:function:: check_max_block_size()
+
+   The cached max block size for the pipeline's first model on its
+   blockwise-config queue (the first, if several are named), if there is
+   one: {"cached": True, "result": {...}}, or {"cached": False, "error"}
+   when there is not (including a model or queue problem -- /compute
+   reports the same thing again, so the builder shows it either way).
+
+
+.. py:function:: compute_max_block_size()
+
+   Submit a short probe job to the pipeline's blockwise-config queue.
+
+   {"success": True, "job_id", "result_path", "model_entry", "queue",
+   "log_path", "message"} to poll (/status below), or {"success": False,
+   "error"}.
+
+
+.. py:data:: RESULT_GRACE_SECONDS
+
+.. py:function:: max_block_size_status()
+
+   Poll a job /compute submitted: {"done": False} while it may still be
+   running (with a "note" once LSF says it ended and its result is being
+   waited for), {"done": True, "result": {...}} once its result is here
+   (its file, or the cache entry it stored; cached for next time), or
+   {"done": True, "error": "..."} if it ended -- however it ended -- and
+   no result followed within RESULT_GRACE_SECONDS.
+
+
+.. py:function:: cancel_max_block_size()
+
+   bkill a probe job /compute submitted -- the queue is full, or the user
+   changed their mind: {"success": True} once LSF has it (or the job had
+   already ended), else {"success": False, "error"}.
+
+
+.. py:function:: output_dtype()
+
+   The dtype a task's output would be written in, as blockwise_processor
+   decides it when the task does not say: the last postprocessor's that
+   declares one (pipeline_spec.chain_output_dtype), else the model's own.
+
+   {"success": True, "dtype": "uint8", "source": "ThresholdPostprocessor"},
+   or {"dtype": None, "source": "model"} when only the model decides: its
+   dtype is read off the built model, which the dashboard does not build
+   (float32, for nearly every type).
+
+

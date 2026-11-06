@@ -1,0 +1,267 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Features &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Features</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="toctree-wrapper compound">
+</div>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png" alt="CellMapFlow Logo" />
+</p>
+<p align="center">
+  <strong>Run segmentation models on any EM volume, on disk or in the cloud, and see their predictions in Neuroglancer as you browse. Paint where a model is wrong and finetune it in place.</strong>
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/flow.gif" alt="Animated demonstration of CellMapFlow's real-time data processing workflow" />
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif" alt="Real-time data processing visualization" />
+</p>
+<p><strong>Try it in your browser, with nothing to install:</strong></p>
+<ul class="simple">
+<li><p><strong><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/">Open the app</a></strong>, then open a volume (a public one, or in Chrome or Edge a folder on your machine) and pick models.</p></li>
+<li><p><strong><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&amp;model=setup_53">Open an example</a></strong>,
+already running: an OpenOrganelle mouse-liver volume with the mitochondria model <code class="docutils literal notranslate"><span class="pre">setup_53</span></code> on it.</p></li>
+</ul>
+<p>🚧 Still under construction: expect frequent changes.</p>
+<section id="features">
+<h1>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h1>
+<ul class="simple">
+<li><p><strong>Almost any model.</strong> cellmap’s own networks, any model in the
+<a class="reference external" href="https://bioimage.io">BioImage Model Zoo</a>, Cellpose-SAM in 2D or 3D,
+fly_organelles checkpoints, DaCapo runs, ONNX exports, and any PyTorch or
+TensorFlow model through a short Python script. Paste what you have (a path,
+a zoo nickname, a Hugging Face repo, a Cellpose model name) into the
+dashboard’s <em>Add a model</em>, or run <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span> <span class="pre">REF</span></code>: it works out the
+model’s type, the environment it runs in and anything it still needs.</p></li>
+<li><p><strong>Any volume.</strong> zarr (v2 or v3, OME-Zarr), N5 or Neuroglancer precomputed,
+on disk or at an <code class="docutils literal notranslate"><span class="pre">s3://</span></code>, <code class="docutils literal notranslate"><span class="pre">gs://</span></code> or <code class="docutils literal notranslate"><span class="pre">https://</span></code> URL. Each model reads the
+level at its own voxel size, resampled when the volume has none.</p></li>
+<li><p><strong>Live.</strong> Predictions are computed for what is on screen, nearest first, and
+kept: panning back, or changing only the postprocessing, reuses them.</p></li>
+<li><p><strong>Pre- and postprocessing.</strong> Input normalizers and postprocessing steps
+(thresholds, watersheds, instance ids, Cellpose masks) are chained in the
+dashboard and redrawn as soon as you apply them.</p></li>
+<li><p><strong>Which model to start from.</strong> Paint a few objects and some background, and
+the models are ranked by how well each one already matches the paint.</p></li>
+<li><p><strong>Finetune in place.</strong> Paint where a model is wrong and train it: with LoRA
+or the whole network on the cluster, or in the browser on your GPU. The
+finetuned model is served beside the original to compare. <em>Seed from
+Prediction</em>, AI-assisted annotation and <em>Mark as Good</em> make the painting quick.</p></li>
+<li><p><strong>Whole volumes.</strong> Blockwise runs over a volume on the cluster, or the
+browser’s <em>Save predictions</em> tab over a box you draw, saved as OME-Zarr.</p></li>
+<li><p><strong>Share.</strong> In the browser app, <em>Share</em> copies a link that opens the volume,
+the models, the view and the settings they run with.</p></li>
+<li><p><strong>In the browser too.</strong> The dashboard as a web page, with the models running
+on your GPU through WebGPU. The server mode adds what a browser cannot run
+(PyTorch, TensorFlow, the Zoo, Cellpose, DaCapo), LoRA, and cluster jobs.
+See <a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/browser.html">In the browser</a>.</p></li>
+</ul>
+</section>
+<section id="install">
+<h1>Install<a class="headerlink" href="#install" title="Link to this heading"></a></h1>
+<p>With <a class="reference external" href="https://pixi.sh">pixi</a> 0.68 or later, on Linux (x86-64) or an Apple-silicon Mac:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/janelia-cellmap/cellmap-flow.git
+<span class="nb">cd</span><span class="w"> </span>cellmap-flow
+pixi<span class="w"> </span>install
+pixi<span class="w"> </span>run<span class="w"> </span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>data_path
+</pre></div>
+</div>
+<p>Model families whose dependencies clash (Cellpose, the BioImage Model Zoo,
+fly_organelles) run in pixi environments of their own, installed the first time
+a model needs one. Or <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">cellmap-flow</span></code>, with the extras <code class="docutils literal notranslate"><span class="pre">[dacapo]</span></code>,
+<code class="docutils literal notranslate"><span class="pre">[bioimageio]</span></code> and <code class="docutils literal notranslate"><span class="pre">[finetune]</span></code>. See
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/install.html">Installation</a> for
+Macs, pip and installing from GitHub, and
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md">docs/finetuning.md</a> for finetuning’s extra setup.</p>
+</section>
+<section id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h1>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>data_path
+cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml
+cellmap_flow<span class="w"> </span>add<span class="w"> </span>conscientious-dromedary
+cellmap_flow<span class="w"> </span>add<span class="w"> </span>cpsam_v2<span class="w"> </span>-v<span class="w"> </span><span class="m">64</span><span class="w"> </span>--run<span class="w"> </span>-d<span class="w"> </span>data_path
+cellmap_flow<span class="w"> </span>blockwise<span class="w"> </span>blockwise.yaml
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">view</span></code> opens a volume and you pick models in the dashboard; <code class="docutils literal notranslate"><span class="pre">yaml</span></code> runs the
+models a YAML lists; <code class="docutils literal notranslate"><span class="pre">add</span></code> says what a model reference is and prints its YAML
+entry, and with <code class="docutils literal notranslate"><span class="pre">--run</span></code> serves it on a volume; <code class="docutils literal notranslate"><span class="pre">blockwise</span></code> runs a model over a
+whole volume on the cluster. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">--help</span></code> lists every command; see
+the <a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/cli.html">CLI page</a>.</p>
+</section>
+<section id="model-types">
+<h1>Model types<a class="headerlink" href="#model-types" title="Link to this heading"></a></h1>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Runs</p></th>
+<th class="head"><p>e.g.</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap</span></code>, <code class="docutils literal notranslate"><span class="pre">huggingface</span></code></p></td>
+<td><p>cellmap’s exported networks, from a folder or a Hugging Face repo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap/fly_organelles_run08_438000</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code></p></td>
+<td><p>any BioImage Model Zoo model, with its own pre- and postprocessing</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">conscientious-dromedary</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellpose</span></code></p></td>
+<td><p>Cellpose-SAM or finetuned Cellpose weights: flows, probability or masks, in 2D or 3D</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
+<td><p>a fly_organelles training checkpoint</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/path/to/run/model_checkpoint_20000</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">onnx</span></code></p></td>
+<td><p>an ONNX export, as the browser runs it</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">setup_54</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+<td><p>a DaCapo run</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dacapo:run&#64;iteration</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code></p></td>
+<td><p>anything else, PyTorch or TensorFlow, from a Python script</p></td>
+<td><p><a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/example/model_spec.py">example/model_spec.py</a></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span></code></p></td>
+<td><p>a LoRA or full finetune of any of the above</p></td>
+<td><p>made by the Finetune tab</p></td>
+</tr>
+</tbody>
+</table>
+<p>Every type’s arguments, and the environment each runs in, are in
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html">YAML configuration</a>;
+there are examples in <a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/tree/main/example">example/</a>.</p>
+</section>
+<section id="documentation">
+<h1>Documentation<a class="headerlink" href="#documentation" title="Link to this heading"></a></h1>
+<p><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/">janelia-cellmap.github.io/cellmap-flow</a>:
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/browser.html">the browser app</a>,
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html">YAML configuration</a>,
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/data_paths.html">data paths</a>,
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/post.html">postprocessing</a>,
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/custom_script.html">custom scripts</a>,
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md">finetuning</a> and
+<a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/architecture.html">how it works</a>.</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

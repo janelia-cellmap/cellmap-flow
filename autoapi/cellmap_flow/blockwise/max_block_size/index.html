@@ -1,0 +1,344 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.blockwise.max_block_size &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.blockwise.max_block_size_cache" href="../max_block_size_cache/index.html" />
+    <link rel="prev" title="cellmap_flow.blockwise.cli" href="../cli/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.blockwise</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.blockwise.max_block_size</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/blockwise/max_block_size/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.blockwise.max_block_size">
+<span id="cellmap-flow-blockwise-max-block-size"></span><h1>cellmap_flow.blockwise.max_block_size<a class="headerlink" href="#module-cellmap_flow.blockwise.max_block_size" title="Link to this heading"></a></h1>
+<p>Probing the largest block size a model’s forward pass fits on a GPU.</p>
+<p>Used from the pipeline builder: before running a blockwise task, a user can
+ask “what is the biggest block this model can process on queue X” instead of
+guessing, or falling back to the model’s own (often much smaller) native
+output tile (the default blockwise has always used, <code class="docutils literal notranslate"><span class="pre">ModelGeometry.</span>
+<span class="pre">block_shape()</span></code>). The live dashboard path never does this – its chunk size
+is pinned to the model’s declared block_shape, to match the OME-NGFF
+multiscale grid neuroglancer already fetches from – this is for the
+persistence (blockwise) step alone, where the block size is a free choice.</p>
+<p>A candidate block size is always an integer multiple of the model’s native
+output tile, scaled the same on every spatial axis: multiple=1 is the
+model’s own declared tile, multiple=2 is 2x per axis (8x the voxels), and so
+on. That keeps every candidate a valid multiple of the grid blockwise
+already schedules on (<code class="docutils literal notranslate"><span class="pre">CellMapFlowBlockwiseProcessor._blocks_roi</span></code>), and
+turns the search into a single integer dimension the UI can show as a plain
+list of options, rather than an open-ended search over 3 independent axis
+sizes.</p>
+<p>Fitting in memory is not enough. A GPU kernel handed a tensor past its
+indexing range (16 feature maps of 570^3 voxels is 2^31 elements) runs and
+returns a constant: on a B300 the setup64 ER model answered 1 everywhere at
+a 570-voxel tile, 0.03 correlated with itself at 514, and right up to 458,
+and a blockwise task at 570 wrote a solid volume for an hour. So every
+candidate runs on the same smooth synthetic image (<code class="docutils literal notranslate"><span class="pre">runner.smooth_field</span></code>),
+centred on the same point, and a multiple above 1 fits only if its answer
+over the native tile’s voxels is the native tile’s (<code class="docutils literal notranslate"><span class="pre">runner.disagreement</span></code>,
+<code class="docutils literal notranslate"><span class="pre">runner.MAX_DISAGREEMENT</span></code>); the search stops at the first that is not, as
+it stops at the first that runs out of memory. <code class="docutils literal notranslate"><span class="pre">ModelRunner</span></code> makes the
+same check at its warmup for a model that knows its reference tile
+(<code class="docutils literal notranslate"><span class="pre">_check_tile_agreement</span></code>), so a tile typed by hand fails at the start
+rather than writing garbage.</p>
+<p>This must run in a process that actually has the GPU in question: torch
+reports real CUDA memory only for the device it runs on. The dashboard
+submits it as a short job to the requested queue (dashboard.routes.blockwise
+computes_max_block_size), rather than running it in the dashboard’s own
+process, which usually has no GPU at all.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.logger" title="cellmap_flow.blockwise.max_block_size.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.DEFAULT_MAX_MULTIPLE" title="cellmap_flow.blockwise.max_block_size.DEFAULT_MAX_MULTIPLE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_MAX_MULTIPLE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate" title="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockSizeCandidate</span></code></a></p></td>
+<td><p>One multiple of the model's native output tile the probe tried.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult" title="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MaxBlockSizeResult</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.probe_max_block_size" title="cellmap_flow.blockwise.max_block_size.probe_max_block_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probe_max_block_size</span></code></a>(model_config[, max_multiple]) → MaxBlockSizeResult</p></td>
+<td><p>Try the model's native output tile scaled by 1, 2, 3, ... on this</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.max_block_size.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.DEFAULT_MAX_MULTIPLE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.max_block_size.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_MAX_MULTIPLE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.DEFAULT_MAX_MULTIPLE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.max_block_size.</span></span><span class="sig-name descname"><span class="pre">BlockSizeCandidate</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate" title="Link to this definition"></a></dt>
+<dd><p>One multiple of the model’s native output tile the probe tried.</p>
+<p><code class="docutils literal notranslate"><span class="pre">fits</span></code> is whether the forward pass ran at this size and, for a
+multiple above 1, answered what the native tile answers over the voxels
+they share (<code class="docutils literal notranslate"><span class="pre">runner.disagreement</span></code>): a GPU kernel can run a tensor past
+its indexing range and return a constant, which fits in memory and is
+wrong everywhere. <code class="docutils literal notranslate"><span class="pre">agreement</span></code> is that comparison’s correlation with
+the native tile’s output (None for the native tile, for a model whose
+output is flat on the probe’s synthetic image, and in results probed
+before this was checked).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.multiple">
+<span class="sig-name descname"><span class="pre">multiple</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.multiple" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.block_shape">
+<span class="sig-name descname"><span class="pre">block_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.block_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.fits">
+<span class="sig-name descname"><span class="pre">fits</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.fits" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.peak_bytes">
+<span class="sig-name descname"><span class="pre">peak_bytes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.peak_bytes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.error">
+<span class="sig-name descname"><span class="pre">error</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.error" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.agreement">
+<span class="sig-name descname"><span class="pre">agreement</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.agreement" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.max_block_size.</span></span><span class="sig-name descname"><span class="pre">MaxBlockSizeResult</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.gpu_name">
+<span class="sig-name descname"><span class="pre">gpu_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.gpu_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.total_memory_bytes">
+<span class="sig-name descname"><span class="pre">total_memory_bytes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.total_memory_bytes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.candidates">
+<span class="sig-name descname"><span class="pre">candidates</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate" title="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate"><span class="pre">BlockSizeCandidate</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.candidates" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.best">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">best</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.BlockSizeCandidate" title="cellmap_flow.blockwise.max_block_size.BlockSizeCandidate"><span class="pre">BlockSizeCandidate</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.best" title="Link to this definition"></a></dt>
+<dd><p>The largest multiple that fit, or None if even the native tile did not.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.to_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.from_dict">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult" title="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult"><span class="pre">MaxBlockSizeResult</span></a></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult.from_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.max_block_size.probe_max_block_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.max_block_size.</span></span><span class="sig-name descname"><span class="pre">probe_max_block_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_multiple</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">DEFAULT_MAX_MULTIPLE</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult" title="cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult"><span class="pre">MaxBlockSizeResult</span></a></span></span><a class="headerlink" href="#cellmap_flow.blockwise.max_block_size.probe_max_block_size" title="Link to this definition"></a></dt>
+<dd><p>Try the model’s native output tile scaled by 1, 2, 3, … on this
+process’s GPU, stopping at the first multiple that does not fit (an
+out-of-memory error, or a shape the network refuses) or <code class="docutils literal notranslate"><span class="pre">max_multiple</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – no CUDA device is available in this process.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../cli/index.html" class="btn btn-neutral float-left" title="cellmap_flow.blockwise.cli" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../max_block_size_cache/index.html" class="btn btn-neutral float-right" title="cellmap_flow.blockwise.max_block_size_cache" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

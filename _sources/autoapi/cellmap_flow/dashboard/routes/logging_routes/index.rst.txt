@@ -1,0 +1,79 @@
+cellmap_flow.dashboard.routes.logging_routes
+============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.logging_routes
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.logger
+   cellmap_flow.dashboard.routes.logging_routes.logging_bp
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.LogHandler
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.requested_offset
+   cellmap_flow.dashboard.routes.logging_routes.stream_logs
+   cellmap_flow.dashboard.routes.logging_routes.get_bbox_json_template
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: logging_bp
+
+.. py:class:: LogHandler(level=NOTSET)
+
+
+
+   Feeds the log panel: each record, numbered, into the session's
+   log_buffer, and to every open stream's queue.
+
+   It runs on whichever thread logged, often one with no app context (a
+   launch, a job monitor), so it asks for the session at emit time.
+
+
+   .. py:method:: emit(record)
+
+      Do whatever it takes to actually log the specified logging record.
+
+      This version is intended to be implemented by subclasses and so
+      raises a NotImplementedError.
+
+
+
+.. py:function:: requested_offset(request)
+
+   Where a log stream's client wants it from, in the dashboard's log
+   protocol (static/js/lib/sse.js): the SSE Last-Event-ID, else ?offset=.
+
+
+.. py:function:: stream_logs()
+
+   The log panel's records as Server-Sent Events: those in the buffer
+   after the one the client asks from (requested_offset; a reconnect asks
+   from the last it was sent), then each new one as it is logged, with a
+   keepalive comment every 30 s.
+
+
+.. py:function:: get_bbox_json_template()
+
+   Serve the bounding box JSON format template
+
+

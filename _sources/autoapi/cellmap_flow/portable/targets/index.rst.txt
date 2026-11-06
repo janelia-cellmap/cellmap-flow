@@ -1,0 +1,159 @@
+cellmap_flow.portable.targets
+=============================
+
+.. py:module:: cellmap_flow.portable.targets
+
+.. autoapi-nested-parse::
+
+   The paint as training targets: what a finetune trains a model toward.
+
+   Labels mean what the paint layer paints: 0 unpainted (no loss), 1
+   background, 2 and up objects (an instance volume numbers each one). Each
+   function takes the labels of a patch, (Z, Y, X), or of a batch of them with
+   any leading axes, (..., Z, Y, X), and answers float32 arrays with a channel
+   axis in front of the three spatial ones, (..., C, Z, Y, X): one channel per
+   output channel of the model, the target and the mask of the voxels its loss
+   counts. The server's ``finetune/target_transforms.py`` wraps these for the
+   trainer's (B, 1, Z, Y, X) tensors; the browser calls them on one painted
+   chunk through ``targets_calls.py``.
+
+   What a model trains toward is the caller's to say: the binary target for a
+   model of objects, the affinities along ``offsets`` for an affinity model
+   (the server reads them from the model's script or its channel names, the
+   browser from the names in its manifest), and for a distance model the soft
+   signed distance (dense paint) or the bounds on it (scribbles), on the
+   server only for now.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.targets.SATURATION_SIGMAS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.targets.binary
+   cellmap_flow.portable.targets.affinity
+   cellmap_flow.portable.targets.distance
+   cellmap_flow.portable.targets.interval
+   cellmap_flow.portable.targets.sigma_nm
+   cellmap_flow.portable.targets.distance_bounds
+
+
+Module Contents
+---------------
+
+.. py:data:: SATURATION_SIGMAS
+   :value: 3.0
+
+
+.. py:function:: binary(labels, channels: int = 1)
+
+   ``(target, mask)``: 1 where the voxel is an object (label 2 or more),
+   and where it is painted (label above 0), the same on every one of
+   ``channels`` channels.
+
+   One channel is the target of a model of one class. More treat a
+   multi-channel model (affinities, distances) as simple binary
+   segmentation, every channel trained toward the same objects.
+
+
+.. py:function:: affinity(labels, offsets, channels: int = None)
+
+   ``(target, mask)``: channel c the affinity along ``offsets[c]``.
+
+   A voxel's affinity is 1 when it and its neighbour at the offset are the
+   same object (equal labels above 1), and 0 when they are different
+   objects or either is background. It is written at the voxel, and masked
+   only where both of the pair are painted, so each channel has a mask of
+   its own.
+
+   ``offsets`` are [dz, dy, dx], one for each of the first channels; an
+   offset of None leaves its channel out of the loss, as are the channels
+   past the offsets when ``channels`` (the model's output channels, by
+   default one per offset) has more: LSDs, say, which then get no
+   gradient. An offset as long as the patch along its axis or longer pairs
+   no voxel inside it, so its channel has an empty mask: a one-slice
+   patch's z channel, the head of a 2D student, keeps the model's weights.
+
+
+.. py:function:: distance(labels, sigma_voxels: float = 6.0, channels: int = 1)
+
+   ``(target, mask)``: the soft signed distance of models trained the fly_organelles way.
+
+   The target is ``(tanh((edt(fg) - edt(not fg)) / sigma) + 1) / 2`` with
+   distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+   falling to 0 outside, saturating a few sigma away. That is exactly what
+   ``fly_organelles.utils.Distance`` fed the cellmap distance models (the
+   nuc/mito "*_distance_*" HuggingFace repos use sigma=6), so sigmoid(model
+   output) is comparable to this target voxel for voxel. It goes with a
+   BCE-with-logits loss, which accepts soft targets; margin and dice do not.
+   The target is the same on every one of ``channels`` channels.
+
+   Masking: an EDT computed inside a patch only sees boundaries inside the
+   patch. For an annotated voxel the computed |d| is an upper bound on the
+   truth -- the real nearest boundary may sit just past the patch edge or
+   inside an unannotated pocket. A voxel is supervised only when its
+   computed |d| is no larger than its distance to the nearest unannotated
+   voxel or patch edge (so no unseen boundary can be closer), or when that
+   distance is already past 3*sigma, where tanh has saturated and the exact
+   value no longer matters.
+
+
+.. py:function:: interval(labels, sigma_voxels: float = 6.0, voxel_size_nm=None)
+
+   ``(bounds, mask)``: bounds on a distance model's output at each painted voxel, for scribbles.
+
+   A distance target needs every voxel's distance to the object boundary,
+   and a stroke does not say where the boundary is. It does bound it
+   (``distance_bounds``). The bounds are returned in the model's logit
+   space, where the distance target (tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma)
+   is the line z = 2d/sigma, with the sign of the painted class. Past
+   SATURATION_SIGMAS a lower bound is capped there and an upper bound
+   dropped (+-inf).
+
+   Distances are Euclidean in nm (``voxel_size_nm``, so an anisotropic
+   grid is measured as it is; 1 nm a voxel when None), and sigma, which is
+   in output voxels as for the distance target, is taken in the finest
+   axis's voxels (``sigma_nm``).
+
+   bounds has two channels, the lower and the upper bound on the logit (0
+   off the paint), and mask one, the painted voxels, whatever the model's
+   channels: losses.IntervalLoss broadcasts them over its output.
+
+
+.. py:function:: sigma_nm(sigma_voxels: float, voxel_size_nm=None) -> float
+
+   The interval target's sigma in nm: ``sigma_voxels`` of the finest axis's voxels.
+
+
+.. py:function:: distance_bounds(ann, voxel_size_nm=None)
+
+   (L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.
+
+   - upper, U: the nearest voxel painted as the other class. The boundary
+     lies between the two, so |d| <= U.
+   - lower, L: the nearest voxel not painted as the voxel's own class --
+     the other class, unpainted (it may be either), or past the patch edge.
+     Every voxel closer is known to be its own class, so |d| >= L.
+
+   Where the paint is dense, the nearest voxel not of its own class is of
+   the other, and L == U: the exact distance ``distance`` would give, with
+   the same convention (edt to the nearest voxel of the other class, so 1
+   voxel on either side of a boundary). On a stroke the two bracket the
+   truth. Both are computed in the patch the trainer gets, which keeps them
+   valid: a closer other-class voxel outside the patch would only lower the
+   true |d|, which U already exceeds or meets, and the patch edge counts as
+   "not its own class", which can only lower L. Reading context around the
+   patch would tighten bounds near its edges, but the dataset hands the
+   trainer the patch alone (augmented with it), so they are left as loose
+   as the patch makes them.
+
+

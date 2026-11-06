@@ -1,0 +1,193 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python Scripts &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="YAML Configuration" href="yaml_config.html" />
+    <link rel="prev" title="Command line" href="cli.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Python Scripts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#script">Script</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#explanation">Explanation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Python Scripts</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/scripts.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="python-scripts">
+<h1>Python Scripts<a class="headerlink" href="#python-scripts" title="Link to this heading"></a></h1>
+<p>CellMap Flow can be run from the command line or from a Python script. A script does what <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> does with a YAML file (see <a class="reference internal" href="yaml_config.html"><span class="doc">YAML Configuration</span></a>): it builds the model configs, submits one inference server per model, and then serves the dashboard.</p>
+<p>First define your model configs: <code class="docutils literal notranslate"><span class="pre">ScriptModelConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">DaCapoModelConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code> or <code class="docutils literal notranslate"><span class="pre">FlyModelConfig</span></code>. Then pass them to <code class="docutils literal notranslate"><span class="pre">run_multiple</span></code>.</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h2>
+<p>You need a valid model checkpoint and access to GPUs through LSF (e.g. the <code class="docutils literal notranslate"><span class="pre">gpu_h100</span></code> queue).</p>
+</section>
+<section id="script">
+<h2>Script<a class="headerlink" href="#script" title="Link to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.cli.yaml_cli</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_multiple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.jobs.launch</span><span class="w"> </span><span class="kn">import</span> <span class="n">install_cleanup_handlers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.logging_setup</span><span class="w"> </span><span class="kn">import</span> <span class="n">configure_logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">FlyModelConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.pipeline_spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">PipelineSpec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.process_chain</span><span class="w"> </span><span class="kn">import</span> <span class="n">process_chain</span>
+
+<span class="c1"># The log lines cellmap_flow's commands print: each server as it starts,</span>
+<span class="c1"># and the dashboard's address.</span>
+<span class="n">configure_logging</span><span class="p">()</span>
+
+<span class="n">DATA_PATH</span> <span class="o">=</span> <span class="s2">"/path/to/dataset.zarr/recon-1/em/fibsem-uint8/s1"</span>
+
+<span class="n">model_config</span> <span class="o">=</span> <span class="n">FlyModelConfig</span><span class="p">(</span>
+    <span class="n">checkpoint_path</span><span class="o">=</span><span class="s2">"/path/to/fly_organelles/run07/model_checkpoint_432000"</span><span class="p">,</span>
+    <span class="n">channels</span><span class="o">=</span><span class="p">[</span><span class="s2">"mito"</span><span class="p">,</span> <span class="s2">"er"</span><span class="p">,</span> <span class="s2">"nucleus"</span><span class="p">],</span>
+    <span class="n">input_voxel_size</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+    <span class="n">output_voxel_size</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"fly_organelles"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The normalization every layer is served with, as json_data.input_norm</span>
+<span class="c1"># would set it in a YAML file.</span>
+<span class="n">process_chain</span><span class="p">()</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">PipelineSpec</span><span class="p">(</span><span class="n">input_norm</span><span class="o">=</span><span class="p">[</span>
+    <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"MinMaxNormalizer"</span><span class="p">,</span> <span class="s2">"min_value"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"max_value"</span><span class="p">:</span> <span class="mi">255</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"LambdaNormalizer"</span><span class="p">,</span> <span class="s2">"expression"</span><span class="p">:</span> <span class="s2">"x*2-1"</span><span class="p">},</span>
+<span class="p">]))</span>
+
+<span class="c1"># Ctrl+C then kills the LSF jobs this script started.</span>
+<span class="n">install_cleanup_handlers</span><span class="p">()</span>
+
+<span class="n">run_multiple</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">model_config</span><span class="p">],</span>
+    <span class="n">DATA_PATH</span><span class="p">,</span>
+    <span class="n">charge_group</span><span class="o">=</span><span class="s2">"CHARGE_GROUP"</span><span class="p">,</span>
+    <span class="n">queue</span><span class="o">=</span><span class="s2">"gpu_h100"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="explanation">
+<h2>Explanation<a class="headerlink" href="#explanation" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>configure_logging()</strong>: the timestamped INFO lines. The <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> commands set up logging themselves; a script that skips this prints only warnings and errors.</p></li>
+<li><p><strong>FlyModelConfig</strong>: a fly_organelles checkpoint; its channels, voxel sizes and tile are read from the
+checkpoint’s folder when not given (see <a class="reference internal" href="yaml_config.html#fly"><span class="std std-ref">fly_organelles checkpoints</span></a>).</p></li>
+<li><p><strong>process_chain().set(PipelineSpec(…))</strong>: the input normalization (<code class="docutils literal notranslate"><span class="pre">input_norm</span></code>) and postprocessing (<code class="docutils literal notranslate"><span class="pre">postprocess</span></code>) chains. Each step is <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">&lt;class</span> <span class="pre">name&gt;,</span> <span class="pre">**its</span> <span class="pre">arguments}</span></code>, as in a YAML’s <code class="docutils literal notranslate"><span class="pre">json_data</span></code>; <code class="docutils literal notranslate"><span class="pre">set()</span></code> builds them, skipping a name it does not know with a warning. Left unset, the model sees the raw values.</p></li>
+<li><p><strong>queue</strong>: the LSF queue the inference servers are submitted to.</p></li>
+<li><p><strong>charge_group</strong>: the accounting group the GPU time is billed to.</p></li>
+<li><p><strong>run_multiple</strong>: starts one inference server per model and waits for each to report its address. Then it serves the dashboard with a prediction layer per model. It does not return. Stop it with Ctrl+C: <code class="docutils literal notranslate"><span class="pre">install_cleanup_handlers()</span></code> makes that kill the jobs it started, which <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> does for you.</p></li>
+</ul>
+<p>A model type, normalizer or postprocessor from a plugin (<a class="reference internal" href="plugins.html"><span class="doc">Plugins</span></a>) exists only once the plugins are loaded. The <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> commands load them when they start; a script that uses one calls <code class="docutils literal notranslate"><span class="pre">cellmap_flow.plugins.load_plugins()</span></code> first.</p>
+<p>If no model server starts, <code class="docutils literal notranslate"><span class="pre">run_multiple</span></code> raises <code class="docutils literal notranslate"><span class="pre">JobStartError</span></code> naming each failure.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli.html" class="btn btn-neutral float-left" title="Command line" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="yaml_config.html" class="btn btn-neutral float-right" title="YAML Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

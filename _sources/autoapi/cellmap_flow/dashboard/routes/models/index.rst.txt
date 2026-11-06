@@ -1,0 +1,160 @@
+cellmap_flow.dashboard.routes.models
+====================================
+
+.. py:module:: cellmap_flow.dashboard.routes.models
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.models.logger
+   cellmap_flow.dashboard.routes.models.models_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.models.get_model_config_types
+   cellmap_flow.dashboard.routes.models.create_model_config
+   cellmap_flow.dashboard.routes.models.get_huggingface_models
+   cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route
+   cellmap_flow.dashboard.routes.models.get_bioimage_models
+   cellmap_flow.dashboard.routes.models.refresh_bioimage_models_route
+   cellmap_flow.dashboard.routes.models.submit_models
+   cellmap_flow.dashboard.routes.models.get_loaded_models
+   cellmap_flow.dashboard.routes.models.remove_loaded_model
+   cellmap_flow.dashboard.routes.models.job_logs
+   cellmap_flow.dashboard.routes.models.gpu_queues
+   cellmap_flow.dashboard.routes.models.get_server_config
+   cellmap_flow.dashboard.routes.models.export_config
+   cellmap_flow.dashboard.routes.models.update_server_config
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: models_bp
+
+.. py:function:: get_model_config_types()
+
+   Get available ModelConfig subclasses and their parameter metadata
+
+
+.. py:function:: create_model_config()
+
+   Build the model config the form describes (a CreateModelConfig: the
+   type and its parameters, as a model entry) and keep it among the
+   session's models, for the pipeline builder and blockwise. A type or
+   value the registry cannot build from is a 400.
+
+
+.. py:function:: get_huggingface_models()
+
+   Get available models from Hugging Face (uses cache if available)
+
+
+.. py:function:: refresh_huggingface_models_route()
+
+   Force refresh the Hugging Face models cache
+
+
+.. py:function:: get_bioimage_models()
+
+   The BioImage Model Zoo's models (cached): bioimage_catalog.list_bioimage_models.
+
+
+.. py:function:: refresh_bioimage_models_route()
+
+   Fetch the zoo's index again.
+
+
+.. py:function:: submit_models()
+
+   Run the models the Models tab has ticked (a SubmitModels), and stop
+   the others: services.launch.update_run_models, each catalog and Hugging
+   Face model at its ``run_voxel_sizes`` entry, if it has one. A zoo model
+   that needs a voxel size and was given none, a Cellpose model without
+   one, or a run voxel size for a model that reads its input itself, is a
+   400, and nothing changes. A chain with no input normalizers takes the
+   ones the first model started declares, if any (get_loaded_models says
+   so to the page).
+
+
+.. py:function:: get_loaded_models()
+
+   The Models tab's Loaded models list: every model running or starting,
+   with where it came from and whether its ✕ can remove it
+   (services.launch.loaded_models), and the chain they run through.
+
+   ``{"success": true, "models": [...], "pipeline": {"input_norm",
+   "postprocess"}, "input_norm_from", "input_norm_declared",
+   "postprocess_from", "postprocess_fitted"}``: ``pipeline`` is the chain
+   as it is set (PUT /api/pipeline's answer gives it the same way),
+   ``input_norm_from`` the loaded model whose start set its input part as
+   it is, else None, and ``input_norm_declared`` whether that model
+   declares it (False: the convention for its kind of model; None with no
+   such model; routes.pipeline.input_norm_set_by). ``postprocess_from`` is
+   the loaded model whose settings its postprocessing is, else None, and
+   ``postprocess_fitted`` whether the ranking fitted them to the paint
+   (False: the model's start set the sigmoid its logits need; None with no
+   such model; routes.pipeline.postprocess_set_by). The page reads them
+   after every model change: a model's start can set the input
+   normalization (routes.pipeline.set_declared_input_norm) and the
+   postprocessing (set_needed_postprocess), and the Processing tab's list
+   then shows it, saying from which model and on what grounds.
+   ``deleted_in_viewer`` lists the models stopped because their layer was
+   deleted in the viewer, numbered in the order they went (the session's
+   record: services.launch._layers_deleted), for the list to untick the
+   rows of those newer than it has seen, as their ✕ would.
+
+
+.. py:function:: remove_loaded_model()
+
+   The ✕ of one model on the Loaded models list, ``{"name": ...}``: stop
+   that model and take its layer away, and nothing else
+   (services.launch.remove_model): a finetune job's model's job is
+   cancelled with it. Answers the list as it is then; a 404 when no model
+   of that name is running, a 409 when a finetune job could not be
+   cancelled.
+
+
+.. py:function:: job_logs()
+
+   The inference jobs' own output, so a failure can be read here.
+
+   Without this, a server that dies on startup or 500s on every chunk says
+   nothing in the dashboard -- the traceback is in the LSF job's output on a
+   cluster node, and reading it means logging in and running bpeek.
+
+
+.. py:function:: gpu_queues()
+
+   Which GPU queues are open and how busy, for the queue picker.
+
+   Polled about once a minute by the models tab; the underlying LSF query is
+   cached server-side, so this is cheap to call.
+
+
+.. py:function:: get_server_config()
+
+   Get current server configuration.
+
+
+.. py:function:: export_config()
+
+   Export the dashboard's current live config (models, normalization,
+   postprocessing, queue/charge_group) as a downloadable YAML file that can
+   be reloaded later with `cellmap_flow yaml`.
+
+
+.. py:function:: update_server_config()
+
+   Update server configuration and save to cache.
+
+

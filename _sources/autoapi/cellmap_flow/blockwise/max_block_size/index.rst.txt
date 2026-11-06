@@ -1,0 +1,169 @@
+cellmap_flow.blockwise.max_block_size
+=====================================
+
+.. py:module:: cellmap_flow.blockwise.max_block_size
+
+.. autoapi-nested-parse::
+
+   Probing the largest block size a model's forward pass fits on a GPU.
+
+   Used from the pipeline builder: before running a blockwise task, a user can
+   ask "what is the biggest block this model can process on queue X" instead of
+   guessing, or falling back to the model's own (often much smaller) native
+   output tile (the default blockwise has always used, ``ModelGeometry.
+   block_shape()``). The live dashboard path never does this -- its chunk size
+   is pinned to the model's declared block_shape, to match the OME-NGFF
+   multiscale grid neuroglancer already fetches from -- this is for the
+   persistence (blockwise) step alone, where the block size is a free choice.
+
+   A candidate block size is always an integer multiple of the model's native
+   output tile, scaled the same on every spatial axis: multiple=1 is the
+   model's own declared tile, multiple=2 is 2x per axis (8x the voxels), and so
+   on. That keeps every candidate a valid multiple of the grid blockwise
+   already schedules on (``CellMapFlowBlockwiseProcessor._blocks_roi``), and
+   turns the search into a single integer dimension the UI can show as a plain
+   list of options, rather than an open-ended search over 3 independent axis
+   sizes.
+
+   Fitting in memory is not enough. A GPU kernel handed a tensor past its
+   indexing range (16 feature maps of 570^3 voxels is 2^31 elements) runs and
+   returns a constant: on a B300 the setup64 ER model answered 1 everywhere at
+   a 570-voxel tile, 0.03 correlated with itself at 514, and right up to 458,
+   and a blockwise task at 570 wrote a solid volume for an hour. So every
+   candidate runs on the same smooth synthetic image (``runner.smooth_field``),
+   centred on the same point, and a multiple above 1 fits only if its answer
+   over the native tile's voxels is the native tile's (``runner.disagreement``,
+   ``runner.MAX_DISAGREEMENT``); the search stops at the first that is not, as
+   it stops at the first that runs out of memory. ``ModelRunner`` makes the
+   same check at its warmup for a model that knows its reference tile
+   (``_check_tile_agreement``), so a tile typed by hand fails at the start
+   rather than writing garbage.
+
+   This must run in a process that actually has the GPU in question: torch
+   reports real CUDA memory only for the device it runs on. The dashboard
+   submits it as a short job to the requested queue (dashboard.routes.blockwise
+   computes_max_block_size), rather than running it in the dashboard's own
+   process, which usually has no GPU at all.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size.logger
+   cellmap_flow.blockwise.max_block_size.DEFAULT_MAX_MULTIPLE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size.BlockSizeCandidate
+   cellmap_flow.blockwise.max_block_size.MaxBlockSizeResult
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size.probe_max_block_size
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: DEFAULT_MAX_MULTIPLE
+   :value: 8
+
+
+.. py:class:: BlockSizeCandidate
+
+   One multiple of the model's native output tile the probe tried.
+
+   ``fits`` is whether the forward pass ran at this size and, for a
+   multiple above 1, answered what the native tile answers over the voxels
+   they share (``runner.disagreement``): a GPU kernel can run a tensor past
+   its indexing range and return a constant, which fits in memory and is
+   wrong everywhere. ``agreement`` is that comparison's correlation with
+   the native tile's output (None for the native tile, for a model whose
+   output is flat on the probe's synthetic image, and in results probed
+   before this was checked).
+
+
+   .. py:attribute:: multiple
+      :type:  int
+
+
+   .. py:attribute:: block_shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: fits
+      :type:  bool
+
+
+   .. py:attribute:: peak_bytes
+      :type:  Optional[int]
+      :value: None
+
+
+
+   .. py:attribute:: error
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: agreement
+      :type:  Optional[float]
+      :value: None
+
+
+
+   .. py:method:: to_dict() -> dict
+
+
+.. py:class:: MaxBlockSizeResult
+
+   .. py:attribute:: gpu_name
+      :type:  str
+
+
+   .. py:attribute:: total_memory_bytes
+      :type:  int
+
+
+   .. py:attribute:: candidates
+      :type:  List[BlockSizeCandidate]
+
+
+   .. py:property:: best
+      :type: Optional[BlockSizeCandidate]
+
+
+      The largest multiple that fit, or None if even the native tile did not.
+
+
+   .. py:method:: to_dict() -> dict
+
+
+   .. py:method:: from_dict(data: dict) -> MaxBlockSizeResult
+      :classmethod:
+
+
+
+.. py:function:: probe_max_block_size(model_config, max_multiple: int = DEFAULT_MAX_MULTIPLE) -> MaxBlockSizeResult
+
+   Try the model's native output tile scaled by 1, 2, 3, ... on this
+   process's GPU, stopping at the first multiple that does not fit (an
+   out-of-memory error, or a shape the network refuses) or ``max_multiple``.
+
+   :raises RuntimeError: no CUDA device is available in this process.
+
+

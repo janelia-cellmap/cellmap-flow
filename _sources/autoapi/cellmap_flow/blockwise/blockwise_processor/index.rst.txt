@@ -1,0 +1,200 @@
+cellmap_flow.blockwise.blockwise_processor
+==========================================
+
+.. py:module:: cellmap_flow.blockwise.blockwise_processor
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.logger
+   cellmap_flow.blockwise.blockwise_processor.OUTPUT_CODEC
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.blockwise_processor.precheck
+   cellmap_flow.blockwise.blockwise_processor.progress_marker
+   cellmap_flow.blockwise.blockwise_processor.check_block
+   cellmap_flow.blockwise.blockwise_processor.spawn_worker
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: OUTPUT_CODEC
+
+.. py:function:: precheck(yaml_config: str) -> dict
+
+   Check a blockwise task YAML without side effects.
+
+   Loads no model, writes nothing, and leaves ``g`` alone -- unlike
+   constructing CellMapFlowBlockwiseProcessor, which the dashboard used to
+   do for this: that created the output arrays, loaded every model's weights
+   into the dashboard process (onto its GPU, if it had one), and replaced the
+   dashboard's live normalization and postprocessing with the task's.
+
+   Checks the settings, that every model entry builds a model config, that
+   json_data builds its normalizers and postprocessors, and that a local
+   data_path exists. What needs the model's geometry (output shapes, the
+   channels) is left to the run itself.
+
+   :raises ConfigError: with the reason, when the file is not usable.
+
+
+.. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=False)
+
+   .. py:attribute:: config
+
+
+   .. py:attribute:: yaml_config
+
+
+   .. py:attribute:: input_path
+
+
+   .. py:attribute:: charge_group
+
+
+   .. py:attribute:: queue
+
+
+   .. py:attribute:: output_path
+
+
+   .. py:attribute:: workers
+
+
+   .. py:attribute:: output_channels_is_dict
+
+
+   .. py:attribute:: cpu_workers
+
+
+   .. py:attribute:: walltime
+
+
+   .. py:attribute:: track_progress
+
+
+   .. py:attribute:: models
+
+
+   .. py:attribute:: model_mode_str
+
+
+   .. py:attribute:: model_merger
+
+
+   .. py:attribute:: process_only
+
+
+   .. py:attribute:: cross_channels_mode
+
+
+   .. py:attribute:: model_config
+
+
+   .. py:attribute:: block_shape
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: channels
+
+
+   .. py:attribute:: task_name
+
+
+   .. py:attribute:: dtype
+
+
+   .. py:attribute:: inferencers
+      :value: []
+
+
+
+   .. py:attribute:: inferencer
+      :value: None
+
+
+
+   .. py:attribute:: raw_input
+
+
+   .. py:attribute:: grid_origin
+
+
+   .. py:attribute:: full_output_roi
+
+
+   .. py:attribute:: bounding_boxes
+
+
+   .. py:attribute:: separate_zarrs
+
+
+   .. py:method:: process_fn(block)
+
+
+   .. py:method:: client()
+
+
+   .. py:method:: run() -> bool
+
+      Process every ROI; True only if every block of every ROI succeeded.
+
+
+
+.. py:function:: progress_marker(tmp_dir, block: daisy.Block) -> pathlib.Path
+
+   The file that records ``block`` as done: <tmp_dir>/<task>/<write ROI>.
+
+   One directory per daisy task, and named by the block's write ROI rather
+   than its index. The index is only unique within a task -- daisy counts it
+   from each task's own total_roi, and every bounding box is its own task --
+   so with one shared directory, finishing ROI 1 marked ROI 2's blocks with
+   the same indices as done. An index also names a different region once the
+   block size changes; a write ROI does not.
+
+
+.. py:function:: check_block(tmp_dir, block: daisy.Block) -> bool
+
+.. py:function:: spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None, log_dir=None)
+
+   A daisy spawn function that submits one blockwise worker to LSF.
+
+   Goes through jobs.launch.submit_bsub_job, so each worker gets a run limit
+   (-W; the GPU queues' own default is two hours), its own log file named
+   after its job id, and a submission that fails loudly: a bsub error
+   raises here, and daisy stops the run, rather than the master waiting
+   forever for a worker that never started.
+
+   Logs go to ``log_dir``, by default ./daisy_logs as before, resolved now so
+   that every worker writes to the same place.
+
+   ``queue`` is the task's GPU queues (a list, as load_config reads it).
+   Each worker goes to the one with the most free GPUs when it is submitted
+   (queues.candidates; the first of them when queue cycling is off), and
+   stays there: a worker is not moved once submitted.
+
+

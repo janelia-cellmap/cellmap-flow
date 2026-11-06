@@ -1,0 +1,97 @@
+cellmap_flow.ai_annotate.organelles
+===================================
+
+.. py:module:: cellmap_flow.ai_annotate.organelles
+
+.. autoapi-nested-parse::
+
+   What the model is told about each structure it can be asked to paint.
+
+   A catalog of organelles: the colour to ask the model to paint each one, and a
+   description of how it looks in EM to ground the request in what the
+   structure actually looks like. Adapted from ask-to-mask's ORGANELLES catalog,
+   keeping only the fields this feature uses. A label name the catalog does not
+   know still works (``resolve_organelle_profile``), just without a description.
+
+   The colours are distinct within the catalog but need not be unique across it
+   (cells and mitochondria are both red): one request asks for one structure.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.organelles.ORGANELLES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.organelles.OrganelleProfile
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.organelles.find_organelle_profile
+   cellmap_flow.ai_annotate.organelles.resolve_organelle_profile
+
+
+Module Contents
+---------------
+
+.. py:class:: OrganelleProfile
+
+   One structure: catalog key, plural name as used in the prompt, the
+   colour asked for (as words for the prompt, and as RGB to find it in the
+   reply), and its EM appearance.
+
+
+   .. py:attribute:: key
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: color_name
+      :type:  str
+
+
+   .. py:attribute:: rgb
+      :type:  tuple[int, int, int]
+
+
+   .. py:attribute:: description
+      :type:  str
+      :value: ''
+
+
+
+.. py:data:: ORGANELLES
+   :type:  dict[str, OrganelleProfile]
+
+.. py:function:: find_organelle_profile(label_name: str) -> OrganelleProfile | None
+
+   The catalog profile a free-text label name means, or None.
+
+   Matches a key, a name or a known alias, ignoring case, surrounding
+   whitespace, and ``-``/``_`` versus spaces. None lets the caller fall back
+   to a generic profile.
+
+
+.. py:function:: resolve_organelle_profile(label_name: str) -> OrganelleProfile
+
+   The catalog profile for ``label_name``, or a generic one built from it.
+
+   A label the catalog does not know still works: the prompt names it as
+   typed and asks for bright red, just without an EM-appearance description.
+
+

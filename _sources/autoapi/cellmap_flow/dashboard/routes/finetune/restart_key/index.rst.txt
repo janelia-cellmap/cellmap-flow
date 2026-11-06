@@ -1,0 +1,154 @@
+cellmap_flow.dashboard.routes.finetune.restart_key
+==================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.restart_key
+
+.. autoapi-nested-parse::
+
+   Shift+R over the viewer: restart the finetune job the Finetune tab shows, with the tab's settings.
+
+   It does what the Training Status card's Restart button does, without the
+   button's confirm (pressing the key is a deliberate act), from the viewer,
+   where the user paints. The form's values are in the page, not here, so the
+   key does not restart the job itself. Its action checks the job and counts
+   the press against it; the job's status answer, which the Finetune tab polls
+   every 3 s while it follows a job (job-monitor.js's startStatusPolling),
+   carries the count as ``restart_requests``; and the tab, seeing the count go
+   up, sends the restart as Restart does. So the key acts within one poll, up
+   to 3 s, and the restart route then syncs MinIO as for the button.
+
+   The job is the one the tab follows, the last whose status it asked for,
+   which is the one its card shows. The key counts a press only for a job that
+   can take a restart (state.can_restart, which is when the card offers
+   Restart), and otherwise says why not, in neuroglancer's status bar, as
+   ai_annotate's Shift+G does: there is no job, or it is still running, or it
+   has finished. A press while an earlier one waits for its restart is ignored,
+   saying so, as the button is disabled while its request runs.
+
+   The status bar says what will happen at the press; then what the restart
+   route answered (``taken`` as it starts, ``answered`` once it has), or, when
+   no restart came within PENDING_S (the dashboard's page is closed, or it
+   refused, saying why in the tab), that none did. Each of those goes after
+   SHOW_S.
+
+   Shift+R pressed with the focus in the dashboard's page, and the browser
+   mode's key (web/src/backend/routes/finetune.ts binds it in the page), go
+   straight to job-monitor.js, which says why not in the tab itself.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.restart_key.ACTION
+   cellmap_flow.dashboard.routes.finetune.restart_key.KEY
+   cellmap_flow.dashboard.routes.finetune.restart_key.KEYBINDING
+   cellmap_flow.dashboard.routes.finetune.restart_key.STATUS_KEY
+   cellmap_flow.dashboard.routes.finetune.restart_key.PENDING_S
+   cellmap_flow.dashboard.routes.finetune.restart_key.SHOW_S
+   cellmap_flow.dashboard.routes.finetune.restart_key.TAKEN
+   cellmap_flow.dashboard.routes.finetune.restart_key.NO_JOB
+   cellmap_flow.dashboard.routes.finetune.restart_key.NOT_WAITING
+   cellmap_flow.dashboard.routes.finetune.restart_key.ALREADY_ASKED
+   cellmap_flow.dashboard.routes.finetune.restart_key.RESTARTING
+   cellmap_flow.dashboard.routes.finetune.restart_key.NOT_RESTARTED
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.restart_key.ensure_binding
+   cellmap_flow.dashboard.routes.finetune.restart_key.follow
+   cellmap_flow.dashboard.routes.finetune.restart_key.with_requests
+   cellmap_flow.dashboard.routes.finetune.restart_key.taken
+   cellmap_flow.dashboard.routes.finetune.restart_key.answered
+
+
+Module Contents
+---------------
+
+.. py:data:: ACTION
+   :value: 'finetune-restart'
+
+
+.. py:data:: KEY
+   :value: 'shift+keyr'
+
+
+.. py:data:: KEYBINDING
+   :value: 'Shift+R'
+
+
+.. py:data:: STATUS_KEY
+   :value: 'finetune'
+
+
+.. py:data:: PENDING_S
+   :value: 15.0
+
+
+.. py:data:: SHOW_S
+   :value: 10.0
+
+
+.. py:data:: TAKEN
+   :value: inf
+
+
+.. py:data:: NO_JOB
+   :value: 'Finetune: no job to restart. Start one on the Finetune tab.'
+
+
+.. py:data:: NOT_WAITING
+   :value: 'Finetune: Shift+R restarts a job that is waiting for a restart; {job_id} is {status}.'
+
+
+.. py:data:: ALREADY_ASKED
+   :value: 'Finetune: the restart of {job_id} is already on its way; this press is ignored.'
+
+
+.. py:data:: RESTARTING
+   :value: "Finetune: restarting {job_id} with the Finetune tab's settings..."
+
+
+.. py:data:: NOT_RESTARTED
+   :value: 'Finetune: {job_id} was not restarted; the Finetune tab says why (is the dashboard open?).'
+
+
+.. py:function:: ensure_binding()
+
+   Bind Shift+R to the restart action in the session's viewer, once per viewer.
+
+   The routes that call this are the job list, which the Finetune tab asks
+   for on every page load (and connect.js reloads the page after a new
+   dataset), and a job's status, which it polls while it follows a job.
+
+
+.. py:function:: follow(job_id)
+
+   The tab asked for ``job_id``'s status: that is the job its card shows, which Shift+R restarts.
+
+
+.. py:function:: with_requests(status)
+
+   A job's status answer with ``restart_requests``: the presses that asked for its restart.
+
+
+.. py:function:: taken(job_id)
+
+   The restart route has started on ``job_id``'s restart: a press waiting on it is no longer lost.
+
+
+.. py:function:: answered(job_id, success, message)
+
+   The restart route answered for ``job_id``: if a press waits on it, say how in the status bar.
+
+   A restart from the button answers a press too: the job was restarted,
+   which is what the press asked for, and the tab, seeing the count go up
+   while the job runs, does not send another.
+
+

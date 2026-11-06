@@ -1,0 +1,109 @@
+cellmap_flow.serving.launch
+===========================
+
+.. py:module:: cellmap_flow.serving.launch
+
+.. autoapi-nested-parse::
+
+   Starting an inference server for a model: the one launcher, and the
+   command line it runs.
+
+   ``launch(model, data_path, ...)`` is what every launcher calls:
+   ``cellmap_flow infer <type>``, ``cellmap_flow yaml`` and ``add --run``, the
+   dashboard's Models tab (its catalog, Hugging Face, zoo and Cellpose picks,
+   Add a model, and a model ticked again) and the Training tab's ranking. It
+   applies the one data path and scale rule (``config.yaml.resolve_data_path``),
+   falls back to the saved launcher settings for the queues and charge group,
+   builds the command and starts the job (``jobs.launch.start_hosts``), which
+   it returns.
+
+   The command is ``<SERVER_COMMAND> --model <entry> -d <data path>``, where the entry
+   is ``ModelConfig.launch_entry`` as JSON, which the server rebuilds as it
+   rebuilds a YAML's model entry, then ``--resample`` or ``--no-resample``:
+   always one of them, so a server reads the data as its launcher was told to
+   (a YAML's ``resample``, ``infer --no-resample``, the dashboard's checkbox)
+   whatever ``serve``'s own default is.
+
+   The serve program is ``jobs.launch.SERVER_COMMAND``, and deployments change
+   it: the fileglancer deploy sets ``"pixi run cellmap_flow serve"``. So it is
+   read each time a command is built, never copied at import (a copy misses
+   the override), and split into words (quoted as one token, the shell looks
+   for a program called "pixi run cellmap_flow serve"). ``cellmap_flow_server``,
+   the program before 0.3.0, takes ``--model`` too, so a deployment that
+   still sets that works.
+
+   A model with an environment of its own (``models.envs``: its entry's
+   ``env``, else its type's ``default_env``) is served from it instead: the
+   entry's ``env`` is taken off, and the program is that environment's (``pixi run --frozen --manifest-path <pixi.toml> -e <env>
+   cellmap_flow serve``, or ``<env>/bin/python -P -m cellmap_flow.cli.main
+   serve``) in place of SERVER_COMMAND, which names this deployment's own.
+
+   The launchers submit it as a shell line, which ``jobs.spec.shell_join``
+   quotes: the entry's JSON is full of double quotes and braces, and
+   ``shlex.join`` would single-quote it, which LSF's own quoting splits apart
+   (``jobs.spec.shell_quote`` says how).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.launch.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.launch.server_argv
+   cellmap_flow.serving.launch.server_command
+   cellmap_flow.serving.launch.remembered
+   cellmap_flow.serving.launch.launch
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: server_argv(model_config, data_path: str, resample: bool = True) -> list
+
+   The server's argv for ``model_config`` reading ``data_path``, resampling
+   it to the model's input voxel size when ``resample``.
+
+
+.. py:function:: server_command(model_config, data_path: str, resample: bool = True) -> str
+
+   ``server_argv`` as the shell line start_hosts takes.
+
+
+.. py:function:: remembered(queue, charge_group)
+
+   ``(queue, charge_group)`` for a command-line launch: the ones given,
+   else the saved launcher settings'; the ones given are saved for the next
+   run and the dashboard. ``queue`` is ``-q``'s text, one queue or several
+   (queues.queue_list), and comes back a list.
+
+
+.. py:function:: launch(model, data_path: str, *, queue=None, charge_group=None, resample: bool = True, wait_for_host: bool = True)
+
+   Start an inference server for ``model`` on ``data_path``, and return its job.
+
+   ``model`` is a model config, or a model entry (``models.entry``), which
+   is built first (``registry.build_model``). The server reads
+   ``data_path`` with the model's ``scale`` applied
+   (``config.yaml.resolve_data_path``), resampling it to the model's voxel
+   size when ``resample``. ``queue``, the GPU queues it may run on (a
+   list; start_hosts tries them in the order queues.candidates gives), and
+   ``charge_group`` default to the saved launcher settings
+   (``jobs.settings``). The job is named after the
+   model, and is returned once its server has announced its address, or at
+   once when ``wait_for_host`` is off.
+
+   :raises ConfigError: ``model`` is an entry that does not describe a model.
+   :raises JobStartError: no queue accepted the job, or its server never came up.
+
+

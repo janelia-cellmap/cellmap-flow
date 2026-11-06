@@ -1,0 +1,323 @@
+cellmap_flow.dashboard.state
+============================
+
+.. py:module:: cellmap_flow.dashboard.state
+
+.. autoapi-nested-parse::
+
+   The dashboard's state, read and written through one object: ``get_session()``.
+
+   One Session per process, made at import and filled by the CLIs,
+   ``services/startup`` and ``create_and_run_app``. It lives in this module
+   rather than in Flask's ``app.extensions`` because the CLIs fill it before
+   ``dashboard.app`` is imported (they import it lazily so ``--help`` stays
+   fast); because launch threads, job-monitor listeners, the MinIO sync thread
+   and the log panel's handler run with no app context; and so that this module
+   imports without Flask.
+
+   The Session forwards three parts to their owners, which also serve processes
+   that have no dashboard:
+
+   - The launcher settings in ~/.cellmap_flow/server_config.yaml, one
+     attribute per key of ``jobs.settings.SERVER_CONFIG_DEFAULTS`` (``queue``,
+     ``charge_group``, ``walltime``, ...), and ``settings``, ``server_config``,
+     ``server_config_cached`` and ``save_server_config()``:
+     ``jobs.settings.launcher_settings()``.
+   - The chain: ``input_norms`` and ``postprocess`` (the live steps, read-only),
+     ``pipeline_spec`` (the same as data), and ``set_pipeline()``, the one way
+     to change them: ``process_chain.process_chain()``.
+   - ``jobs``, the running inference servers' jobs: ``jobs.launch.started_jobs()``.
+
+   The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
+   rather than being stored beside the real one:
+
+   - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
+     ``raw``, ``neuroglancer_url``, ``dashboard_url``, ``shaders``,
+     ``shader_controls``, ``extra_layers``, ``shown_channels``; and
+     ``layer_blob()``, the chain as every prediction layer's URL carries it,
+     and ``shown_channel()``, the channel a model's layer opens on.
+   - The models: ``models_config``, ``model_catalog``,
+     ``start_postprocess``, the postprocessing a model's start set, and
+     ``deleted_in_viewer``, the models stopped because their layer was deleted
+     in the viewer.
+   - The pipeline builder's last apply: ``builder_state``,
+     ``builder_model_configs``.
+   - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
+   - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
+     ``annotation_volumes``, ``output_sessions``; the models its ranking was
+     given by reference, ``rank_added``, and what it fitted each model's
+     settings to, ``rank_fits``; its AI annotation's
+     ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
+     ``restart_key`` that restarts one from the viewer; the Hugging Face
+     sign-in and publishes of its finetuned models, ``huggingface``; the Review
+     tab's ``review``.
+   - The log panel's ``log_buffer``, ``log_ids`` and ``log_clients``; the box
+     tool's ``bbx_generator_state``.
+
+   Read the session through ``get_session()`` when it is needed, never into a
+   module global: tests/conftest.py installs a fresh Session for every test.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.LAYER_BOOKKEEPING
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.Session
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.get_session
+
+
+Module Contents
+---------------
+
+.. py:data:: LAYER_BOOKKEEPING
+   :value: ('shaders', 'shader_controls', 'extra_layers')
+
+
+.. py:class:: Session
+
+   The dashboard's state; see the module docstring.
+
+
+   .. py:attribute:: dataset_path
+      :value: None
+
+
+
+   .. py:attribute:: resample
+      :value: True
+
+
+
+   .. py:attribute:: viewer
+      :value: None
+
+
+
+   .. py:attribute:: raw
+      :value: None
+
+
+
+   .. py:attribute:: neuroglancer_url
+      :value: None
+
+
+
+   .. py:attribute:: dashboard_url
+      :value: None
+
+
+
+   .. py:attribute:: shaders
+
+
+   .. py:attribute:: shader_controls
+
+
+   .. py:attribute:: extra_layers
+
+
+   .. py:attribute:: shown_channels
+
+
+   .. py:attribute:: models_config
+      :value: []
+
+
+
+   .. py:attribute:: model_catalog
+
+
+   .. py:attribute:: start_postprocess
+      :value: None
+
+
+
+   .. py:attribute:: deleted_in_viewer
+      :value: []
+
+
+
+   .. py:attribute:: builder_model_configs
+
+
+   .. py:attribute:: tmp_dir
+
+
+   .. py:attribute:: blockwise_tasks_dir
+
+
+   .. py:attribute:: minio_state
+
+
+   .. py:attribute:: annotation_volumes
+
+
+   .. py:attribute:: output_sessions
+
+
+   .. py:attribute:: rank_added
+
+
+   .. py:attribute:: rank_fits
+
+
+   .. py:attribute:: review
+      :value: None
+
+
+
+   .. py:attribute:: label_undo
+
+
+   .. py:attribute:: ai_annotate
+
+
+   .. py:attribute:: huggingface
+
+
+   .. py:attribute:: restart_key
+
+
+   .. py:attribute:: log_buffer
+
+
+   .. py:attribute:: log_ids
+
+
+   .. py:attribute:: log_clients
+      :value: []
+
+
+
+   .. py:attribute:: bbx_generator_state
+
+
+   .. py:method:: forget_layer(name)
+
+      Drop ``name``'s LAYER_BOOKKEEPING, so a later layer of that name starts fresh.
+
+
+
+   .. py:method:: layer_blob(dashboard_url=None)
+
+      The args blob of a prediction layer's URL (viewer.layers.prediction_url):
+      the chain (``pipeline_spec``), the dashboard's address and the chain's
+      digest, as the browser app's layers carry them (web/src/backend/serving.ts).
+
+      Every layer is built through this, whatever started its model (the
+      CLI, Submit, Add, a finetune, Submit's redraw), so an inference server
+      running a merging postprocessor knows where to post its merged ids
+      (serving.chunkmirage_ops), and a redraw of the chain a layer already
+      shows is told by its URL (routes.pipeline._shows). The address is
+      the dashboard's own (``dashboard_url``, by IP, which a server on the
+      cluster can reach), or else ``dashboard_url`` as given, the address
+      a request reached the dashboard by; left out when neither is known.
+
+
+
+   .. py:method:: shown_channel(model_name)
+
+      The channel ``model_name``'s layer opens on (viewer.layers
+      prediction_layer's ``channel``): the one picked for it
+      (``shown_channels``), else the one picked for the model it is a
+      finetune of, as finetune_layers names each iteration
+      (``<base>_finetuned...``), so a finetune of mito's channel shows mito
+      too; None when none was picked (the layer opens where its server
+      says).
+
+
+
+   .. py:property:: jobs
+
+      The running inference servers' jobs, each with its model_name and
+      host: jobs.launch.started_jobs(). Assigning replaces the list's
+      contents, so start_hosts and cleanup_handler keep seeing it.
+
+
+   .. py:property:: input_norms
+
+      The live input normalizers. Changed only by set_pipeline().
+
+
+   .. py:property:: postprocess
+
+      The live postprocessors. Changed only by set_pipeline().
+
+
+   .. py:property:: pipeline_spec
+
+      The chain as data (PipelineSpec), derived on every read.
+
+
+   .. py:method:: set_pipeline(spec, built=None)
+
+      Replace the chain; see ProcessChain.set.
+
+
+
+   .. py:property:: builder_state
+
+      ``{inputs, outputs,
+      edges, normalizers, models, postprocessors}``, each a list of its
+      nodes, all empty until the first apply. A new dict on every read.
+
+      :type: What the builder last applied, as it sent it
+
+
+   .. py:property:: settings
+
+      The launcher settings themselves (jobs.settings.LauncherSettings).
+
+
+   .. py:property:: server_config
+
+      value} of the saved settings.
+
+      :type: {key
+
+
+   .. py:property:: server_config_cached
+
+      Whether the settings came from, or were saved to, the file.
+
+
+   .. py:method:: save_server_config()
+
+      Write the settings to ~/.cellmap_flow/server_config.yaml.
+
+
+
+   .. py:method:: tasks_dir() -> str
+
+      ``blockwise_tasks_dir``, made if it is missing.
+
+
+
+   .. py:property:: finetune_job_manager
+
+      The training jobs' FinetuneJobManager, made when first asked for.
+
+
+.. py:function:: get_session() -> Session
+
+   The dashboard's session.
+
+

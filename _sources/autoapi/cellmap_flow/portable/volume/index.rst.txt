@@ -1,0 +1,234 @@
+cellmap_flow.portable.volume
+============================
+
+.. py:module:: cellmap_flow.portable.volume
+
+.. autoapi-nested-parse::
+
+   Where a new annotation volume lies and what holds its labels: the planning
+   of ``finetune/session/volume.py`` (its module docstring says what a volume
+   is), on numbers alone, so that the server and the browser plan a volume the
+   same way. The server reads the raw level and the model's geometry
+   (``open_raw``, ``resolve_model_geometry``) and the browser its
+   ``DatasetInfo`` and model manifest (``web/src/finetune/volume.ts``, through
+   ``volume_calls.py``); both hand what they found to ``plan_volume`` here.
+
+   The grid. A model reads one level of the raw, the one ``select_level``'s
+   "floor" picks for its input voxel size (or, with Resample, the raw resampled
+   to that size), and both servers serve its prediction on that level's grid:
+   output voxel 0 starts at the level's corner, and an output voxel is the
+   level's voxel times the model's ratio of output to input voxel size. The
+   volume lies on that grid, one chunk per model output block, so that a chunk
+   of paint is a block of the prediction it is painted over, and it covers the
+   level's whole extent, a partial output voxel at the far end rounded up, then
+   padded to whole chunks.
+
+   A volume painted before any model (``plan_paint_volume``, a "paint-first"
+   volume) lies on the raw's own grid instead, at a voxel size the user picks
+   (``shown_level`` gives the default: the level the viewer shows), in chunks
+   PAINT_FIRST_CHUNK voxels a side. It is for no model (its ``model_name`` is
+   None), so it is not trained on (``training_refusal``): Which model to start
+   from ranks the models on its paint, and Use this model carries the paint onto
+   the chosen model's grid (``carry.py``), into a volume that is trained on.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.volume.INSTANCE_TARGETS
+   cellmap_flow.portable.volume.WHOLE_VOXEL_TOLERANCE
+   cellmap_flow.portable.volume.PAINT_FIRST_CHUNK
+   cellmap_flow.portable.volume.PAINT_FIRST_TRAINING
+   cellmap_flow.portable.volume.SHOWN_LEVEL_SLACK
+   cellmap_flow.portable.volume.GRID_FIELDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.volume.annotation_dtype
+   cellmap_flow.portable.volume.volume_corner_nm
+   cellmap_flow.portable.volume.whole_voxels
+   cellmap_flow.portable.volume.block_shapes
+   cellmap_flow.portable.volume.plan_volume
+   cellmap_flow.portable.volume.shown_level
+   cellmap_flow.portable.volume.plan_paint_volume
+   cellmap_flow.portable.volume.training_refusal
+   cellmap_flow.portable.volume.same_grid
+   cellmap_flow.portable.volume.grid_text
+   cellmap_flow.portable.volume.carried_note
+
+
+Module Contents
+---------------
+
+.. py:data:: INSTANCE_TARGETS
+   :value: ('affinities', 'flows')
+
+
+.. py:data:: WHOLE_VOXEL_TOLERANCE
+   :value: 1e-06
+
+
+.. py:data:: PAINT_FIRST_CHUNK
+   :value: 64
+
+
+.. py:data:: PAINT_FIRST_TRAINING
+   :value: "This volume was painted before a model was chosen, so it is on no model's grid: under Which...
+
+
+.. py:function:: annotation_dtype(output_type) -> str
+
+   The labels' dtype of a new volume for a model that trains on ``output_type``.
+
+   uint8 (ids up to 255) for a model trained on foreground and background;
+   uint16 (up to 65535) for one trained on instances (affinities, Cellpose's
+   flows), whose seeds number each object: 282 of a Cellpose model's masks
+   in one box did not fit a uint8 volume.
+
+
+.. py:function:: volume_corner_nm(dataset_offset_nm, output_voxel_size) -> numpy.ndarray
+
+   The world position of an annotation volume's voxel-0 lower corner, in nm.
+
+   ``dataset_offset_nm`` (a root attr of every volume) is also written as the
+   volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
+   Neuroglancer drew the volume that way while it was painted, so that is
+   where the labels are: read as a corner, the value puts every label half
+   an annotation voxel away from where it was drawn. None is an offset of 0.
+
+
+.. py:function:: whole_voxels(values, what: str) -> list
+
+   ``values`` (a block size in voxels, as floats) as whole numbers.
+
+   A ValueError names ``what`` when one is not whole: truncating a block of
+   177.6 voxels to 177 would make a volume whose chunks are not the model's
+   blocks.
+
+
+.. py:function:: block_shapes(model) -> tuple
+
+   ``(input_size, output_size)``, a model's blocks in voxels.
+
+   ``model`` (a mapping, or an object with these attributes) has
+   ``input_voxel_size`` and ``output_voxel_size``, and either
+   ``input_shape``/``output_shape`` in voxels or ``read_shape``/
+   ``write_shape`` in nm, which is what a server reports.
+
+
+.. py:function:: plan_volume(level, model) -> dict
+
+   Where a new volume lies for ``model`` over the raw ``level`` it reads.
+
+   ``level`` is that level as the model reads it, z, y, x: ``voxel`` its
+   voxel size in nm, ``corner`` its voxel-0 lower corner in nm (not the OME
+   translation, which is the centre), ``shape`` its voxels. On the server
+   it is the level ``select_level`` picks for the model's input voxel size,
+   at its own voxel size, or the raw resampled to the model's input voxel
+   size when Resample is on; in the browser, the level ``chooseRawLevel``
+   picks. ``model`` is as ``block_shapes`` takes it.
+
+   Answers the plan's fields of ``VolumeGeometry``, as JSON-ready lists:
+   ``input_voxel_size`` the level's own, ``output_voxel_size`` the level's
+   times the model's ratio of output to input voxel size (where both
+   servers serve the prediction), the model's own as the claimed sizes,
+   ``chunk_size`` the model's output block and ``input_size`` its input
+   block, ``dataset_offset_nm`` voxel 0's centre (the level's corner plus
+   half an output voxel) and ``dataset_shape_voxels`` the level's extent in
+   output voxels, rounded up, then padded to whole chunks.
+
+   The ratio is the model's: snapping the output voxel size to a raw level
+   of its own could break it (on levels of 10, 20 and 40 nm, a model reading
+   8 nm and writing 16 read the 10 nm level and wrote a 10 nm volume, while
+   its server serves the prediction at 20), and the volume's chunks were
+   then not the model's blocks.
+
+
+.. py:data:: SHOWN_LEVEL_SLACK
+   :value: 1.01
+
+
+.. py:function:: shown_level(voxel_sizes, pixel_nm=None) -> int
+
+   The index in ``voxel_sizes`` (each a raw level's voxel size in nm,
+   finest first) of the level the viewer shows when one screen pixel spans
+   ``pixel_nm``: the coarsest whose finest axis is no coarser than a pixel,
+   and the finest when zoomed in past it, as Neuroglancer picks the level
+   to draw (viewer/raw.py's _view_contrast_range reads it so). The finest
+   when the zoom is not known (None: no viewer, or none that has reported
+   one yet). A paint-first volume's voxel size is this level's unless the
+   user picks another. A ValueError when there is no level.
+
+
+.. py:function:: plan_paint_volume(level, voxel_size) -> dict
+
+   Where a new paint-first volume lies: over the raw ``level`` it is
+   read from, on a grid of ``voxel_size`` nm (z, y, x), for no model.
+
+   ``level`` is as ``plan_volume`` takes it: on the server the level
+   ``raw_level`` opens for ``voxel_size`` (the level at that size, else the
+   finest not coarser than it, at its own voxel size; with Resample on, the
+   raw resampled to it), in the browser the one ``chooseRawLevel`` picks.
+   The grid starts at the level's corner: at a level's own voxel size its
+   voxels are the level's (a size within float noise of it is taken as
+   it), and at another (one the user typed) the level's extent is covered
+   in voxels of that size, a partial voxel at the far end rounded up. The
+   chunks are PAINT_FIRST_CHUNK voxels a side, as thin as the volume along
+   an axis it is thinner along, and the extent is padded to whole chunks.
+
+   Answers ``plan_volume``'s fields: ``output_voxel_size`` the grid's,
+   ``input_voxel_size`` the level's (what the raw under the paint is read
+   at: Which model to start from's window of it), no claimed sizes (there
+   is no model to claim any), ``chunk_size``, ``input_size`` a chunk in the
+   level's voxels, rounded up, ``dataset_offset_nm`` voxel 0's centre and
+   ``dataset_shape_voxels`` the padded extent. A ValueError says what is
+   wrong with ``level`` or ``voxel_size``.
+
+
+.. py:function:: training_refusal(volume)
+
+   Why ``volume`` (its record or root attrs: a mapping, or an object
+   with ``model_name``) is not trained on, or None when it can be:
+   PAINT_FIRST_TRAINING for a paint-first volume, which names no model,
+   so no model's blocks are its chunks to train on.
+
+
+.. py:data:: GRID_FIELDS
+   :value: ('input_size', 'output_size', 'input_voxel_size', 'output_voxel_size')
+
+
+.. py:function:: same_grid(a, b) -> bool
+
+   Whether grids ``a`` and ``b`` (mappings of GRID_FIELDS) are one: the
+   same blocks, voxel for voxel, at the same voxel sizes (float noise of nm
+   aside). A volume made for a model is on the grid of that model, of its
+   finetunes and of any model of the same sizes; a model on another grid
+   took the volume's 178^3 blocks at 8 nm for its own 1 x 556 x 556 at 16
+   and torch.export refused them.
+
+
+.. py:function:: grid_text(grid) -> str
+
+   A grid (GRID_FIELDS) as the sentences name it: its input block to its
+   output block, "178×178×178 → 56×56×56 at 8 nm", each at its own voxel
+   size when the two differ ("1×556×556 at 8 nm → 1×468×468 at 16 nm").
+
+
+.. py:function:: carried_note(from_model, from_grid, to_model, to_grid, kept) -> str
+
+   What training's submit says, in both modes, when the session volume
+   was on ``from_model``'s grid and the model to train, ``to_model``, is on
+   another: the paint carried onto that model's grid, as Use this model
+   carries it, both grids named (grid_text), and where the old volume is
+   kept (``kept``, the mode's words). The input normalization, the
+   postprocessing and the channel stay what the user set: only the volume
+   changed.
+
+

@@ -1,0 +1,207 @@
+cellmap_flow.io.raw
+===================
+
+.. py:module:: cellmap_flow.io.raw
+
+.. autoapi-nested-parse::
+
+   The raw data as a model reads it: a worldarray array through the input chain.
+
+   ``open_raw(path, voxel_size)`` opens, with worldarray, the level a model at
+   ``voxel_size`` reads: the level of a multiscale group or precomputed volume
+   for that size (the finest no coarser than it), the path of one level as it
+   is. When no level is at that size the level found is read as if it were
+   ("relabel": voxel for voxel, its corner rescaled, with a warning) or
+   resampled to it (``resample=True``). What comes back is a plain
+   ``worldarray.WorldArray``: ``voxel_size`` and ``corner`` (nm, spatial axes),
+   ``shape`` (every axis), ``read`` and ``read_index``; ``spatial_shape`` and
+   ``spatial_axes`` pick out its spatial part.
+
+   ``RawInput`` is what a model reads its input from, and what a config's
+   ``process_chunk(idi, roi)`` or ``predict`` script is given: ``to_ndarray_ts(roi)``
+   is the world box ``roi`` through the input chain, the normalizers (and
+   ChannelSelector) given as ``input_norms``, else the process's chain
+   (``process_chain().input_norms``) as it is at read time, which scripts rely
+   on. The inference server reads with ``serving.chunkmirage_ops.BlockInput``,
+   the same protocol over the block chunkmirage read for a chunk.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.raw.logger
+   cellmap_flow.io.raw.RESAMPLE_HINT
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.raw.RawInput
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.raw.is_label_dtype
+   cellmap_flow.io.raw.open_raw
+   cellmap_flow.io.raw.spatial_shape
+   cellmap_flow.io.raw.spatial_axes
+   cellmap_flow.io.raw.apply_norms
+   cellmap_flow.io.raw.selected_channel
+   cellmap_flow.io.raw.channel_axis
+   cellmap_flow.io.raw.channel_select
+   cellmap_flow.io.raw.raw_channels
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: RESAMPLE_HINT
+   :value: 'resample=True (`resample: true` in a YAML, `--resample` on the command line) resamples it to...
+
+
+.. py:function:: is_label_dtype(dtype) -> bool
+
+   Whether data of ``dtype`` is resampled as labels (nearest voxel)
+   rather than as intensities (mean and linear): bool, or an integer type
+   of 32 bits or more.
+
+
+.. py:function:: open_raw(path, voxel_size=None, resample=False, padding='edge', context=None) -> worldarray.WorldArray
+
+   The level of ``path`` a model at ``voxel_size`` reads, open.
+
+   ``voxel_size`` (nm, z, y, x) picks the level of a multiscale group or
+   precomputed volume: the finest not coarser than it (worldarray's
+   "floor"), or with ``resample`` the coarsest not coarser than it on any
+   axis, else the finest. The path of one level, or of an array, is read as
+   it is. Without a voxel size a group's first level is opened.
+
+   When the level is not at ``voxel_size``, reads are relabelled (the
+   default, with a warning: the level is read voxel for voxel as if it were
+   at ``voxel_size``, so the data really lies where its ``source_voxel_size``
+   and ``source_translation`` say and ``corner`` is its own corner
+   rescaled) or, with ``resample``,
+   resampled to it by worldarray (labels by the nearest voxel, intensities
+   linearly), from the level's own corner. ``resampled`` tells the two
+   apart; ``voxel_size`` is the size reads are at either way.
+
+   ``padding`` is what a read past the array is padded with, after the
+   chain: "edge" (the default), the array's outermost voxels repeated, is
+   what a model's input is read with, since a flat fill is a wall the model
+   never saw in training; ``0`` for anything else. The reads go through one
+   tensorstore reader thread and no cache (worldarray's
+   ``capped_context(network=False)``) unless ``context`` says otherwise.
+
+
+.. py:function:: spatial_shape(array: worldarray.WorldArray) -> tuple
+
+   ``array``'s shape on its spatial axes (its resampled shape when it
+   resamples): what cellmap-flow calls the dataset's shape, z, y, x.
+
+
+.. py:function:: spatial_axes(array: worldarray.WorldArray) -> tuple
+
+   The names of ``array``'s spatial axes (z, y, x when the store names none).
+
+
+.. py:function:: apply_norms(data, input_norms=None)
+
+   ``data`` (a tensorstore view is read first) through the chain
+   ``input_norms``; ``None`` means the process's, ``process_chain().input_norms``.
+
+
+.. py:function:: selected_channel(input_norms) -> int
+
+   The input channel a chain asks for: its first ChannelSelector's, else 0.
+
+
+.. py:function:: channel_axis(array: worldarray.WorldArray)
+
+   The index of ``array``'s channel axis: the one named c, c^ or channel,
+   else its first non-spatial axis; None for an array with spatial axes only.
+
+
+.. py:function:: channel_select(array: worldarray.WorldArray, input_norms)
+
+   worldarray's ``select`` for reading one channel of ``array``: its
+   channel axis pinned to the channel the chain asks for; None for an array
+   with spatial axes only.
+
+
+.. py:function:: raw_channels(path) -> tuple
+
+   ``(count, labels)`` for the raw at ``path``: how many channels a model
+   can be given to read (1 for an array with spatial axes only), and their
+   names, an OME-Zarr's ``omero.channels[].label`` when it names every
+   channel, else None.
+
+
+.. py:class:: RawInput(array: worldarray.WorldArray, input_norms=None, normalize=True)
+
+   What a model reads its input from: ``array`` (the level a model reads,
+   ``open_raw``'s) through the input chain.
+
+   ``input_norms`` is the chain reads go through, the normalizers and the
+   ChannelSelector; ``None`` follows the process's chain
+   (``process_chain().input_norms``) as it is at each read, so a worker that
+   unpickles one reads its own chain, not the sender's. ``normalize=False``
+   reads the channel the chain selects as it is stored, through no
+   normalizer: the finetune trainer and the AI-annotate reader normalize
+   for themselves.
+
+
+   .. py:attribute:: array
+
+
+   .. py:attribute:: input_norms
+      :value: None
+
+
+
+   .. py:attribute:: normalize
+      :value: True
+
+
+
+   .. py:method:: chain() -> list
+
+      The chain reads go through now.
+
+
+
+   .. py:method:: with_input_norms(input_norms) -> RawInput
+
+      This input read through ``input_norms`` instead; the open array is shared.
+
+
+
+   .. py:method:: to_ndarray_ts(roi) -> numpy.ndarray
+
+      The world box ``roi`` (nm, half-open; a funlib ``Roi``, a worldarray
+      ``Box`` or a ``(begin, end)`` pair) through the chain: the channel the
+      chain selects of a multichannel array, the normalizers applied unless
+      ``normalize`` is off, and past the array what ``open_raw``'s ``padding``
+      says, added after the chain, so padding is never normalized. A voxel
+      is read when its centre lies in the box (worldarray's rule). An array
+      that resamples is resampled first, then goes through the chain, as a
+      stored level at that voxel size would.
+
+
+
+   .. py:method:: read_index(begin, end) -> numpy.ndarray
+
+      Voxels ``[begin, end)`` on the array's spatial grid (its resampled
+      grid when it resamples), read as ``to_ndarray_ts`` reads them.
+
+
+

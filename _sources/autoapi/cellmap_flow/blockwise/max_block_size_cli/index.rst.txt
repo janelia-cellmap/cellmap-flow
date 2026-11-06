@@ -1,0 +1,49 @@
+cellmap_flow.blockwise.max_block_size_cli
+=========================================
+
+.. py:module:: cellmap_flow.blockwise.max_block_size_cli
+
+.. autoapi-nested-parse::
+
+   ``cellmap_flow max-block-size``: probe the biggest block size a model's
+   forward pass fits on this process's GPU, and write the result as JSON.
+
+   This is what the dashboard submits as a short job to the requested queue
+   (``dashboard.routes.blockwise``), not something run in the dashboard's own
+   process: ``max_block_size.probe_max_block_size`` needs a real GPU of the
+   queue's type to measure real CUDA memory against.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size_cli.max_block_size_cli
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: max_block_size_cli(model_json, out_path, queue, max_multiple)
+
+   Probe the largest multiple of the model's native output tile that
+   fits a single forward pass on this process's GPU, writing
+   ``MaxBlockSizeResult.to_dict()`` as JSON to ``--out``.
+
+   
+     cellmap_flow max-block-size --model '{"type": "fly", "checkpoint_path": "..."}' \
+         --out result.json --queue gpu_h100
+
+

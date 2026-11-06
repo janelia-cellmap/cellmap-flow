@@ -1,0 +1,53 @@
+cellmap_flow.blockwise.bounding_box
+===================================
+
+.. py:module:: cellmap_flow.blockwise.bounding_box
+
+.. autoapi-nested-parse::
+
+   A box of a dataset, nm, z, y, x: the box tool's (lenient) and a blockwise task's (strict). No Flask.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.bounding_box.BoundingBox
+   cellmap_flow.blockwise.bounding_box.TaskBoundingBox
+
+
+Module Contents
+---------------
+
+.. py:class:: BoundingBox(/, **data: Any)
+
+
+
+   Its lower corner and its size.
+
+
+   .. py:attribute:: offset
+      :type:  _Triple
+      :value: [0, 0, 0]
+
+
+
+   .. py:attribute:: shape
+      :type:  _Triple
+      :value: [1, 1, 1]
+
+
+
+.. py:class:: TaskBoundingBox(/, **data: Any)
+
+
+
+   A task YAML's box: its shape given, every side above 0.
+
+
+   .. py:attribute:: shape
+      :type:  Annotated[list[Annotated[float, Field(gt=0)]], Field(min_length=3, max_length=3)]
+
+

@@ -1,0 +1,286 @@
+cellmap_flow.finetune.losses
+============================
+
+.. py:module:: cellmap_flow.finetune.losses
+
+.. autoapi-nested-parse::
+
+   The finetune losses, and the masked means they are all made of.
+
+   Every loss here is averaged over the voxels a mask supervises, not over the
+   patch: a correction labels a few voxels of it, and the rest must not count.
+   ``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
+   the background half the weight each, and the losses and the distillation
+   term below are built from the two. ``IntervalLoss``, a distance model's loss
+   on scribbles, works in logits instead of probabilities (``as_logits``). A
+   flow model's loss, ``instance_flows.FlowLoss``, is built from
+   ``masked_mean`` too, and lives beside the target it compares with.
+
+   The float operations are kept in the order the trainer always used, so a
+   run computes the same numbers bit for bit
+   (tests/finetune/test_training_snapshot.py).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.losses.DiceLoss
+   cellmap_flow.finetune.losses.CombinedLoss
+   cellmap_flow.finetune.losses.MarginLoss
+   cellmap_flow.finetune.losses.IntervalLoss
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.losses.masked_mean
+   cellmap_flow.finetune.losses.balanced_mean
+   cellmap_flow.finetune.losses.as_probabilities
+   cellmap_flow.finetune.losses.as_logits
+   cellmap_flow.finetune.losses.soft_target_entropy
+   cellmap_flow.finetune.losses.distillation_loss
+
+
+Module Contents
+---------------
+
+.. py:function:: masked_mean(x, weight)
+
+   Mean of ``x`` weighted by ``weight`` (a 0/1 mask, usually); 0 when nothing is weighted.
+
+
+.. py:function:: balanced_mean(x, hard_target, mask)
+
+   The foreground's and the background's masked means, averaged.
+
+   Each class counts the same however many voxels it has. The split is by
+   the target as annotated (0/1), before any label smoothing: split by the
+   smoothed target, every background voxel carried s/2 of foreground weight.
+
+
+.. py:function:: as_probabilities(pred, output_class)
+
+   The model's output as probabilities, by what it is (serving.probe's classes).
+
+   Left alone when the model ends in a sigmoid (UNIT: the cellmap
+   *_distance_* UNets do); a second sigmoid would squash [0, 1] into
+   [0.5, 0.73] and make a well-fitting prediction look like a constant. A
+   tanh's [-1, 1] (SIGNED_UNIT) is moved to [0, 1]; logits (UNBOUNDED, or
+   None) go through the sigmoid. The reading the dashboard's ranking and
+   seeding use (view_labels.probability).
+
+
+.. py:function:: as_logits(pred, output_class)
+
+   The model's output as logits: ``as_probabilities``' inverse.
+
+   A bounded output is taken back through the logit. The clamp keeps
+   log(0) out; it costs no gradient short of |logit| ~16, far past where any
+   distance bound sits (SATURATION_SIGMAS is a logit of 6).
+
+
+.. py:function:: soft_target_entropy(target, eps=1e-07)
+
+   Per-voxel BCE that a perfectly calibrated prediction still pays.
+
+   -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+   t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+   of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
+   model sitting on its floor. Report the loss minus this instead.
+
+
+.. py:function:: distillation_loss(student, teacher, scope, anchor_mask=None, unlabeled_mask=None)
+
+   Mean squared distance of the student's output from the teacher's, over ``scope``.
+
+   - ``"anchor"``: the good regions the user vouched for, ``anchor_mask``.
+     It is about location, so one channel, broadcast over the output's.
+   - ``"unlabeled"``: the voxels the supervised loss leaves out,
+     ``unlabeled_mask`` (1 - the supervised mask).
+   - ``"all"``: every voxel.
+
+   The two are compared as the model emits them: logits, or probabilities
+   for a model that ends in a sigmoid.
+
+
+.. py:class:: DiceLoss(smooth: float = 1.0)
+
+
+
+   Dice Loss for segmentation tasks.
+
+   Dice loss is effective for imbalanced datasets where the target class
+   may be sparse (e.g., mitochondria in EM images).
+
+   Formula: 1 - (2 * |X ∩ Y| + smooth) / (|X| + |Y| + smooth)
+
+
+   .. py:attribute:: smooth
+      :value: 1.0
+
+
+
+   .. py:attribute:: apply_sigmoid
+      :value: True
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Dice loss of (B, C, Z, Y, X) logits (or probabilities) against 0/1 targets, over ``mask``.
+
+
+
+.. py:class:: CombinedLoss(dice_weight: float = 0.5, bce_weight: float = 0.5)
+
+
+
+   Combined Dice + BCE loss for better convergence.
+
+   Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).
+
+
+   .. py:attribute:: dice_loss
+
+
+   .. py:attribute:: bce_loss
+
+
+   .. py:attribute:: dice_weight
+      :value: 0.5
+
+
+
+   .. py:attribute:: bce_weight
+      :value: 0.5
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Weighted Dice + BCE of (B, C, Z, Y, X) logits against 0/1 targets, over ``mask``.
+
+
+
+.. py:class:: MarginLoss(margin: float = 0.3, balance_classes: bool = False)
+
+
+
+   Margin-based loss for sparse/scribble annotations.
+
+   Only penalizes predictions on the wrong side of a margin threshold.
+   For post-sigmoid outputs in [0, 1]:
+   - Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
+   - Background (target=0): loss = relu(pred - margin)^2
+   - No loss when prediction is already correct with sufficient confidence.
+
+
+   .. py:attribute:: margin
+      :value: 0.3
+
+
+
+   .. py:attribute:: balance_classes
+      :value: False
+
+
+
+   .. py:attribute:: apply_sigmoid
+      :value: True
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+
+.. py:class:: IntervalLoss(sigma_nm, voxel_size_nm, slope_weight=1.0, balance_classes=False, slack_voxels=1.0, sign_weight=5.0)
+
+
+
+   A distance model's loss on scribbles: stay within the bounds the paint implies.
+
+   After iSDF (Ortiz et al., RSS 2022). IntervalTargetTransform gives each
+   painted voxel a lower and an upper bound on its logit z (the distance
+   target is z = 2d/sigma). Per painted voxel the loss is
+
+       relu(lower - slack - z) + relu(z - upper - slack)
+           + sign_weight * relu(-s * z - slack)
+
+   with s the painted side (+1 foreground, -1 background): zero inside the
+   bounds, linear outside them, and much steeper on the wrong side of the
+   boundary. The slack, a voxel of distance by default, forgives a stroke
+   that strays a voxel over an edge. Unpainted voxels get none of it:
+   distillation and the anchor patches hold them.
+
+   Bounds alone let the field collapse: a step at the boundary meets every
+   lower bound and most upper ones, and is what margin loss made of a
+   distance model. So a second term limits the slope, everywhere in the
+   patch: the mean of relu(|grad z| / max_slope - 1), from central
+   differences scaled by the voxel size in nm, with max_slope =
+   SLOPE_TOLERANCE * 2/sigma per nm, the steepest a distance field gets in
+   logits. One-sided: the field may be flatter. z is clamped to the
+   saturation (SATURATION_SIGMAS) first, so a model confident far from any
+   boundary is not asked to bring its far field in.
+
+   :param sigma_nm: from the IntervalTargetTransform that made
+                    the bounds.
+   :param voxel_size_nm: from the IntervalTargetTransform that made
+                         the bounds.
+   :param slope_weight: the slope term's weight against the bounds' (default 1).
+   :param balance_classes: average foreground and background voxels separately.
+   :param slack_voxels: the slack, in voxels of the finest axis (default 1).
+   :param sign_weight: the extra slope of the wrong-side penalty (default 5).
+
+
+   .. py:attribute:: voxel_size_nm
+
+
+   .. py:attribute:: slack
+
+
+   .. py:attribute:: max_slope
+
+
+   .. py:attribute:: saturation
+      :value: 6.0
+
+
+
+   .. py:attribute:: slope_weight
+      :value: 1.0
+
+
+
+   .. py:attribute:: balance_classes
+      :value: False
+
+
+
+   .. py:attribute:: sign_weight
+      :value: 5.0
+
+
+
+   .. py:method:: bounds_term(z, bounds, mask)
+
+      The mean penalty for leaving the bounds, over the painted voxels.
+
+
+
+   .. py:method:: slope_term(z)
+
+      The mean excess of |grad z| over max_slope, as a fraction of it, over the patch's interior.
+
+
+
+   .. py:method:: forward(z: torch.Tensor, bounds: torch.Tensor, mask: torch.Tensor) -> torch.Tensor
+
+      The loss of (B, C, Z, Y, X) logits ``z`` against IntervalTargetTransform's bounds and mask.
+
+
+

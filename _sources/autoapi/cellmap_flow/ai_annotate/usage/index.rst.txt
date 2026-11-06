@@ -1,0 +1,76 @@
+cellmap_flow.ai_annotate.usage
+==============================
+
+.. py:module:: cellmap_flow.ai_annotate.usage
+
+.. autoapi-nested-parse::
+
+   A per-user daily cap on hosted-model calls, kept across dashboard restarts.
+
+   Each call to a hosted model costs money, and a stuck key or a runaway loop
+   in the browser could make hundreds. The config's ``daily_call_limit`` caps
+   the calls one user makes in a local calendar day. The count lives in the
+   user's home (``~/.cellmap_flow/ai_annotate_usage.json``), not in the session,
+   so restarting the dashboard does not reset it, and two dashboards the same
+   user runs share it.
+
+   A call is counted before it is made, so a failed call counts too: it may
+   still have been billed.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.usage.fcntl
+   cellmap_flow.ai_annotate.usage.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.usage.usage_path
+   cellmap_flow.ai_annotate.usage.check_and_count
+   cellmap_flow.ai_annotate.usage.refund
+   cellmap_flow.ai_annotate.usage.calls_today
+
+
+Module Contents
+---------------
+
+.. py:data:: fcntl
+   :value: None
+
+
+.. py:data:: logger
+
+.. py:function:: usage_path()
+
+   ``~/.cellmap_flow/ai_annotate_usage.json``.
+
+
+.. py:function:: check_and_count(limit, *, path=None, today=None)
+
+   Count one call against today's ``limit`` and return the calls used, this one included.
+
+   Raises ``AIAnnotateError("limit")`` without counting when today's calls
+   already reached the limit. ``path`` and ``today`` are for tests.
+
+
+.. py:function:: refund(*, path=None, today=None)
+
+   Take back one call counted today: one refused before it reached the model.
+
+   A call that fails signing in, or that the config rejects, costs nothing,
+   so it should not use up the day's limit. Never goes below zero.
+
+
+.. py:function:: calls_today(*, path=None, today=None)
+
+   Calls counted so far today.
+
+
