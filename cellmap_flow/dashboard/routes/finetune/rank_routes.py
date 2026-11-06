@@ -6,7 +6,7 @@ tab's ranking (static/js/dashboard/finetune/rank.js) works the same in both.
   offers them, each with the ``group`` of the tab's it is listed under, in
   the tab's order: the session's ("Running", running or not; not a
   Cellpose model, whose flows the ranking does not score), each catalog
-  group's (models.yaml's "cellmap", "saalfeldlab"), cellmap's on Hugging
+  group's (models.yaml's, such as "cellmap"), cellmap's on Hugging
   Face ("Hugging Face") and the BioImage Model Zoo's ("BioImage Zoo", with
   its ``em`` tag, which the others are), from the lists the tab last
   cached (``hf_cached`` and ``zoo_cached`` say whether there were any: none
@@ -219,9 +219,10 @@ def rank_candidates():
     def add(name, group, **fields):
         # A model listed twice is kept where it was first listed, unless a
         # list's copy is followed by one that finetunes in more ways, which
-        # Use this model then starts: fly_organelles' copies under
-        # /nrs/cellmap/models/saalfeldlab (the catalog's) have no model.pt2
-        # and train in full alone, their Hugging Face copies take LoRA too.
+        # Use this model then starts: a catalog folder exported without a
+        # model.pt2 trains in full alone, its Hugging Face copy with one
+        # takes LoRA too (fly_organelles' copies under
+        # /nrs/cellmap/models/saalfeldlab, when the catalog listed them).
         # A running model or one added by hand is the one meant.
         if not name:
             return
