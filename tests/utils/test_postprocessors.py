@@ -1,13 +1,57 @@
-"""Cellpose's masks, the segmentation postprocessor only the server runs.
+"""Cellpose's masks, the segmentation postprocessor only the server runs, and
+what ArgmaxPostprocessor's ids are.
 
 What LabelPostprocessor and AffinityPostprocessor give, options and the
 forms' strings included, is in web/test/fixtures (label.json, affinity.json),
-which test_fixtures_fresh checks against this code; ``post.segment``, which
+and ArgmaxPostprocessor's on a block of logits in post.json, which
+test_fixtures_fresh checks against this code; ``post.segment``, which
 they run on, is test_segment's.
 """
 
 import numpy as np
 import pytest
+
+
+def test_argmax_gives_each_voxel_its_best_channel_plus_one():
+    """A model of exclusive classes, drawn as one layer of label ids: 0 only
+    below the threshold, a tie to the lowest channel, a NaN never the best."""
+    from cellmap_flow.post.postprocessors import ArgmaxPostprocessor
+
+    scores = np.array(
+        [
+            [0.1, 0.7, 0.2],  # channel 1 is best: id 2
+            [0.6, 0.6, 0.1],  # a tie: the lower channel, id 1
+            [0.2, 0.3, 0.35],  # best below the threshold
+            [np.nan, 0.1, 0.9],  # the NaN does not win
+            [np.nan, np.nan, np.nan],  # nothing to pick: background
+        ],
+        np.float32,
+    ).T.reshape(3, 1, 1, 5)
+    ids = ArgmaxPostprocessor()(scores)
+    assert ids.shape == (1, 1, 1, 5) and ids.dtype == np.uint8
+    assert ids.ravel().tolist() == [2, 1, 3, 3, 0]
+    # The form's strings: "None" (its default shown) is no threshold.
+    assert ArgmaxPostprocessor(threshold="None")(scores).ravel().tolist() == [2, 1, 3, 3, 0]
+    assert ArgmaxPostprocessor(threshold="0.5")(scores).ravel().tolist() == [2, 1, 0, 3, 0]
+
+    # Ids past 255 need uint16.
+    many = np.zeros((300, 1, 1, 2), np.float32)
+    many[299, 0, 0, 0] = 1.0
+    wide = ArgmaxPostprocessor()(many)
+    assert wide.dtype == np.uint16 and wide.ravel().tolist() == [300, 1]
+
+
+def test_an_argmax_chain_declares_one_channel_of_labels():
+    """So the dashboard draws one segmentation layer, and blockwise writes a
+    label volume in the ids' dtype."""
+    from cellmap_flow.pipeline_spec import PipelineSpec, chain_is_segmentation, chain_num_channels, chain_output_dtype
+
+    steps = PipelineSpec((), [{"name": "ChannelSelection", "channels": "2,0"}, {"name": "ArgmaxPostprocessor"}]).build()[1]
+    assert chain_num_channels(steps, 8) == 1
+    assert chain_is_segmentation(steps) is True
+    assert np.dtype(chain_output_dtype(steps, np.float32)) == np.uint8
+    (argmax,) = PipelineSpec((), [{"name": "ArgmaxPostprocessor"}]).build()[1]
+    assert np.dtype(chain_output_dtype([argmax], np.float32, 300)) == np.uint16
 
 
 def test_cellpose_masks_follow_the_flows_to_their_objects_and_link_them_across_slices():

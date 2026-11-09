@@ -337,11 +337,12 @@ class CellMapFlowBlockwiseProcessor:
             process_chain().set(spec, built=(self.input_norms, self.postprocess))
         # The task's own dtype when it names one (the builder's Output node),
         # else the chain's: the last postprocessor's that declares one, or
-        # the model's.
+        # the model's. Its channel count is for ArgmaxPostprocessor, whose
+        # ids are uint16 past 255 channels.
         self.dtype = (
             np.dtype(self.config["dtype"])
             if self.config.get("dtype")
-            else process_chain().output_dtype(geometry.output_dtype, self.postprocess)
+            else process_chain().output_dtype(geometry.output_dtype, self.postprocess, geometry.output_channels)
         )
 
         self.inferencers = []

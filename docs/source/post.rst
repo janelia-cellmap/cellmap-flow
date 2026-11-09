@@ -65,6 +65,24 @@ Applies a threshold to binarize data. Produces `uint8` output.
 
 - `threshold`: Threshold for binarization
 
+ArgmaxPostprocessor
+~~~~~~~~~~~~~~~~~~~
+
+.. class:: ArgmaxPostprocessor(threshold=None)
+
+One channel of label ids from a model's channels of scores, for a model whose channels are classes that
+exclude each other (one softmax over them) or sigmoids that do not overlap: each voxel's id is the index of its
+highest-scoring channel plus 1, so the dashboard draws one segmentation layer and blockwise writes one label
+volume. Put a ChannelSelection ahead of it to choose which channels compete; the ids then count in its order.
+A tie goes to the lowest channel. A NaN never wins, and a voxel that is NaN in every channel is 0. The ids are
+``uint8`` for up to 255 channels, else ``uint16``. Each voxel is its own, so it runs per chunk, in the browser too.
+A blockwise task writes the ids as one output, which its ``output_channels`` names as a mapping
+(``output_channels: {classes: 0}``): left out, it would write one output per model channel, and the chain
+leaves only one.
+
+- `threshold`: voxels whose highest score is below it are 0, background; without one (``None``, the default)
+  every voxel gets its best channel's id
+
 LabelPostprocessor
 ~~~~~~~~~~~~~~~~~~
 

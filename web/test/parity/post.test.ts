@@ -8,7 +8,10 @@
 // its dtype: the uint8 steps truncate toward zero and wrap), and what
 // chain_output_dtype / chain_num_channels / chain_is_segmentation say of the
 // chain. Regenerate the fixture when the Python changes;
-// tests/web/test_fixtures_fresh.py fails when it is stale.
+// tests/web/test_fixtures_fresh.py fails when it is stale. What JSON cannot
+// hold (a NaN) or the block is too small for (ties, past 255 channels) is
+// held to what tests/utils/test_postprocessors.py says of the Python, on the
+// same block.
 import { describe, expect, it } from "vitest";
 
 import type { Step } from "../../src/contracts";
@@ -59,7 +62,7 @@ describe("applyPostprocessors matches the Python postprocessors", () => {
 describe("the chain summaries match pipeline_spec.py", () => {
   for (const c of fixture.cases) {
     it(`${c.id}: dtype ${c.chain_output_dtype}, ${c.chain_num_channels} channels, segmentation ${c.chain_is_segmentation}`, () => {
-      expect(outputDtype(c.steps, fixture.model_dtype), "outputDtype").toBe(c.chain_output_dtype);
+      expect(outputDtype(c.steps, fixture.model_dtype, fixture.model_channels), "outputDtype").toBe(c.chain_output_dtype);
       expect(outputChannels(c.steps, fixture.model_channels), "outputChannels").toBe(c.chain_num_channels);
       // The Python says None when steps are present but none declares; the
       // port may say null or undefined for that.
@@ -72,5 +75,35 @@ describe("the chain summaries match pipeline_spec.py", () => {
     for (const name of names) {
       expect(supports(SUPPORTED_POSTPROCESSORS, name), `${name} in SUPPORTED_POSTPROCESSORS`).toBe(true);
     }
+  });
+});
+
+describe("ArgmaxPostprocessor gives the Python's ids where the fixture cannot show them", () => {
+  // test_argmax_gives_each_voxel_its_best_channel_plus_one's block: one
+  // voxel per row, its scores in channels 0, 1, 2.
+  const voxels = [
+    [0.1, 0.7, 0.2],  // channel 1 is best: id 2
+    [0.6, 0.6, 0.1],  // a tie: the lower channel, id 1
+    [0.2, 0.3, 0.35],  // best below the threshold
+    [NaN, 0.1, 0.9],  // the NaN does not win
+    [NaN, NaN, NaN],  // nothing to pick: background
+  ];
+  const scores = { data: Float32Array.from([0, 1, 2].flatMap((ch) => voxels.map((v) => v[ch]))), shape: [3, 1, 1, voxels.length] };
+  const ids = (steps: Step[], nd = scores) => {
+    const out = applyPostprocessors({ data: nd.data.slice(), shape: [...nd.shape] }, steps);
+    return { dtype: dtypeOf(out.data), shape: out.shape, ids: Array.from(out.data, Number) };
+  };
+
+  it("ties to the lowest channel, never picks a NaN, and gives 0 below the threshold", () => {
+    expect(ids([{ name: "ArgmaxPostprocessor" }])).toEqual({ dtype: "uint8", shape: [1, 1, 1, 5], ids: [2, 1, 3, 3, 0] });
+    expect(ids([{ name: "ArgmaxPostprocessor", threshold: "None" }]).ids).toEqual([2, 1, 3, 3, 0]);
+    expect(ids([{ name: "ArgmaxPostprocessor", threshold: "0.5" }]).ids).toEqual([2, 1, 0, 3, 0]);
+  });
+
+  it("gives uint16 ids past 255 channels, and declares them", () => {
+    const many = { data: new Float32Array(300 * 2), shape: [300, 1, 1, 2] };
+    many.data[299 * 2] = 1;
+    expect(ids([{ name: "ArgmaxPostprocessor" }], many)).toEqual({ dtype: "uint16", shape: [1, 1, 1, 2], ids: [300, 1] });
+    expect(outputDtype([{ name: "ArgmaxPostprocessor" }], "float32", 300)).toBe("uint16");
   });
 });

@@ -274,7 +274,7 @@ export interface PostprocessStageSpec {
  * and the voxels of one whole output block, as PostprocessOp.apply_at
  * passes them (the block's, not a clipped chunk's). */
 export function postprocessStage(spec: PostprocessStageSpec): Stage {
-  const dtype = outputDtype(spec.steps, "float32");
+  const dtype = outputDtype(spec.steps, "float32", spec.modelChannels);
   const channels = outputChannels(spec.steps, spec.modelChannels);
   const chunkNumVoxels = prod(outputShape(spec.geometry));
   return {
