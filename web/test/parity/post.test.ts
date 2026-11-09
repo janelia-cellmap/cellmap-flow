@@ -34,6 +34,8 @@ interface PostFixture {
   model_channels: number;
   input: ArrayRecord;
   cases: PostCase[];
+  /** Chains only declared, with the model's channels not known. */
+  declared: { id: string; steps: Step[]; chain_output_dtype: string }[];
 }
 
 const fixture = loadFixture<PostFixture>("post.json");
@@ -70,6 +72,12 @@ describe("the chain summaries match pipeline_spec.py", () => {
     });
   }
 
+  for (const c of fixture.declared) {
+    it(`${c.id}, the model's channels not known: dtype ${c.chain_output_dtype}`, () => {
+      expect(outputDtype(c.steps, fixture.model_dtype), "outputDtype").toBe(c.chain_output_dtype);
+    });
+  }
+
   it("lists every postprocessor the fixtures use as supported", () => {
     const names = new Set(fixture.cases.flatMap((c) => c.steps.map((s) => s.name)));
     for (const name of names) {
@@ -98,6 +106,8 @@ describe("ArgmaxPostprocessor gives the Python's ids where the fixture cannot sh
     expect(ids([{ name: "ArgmaxPostprocessor" }])).toEqual({ dtype: "uint8", shape: [1, 1, 1, 5], ids: [2, 1, 3, 3, 0] });
     expect(ids([{ name: "ArgmaxPostprocessor", threshold: "None" }]).ids).toEqual([2, 1, 3, 3, 0]);
     expect(ids([{ name: "ArgmaxPostprocessor", threshold: "0.5" }]).ids).toEqual([2, 1, 0, 3, 0]);
+    // Compared in float64, as the Python compares: float32's 0.7 is below 0.7.
+    expect(ids([{ name: "ArgmaxPostprocessor", threshold: 0.7 }], { data: new Float32Array([0.7, 0.7]), shape: [2, 1, 1, 1] }).ids).toEqual([0]);
   });
 
   it("gives each channel the id it is given, 0 making it background, in the smallest dtype that holds them", () => {

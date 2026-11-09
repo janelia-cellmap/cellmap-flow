@@ -86,8 +86,10 @@ only one.
 - `ids`: the label id each channel it is given gets, in channel order (after any ChannelSelection), one per
   channel, as a list or comma- or space-separated (``"50,51,37"``, ``"50 51 37"``); for a model's classes as a
   dataset numbers them, e.g. 12 class channels as ``ids: 50,51,37,40,41,42,43,44,49,55,2,1``. An id of 0 makes its
-  channel background too; ids must be 0 or more, and a count that is not the channels' fails. ``None`` (the
-  default) numbers the channels from 1
+  channel background too; ids must be 0 or more. A count that is not the channels' is refused when the
+  dashboard applies the chain, if it can tell how many reach the step (the model's, as its server reports
+  them, or a ChannelSelection's ahead of it), and fails each chunk otherwise. ``None`` (the default) numbers the
+  channels from 1
 
 LabelPostprocessor
 ~~~~~~~~~~~~~~~~~~

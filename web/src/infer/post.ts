@@ -58,10 +58,12 @@ export type Postprocessor = (nd: NdArray, context: PostContext) => NdArray;
  * a dtype if it declares one, a channel count if it changes it, and whether
  * the output is labels (undefined: it does not say). A dtype that depends on
  * how many channels the step is given (ArgmaxPostprocessor's) is a function
- * of that count, undefined when the caller does not know it. */
+ * of that count, undefined when the caller does not know it; so is the
+ * count, though every step that changes it sets its own, as the Python's
+ * num_channels does. */
 export interface Declares {
   dtype?: string | ((given: number | undefined) => string);
-  channels?: (given: number) => number;
+  channels?: (given: number | undefined) => number;
   isSegmentation?: boolean;
 }
 
@@ -302,7 +304,9 @@ export function applyPostprocessors(nd: NdArray, steps: Step[], context?: PostCo
  * declares one, else the model's own. `modelChannels`, when the caller knows
  * it, is for a step whose dtype depends on the channels it is given
  * (ArgmaxPostprocessor's ids: uint16 past 255 channels); the count follows
- * the steps that change it, as `outputChannels` does. */
+ * the steps that change it, as `outputChannels` does, and as
+ * pipeline_spec's does without the model's: a ChannelSelection's count is
+ * its own, so after one it is known either way. */
 export function outputDtype(steps: Step[], modelDtype = "float32", modelChannels?: number): string {
   let dtype = modelDtype;
   let channels = modelChannels;
@@ -310,7 +314,7 @@ export function outputDtype(steps: Step[], modelDtype = "float32", modelChannels
     const says = declares(step);
     const own = typeof says?.dtype === "function" ? says.dtype(channels) : says?.dtype;
     dtype = own ?? dtype;
-    if (says?.channels && channels !== undefined) channels = says.channels(channels);
+    if (says?.channels) channels = says.channels(channels);
   }
   return dtype;
 }
