@@ -390,7 +390,7 @@ class ModelRunner:
             with torch.no_grad():
                 out = config.model.forward(dummy)
                 # TorchScript's profiling executor optimizes a graph on its
-                # second call, not its first: 35 s for lmd-vitl-p8-cellmap-lvd's
+                # second call, not its first: 35 s for a vision transformer's
                 # graph of eight windows, which landed on the first chunk asked
                 # for while every other chunk queued behind it. Two more
                 # forwards move that here, the last one through the optimized

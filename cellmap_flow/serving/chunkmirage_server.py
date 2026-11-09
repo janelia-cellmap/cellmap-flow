@@ -68,8 +68,7 @@ PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
 # cached until every chunk they reach is blended; a block dropped before then
 # is run again. A 2D slice of 6 x 6 chunks reaches (6 + 2)^2 x 3 = 192 blocks
 # centred on chunks, (6 + 1)^2 x 2 = 98 on their corners.
-# lmd-vitl-p8-cellmap-lvd's, 12 uint8 channels of 256^3, are 200 MB each: 51 GB
-# for 256. A GPU queue's slot comes with
+# Blocks of 12 uint8 channels of 256^3 are 200 MB each: 51 GB for 256. A GPU queue's slot comes with
 # 40 GB (15 GB on the L4 and T4 queues), and a server's job has 4.
 OVERLAP_BLOCKS_CACHED = 256
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
