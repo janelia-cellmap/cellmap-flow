@@ -226,8 +226,10 @@ class FinetuneModelConfig(ModelConfig):
         config.output_channels = base_cfg.output_channels
         config.block_shape = base_cfg.block_shape
 
-        # Copy optional attributes from base config
-        for attr in ("channels", "axes_names", "chunk_output_axes", "output_dtype"):
+        # Copy optional attributes from base config; a base model's overlap
+        # and how its blocks are blended (ModelGeometry.overlap) are its
+        # finetune's too, or the finetune is served with seams again.
+        for attr in ("channels", "axes_names", "chunk_output_axes", "output_dtype", "overlap", "block_phase", "blend"):
             if hasattr(base_cfg, attr):
                 setattr(config, attr, getattr(base_cfg, attr))
         # Served as the base type serves a trained module: by default as the

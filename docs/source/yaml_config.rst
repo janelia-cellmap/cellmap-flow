@@ -961,7 +961,7 @@ A UNet's output voxel depends only on the input around it, so its tiles meet wit
 
 A cellmap-models export gives them in its ``metadata.json``, beside ``input_normalization``; a script model as top-level variables (``overlap = 64``). The model's own shapes stay the window's (``input_shape`` and ``output_shape`` 256, its ``block_shape`` the window too).
 
-The blocks stay cached until their chunks are blended, so the server sizes its prediction cache for 256 of them (12 uint8 channels of 256³ are 200 MB a block, 51 GB in all), or 16 GiB if that is more; ``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` overrides it. A GPU queue's slot comes with 40 GB of memory (15 GB on the L4 and T4 queues) and a server's job has 4 slots. Blockwise processing does not blend blocks yet and refuses a model with an overlap.
+The blocks stay cached until their chunks are blended, so the server sizes its prediction cache for 512 of them (12 uint8 channels of 256³ are 200 MB a block, 103 GB in all), or 16 GiB if that is more, and holds it to half the memory its job may use (its cgroup's limit, else the machine's), warning when that is less; ``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` overrides it. A GPU queue's slot comes with 40 GB of memory (15 GB on the L4 and T4 queues) and a server's job has 4 slots. ``block_phase`` and ``blend`` need chunkmirage 0.1.0a7 or later: a server on an older one refuses a model declaring other than ``centred`` and ``tent``. Blockwise processing does not blend blocks yet and refuses a model with an overlap; a finetune of such a model keeps its overlap.
 
 Extra Layers
 ------------

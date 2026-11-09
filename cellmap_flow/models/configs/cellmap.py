@@ -175,7 +175,8 @@ class CellMapModelConfig(ModelConfig):
         if self._metadata_file is None:
             try:
                 with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
-                    self._metadata_file = json.load(f)
+                    written = json.load(f)
+                self._metadata_file = written if isinstance(written, dict) else {}
             except (OSError, ValueError, AttributeError):
                 self._metadata_file = {}
         return self._metadata_file
