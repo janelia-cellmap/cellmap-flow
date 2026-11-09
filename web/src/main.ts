@@ -30,6 +30,7 @@ import "./browser.css";
 import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext, Chain } from "./contracts";
+import { countVisit } from "./count";
 import { createInference } from "./infer";
 import { askToKeepStorage } from "./kept";
 import { installKeptUi } from "./kept/panel";
@@ -71,6 +72,8 @@ function showBootError(error: unknown) {
 
 async function boot() {
   document.documentElement.dataset.mode = "browser";
+  // On the public site only, the path alone (src/count.ts).
+  countVisit();
   installApiRebase();
   installApiDownloads();
   // The finetuned models and the paint live in IndexedDB, which a browser
