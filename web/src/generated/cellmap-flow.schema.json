@@ -846,7 +846,8 @@
         "class_name": "ArgmaxPostprocessor",
         "name": "ArgmaxPostprocessor",
         "params": {
-          "threshold": null
+          "threshold": null,
+          "ids": null
         }
       },
       {

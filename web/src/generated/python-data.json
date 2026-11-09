@@ -115,7 +115,8 @@
         "name": "ArgmaxPostprocessor",
         "browser": true,
         "params": {
-          "threshold": null
+          "threshold": null,
+          "ids": null
         }
       },
       {

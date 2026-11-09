@@ -449,6 +449,45 @@
       "chain_output_dtype": "uint8",
       "chain_num_channels": 1,
       "chain_is_segmentation": true
+    },
+    {
+      "id": "argmax_ids",
+      "steps": [
+        {
+          "name": "ArgmaxPostprocessor",
+          "ids": "50,51,37"
+        }
+      ],
+      "output": {
+        "dtype": "uint8",
+        "shape": [1, 2, 3, 4],
+        "data": [51, 37, 51, 51, 50, 51, 51, 50, 50, 50, 50, 51, 50, 51, 51, 37, 50, 37, 51, 37, 51, 51, 50, 37]
+      },
+      "chain_output_dtype": "uint8",
+      "chain_num_channels": 1,
+      "chain_is_segmentation": true
+    },
+    {
+      "id": "chain_channels_argmax_ids_uint16",
+      "steps": [
+        {
+          "name": "ChannelSelection",
+          "channels": "2,0"
+        },
+        {
+          "name": "ArgmaxPostprocessor",
+          "ids": "300 0",
+          "threshold": "2"
+        }
+      ],
+      "output": {
+        "dtype": "uint16",
+        "shape": [1, 2, 3, 4],
+        "data": [0, 300, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 300, 0, 300, 0, 0, 0, 300]
+      },
+      "chain_output_dtype": "uint16",
+      "chain_num_channels": 1,
+      "chain_is_segmentation": true
     }
   ]
 }

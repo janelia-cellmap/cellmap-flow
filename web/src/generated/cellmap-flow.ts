@@ -1019,7 +1019,7 @@ export const POSTPROCESSORS: readonly StepSpec[] = [
   {
     class_name: "ArgmaxPostprocessor",
     name: "ArgmaxPostprocessor",
-    params: { threshold: null },
+    params: { threshold: null, ids: null },
   },
   {
     class_name: "FillHolesPostprocessor",
