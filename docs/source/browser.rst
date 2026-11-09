@@ -56,6 +56,13 @@ TensorFlow, DaCapo, BioImage.io, Cellpose), crops imported from disk,
 the Pipeline Builder and blockwise runs on the cluster. Those are the server
 mode's (:doc:`cli`).
 
+The app at janelia-cellmap.github.io counts its visits with
+`GoatCounter <https://www.goatcounter.com>`_, which sets no cookies. A visit
+sends the app's path, the screen's width and the site you came from, never
+anything after the ``?`` or ``#`` in the address (a link's dataset and
+models, a shared view) or anything you open, paint or train. A copy served
+from anywhere else counts nothing, and neither does the server mode.
+
 Opening a volume
 ----------------
 
