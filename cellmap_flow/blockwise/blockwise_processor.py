@@ -283,6 +283,16 @@ class CellMapFlowBlockwiseProcessor:
 
         self.model_config = models[0]
         geometry = self.model_config.geometry
+        # A model with an overlap has its blocks blended where they meet by
+        # the inference server (chunkmirage's Op.overlap). A worker writes each
+        # tile on its own: for such a model, whole windows side by side, with
+        # a seam at every face.
+        if any(geometry.overlap):
+            raise ConfigError(
+                f"{getattr(self.model_config, 'name', None) or 'The model'} has an overlap {list(geometry.overlap)}: "
+                "its blocks are blended where they meet, which the inference server does and blockwise does not "
+                "yet. Serve it, or run blockwise with an export of it without an overlap."
+            )
 
         # this is zyx
         block_shape = list(geometry.block_shape())[:3]

@@ -102,6 +102,58 @@ def test_a_chunk_the_data_ends_in_is_computed_whole_and_cropped(tmp_path):
     np.testing.assert_array_equal(got, _computed(server, (2, 2, 1))[:, :2, :2, :4])
 
 
+# Each output voxel the mean of the model's whole input, as a model attending
+# over all of it depends on all of it: two of its blocks disagree where they
+# meet. 16^3 in and out, served in 8^3 chunks with 4 voxels of overlap a side.
+WINDOW_MEAN_MODEL = """
+input_voxel_size = Coordinate(8, 8, 8)
+output_voxel_size = Coordinate(8, 8, 8)
+read_shape = Coordinate(16, 16, 16) * input_voxel_size
+write_shape = read_shape
+output_channels = 1
+block_shape = np.array((16, 16, 16, 1))
+overlap = 4
+block_phase = "$phase"
+blend = "$blend"
+calls = []
+
+
+class WindowMean(torch.nn.Module):
+    def forward(self, x):
+        calls.append(tuple(x.shape[-3:]))
+        return x.mean(dim=(2, 3, 4), keepdim=True).expand_as(x)
+
+
+model = WindowMean()
+"""
+
+
+@pytest.mark.parametrize("phase, blend", [("centred", "tent"), ("corner", "tent"), ("corner", "ramp")])
+def test_a_model_with_an_overlap_is_served_as_the_blend_of_its_overlapping_blocks(tmp_path, phase, blend):
+    """Data rising 5 a voxel along x: an 8-voxel chunk computed alone would
+    step by 40 at every face. Served with an overlap, each 16^3 block is run
+    once, and two chunks side by side rise without a step half that size
+    anywhere, their face included. (The tent leaves 1 / (overlap + 1) of a
+    step where a block's overlap ends: a third of 40 with this overlap of 4,
+    a 65th with a model's 64.)"""
+    from chunkmirage.ops import Op
+
+    if phase != "centred" and not hasattr(Op, "block_phase"):
+        pytest.skip("this chunkmirage has no block_phase")
+    data = np.broadcast_to((np.arange(48) * 5).astype(np.uint8), (24, 24, 48)).copy()
+    script = WINDOW_MEAN_MODEL.replace("$phase", phase).replace("$blend", blend)
+    server, client = _server(write_raw(tmp_path, data), write_script(tmp_path, script))
+    calls = server.inferencer.model_config.config.calls
+
+    both = np.concatenate([read_chunk(client, layer(), (1, 1, x))[0] for x in (2, 3)], axis=-1).astype(float)
+    runs = len(calls)
+    read_chunk(client, layer(), (1, 1, 2))
+
+    assert server.served.block == (8, 8, 8)
+    assert set(calls) == {(16, 16, 16)} and len(calls) == runs
+    assert np.abs(np.diff(both, axis=-1)).max() < 20
+
+
 def test_the_served_array_covers_the_data_rounded_up_and_its_chunks_start_at_the_raw_corner(tmp_path, ome_pyramid):
     """11 voxels of 8 nm from -4 nm (Janelia's corner, which OME metadata
     carries; a legacy offset is snapped onto the voxel grid) end at 84 nm:

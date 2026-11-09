@@ -20,9 +20,11 @@ after the epoch it is in. model_info says ``"engine": "chunkmirage"``: the
 release before this one had two engines, and its dashboard reads the field
 to tell their URLs apart.
 
-``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (default 16 GiB; 0 for none) bounds the
-memory kept for computed chunks, the model's output and the raw data read for
-it; ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB) tensorstore's decoded raw
+``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (0 for none) bounds the memory kept
+for computed chunks, the model's output and the raw data read for it: by
+default 16 GiB, or for a model with an overlap enough for a view's
+overlapping blocks (``prediction_cache_bytes``).
+``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB) tensorstore's decoded raw
 chunks.
 """
 
@@ -62,6 +64,13 @@ PREDICTION_CACHE_BYTES_ENV = "CELLMAP_FLOW_PREDICTION_CACHE_BYTES"
 # ran the model on them again. A server's job has 15 GB of memory a slot or
 # more, and 4 slots.
 PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
+# A model with an overlap (ModelGeometry.overlap) keeps its output blocks
+# cached until every chunk they reach is blended; a block dropped before then
+# is run again. A 2D slice of 6 x 6 chunks reaches (6 + 2)^2 x 3 = 192 blocks
+# centred on chunks, (6 + 1)^2 x 2 = 98 on their corners.
+# Blocks of 12 uint8 channels of 256^3 are 200 MB each: 51 GB for 256. A GPU queue's slot comes with
+# 40 GB (15 GB on the L4 and T4 queues), and a server's job has 4.
+OVERLAP_BLOCKS_CACHED = 256
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
 HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
@@ -79,6 +88,16 @@ def _env_count(name, default):
         return int(float(value))
     except ValueError:
         raise ValueError(f"{name} must be a number, got {value!r}") from None
+
+
+def prediction_cache_bytes(geometry, stage_dtype) -> int:
+    """The prediction cache's size when the environment sets none: 16 GiB, or
+    room for OVERLAP_BLOCKS_CACHED of an overlapping model's output blocks in
+    ``stage_dtype`` (the dtype they are cached in), whichever is more."""
+    if not any(geometry.overlap):
+        return PREDICTION_CACHE_BYTES_DEFAULT
+    block_bytes = int(np.prod(geometry.block_shape())) * np.dtype(stage_dtype).itemsize
+    return max(PREDICTION_CACHE_BYTES_DEFAULT, OVERLAP_BLOCKS_CACHED * block_bytes)
 
 
 def _env_flag(name):
@@ -148,7 +167,7 @@ class ChunkmirageServer:
         self.has_channel = self.geometry.has_channel_axis
         input_voxel_size = np.asarray(Coordinate(self.geometry.input_voxel_size), dtype=float)
         output_voxel_size = Coordinate(self.geometry.output_voxel_size)
-        block = tuple(int(v) for v in self.geometry.block_shape()[: len(self.axes)])
+        block = tuple(int(v) for v in self.geometry.served_block()[: len(self.axes)])
         declared = self.geometry.output_dtype
         stage_dtype = np.dtype(declared) if np.dtype(declared).kind in "iub" else np.dtype(np.float32)
         self.served = ServedModel(
@@ -170,11 +189,14 @@ class ChunkmirageServer:
             has_channel=self.has_channel,
             output_dtype=declared,
             stage_dtype=stage_dtype,
+            overlap=tuple(int(v) for v in self.geometry.overlap[: len(self.axes)]),
+            block_phase=self.geometry.block_phase,
+            blend=self.geometry.blend,
         )
         serve_model(self.served)
 
         self.registry = DatasetRegistry(
-            cache=LRUCache(_env_count(PREDICTION_CACHE_BYTES_ENV, PREDICTION_CACHE_BYTES_DEFAULT)),
+            cache=LRUCache(_env_count(PREDICTION_CACHE_BYTES_ENV, prediction_cache_bytes(self.geometry, stage_dtype))),
             source_cache_bytes=_env_count(RAW_CACHE_BYTES_ENV, RAW_CACHE_BYTES_DEFAULT),
             resolver=self.pipeline_for,
         )
