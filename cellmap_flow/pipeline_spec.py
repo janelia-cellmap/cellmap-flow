@@ -235,10 +235,15 @@ def _run_output_info(postprocess, dtype, channels):
     return dtype, channels, is_segmentation
 
 
-def chain_output_dtype(postprocess, model_dtype):
+def chain_output_dtype(postprocess, model_dtype, model_channels=None):
     """The dtype the client receives: the last step's that declares one,
-    else the model's own."""
-    return _run_output_info(postprocess, model_dtype, None)[0]
+    else the model's own.
+
+    ``model_channels``, when the caller knows it, is for the step whose
+    dtype depends on how many channels it is given (ArgmaxPostprocessor's
+    ids: uint16 past 255 channels).
+    """
+    return _run_output_info(postprocess, model_dtype, model_channels)[0]
 
 
 def chain_num_channels(postprocess, model_channels) -> int:

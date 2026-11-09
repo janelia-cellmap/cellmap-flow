@@ -63,11 +63,13 @@ class ProcessChain:
         self.input_norm_config = list(spec.input_norm)
         self.postprocess_config = list(spec.postprocess)
 
-    def output_dtype(self, model_output_dtype, postprocess=None):
+    def output_dtype(self, model_output_dtype, postprocess=None, model_channels=None):
         """The dtype a chain hands to the client.
 
         ``postprocess=None`` means this chain's; the inference server passes
-        the chain of the layer being served. The last step that declares a
+        the chain of the layer being served. ``model_channels``, the model's
+        output channels when the caller knows them, is for a step whose dtype
+        depends on them (chain_output_dtype). The last step that declares a
         dtype decides, since the steps run in order: taking the first picked
         e.g. SigmoidPostprocessor's float32 ahead of a trailing
         AffinityPostprocessor's uint64, which both advertised the wrong dtype
@@ -77,7 +79,7 @@ class ProcessChain:
         """
         if postprocess is None:
             postprocess = self.postprocess
-        return chain_output_dtype(postprocess, model_output_dtype)
+        return chain_output_dtype(postprocess, model_output_dtype, model_channels)
 
 
 def _chain_config(steps) -> list:

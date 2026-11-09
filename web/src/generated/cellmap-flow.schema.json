@@ -843,6 +843,13 @@
         }
       },
       {
+        "class_name": "ArgmaxPostprocessor",
+        "name": "ArgmaxPostprocessor",
+        "params": {
+          "threshold": null
+        }
+      },
+      {
         "class_name": "FillHolesPostprocessor",
         "name": "FillHolesPostprocessor",
         "params": {

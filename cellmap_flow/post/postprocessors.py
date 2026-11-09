@@ -100,6 +100,78 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
+def argmax_dtype(channels):
+    """The dtype of ArgmaxPostprocessor's ids from ``channels`` channels: uint8
+    while every id, 0 to ``channels``, fits in it, else uint16. ``None``, a
+    count the caller does not know (a chain read without its model), is
+    taken to fit uint8, which it does unless the model has over 255
+    channels."""
+    return np.uint16 if channels is not None and channels + 1 > 256 else np.uint8
+
+
+class ArgmaxPostprocessor(PostProcessor):
+    """One channel of label ids from a model's channels of scores: each
+    voxel's id is the index of its highest-scoring channel, plus 1.
+
+    For a model whose channels are classes that exclude each other (one
+    softmax over them), or independent sigmoids that do not overlap; a
+    ChannelSelection ahead of it chooses the channels that compete, and the
+    ids count in its order. Id 0 is background: with ``threshold``, a voxel
+    whose highest score is below it. Without one, every voxel is its best
+    channel's. A tie goes to the lowest channel, as numpy's argmax gives it.
+    A NaN never wins, ranking below every number, -inf too, and a voxel that
+    is NaN in every channel is background, threshold or not. The ids are
+    uint8 for up to 255 channels, else uint16 (argmax_dtype). Each voxel's
+    id is its own, so a chunk needs nothing from its neighbours.
+    """
+
+    browser = True
+
+    def __init__(self, threshold: float | None = None):
+        # The dashboard's form shows no threshold as "None", and an emptied
+        # field sends "": either is none.
+        if isinstance(threshold, str) and threshold.strip().lower() in ("", "none", "null"):
+            threshold = None
+        self.threshold = None if threshold is None else float(threshold)
+
+    def _process(self, data):
+        if data.ndim == 3:
+            # A model served with no channel axis: its one channel, as the
+            # browser reads every block, and its ids with no axis either.
+            return self._process(data[np.newaxis])[0]
+        if data.ndim != 4:
+            raise ValueError(
+                "ArgmaxPostprocessor picks between a model's channels: it needs (c, z, y, x) "
+                f"or (z, y, x) data, got shape {data.shape}"
+            )
+        nan = np.isnan(data) if np.issubdtype(data.dtype, np.floating) else None
+        if nan is not None and nan.any():
+            # Taken as -inf, a NaN would still win against a real -inf by
+            # coming first, so the winner is the lowest channel holding the
+            # largest number.
+            scores = np.where(nan, -np.inf, data)
+            best = scores.max(axis=0)
+            winner = np.argmax(~nan & (scores == best), axis=0)
+            background = nan.all(axis=0)
+        else:
+            winner = data.argmax(axis=0)
+            best = None if self.threshold is None else data.max(axis=0)
+            background = np.zeros(winner.shape, dtype=bool)
+        if self.threshold is not None:
+            # In float64, as the browser compares: numpy compares float32
+            # scores with a plain float in float32, rounding the threshold,
+            # and a score at it could then fall on the other side of it.
+            background |= best < np.float64(self.threshold)
+        labels = (winner + 1).astype(argmax_dtype(data.shape[0]))
+        labels[background] = 0
+        return labels[np.newaxis]
+
+    def output_info(self, dtype, channels):
+        # Its dtype depends on how many channels it is given, so there is no
+        # fixed ``dtype`` to declare (process() would cast every chunk to it).
+        return argmax_dtype(channels), 1, True
+
+
 class FillHolesPostprocessor(PostProcessor):
     """Threshold, then fill the background holes each foreground blob encloses.
 
@@ -577,6 +649,7 @@ LISTING_ORDER = [
     "ThresholdPostprocessor",
     "ChannelSelection",
     "LambdaPostprocessor",
+    "ArgmaxPostprocessor",
     "FillHolesPostprocessor",
     "LabelPostprocessor",
     "AffinityPostprocessor",
