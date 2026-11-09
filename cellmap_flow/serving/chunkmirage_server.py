@@ -36,6 +36,7 @@ from http import HTTPStatus
 
 import numpy as np
 from chunkmirage.cache import LRUCache
+from chunkmirage.ops import Op
 from chunkmirage.pipeline import Pipeline, select_axes
 from chunkmirage.server import DatasetRegistry, create_app
 from funlib.geometry.coordinate import Coordinate
@@ -67,10 +68,13 @@ PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
 # A model with an overlap (ModelGeometry.overlap) keeps its output blocks
 # cached until every chunk they reach is blended; a block dropped before then
 # is run again. A 2D slice of 6 x 6 chunks reaches (6 + 2)^2 x 3 = 192 blocks
-# centred on chunks, (6 + 1)^2 x 2 = 98 on their corners.
-# Blocks of 12 uint8 channels of 256^3 are 200 MB each: 51 GB for 256. A GPU queue's slot comes with
-# 40 GB (15 GB on the L4 and T4 queues), and a server's job has 4.
-OVERLAP_BLOCKS_CACHED = 256
+# centred on chunks, (6 + 1)^2 x 2 = 98 on their corners, and Neuroglancer's
+# default layout shows three slices. Blocks of 12 uint8 channels of 256^3 are
+# 200 MB each: 103 GB for 512. A GPU queue's slot comes with 40 GB (15 GB on
+# the L4 and T4 queues) and a server's job has 4, so the cache is held to
+# OVERLAP_CACHE_SHARE of the memory the process may use (memory_limit_bytes).
+OVERLAP_BLOCKS_CACHED = 512
+OVERLAP_CACHE_SHARE = 0.5
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
 HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
@@ -90,14 +94,66 @@ def _env_count(name, default):
         raise ValueError(f"{name} must be a number, got {value!r}") from None
 
 
+def memory_limit_bytes():
+    """The memory this process may use: its cgroup's limit (an LSF job's
+    memory, under cgroup v2 or v1), else the machine's; None when neither can
+    be read."""
+    try:
+        with open("/proc/self/cgroup") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    candidates = []
+    for line in lines:
+        _, controllers, path = line.split(":", 2)
+        if controllers == "":  # cgroup v2
+            candidates.append(f"/sys/fs/cgroup{path}/memory.max")
+        elif "memory" in controllers.split(","):
+            candidates.append(f"/sys/fs/cgroup/memory{path}/memory.limit_in_bytes")
+    for candidate in candidates:
+        try:
+            with open(candidate) as f:
+                value = f.read().strip()
+        except OSError:
+            continue
+        # "max" (v2) or a huge number (v1) is no limit of its own.
+        if value.isdigit() and int(value) < 1 << 60:
+            return int(value)
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
 def prediction_cache_bytes(geometry, stage_dtype) -> int:
     """The prediction cache's size when the environment sets none: 16 GiB, or
-    room for OVERLAP_BLOCKS_CACHED of an overlapping model's output blocks in
-    ``stage_dtype`` (the dtype they are cached in), whichever is more."""
+    for an overlapping model room for OVERLAP_BLOCKS_CACHED of its output
+    blocks in ``stage_dtype`` (the dtype they are cached in) if that is more,
+    held to OVERLAP_CACHE_SHARE of the memory the process may use."""
     if not any(geometry.overlap):
         return PREDICTION_CACHE_BYTES_DEFAULT
     block_bytes = int(np.prod(geometry.block_shape())) * np.dtype(stage_dtype).itemsize
-    return max(PREDICTION_CACHE_BYTES_DEFAULT, OVERLAP_BLOCKS_CACHED * block_bytes)
+    wanted = max(PREDICTION_CACHE_BYTES_DEFAULT, OVERLAP_BLOCKS_CACHED * block_bytes)
+    limit = memory_limit_bytes()
+    if limit is None:
+        return wanted
+    held = int(limit * OVERLAP_CACHE_SHARE)
+    if held < wanted:
+        logger.warning(
+            f"The prediction cache holds {held / 1e9:.0f} GB of this model's {block_bytes / 1e6:.0f} MB blocks, "
+            f"{held // block_bytes} of them, half the {limit / 1e9:.0f} GB this job may use: blocks dropped before "
+            f"the chunks they reach are blended are run again. More memory, or a uint8 output_dtype, holds more."
+        )
+    return min(wanted, held)
+
+
+def _chunkmirage_version():
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("chunkmirage")
+    except PackageNotFoundError:
+        return "unknown version"
 
 
 def _env_flag(name):
@@ -168,6 +224,15 @@ class ChunkmirageServer:
         input_voxel_size = np.asarray(Coordinate(self.geometry.input_voxel_size), dtype=float)
         output_voxel_size = Coordinate(self.geometry.output_voxel_size)
         block = tuple(int(v) for v in self.geometry.served_block()[: len(self.axes)])
+        # chunkmirage ignores an op's block_phase and blend before 0.1.0a7,
+        # which has them: serving a model declaring others on an older one
+        # would quietly lay and weight its blocks otherwise.
+        if (self.geometry.block_phase, self.geometry.blend) != ("centred", "tent") and not hasattr(Op, "block_phase"):
+            raise ValueError(
+                f"{getattr(model_config, 'name', None) or 'The model'} declares block_phase "
+                f"{self.geometry.block_phase!r} and blend {self.geometry.blend!r}, which need chunkmirage 0.1.0a7 "
+                f"or later; this one ({_chunkmirage_version()}) lays every model's blocks centred, with the tent"
+            )
         declared = self.geometry.output_dtype
         stage_dtype = np.dtype(declared) if np.dtype(declared).kind in "iub" else np.dtype(np.float32)
         self.served = ServedModel(
