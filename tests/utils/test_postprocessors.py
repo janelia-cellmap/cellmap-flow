@@ -12,21 +12,26 @@ import numpy as np
 import pytest
 
 
+# One voxel per row, its scores in channels 0, 1 and 2, channel-first as a
+# block; web/test/parity/post.test.ts holds the port to the same ids.
+ARGMAX_SCORES = np.array(
+    [
+        [0.1, 0.7, 0.2],  # channel 1 is best: id 2
+        [0.6, 0.6, 0.1],  # a tie: the lower channel, id 1
+        [0.2, 0.3, 0.35],  # best below the threshold
+        [np.nan, 0.1, 0.9],  # the NaN does not win
+        [np.nan, np.nan, np.nan],  # nothing to pick: background
+    ],
+    np.float32,
+).T.reshape(3, 1, 1, 5)
+
+
 def test_argmax_gives_each_voxel_its_best_channel_plus_one():
     """A model of exclusive classes, drawn as one layer of label ids: 0 only
     below the threshold, a tie to the lowest channel, a NaN never the best."""
     from cellmap_flow.post.postprocessors import ArgmaxPostprocessor
 
-    scores = np.array(
-        [
-            [0.1, 0.7, 0.2],  # channel 1 is best: id 2
-            [0.6, 0.6, 0.1],  # a tie: the lower channel, id 1
-            [0.2, 0.3, 0.35],  # best below the threshold
-            [np.nan, 0.1, 0.9],  # the NaN does not win
-            [np.nan, np.nan, np.nan],  # nothing to pick: background
-        ],
-        np.float32,
-    ).T.reshape(3, 1, 1, 5)
+    scores = ARGMAX_SCORES
     ids = ArgmaxPostprocessor()(scores)
     assert ids.shape == (1, 1, 1, 5) and ids.dtype == np.uint8
     assert ids.ravel().tolist() == [2, 1, 3, 3, 0]
@@ -41,6 +46,25 @@ def test_argmax_gives_each_voxel_its_best_channel_plus_one():
     assert wide.dtype == np.uint16 and wide.ravel().tolist() == [300, 1]
 
 
+def test_argmax_gives_each_channel_the_id_it_is_given():
+    """A model's classes as a dataset numbers them: an id of 0 makes its
+    channel background, the dtype is the smallest that holds the ids, and
+    a count of ids that is not the channels' is refused."""
+    from cellmap_flow.post.postprocessors import ArgmaxPostprocessor
+
+    for ids in ([50, 0, 37], "50,0,37", "50 0 37", " 50, 0  37 "):
+        labelled = ArgmaxPostprocessor(ids=ids)(ARGMAX_SCORES)
+        assert labelled.dtype == np.uint8 and labelled.ravel().tolist() == [0, 50, 37, 37, 0]
+    assert ArgmaxPostprocessor(ids="None").ids is None
+    assert ArgmaxPostprocessor(ids="300,1,2")(ARGMAX_SCORES).dtype == np.uint16
+    assert ArgmaxPostprocessor(ids=[70000, 1, 2])(ARGMAX_SCORES).dtype == np.uint32
+    with pytest.raises(ValueError, match=r"2\D+3"):  # says both counts
+        ArgmaxPostprocessor(ids="1,2")(ARGMAX_SCORES)
+    for refused in ("1,-2", "1,2.5", [1, -2]):
+        with pytest.raises(ValueError):
+            ArgmaxPostprocessor(ids=refused)
+
+
 def test_an_argmax_chain_declares_one_channel_of_labels():
     """So the dashboard draws one segmentation layer, and blockwise writes a
     label volume in the ids' dtype."""
@@ -52,6 +76,8 @@ def test_an_argmax_chain_declares_one_channel_of_labels():
     assert np.dtype(chain_output_dtype(steps, np.float32)) == np.uint8
     (argmax,) = PipelineSpec((), [{"name": "ArgmaxPostprocessor"}]).build()[1]
     assert np.dtype(chain_output_dtype([argmax], np.float32, 300)) == np.uint16
+    (mapped,) = PipelineSpec((), [{"name": "ArgmaxPostprocessor", "ids": "2,1,300"}]).build()[1]
+    assert np.dtype(chain_output_dtype([mapped], np.float32)) == np.uint16
 
 
 def test_cellpose_masks_follow_the_flows_to_their_objects_and_link_them_across_slices():

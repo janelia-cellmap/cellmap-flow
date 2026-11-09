@@ -100,6 +100,18 @@ describe("ArgmaxPostprocessor gives the Python's ids where the fixture cannot sh
     expect(ids([{ name: "ArgmaxPostprocessor", threshold: "0.5" }]).ids).toEqual([2, 1, 0, 3, 0]);
   });
 
+  it("gives each channel the id it is given, 0 making it background, in the smallest dtype that holds them", () => {
+    for (const given of ["50,0,37", "50 0 37", " 50, 0  37 "]) {
+      expect(ids([{ name: "ArgmaxPostprocessor", ids: given }])).toEqual({ dtype: "uint8", shape: [1, 1, 1, 5], ids: [0, 50, 37, 37, 0] });
+    }
+    expect(ids([{ name: "ArgmaxPostprocessor", ids: "None" }]).ids).toEqual([2, 1, 3, 3, 0]);
+    expect(ids([{ name: "ArgmaxPostprocessor", ids: "300,1,2" }]).dtype).toBe("uint16");
+    expect(ids([{ name: "ArgmaxPostprocessor", ids: "70000,1,2" }]).dtype).toBe("uint32");
+    expect(outputDtype([{ name: "ArgmaxPostprocessor", ids: "2,1,300" }], "float32")).toBe("uint16");
+    expect(() => ids([{ name: "ArgmaxPostprocessor", ids: "1,2" }])).toThrow(/2\D+3/);  // says both counts
+    for (const refused of ["1,-2", "1,2.5"]) expect(() => ids([{ name: "ArgmaxPostprocessor", ids: refused }])).toThrow();
+  });
+
   it("gives uint16 ids past 255 channels, and declares them", () => {
     const many = { data: new Float32Array(300 * 2), shape: [300, 1, 1, 2] };
     many.data[299 * 2] = 1;

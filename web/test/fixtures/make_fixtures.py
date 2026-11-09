@@ -251,6 +251,14 @@ POST_CASES = [
     # The ids count in ChannelSelection's order: 1 is channel 2.
     ("chain_channels_argmax", [{"name": "ChannelSelection", "channels": "2,0"}, {"name": "ArgmaxPostprocessor"}]),
     ("chain_sigmoid_argmax_threshold", [{"name": "SigmoidPostprocessor"}, {"name": "ArgmaxPostprocessor", "threshold": 0.9}]),
+    # Each channel's own id, as the form sends them: an id over 255 makes the
+    # ids uint16, and an id of 0 makes its channel (model channel 0, after
+    # the selection) background.
+    ("argmax_ids", [{"name": "ArgmaxPostprocessor", "ids": "50,51,37"}]),
+    (
+        "chain_channels_argmax_ids_uint16",
+        [{"name": "ChannelSelection", "channels": "2,0"}, {"name": "ArgmaxPostprocessor", "ids": "300 0", "threshold": "2"}],
+    ),
 ]
 POST_MODEL_DTYPE = "float32"
 POST_MODEL_CHANNELS = 3
