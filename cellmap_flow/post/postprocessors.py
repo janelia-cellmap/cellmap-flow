@@ -31,12 +31,14 @@ class PostProcessor(SerializableInterface):
     def is_segmentation(self):
         return None
 
-    def problem_with(self, model_config):
+    def problem_with(self, model_config, channels=None):
         """Why this step cannot run on ``model_config``'s output, or None when it can.
 
         Checked by the dashboard before it applies a chain: a step that
         fails on every chunk does so inside the model's server, where the
-        page shows only an empty layer.
+        page shows only an empty layer. ``channels`` is how many channels
+        reach the step when a step ahead of it sets the count (a
+        ChannelSelection), else None: the model's output, all of it.
         """
         return None
 
@@ -195,10 +197,7 @@ class ArgmaxPostprocessor(PostProcessor):
                 f"or (z, y, x) data, got shape {data.shape}"
             )
         if self.ids is not None and len(self.ids) != data.shape[0]:
-            raise ValueError(
-                f"ArgmaxPostprocessor has {len(self.ids)} ids for {data.shape[0]} channels: give one id per "
-                "channel it is given (after any ChannelSelection)"
-            )
+            raise ValueError(self._count_problem(data.shape[0]))
         nan = np.isnan(data) if np.issubdtype(data.dtype, np.floating) else None
         if nan is not None and nan.any():
             # Taken as -inf, a NaN would still win against a real -inf by
@@ -213,10 +212,11 @@ class ArgmaxPostprocessor(PostProcessor):
             best = None if self.threshold is None else data.max(axis=0)
             background = np.zeros(winner.shape, dtype=bool)
         if self.threshold is not None:
-            # In float64, as the browser compares: numpy compares float32
-            # scores with a plain float in float32, rounding the threshold,
-            # and a score at it could then fall on the other side of it.
-            background |= best < np.float64(self.threshold)
+            # In float64, as the browser compares, on any numpy: float32
+            # scores against a float scalar compare in float32 (numpy 2's
+            # NEP 50 and numpy 1's value-based casting alike), rounding the
+            # threshold, and a score at it could fall on the other side.
+            background |= best.astype(np.float64) < self.threshold
         labels_dtype = argmax_dtype(data.shape[0], self.ids)
         if self.ids is None:
             labels = (winner + 1).astype(labels_dtype)
@@ -224,6 +224,31 @@ class ArgmaxPostprocessor(PostProcessor):
             labels = np.asarray(self.ids, dtype=labels_dtype)[winner]
         labels[background] = 0
         return labels[np.newaxis]
+
+    def problem_with(self, model_config, channels=None):
+        """With ``ids``, a count of them that is not that of the channels
+        reaching it, when that is known: set by a step ahead of it, else the
+        model's output channels as its running server or the geometry cache
+        knows them (geometry_cache.known_geometry; the model is not built)."""
+        if self.ids is None:
+            return None
+        name = getattr(model_config, "name", "the model")
+        if channels is None:
+            from cellmap_flow.models.geometry_cache import known_geometry
+
+            try:
+                channels = getattr(known_geometry(name, model_config), "output_channels", None)
+            except Exception as e:
+                logger.debug(f"Could not tell how many channels {name} has: {e}")
+        if channels is None or int(channels) == len(self.ids):
+            return None
+        return f"{name}: {self._count_problem(int(channels))}"
+
+    def _count_problem(self, channels):
+        return (
+            f"ArgmaxPostprocessor has {len(self.ids)} ids for {channels} channels: give one id per "
+            "channel it is given (after any ChannelSelection)"
+        )
 
     def output_info(self, dtype, channels):
         # Without ids its dtype depends on how many channels it is given, so
@@ -592,7 +617,7 @@ class CellposeMasksPostprocessor(PostProcessor):
         self.stitch_threshold = float(stitch_threshold)
         self.niter = int(niter)
 
-    def problem_with(self, model_config):
+    def problem_with(self, model_config, channels=None):
         """None for a Cellpose model (or a finetune of one) served with ``output: flows``."""
         base = getattr(model_config, "base_model_config", None) or model_config
         name = getattr(model_config, "name", "the model")

@@ -38,6 +38,8 @@ def test_argmax_gives_each_voxel_its_best_channel_plus_one():
     # The form's strings: "None" (its default shown) is no threshold.
     assert ArgmaxPostprocessor(threshold="None")(scores).ravel().tolist() == [2, 1, 3, 3, 0]
     assert ArgmaxPostprocessor(threshold="0.5")(scores).ravel().tolist() == [2, 1, 0, 3, 0]
+    # Compared in float64, as the browser compares: float32's 0.7 is below 0.7.
+    assert ArgmaxPostprocessor(threshold=0.7)(np.full((2, 1, 1, 1), 0.7, np.float32)).ravel().tolist() == [0]
 
     # Ids past 255 need uint16.
     many = np.zeros((300, 1, 1, 2), np.float32)
