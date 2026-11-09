@@ -58,7 +58,10 @@ class ServedModel:
     ``origin``: output voxel 0's lower corner in nm, where the chunk grid
     starts. ``block``: output voxels per chunk, spatial. ``halo``: input voxels
     the model reads beyond each side of what it writes. ``ratio``: input
-    voxels per output voxel.
+    voxels per output voxel. ``overlap``: output voxels beyond each side of a
+    chunk that the model also writes (ModelGeometry.overlap), whose blocks
+    chunkmirage blends into the chunks; zeros for none. ``block_phase`` and
+    ``blend``: how those blocks lie and are weighted (ModelGeometry's).
     """
 
     name: str
@@ -75,6 +78,9 @@ class ServedModel:
     has_channel: bool
     output_dtype: Any
     stage_dtype: np.dtype
+    overlap: tuple = (0, 0, 0)
+    block_phase: str = "centred"
+    blend: str = "tent"
     weights_version: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -150,14 +156,19 @@ def _whole(values, what):
     return out
 
 
+def output_roi(start, shape, output_voxel_size, origin) -> Roi:
+    """The region (nm) of ``shape`` output voxels from output voxel ``start``,
+    the output grid starting at ``origin``."""
+    box = np.array([start, shape]) * output_voxel_size
+    return Roi(tuple(int(v) for v in origin + box[0]), tuple(int(v) for v in box[1]))
+
+
 def chunk_roi(index, spatial_block, output_voxel_size, origin) -> Roi:
     """The region (nm) chunk ``index`` covers: ``spatial_block`` output voxels
     per chunk, the grid starting at ``origin``. The whole chunk, as the model
     always computed it, also where the data ends inside it."""
     block = np.array(spatial_block)
-    corner = block * np.array(index)
-    box = np.array([corner, block]) * output_voxel_size
-    return Roi(tuple(int(v) for v in origin + box[0]), tuple(int(v) for v in box[1]))
+    return output_roi(block * np.array(index), block, output_voxel_size, origin)
 
 
 class InferenceOp(Op):
@@ -167,6 +178,9 @@ class InferenceOp(Op):
     One level only (``input_voxel_size``): the model's. Cached, as running the
     model is the expensive part; ``slots`` (set by the server from
     ``CELLMAP_FLOW_GPU_SLOTS``) bounds how many chunks use the device at once.
+    With an ``overlap`` (the served model's), each run writes its chunk grown
+    by it, a block of its own that chunkmirage caches, and a served chunk is
+    the blend of the blocks reaching it.
     """
 
     name: ClassVar[str] = "cellmap_flow.inference"
@@ -191,6 +205,18 @@ class InferenceOp(Op):
     @property
     def halo(self):  # type: ignore[override]
         return tuple(int(h) for h in self.served.halo)
+
+    @property
+    def overlap(self):  # type: ignore[override]
+        return tuple(int(o) for o in self.served.overlap)
+
+    @property
+    def block_phase(self):  # type: ignore[override]
+        return self.served.block_phase
+
+    @property
+    def blend(self):  # type: ignore[override]
+        return self.served.blend
 
     def input_voxel_size(self):
         return tuple(float(v) for v in self.served.input_voxel_size)
@@ -223,13 +249,19 @@ class InferenceOp(Op):
         start = np.asarray(box.start[-3:])
         stop = np.asarray(box.stop[-3:])
         halo = np.asarray(self.halo)
+        overlap = np.asarray(self.overlap)
         ratio = np.asarray(served.ratio, dtype=float)
-        out_start = _whole((start + halo) / ratio, "an output chunk's start")
-        out_shape = _whole((stop - start - 2 * halo) / ratio, "an output chunk's shape")
-        index = out_start // np.asarray(served.block)
-        # The whole chunk, as the model always computed it; one the data ends
-        # in is cropped after.
-        roi = chunk_roi(index, served.block, served.output_voxel_size, served.origin)
+        # The block's output: its chunk, grown by the overlap when there is one.
+        out_start = _whole((start + halo) / ratio, "an output block's start")
+        out_shape = _whole((stop - start - 2 * halo) / ratio, "an output block's shape")
+        # The chunk the block's middle starts in, to log it by.
+        index = (out_start + overlap) // np.asarray(served.block)
+        # The whole block from where its output starts, as the model always
+        # computed it: an overlap's blocks lie off the chunk grid, by the
+        # overlap when centred on chunks and half a chunk more on their
+        # corners. One the data ends in is cropped after.
+        extent = np.asarray(served.block) + 2 * overlap
+        roi = output_roi(out_start, extent, np.asarray(served.output_voxel_size, dtype=float), served.origin)
         reader = BlockInput(block, start, served.input_voxel_size, served.translation, served.level_shape,
                             self._norms)
         timing.start()

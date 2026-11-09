@@ -223,7 +223,7 @@ export class InferenceEngine implements Inference {
       this.opts.log(`${entry.name}: no raw level at ${geometry.input_voxel_size.join("×")} nm; reading level ${rawLevel} (${raw.voxel.join("×")} nm) as if it were, so the output really lies at ${effective.join("×")} nm`);
     }
     const channels = outputChannels(chain.postprocess, info.output_channels);
-    const dtype = outputDtype(chain.postprocess, "float32");
+    const dtype = outputDtype(chain.postprocess, "float32", info.output_channels);
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
     // Unserved before on this engine (its model removed, then added back),

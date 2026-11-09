@@ -112,6 +112,14 @@
         }
       },
       {
+        "name": "ArgmaxPostprocessor",
+        "browser": true,
+        "params": {
+          "threshold": null,
+          "ids": null
+        }
+      },
+      {
         "name": "FillHolesPostprocessor",
         "browser": false,
         "params": {

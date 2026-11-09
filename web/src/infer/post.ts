@@ -6,7 +6,9 @@
 // A block is a channel-first ndarray {data, shape: [C, z, y, x]}. Each step
 // returns a new ndarray in the dtype the Python class declares (uint8 for
 // Default and Threshold, float32 for Sigmoid and Lambda; ChannelSelection
-// keeps what it is given), and the chain's output dtype, channel count and
+// keeps what it is given; Argmax's one channel of ids is uint8, or uint16
+// past 255 channels, or with its `ids` the smallest of uint8, uint16 and
+// uint32 that holds them), and the chain's output dtype, channel count and
 // whether it is labels follow pipeline_spec.py's rule: the last step that
 // declares wins.
 //
@@ -54,10 +56,14 @@ export type Postprocessor = (nd: NdArray, context: PostContext) => NdArray;
 
 /** What a step says about its output (SerializableInterface.output_info):
  * a dtype if it declares one, a channel count if it changes it, and whether
- * the output is labels (undefined: it does not say). */
+ * the output is labels (undefined: it does not say). A dtype that depends on
+ * how many channels the step is given (ArgmaxPostprocessor's) is a function
+ * of that count, undefined when the caller does not know it; so is the
+ * count, though every step that changes it sets its own, as the Python's
+ * num_channels does. */
 export interface Declares {
-  dtype?: string;
-  channels?: (given: number) => number;
+  dtype?: string | ((given: number | undefined) => string);
+  channels?: (given: number | undefined) => number;
   isSegmentation?: boolean;
 }
 
@@ -81,6 +87,58 @@ export function parseChannels(value: StepValue | unknown[] | undefined): number[
     return n;
   });
 }
+
+// What the dashboard's forms send for "none" (a None default is shown as
+// "None"), and the largest id ArgmaxPostprocessor's ids may give.
+const NO_VALUE = ["", "none", "null"];
+const LARGEST_UINT32 = 2 ** 32 - 1;
+
+/** ArgmaxPostprocessor's threshold: none when absent, empty or "None" (the
+ * dashboard's form shows no threshold as "None"), else a number as Python's
+ * float() reads it. */
+function parseArgmaxThreshold(value: StepValue | undefined): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string" && NO_VALUE.includes(value.trim().toLowerCase())) return null;
+  return asNumber(value, 0, "ArgmaxPostprocessor.threshold");
+}
+
+/** ArgmaxPostprocessor's ids (postprocessors._argmax_ids): null for none
+ * (absent, empty, "None", or a list of none), else whole numbers from 0 to
+ * uint32's largest, from a list, one number, or the form's "50,51,37" or
+ * "50 51 37". */
+export function parseArgmaxIds(value: StepValue | unknown[] | undefined): number[] | null {
+  if (value === undefined || value === null) return null;
+  let parts: unknown[];
+  if (typeof value === "string") {
+    if (NO_VALUE.includes(value.trim().toLowerCase())) return null;
+    parts = value.trim().split(/[\s,]+/).filter((part) => part !== "");
+  } else {
+    parts = Array.isArray(value) ? value : [value];
+  }
+  const ids = parts.map((part) => {
+    const label = typeof part === "string" ? (/^\d+$/.test(part) ? Number(part) : NaN) : typeof part === "number" ? part : NaN;
+    if (!Number.isInteger(label) || label < 0 || label > LARGEST_UINT32) {
+      throw new Error(`ArgmaxPostprocessor.ids: ${JSON.stringify(value)} is not a list of label ids, whole numbers from 0 to ${LARGEST_UINT32}`);
+    }
+    return label;
+  });
+  return ids.length ? ids : null;
+}
+
+/** postprocessors.argmax_dtype: the dtype of ArgmaxPostprocessor's ids. With
+ * `ids`, the smallest of uint8, uint16 and uint32 that holds the largest of
+ * them; without, uint8 while every id (0 to `channels`) fits in it, else
+ * uint16, and a count not known is taken to fit uint8. */
+export function argmaxDtype(channels: number | undefined, ids: number[] | null = null): "uint8" | "uint16" | "uint32" {
+  if (ids) {
+    const largest = Math.max(...ids);
+    return largest <= 255 ? "uint8" : largest <= 65535 ? "uint16" : "uint32";
+  }
+  return channels !== undefined && channels + 1 > 256 ? "uint16" : "uint8";
+}
+
+/** The typed array of each dtype argmaxDtype answers. */
+const ID_ARRAYS = { uint8: Uint8Array, uint16: Uint16Array, uint32: Uint32Array };
 
 /** The steps the browser runs, by the Python class name the dashboard sends. */
 export const POSTPROCESSORS: Record<string, PostprocessorDef> = {
@@ -156,6 +214,43 @@ export const POSTPROCESSORS: Record<string, PostprocessorDef> = {
       };
     },
   },
+  ArgmaxPostprocessor: {
+    declares: (step) => {
+      const ids = parseArgmaxIds(step.ids);
+      return { dtype: (given) => argmaxDtype(given, ids), channels: () => 1, isSegmentation: true };
+    },
+    make: (step) => {
+      // One channel of ids: each voxel's highest-scoring channel plus 1, or
+      // that channel's id in `ids`, the lowest on a tie (numpy's argmax), a
+      // NaN never the one; 0 where the best score is below the threshold,
+      // or every channel is NaN. The threshold is compared in float64, as
+      // the Python compares it.
+      const threshold = parseArgmaxThreshold(step.threshold);
+      const ids = parseArgmaxIds(step.ids);
+      return ({ data, shape }) => {
+        if (shape.length !== 4) throw new Error(`ArgmaxPostprocessor picks between a model's channels: it needs a (c, z, y, x) block, got shape ${shape.join("×")}`);
+        const [c, z, y, x] = shape;
+        if (ids && ids.length !== c) {
+          throw new Error(`ArgmaxPostprocessor has ${ids.length} ids for ${c} channels: give one id per channel it is given (after any ChannelSelection)`);
+        }
+        const plane = z * y * x;  // voxels per channel
+        const out = new ID_ARRAYS[argmaxDtype(c, ids)](plane);
+        for (let i = 0; i < plane; i++) {
+          let winner = -1;
+          let best = -Infinity;
+          for (let ch = 0; ch < c; ch++) {
+            const v = Number(data[ch * plane + i]);
+            if (!Number.isNaN(v) && (winner < 0 || v > best)) {
+              winner = ch;
+              best = v;
+            }
+          }
+          out[i] = winner < 0 || (threshold !== null && best < threshold) ? 0 : ids ? ids[winner] : winner + 1;
+        }
+        return { data: out, shape: [1, z, y, x] };
+      };
+    },
+  },
   AffinityPostprocessor: affinityPostprocessor,
   MortonSegmentationRelabeling: mortonRelabeling,
   LabelPostprocessor: labelPostprocessor,
@@ -206,10 +301,21 @@ export function applyPostprocessors(nd: NdArray, steps: Step[], context?: PostCo
 }
 
 /** The dtype the viewer receives (chain_output_dtype): the last step's that
- * declares one, else the model's own. */
-export function outputDtype(steps: Step[], modelDtype = "float32"): string {
+ * declares one, else the model's own. `modelChannels`, when the caller knows
+ * it, is for a step whose dtype depends on the channels it is given
+ * (ArgmaxPostprocessor's ids: uint16 past 255 channels); the count follows
+ * the steps that change it, as `outputChannels` does, and as
+ * pipeline_spec's does without the model's: a ChannelSelection's count is
+ * its own, so after one it is known either way. */
+export function outputDtype(steps: Step[], modelDtype = "float32", modelChannels?: number): string {
   let dtype = modelDtype;
-  for (const step of steps) dtype = declares(step)?.dtype ?? dtype;
+  let channels = modelChannels;
+  for (const step of steps) {
+    const says = declares(step);
+    const own = typeof says?.dtype === "function" ? says.dtype(channels) : says?.dtype;
+    dtype = own ?? dtype;
+    if (says?.channels) channels = says.channels(channels);
+  }
   return dtype;
 }
 

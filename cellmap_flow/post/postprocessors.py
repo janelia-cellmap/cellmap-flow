@@ -6,6 +6,8 @@
 # imports them the same way.
 import ast
 import logging
+import numbers
+import re
 import threading
 
 import numpy as np
@@ -29,12 +31,14 @@ class PostProcessor(SerializableInterface):
     def is_segmentation(self):
         return None
 
-    def problem_with(self, model_config):
+    def problem_with(self, model_config, channels=None):
         """Why this step cannot run on ``model_config``'s output, or None when it can.
 
         Checked by the dashboard before it applies a chain: a step that
         fails on every chunk does so inside the model's server, where the
-        page shows only an empty layer.
+        page shows only an empty layer. ``channels`` is how many channels
+        reach the step when a step ahead of it sets the count (a
+        ChannelSelection), else None: the model's output, all of it.
         """
         return None
 
@@ -98,6 +102,159 @@ class ThresholdPostprocessor(PostProcessor):
     @property
     def is_segmentation(self):
         return True
+
+
+_NO_VALUE = ("", "none", "null")
+_LARGEST_UINT32 = 2**32 - 1
+
+
+def argmax_dtype(channels, ids=None):
+    """The dtype of ArgmaxPostprocessor's ids.
+
+    With ``ids``, the smallest of uint8, uint16 and uint32 that holds the
+    largest of them. Without, the ids are 1 to ``channels``: uint8 while
+    every id, 0 to ``channels``, fits in it, else uint16. ``None``, a count
+    the caller does not know (a chain read without its model), is taken to
+    fit uint8, which it does unless the model has over 255 channels.
+    """
+    if ids is not None:
+        largest = max(ids)
+        return np.uint8 if largest <= 255 else np.uint16 if largest <= 65535 else np.uint32
+    return np.uint16 if channels is not None and channels + 1 > 256 else np.uint8
+
+
+def _argmax_ids(value):
+    """ArgmaxPostprocessor's ``ids``: None for none (absent, "", "None", or
+    a list of none), else a list of whole numbers from 0 to uint32's
+    largest, from a list, one number, or the form's "50,51,37" or
+    "50 51 37"."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        if value.strip().lower() in _NO_VALUE:
+            return None
+        parts = [part for part in re.split(r"[\s,]+", value.strip()) if part]
+    elif isinstance(value, (list, tuple)):
+        parts = list(value)
+    else:
+        parts = [value]
+    ids = []
+    for part in parts:
+        if isinstance(part, str) and re.fullmatch(r"\d+", part):
+            label = int(part)
+        elif isinstance(part, numbers.Real) and not isinstance(part, bool) and float(part).is_integer():
+            label = int(part)
+        else:
+            label = None
+        if label is None or not 0 <= label <= _LARGEST_UINT32:
+            raise ValueError(
+                f"ArgmaxPostprocessor.ids: {value!r} is not a list of label ids, whole numbers from 0 to {_LARGEST_UINT32}"
+            )
+        ids.append(label)
+    return ids or None
+
+
+class ArgmaxPostprocessor(PostProcessor):
+    """One channel of label ids from a model's channels of scores: each
+    voxel's id is the index of its highest-scoring channel, plus 1, or that
+    channel's id in ``ids``.
+
+    For a model whose channels are classes that exclude each other (one
+    softmax over them), or independent sigmoids that do not overlap; a
+    ChannelSelection ahead of it chooses the channels that compete, and the
+    ids count in its order. Id 0 is background: with ``threshold``, a voxel
+    whose highest score is below it. Without one, every voxel is its best
+    channel's. A tie goes to the lowest channel, as numpy's argmax gives it.
+    A NaN never wins, ranking below every number, -inf too, and a voxel that
+    is NaN in every channel is background, threshold or not. Each voxel's id
+    is its own, so a chunk needs nothing from its neighbours.
+
+    ``ids`` gives each channel it is given, in order, the id its voxels get
+    (a model's classes as a dataset numbers them: "50,51,37"); an id of 0
+    makes that channel background too. There must be one per channel. The
+    ids are uint8 for up to 255 channels, else uint16, or with ``ids`` the
+    smallest of uint8, uint16 and uint32 that holds them (argmax_dtype).
+    """
+
+    browser = True
+
+    def __init__(self, threshold: float | None = None, ids: str | list[int] | None = None):
+        # The dashboard's form shows no threshold as "None", and an emptied
+        # field sends "": either is none. The same for ids.
+        if isinstance(threshold, str) and threshold.strip().lower() in _NO_VALUE:
+            threshold = None
+        self.threshold = None if threshold is None else float(threshold)
+        self.ids = _argmax_ids(ids)
+
+    def _process(self, data):
+        if data.ndim == 3:
+            # A model served with no channel axis: its one channel, as the
+            # browser reads every block, and its ids with no axis either.
+            return self._process(data[np.newaxis])[0]
+        if data.ndim != 4:
+            raise ValueError(
+                "ArgmaxPostprocessor picks between a model's channels: it needs (c, z, y, x) "
+                f"or (z, y, x) data, got shape {data.shape}"
+            )
+        if self.ids is not None and len(self.ids) != data.shape[0]:
+            raise ValueError(self._count_problem(data.shape[0]))
+        nan = np.isnan(data) if np.issubdtype(data.dtype, np.floating) else None
+        if nan is not None and nan.any():
+            # Taken as -inf, a NaN would still win against a real -inf by
+            # coming first, so the winner is the lowest channel holding the
+            # largest number.
+            scores = np.where(nan, -np.inf, data)
+            best = scores.max(axis=0)
+            winner = np.argmax(~nan & (scores == best), axis=0)
+            background = nan.all(axis=0)
+        else:
+            winner = data.argmax(axis=0)
+            best = None if self.threshold is None else data.max(axis=0)
+            background = np.zeros(winner.shape, dtype=bool)
+        if self.threshold is not None:
+            # In float64, as the browser compares, on any numpy: float32
+            # scores against a float scalar compare in float32 (numpy 2's
+            # NEP 50 and numpy 1's value-based casting alike), rounding the
+            # threshold, and a score at it could fall on the other side.
+            background |= best.astype(np.float64) < self.threshold
+        labels_dtype = argmax_dtype(data.shape[0], self.ids)
+        if self.ids is None:
+            labels = (winner + 1).astype(labels_dtype)
+        else:
+            labels = np.asarray(self.ids, dtype=labels_dtype)[winner]
+        labels[background] = 0
+        return labels[np.newaxis]
+
+    def problem_with(self, model_config, channels=None):
+        """With ``ids``, a count of them that is not that of the channels
+        reaching it, when that is known: set by a step ahead of it, else the
+        model's output channels as its running server or the geometry cache
+        knows them (geometry_cache.known_geometry; the model is not built)."""
+        if self.ids is None:
+            return None
+        name = getattr(model_config, "name", "the model")
+        if channels is None:
+            from cellmap_flow.models.geometry_cache import known_geometry
+
+            try:
+                channels = getattr(known_geometry(name, model_config), "output_channels", None)
+            except Exception as e:
+                logger.debug(f"Could not tell how many channels {name} has: {e}")
+        if channels is None or int(channels) == len(self.ids):
+            return None
+        return f"{name}: {self._count_problem(int(channels))}"
+
+    def _count_problem(self, channels):
+        return (
+            f"ArgmaxPostprocessor has {len(self.ids)} ids for {channels} channels: give one id per "
+            "channel it is given (after any ChannelSelection)"
+        )
+
+    def output_info(self, dtype, channels):
+        # Without ids its dtype depends on how many channels it is given, so
+        # there is no fixed ``dtype`` to declare (process() would cast every
+        # chunk to it).
+        return argmax_dtype(channels, self.ids), 1, True
 
 
 class FillHolesPostprocessor(PostProcessor):
@@ -460,7 +617,7 @@ class CellposeMasksPostprocessor(PostProcessor):
         self.stitch_threshold = float(stitch_threshold)
         self.niter = int(niter)
 
-    def problem_with(self, model_config):
+    def problem_with(self, model_config, channels=None):
         """None for a Cellpose model (or a finetune of one) served with ``output: flows``."""
         base = getattr(model_config, "base_model_config", None) or model_config
         name = getattr(model_config, "name", "the model")
@@ -577,6 +734,7 @@ LISTING_ORDER = [
     "ThresholdPostprocessor",
     "ChannelSelection",
     "LambdaPostprocessor",
+    "ArgmaxPostprocessor",
     "FillHolesPostprocessor",
     "LabelPostprocessor",
     "AffinityPostprocessor",

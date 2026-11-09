@@ -176,6 +176,25 @@ def test_a_step_a_served_model_cannot_take_is_refused_saying_which_and_why(call)
     assert call("PUT", "/api/pipeline", masks)[0] == 200
 
 
+def test_an_argmax_with_more_or_fewer_ids_than_channels_reaching_it_is_refused(call, monkeypatch):
+    """Its ids were counted only per chunk inside the server, where a wrong
+    count left an empty layer. The channels are the model's (its server's
+    count, here 3), or a ChannelSelection's ahead of it."""
+    import re
+
+    from cellmap_flow.models import geometry_cache
+    from cellmap_flow.models.models_config import ScriptModelConfig
+
+    monkeypatch.setattr(geometry_cache, "known_geometry", lambda name, config: SimpleNamespace(output_channels=3))
+    get_session().models_config = [ScriptModelConfig(script_path="/s.py", name="mito")]
+    argmax = {"name": "ArgmaxPostprocessor", "ids": "50,51"}
+    status, answer = call("PUT", "/api/pipeline", {"input_norm": [], "postprocess": [argmax]})
+    assert status == 400 and "mito" in answer["error"] and re.search(r"2\D+3", answer["error"]), answer
+    assert _drawn() == PipelineSpec.from_json_data(SHOWN)
+    selected = {"input_norm": [], "postprocess": [{"name": "ChannelSelection", "channels": "0,2"}, argmax]}
+    assert call("PUT", "/api/pipeline", selected)[0] == 200
+
+
 def test_the_channel_picker_lists_the_raws_channels_and_refuses_one_past_them(dashboard, ome_pyramid):
     """A light microscope's raw has a channel axis: the Processing tab's
     Channel picks the one every model reads, the chain's ChannelSelector,

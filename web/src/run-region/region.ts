@@ -163,7 +163,7 @@ export function planModel(served: ServedModel, dataset: DatasetInfo, region: Reg
   const { grid, count: chunks } = chunkGrid(box.lo, box.hi, chunk);
   const chain = chainOf(served);
   const channels = served.info.has_channel ? outputChannels(chain.postprocess, served.info.output_channels) : 1;
-  const dtype = outputDtype(chain.postprocess, "float32");
+  const dtype = outputDtype(chain.postprocess, "float32", served.info.output_channels);
   const perValue = TYPED[dtype]?.BYTES_PER_ELEMENT ?? 4;
   const savedChunks = box.hi.reduce((n, h, a) => n * Math.ceil((h - box.lo[a]) / chunk[a]), 1);
   const bytes = savedChunks * chunk.reduce((n, c) => n * c, 1) * channels * perValue;

@@ -406,6 +406,34 @@ class ModelRunner:
         self._check_tile_agreement(shape[2:])
         if self.half_precision:
             self._check_half_precision(shape)
+        self._warm_torchscript(dummy)
+
+    def _warm_torchscript(self, dummy):
+        """Two more forwards of a TorchScript model, after the checks above.
+
+        TorchScript's profiling executor optimizes a graph on its second call,
+        not its first: 35 s for a vision transformer's graph of eight windows,
+        which landed on the first chunk asked for while every other chunk
+        queued behind it. These move that here, the last through the optimized
+        graph. Best effort, as the warmup is: a failure (memory) only leaves
+        the optimizing to the first chunk again.
+        """
+        import torch
+
+        model = self.model_config.config.model
+        if not isinstance(model, torch.jit.ScriptModule):
+            return
+        start = time.time()
+        try:
+            with torch.no_grad():
+                for _ in range(2):
+                    model.forward(dummy)
+            if self.device.type == "cuda":
+                torch.cuda.synchronize()
+        except Exception as e:
+            logger.warning(f"TorchScript's warmup forwards failed ({e}); the first chunk will wait for it to optimize")
+            return
+        logger.info(f"TorchScript warmup, two more forwards: {time.time() - start:.1f}s")
 
     def _check_tile_agreement(self, input_size):
         """Refuse an ``input_size`` the network answers differently at than at

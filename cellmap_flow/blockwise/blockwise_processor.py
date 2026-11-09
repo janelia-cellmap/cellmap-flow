@@ -281,6 +281,20 @@ class CellMapFlowBlockwiseProcessor:
                 f"Processing only channels: {self.process_only} with merge mode: {self.cross_channels_mode}"
             )
 
+        # A model with an overlap has its blocks blended where they meet by
+        # the inference server (chunkmirage's Op.overlap). A worker writes each
+        # tile on its own: for such a model, whole windows side by side, with
+        # a seam at every face. Any of the task's models, as they all run: the
+        # first everywhere, the others where the workers build them anyway,
+        # so the master builds no more models than it did.
+        for model in models if not create else models[:1]:
+            if any(model.geometry.overlap):
+                raise ConfigError(
+                    f"{getattr(model, 'name', None) or 'A model'} has an overlap {list(model.geometry.overlap)}: "
+                    "its blocks are blended where they meet, which the inference server does and blockwise does "
+                    "not yet. Serve it, or run blockwise with an export of it without an overlap."
+                )
+
         self.model_config = models[0]
         geometry = self.model_config.geometry
 
@@ -337,11 +351,12 @@ class CellMapFlowBlockwiseProcessor:
             process_chain().set(spec, built=(self.input_norms, self.postprocess))
         # The task's own dtype when it names one (the builder's Output node),
         # else the chain's: the last postprocessor's that declares one, or
-        # the model's.
+        # the model's. Its channel count is for ArgmaxPostprocessor, whose
+        # ids are uint16 past 255 channels.
         self.dtype = (
             np.dtype(self.config["dtype"])
             if self.config.get("dtype")
-            else process_chain().output_dtype(geometry.output_dtype, self.postprocess)
+            else process_chain().output_dtype(geometry.output_dtype, self.postprocess, geometry.output_channels)
         )
 
         self.inferencers = []

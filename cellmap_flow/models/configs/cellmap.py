@@ -8,6 +8,7 @@ import json
 import logging
 import os
 
+import numpy as np
 from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
@@ -111,7 +112,7 @@ class CellMapModelConfig(ModelConfig):
             name = folder_path.rstrip("/").split("/")[-1]
         self.name = name
         self.scale = scale
-        self._input_normalization = None
+        self._metadata_file = None
 
     def _get_config(self) -> Config:
         config = Config()
@@ -153,7 +154,32 @@ class CellMapModelConfig(ModelConfig):
         config.inference_output_shape = config.write_shape
 
         config.block_shape = [*output_shape, metadata.out_channels]
+
+        # Fields cellmap_models' parsed metadata does not have: an overlap, for
+        # a model whose output depends on its whole input, with how its blocks
+        # lie and are blended (ModelGeometry.overlap, block_phase, blend), and
+        # the dtype its output is in when it is not float32 (a uint8 export
+        # keeps an overlap's cached blocks a quarter of the size).
+        written = self._written_metadata()
+        for key in ("overlap", "block_phase", "blend"):
+            if written.get(key):
+                setattr(config, key, written[key])
+        if written.get("output_dtype"):
+            config.output_dtype = np.dtype(written["output_dtype"])
         return config
+
+    def _written_metadata(self) -> dict:
+        """The export's metadata.json as written, read once; {} when it cannot
+        be read. cellmap_models' parsed metadata leaves out the fields it does
+        not know: input_normalization, overlap, block_phase, blend, output_dtype."""
+        if self._metadata_file is None:
+            try:
+                with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
+                    written = json.load(f)
+                self._metadata_file = written if isinstance(written, dict) else {}
+            except (OSError, ValueError, AttributeError):
+                self._metadata_file = {}
+        return self._metadata_file
 
     def finetune_modes(self):
         """``export_finetune_modes`` of its folder's files, read from their
@@ -176,14 +202,8 @@ class CellMapModelConfig(ModelConfig):
     def declared_input_norm(self, data_range=None):
         """Its export's metadata.json's input_normalization
         (``metadata_input_norm``). cellmap_models' parsed metadata leaves that
-        field out, so the file is read for it, once."""
-        if self._input_normalization is None:
-            try:
-                with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
-                    self._input_normalization = json.load(f).get("input_normalization") or {}
-            except (OSError, ValueError, AttributeError):
-                self._input_normalization = {}
-        return metadata_input_norm(self._input_normalization, data_range)
+        field out, so the file is read for it, once (_written_metadata)."""
+        return metadata_input_norm(self._written_metadata().get("input_normalization") or {}, data_range)
 
     def to_dict(self):
         """This config as a model entry, which ``registry.build_model`` rebuilds."""
