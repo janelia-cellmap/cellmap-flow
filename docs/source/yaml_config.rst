@@ -947,6 +947,22 @@ The level read is then the one at 32 nm, as for a 32 nm model (and :ref:`resampl
 
 A model that reads its input itself, through its own ``process_chunk`` or ``predict`` (a TensorFlow script, a Cellpose or BioImage Model Zoo model), works out what to read in nm at its own voxel size, and refuses ``run_voxel_size``; give Cellpose and zoo models their ``voxel_size`` instead. In the dashboard it is the *Run at (nm)* field under a ticked Local Catalog or Hugging Face model on the Models tab, and ``cellmap_flow add REF -v 32`` writes it for a model that has no voxel size argument of its own.
 
+.. _overlap:
+
+Models whose output depends on their whole input
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A UNet's output voxel depends only on the input around it, so its tiles meet without a seam. A vision transformer attending over its whole input does not: the same voxel predicted in two windows gets two answers, and tiles laid side by side show their faces. Such a model declares an ``overlap``. Its output block is then a window, served in chunks of the block less the overlap on each side, and the server serves each chunk as the weighted mean of every block reaching it (chunkmirage's overlap blending). Each block is computed once and cached for the chunks it reaches.
+
+- ``overlap``: output voxels on each side, one number or ``[z, y, x]``. A 256³ window with an overlap of 64 is served in 128³ chunks.
+- ``block_phase``: where the blocks lie. ``centred`` on the chunks (the default), so a chunk is reached by 3 blocks along each axis, or on their ``corner``\ s, half a chunk back, so it is reached by 2. A 2D view of 6 × 6 chunks then needs 98 blocks instead of 192.
+- ``blend``: how a block's voxels are weighted. ``tent`` (the default) is flat over the block's middle and falls over its overlap; ``ramp`` rises from the block's faces to its centre, as many benchmarks blend sliding windows.
+- ``output_dtype``: the dtype of the model's output, when it is not float32. A uint8 output keeps each cached block a quarter of the size.
+
+A cellmap-models export gives them in its ``metadata.json``, beside ``input_normalization``; a script model as top-level variables (``overlap = 64``). The model's own shapes stay the window's (``input_shape`` and ``output_shape`` 256, its ``block_shape`` the window too).
+
+The blocks stay cached until their chunks are blended, so the server sizes its prediction cache for 256 of them (12 uint8 channels of 256³ are 200 MB a block, 51 GB in all), or 16 GiB if that is more; ``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` overrides it. A GPU queue's slot comes with 40 GB of memory (15 GB on the L4 and T4 queues) and a server's job has 4 slots. Blockwise processing does not blend blocks yet and refuses a model with an overlap.
+
 Extra Layers
 ------------
 

@@ -26,6 +26,9 @@ from funlib.geometry import Coordinate
 from cellmap_flow.io import CHANNEL_AXIS_NAMES  # noqa: F401  (re-read from here by the model types)
 
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
+# ModelGeometry.block_phase's and blend's values, chunkmirage's.
+BLOCK_PHASES = ("centred", "corner")
+BLENDS = ("tent", "ramp")
 
 
 # number: an int when whole, else a float (int() truncated a 5.24 nm voxel to 5).
@@ -140,6 +143,23 @@ class ModelGeometry:
     # what the server and blockwise chunk by; block_shape() derives one only
     # when there is none (a server's model_info, the cache).
     declared_block_shape: Optional[Tuple[int, ...]] = field(default=None, compare=False)
+    # Output voxels on each side of a served chunk that the model's output
+    # block also covers, per spatial axis (one number for all); none by
+    # default. A model whose answer depends on its whole input (a vision
+    # transformer attending over all of it) disagrees with itself where two
+    # blocks meet. With an overlap its blocks are written overlapping, and
+    # the server serves each chunk as the weighted mean of the blocks
+    # reaching it (chunkmirage's Op.overlap), smooth across chunk faces. A
+    # served chunk is then the block less the overlap on each side
+    # (served_block).
+    overlap: Tuple[int, ...] = ()
+    # How an overlap's blocks lie and are weighted (chunkmirage's
+    # Op.block_phase and Op.blend): "centred" on the chunks, or on their
+    # "corner"s, half a chunk back, where a chunk lies in 2 blocks a side
+    # rather than 3; and "tent" (flat over a block's middle, falling over its
+    # overlap) or "ramp" (rising from a block's faces to its centre).
+    block_phase: str = "centred"
+    blend: str = "tent"
 
     def __post_init__(self):
         def set_(name, value):  # frozen: normalize once, here
@@ -155,6 +175,17 @@ class ModelGeometry:
             set_("output_dtype", np.dtype(self.output_dtype))
         if self.declared_block_shape is not None:
             set_("declared_block_shape", tuple(int(v) for v in self.declared_block_shape))
+        overlap = self.overlap if self.overlap is not None else ()
+        if np.isscalar(overlap):
+            overlap = (overlap,) * self.ndim
+        overlap = tuple(int(v) for v in overlap) or (0,) * self.ndim
+        if len(overlap) != self.ndim or any(v < 0 for v in overlap):
+            raise ValueError(f"overlap {self.overlap!r}: give one number of output voxels, or one per spatial axis")
+        set_("overlap", overlap)
+        if self.block_phase not in BLOCK_PHASES:
+            raise ValueError(f"block_phase {self.block_phase!r}: one of {BLOCK_PHASES}")
+        if self.blend not in BLENDS:
+            raise ValueError(f"blend {self.blend!r}: one of {BLENDS}")
 
     @property
     def ndim(self) -> int:
@@ -191,6 +222,15 @@ class ModelGeometry:
             return self.declared_block_shape
         return (*self.output_shape, self.output_channels)
 
+    def served_block(self) -> Tuple[int, ...]:
+        """Spatial output voxels of one served chunk: an output block, less
+        the overlap on each side (all of it without one)."""
+        block = self.block_shape()[: self.ndim]
+        served = tuple(int(b) - 2 * o for b, o in zip(block, self.overlap))
+        if any(v <= 0 for v in served):
+            raise ValueError(f"overlap {self.overlap} leaves nothing of the output block {block} to serve")
+        return served
+
     @classmethod
     def from_config(cls, config, chunk_output_axes=None, output_dtype=None) -> "ModelGeometry":
         """From ``ModelConfig.config``, or anything with its geometry attributes.
@@ -214,6 +254,9 @@ class ModelGeometry:
             output_dtype=output_dtype,
             input_channels=getattr(config, "input_channels", 1),
             declared_block_shape=getattr(config, "block_shape", None),
+            overlap=getattr(config, "overlap", ()),
+            block_phase=getattr(config, "block_phase", "centred"),
+            blend=getattr(config, "blend", "tent"),
         )
 
     def to_model_info(self, spatial_axes=None, actual_input_voxel_size=None) -> dict:

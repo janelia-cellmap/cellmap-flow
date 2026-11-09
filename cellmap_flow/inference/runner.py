@@ -389,6 +389,15 @@ class ModelRunner:
             start = time.time()
             with torch.no_grad():
                 out = config.model.forward(dummy)
+                # TorchScript's profiling executor optimizes a graph on its
+                # second call, not its first: 35 s for lmd-vitl-p8-cellmap-lvd's
+                # graph of eight windows, which landed on the first chunk asked
+                # for while every other chunk queued behind it. Two more
+                # forwards move that here, the last one through the optimized
+                # graph.
+                if isinstance(config.model, torch.jit.ScriptModule):
+                    for _ in range(2):
+                        config.model.forward(dummy)
             if self.device.type == "cuda":
                 torch.cuda.synchronize()
             logger.info(f"Warmup forward {shape} took {time.time() - start:.1f}s")
