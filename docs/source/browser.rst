@@ -61,7 +61,10 @@ The app at janelia-cellmap.github.io counts its visits with
 sends the app's path, the screen's width and the site you came from, never
 anything after the ``?`` or ``#`` in the address (a link's dataset and
 models, a shared view) or anything you open, paint or train. A copy served
-from anywhere else counts nothing, and neither does the server mode.
+from anywhere else counts nothing, and neither does the server mode. To keep
+your own visits out, open
+``https://janelia-cellmap.github.io/cellmap-flow/app/#toggle-goatcounter``
+once; that browser's visits are then not counted, until you open it again.
 
 Opening a volume
 ----------------
