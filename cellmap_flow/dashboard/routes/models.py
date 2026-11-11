@@ -5,7 +5,8 @@ from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import (
-    NotRemovable, configs_by_name, loaded_models, remove_model, served_at_run_voxel_size, update_run_models,
+    NotRemovable, configs_by_name, listed_repo, loaded_models, remove_model, served_at_run_voxel_size,
+    update_run_models,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
@@ -64,10 +65,7 @@ def _with_run_voxel_sizes(hf_models: dict) -> dict:
     size not its own (services.launch.served_at_run_voxel_size), for its
     row's Run at (nm). The browser's listing (web/src/backend/routes/models.ts)
     answers the same key."""
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
-
-    served = {mc.repo: list(mc.run_voxel_size) for mc in served_at_run_voxel_size()
-              if isinstance(mc, HuggingFaceModelConfig)}
+    served = {listed_repo(mc): list(mc.run_voxel_size) for mc in served_at_run_voxel_size() if listed_repo(mc)}
     return {repo: {**meta, "run_voxel_size": served[repo]} if repo in served else meta
             for repo, meta in hf_models.items()}
 

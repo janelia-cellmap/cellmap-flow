@@ -171,6 +171,17 @@ onnxruntime-gpu = ">=1.27"
 [feature.onnx.target.osx-arm64.pypi-dependencies]
 onnxruntime = ">=1.20"
 
+# For the `mia` model type, which defaults to this environment: mia-train,
+# the MIA team's training framework, which cellmap-models' mia_model imports
+# to rebuild one of its networks and convert it, once, into a cellmap-models
+# export (configs/mia.py). Only the conversion needs it: the model.ts it
+# writes runs in any environment. A git package (not on PyPI) whose
+# top-level modules are named models, layers, components, predict and
+# train, so it lives in an environment of its own; pinned to a commit, so
+# that a push to its main branch does not change what installs.
+[feature.mia.pypi-dependencies]
+mia-train = { git = "https://github.com/AI-HHMI/mia-train.git", rev = "4e719562dcafc4761c3a30359899467af2ba38cb" }
+
 [feature.test.dependencies]
 pytest = "*"
 pytest-cov = "*"
@@ -216,3 +227,8 @@ cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }
 # moving them to the workspace re-solved the default env (torch 2.14.0 ->
 # 2.14.1 among others).
 fly = { features = ["finetune", "fly"], solve-group = "fly" }
+# The `mia` model type's (MiaModelConfig.default_env): its server converts
+# the model and serves it, and its finetuning job trains it, so it has the
+# finetune feature, which brings cellmap-models. In the default solve group,
+# so its torch and everything else it shares are the deployed environment's.
+mia = { features = ["finetune", "mia"], solve-group = "default" }

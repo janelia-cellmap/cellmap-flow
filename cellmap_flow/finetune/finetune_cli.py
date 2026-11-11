@@ -83,6 +83,11 @@ def main():
     logger.info("Loading model...")
 
     model_config = model_config_from_args(args)
+    if args.serve_data_path:
+        # Before it is built: a model run at the data's own voxel size is
+        # trained, and then served, at the finest of the data it serves
+        # (ModelConfig.adopt_native_voxel_size), as its server ran it.
+        model_config.adopt_native_voxel_size(args.serve_data_path)
     base_model = load_trainable_model(model_config)
     markers.emit(markers.NETWORK_PARAMETERS, sum(p.numel() for p in base_model.parameters()))
 

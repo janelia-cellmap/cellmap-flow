@@ -20,9 +20,10 @@ from typing import Optional
 # The activation classes and their reading of a range are written once in
 # cellmap_flow.portable, where the browser's Python (a seed's probability)
 # reads them too: UNIT [0, 1], a sigmoid or softmax already applied;
+# BYTE_UNIT [0, 255], a probability x 255 a uint8 export declares;
 # SIGNED_UNIT [-1, 1], a tanh; UNBOUNDED, no output activation (logits,
 # distances, affinities...).
-from cellmap_flow.portable.label_it import SIGNED_UNIT, UNBOUNDED, UNIT, classify_output_range  # noqa: F401
+from cellmap_flow.portable.label_it import BYTE_UNIT, SIGNED_UNIT, UNBOUNDED, UNIT, classify_output_range  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,10 @@ NEIGHBORHOOD_OFFSETS = [
 
 # What each activation class means as a value range. UNBOUNDED stays None:
 # logits and distances share it and imply different parameters.
-_CLASS_RANGE = {UNIT: (0.0, 1.0), SIGNED_UNIT: (-1.0, 1.0)}
+_CLASS_RANGE = {UNIT: (0.0, 1.0), BYTE_UNIT: (0.0, 255.0), SIGNED_UNIT: (-1.0, 1.0)}
 
 
-def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None) -> dict:
+def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None, offsets=None) -> dict:
     """Parameter values for a suggested chain, from the range flowing into each step.
 
     The default parameters assume each step sees the range its most common
@@ -93,7 +94,9 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
 
     ``bias`` is the AffinityPostprocessor's: the cut-off the ranking fitted
     to the paint for the model (its row's threshold, a probability), or
-    None for the midpoint, 0.5.
+    None for the midpoint, 0.5. ``offsets`` are its neighborhood when the
+    model declares them (``ModelConfig.declared_affinity_offsets``), else
+    NEIGHBORHOOD_OFFSETS cut to its channels.
 
     Returns ``{postprocessor_name: {param: value}}``, containing only the steps
     whose defaults are wrong for this chain, and the AffinityPostprocessor's
@@ -128,9 +131,10 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
             # ranking fitted, where its score called a painted pair joined,
             # so the objects are cut where the score read the model.
             affinity = {"bias": 0.5 if bias is None else float(bias)}
-            if out_channels:
-                offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
-                affinity["neighborhood"] = str(offsets)
+            if offsets:
+                affinity["neighborhood"] = str([list(offset) for offset in offsets])
+            elif out_channels:
+                affinity["neighborhood"] = str(NEIGHBORHOOD_OFFSETS[: int(out_channels)])
             params[name] = affinity
             rng = None  # labels from here on
 
@@ -201,6 +205,8 @@ def activation_evidence(output_class_from=None, output_op=None, output_range=Non
     either."""
     if output_class_from == "graph" and output_op:
         return f"its network ends in {'an' if output_op[0] in 'AEIOU' else 'a'} {output_op}"
+    if output_class_from == "declared":
+        return "its metadata declares it"
     if output_range is None or None in tuple(output_range):
         return ""
     lo, hi = (float(v) for v in output_range)
@@ -217,6 +223,7 @@ def review_postprocess(
     channels_names=None,
     evidence="",
     threshold=None,
+    affinity_offsets=None,
 ) -> dict:
     """Compare a model's output class against the configured postprocessors.
 
@@ -249,6 +256,10 @@ def review_postprocess(
     affinity chain suggested cuts its objects there (the watershed's bias),
     where the score called a painted pair joined, and says so; at 0.5
     without one.
+
+    ``affinity_offsets``, the ones the model declares
+    (``ModelConfig.declared_affinity_offsets``), make it an affinity model
+    whatever its channels are named, and are the watershed's neighborhood.
     """
     names = list(postprocess_names or [])
     said = f" ({evidence})" if evidence else ""
@@ -264,7 +275,7 @@ def review_postprocess(
             "level": level,
             "message": message,
             "suggest": suggest,
-            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold),
+            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold, affinity_offsets),
         }
 
     if output_class is None:
@@ -277,11 +288,11 @@ def review_postprocess(
             [],
         )
 
-    if looks_like_affinities(out_channels, model_name, channels_names):
+    if affinity_offsets or looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
             # Whether the affinities reach it in [0, 1], or the 0-255 of a
             # DefaultPostprocessor.
-            scaled = has_default or has_sigmoid or output_class == UNIT
+            scaled = has_default or has_sigmoid or output_class in (UNIT, BYTE_UNIT)
             # The watershed joins neighbours by how far their affinity is
             # above its bias: a threshold ahead of it leaves 0s and 1s, which
             # it reads as DefaultPostprocessor's 0-255 and divides by 255, and
@@ -322,7 +333,7 @@ def review_postprocess(
         # Unless the activation needs setting first, which the checks below
         # suggest or warn of: the sigmoid logits with nothing set need, a
         # second one taken away.
-        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, SIGNED_UNIT) and has_sigmoid)):
+        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, BYTE_UNIT, SIGNED_UNIT) and has_sigmoid)):
             return verdict(
                 "optional",
                 (
@@ -332,12 +343,14 @@ def review_postprocess(
                 suggest_affinity_chain(output_class),
             )
 
-    if output_class == UNIT:
+    if output_class in (UNIT, BYTE_UNIT):
+        # A probability: in [0, 1], or x 255 in a uint8 export's whole numbers.
+        what = "in [0, 1], a sigmoid's" if output_class == UNIT else "a probability x 255, in [0, 255]"
         if has_sigmoid:
             return verdict(
                 "warn",
                 (
-                    f"This model's output is already in [0, 1], a sigmoid's{said}. "
+                    f"This model's output is already {what}{said}. "
                     "SigmoidPostprocessor would apply a second one, flattening "
                     "the contrast."
                 ),
@@ -345,7 +358,7 @@ def review_postprocess(
             )
         return verdict(
             "ok",
-            f"Model output is already in [0, 1]{said}; no activation needed.",
+            f"Model output is already {what}{said}; no activation needed.",
             [],
         )
 

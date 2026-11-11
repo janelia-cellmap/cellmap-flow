@@ -17,6 +17,7 @@ from cellmap_flow.models.configs.finetune import FinetuneModelConfig
 from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
 from cellmap_flow.models.configs.cellpose import CellposeModelConfig
 from cellmap_flow.models.configs.onnx import OnnxModelConfig
+from cellmap_flow.models.configs.mia import MiaModelConfig
 
 __all__ = [
     "Config",
@@ -30,4 +31,5 @@ __all__ = [
     "HuggingFaceModelConfig",
     "CellposeModelConfig",
     "OnnxModelConfig",
+    "MiaModelConfig",
 ]

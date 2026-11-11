@@ -11,8 +11,11 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.models import hf_catalog
+from tests.utils.mia_helpers import PRETRAINING, SEGMENTATION, install_fake_adapter
 
 MB = 1_000_000
+# The organizations listed, each one listing of its repos.
+ORGS = len(hf_catalog.HUGGING_FACE_ORGS)
 
 # The org's repos as the Hub lists them, with their files' sizes: a ResUNet
 # export with every format, and cellmap/onnx-web-models' copy of it; an
@@ -32,7 +35,12 @@ FILES = {
         # A level down: the browser lists top-level folders only.
         "conv3d/setup_54/manifest.json": 7339, "conv3d/setup_54/setup_54_in116_fp32.onnx": 42_914_184,
     },
+    # Models trained with mia-train: a segmentation model, served as type
+    # mia, and a pretraining checkpoint, which is not listed.
+    "ai-hhmi/lmd-vitl-p8-cellmap-lvd": {"README.md": 4000, "config.json": 9000, "model.safetensors": 1214 * MB},
+    "ai-hhmi/simmim-vitl": {"config.json": 900, "model.safetensors": 1214 * MB},
 }
+CONFIGS = {"ai-hhmi/lmd-vitl-p8-cellmap-lvd": SEGMENTATION, "ai-hhmi/simmim-vitl": PRETRAINING}
 
 MANIFESTS = {
     (hf_catalog.WEB_MODELS_REPO, "setup_54"): {"source_repo": "cellmap/mito-aff-resunet-setup-54", "variants": [
@@ -50,12 +58,13 @@ def hub(tmp_path, monkeypatch):
     """The fake Hub, and the cache under tmp_path; ``hub.asked`` counts the
     listings of the org."""
     state = SimpleNamespace(asked=0)
+    install_fake_adapter(monkeypatch)
 
     def listing(author, expand=None):
         state.asked += 1
         assert expand == ["siblings"]
         return [SimpleNamespace(id=repo, siblings=[SimpleNamespace(rfilename=name) for name in files])
-                for repo, files in FILES.items()]
+                for repo, files in FILES.items() if repo.startswith(f"{author}/")]
 
     def download(repo, filename):
         folder, _, name = filename.rpartition("/")
@@ -72,6 +81,7 @@ def hub(tmp_path, monkeypatch):
     monkeypatch.setattr(hf_catalog, "get_paths_info", lambda repo, paths: [
         SimpleNamespace(path=path, size=FILES[repo][path]) for path in paths])
     monkeypatch.setattr(hf_catalog, "hf_hub_download", download)
+    monkeypatch.setattr(hf_catalog, "_hf_config", lambda repo, revision: CONFIGS[repo])
     monkeypatch.setattr(hf_catalog, "HF_CACHE_DIR", str(tmp_path / "hugging_face"))
     monkeypatch.setattr(hf_catalog, "HF_CACHE_FILE", str(tmp_path / "hugging_face" / "models_cache.json"))
     return state
@@ -81,8 +91,9 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
     models = dashboard.get("/api/huggingface-models").get_json()
 
     # onnx-web-models has no metadata.json: it is not a model, but its
-    # manifests say which models it has a copy of.
-    assert sorted(models) == sorted(list(FILES)[:3])
+    # manifests say which models it has a copy of. The pretraining
+    # checkpoint is no model cellmap-flow serves.
+    assert sorted(models) == sorted([*list(FILES)[:3], "ai-hhmi/lmd-vitl-p8-cellmap-lvd"])
     facts = {repo: hf_catalog.facts_of(meta) for repo, meta in models.items()}
     assert facts["cellmap/mito-aff-resunet-setup-54"] == {
         "formats": ["TorchScript", "torch.export", "ONNX"], "finetune_modes": ["lora", "full"], "size_mb": 56.0,
@@ -98,10 +109,15 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
         "browser_copy": "cellmap/mito_aff_unet_setup_16_ft/ft-small",
         "variants": [{"variant": "fp32", "file_mb": 43.37}, {"variant": "int8w", "file_mb": 11.0}]}
     assert models["cellmap/mito-aff-resunet-setup-54"]["description"] == "cellmap/mito-aff-resunet-setup-54"
+    # The mia-train model is listed to be served as type mia, which converts it.
+    mia = models["ai-hhmi/lmd-vitl-p8-cellmap-lvd"]
+    assert hf_catalog.listed_entry("ai-hhmi/lmd-vitl-p8-cellmap-lvd", mia, "lmd")["type"] == "mia"
+    assert hf_catalog.facts_of(mia) == {"formats": [], "finetune_modes": ["lora", "full"], "size_mb": 1214.0,
+                                        "browser_copy": None}
 
     # Cached: listed again without asking the Hub.
     dashboard.get("/api/huggingface-models")
-    assert hub.asked == 1
+    assert hub.asked == ORGS
 
     # A cache written before the listing said what each model is is fetched
     # again, once.
@@ -109,4 +125,4 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
         json.dump({"cellmap/mito-aff-resunet-setup-54": {"description": "old"}}, f)
     assert dashboard.get("/api/huggingface-models").get_json() == models
     dashboard.get("/api/huggingface-models")
-    assert hub.asked == 2
+    assert hub.asked == 2 * ORGS

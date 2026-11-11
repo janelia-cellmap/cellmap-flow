@@ -85,6 +85,13 @@ export const ADDED_REPOS_KEY = "cellmap-flow:models:added-repos:v1";
  * only when its network fits an .onnx file. */
 const SERVER_FORM = ["metadata.json", "model.ts"];
 
+/** The files at a repo's root of a model trained with mia-train (the MIA
+ * team's, ai-hhmi on Hugging Face; cellmap_models' MIA_FILES), which a
+ * cellmap-flow server converts into its export for servers on its first
+ * start (cellmap_flow/models/configs/mia.py). Its networks are vision
+ * transformers over 256³ windows, far too big for the browser. */
+const MIA_FORM = ["config.json", "model.safetensors"];
+
 /** What a server's publish names the folder of a smaller copy for the
  * browser, after the model's own (cellmap_flow/portable/publish.py
  * SMALL_SUFFIX): added to the repo once its training on the cluster is done. */
@@ -302,7 +309,8 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   }
 
   // `repo`'s raw manifests by folder, from the Hub. A repo with none that
-  // holds a model for servers (SERVER_FORM) is a NoBrowserCopyError.
+  // holds a model for servers (SERVER_FORM), or a model trained with
+  // mia-train (MIA_FORM), is a NoBrowserCopyError.
   async function fetchRepo(repo: string): Promise<Record<string, unknown>> {
     const tree = await fetchTree(fetchImpl, repo);
     const folders = modelFolders(tree);
@@ -312,8 +320,12 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
       if (result.status === "fulfilled") manifests[folders[i]!] = result.value;
       else if (!isMissing(result.reason)) throw result.reason;
     });
-    if (Object.keys(manifests).length === 0 && SERVER_FORM.every((name) => tree.some((e) => e.type === "file" && e.path === name))) {
+    const holds = (names: readonly string[]) => names.every((name) => tree.some((e) => e.type === "file" && e.path === name));
+    if (Object.keys(manifests).length === 0 && holds(SERVER_FORM)) {
       throw new NoBrowserCopyError(`${repo} has no copy for the browser: it holds a model for cellmap-flow servers (Add a model on a server takes ${repo}). A smaller copy for the browser, if its publish asked for one, is added as a folder of it once trained`);
+    }
+    if (Object.keys(manifests).length === 0 && holds(MIA_FORM)) {
+      throw new NoBrowserCopyError(`${repo} holds a model trained with mia-train, which runs on a GPU server only: its network (a vision transformer over 256³ windows) is far too big for the browser. On the cellmap-flow dashboard (server mode), Add a model takes ${repo}, converts it once on the server's GPU and serves it there`);
     }
     return manifests;
   }

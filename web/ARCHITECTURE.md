@@ -638,7 +638,7 @@ web/
       norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks at the voxel size run at, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
-    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice (the largest block that fits for a 3D model, the one nearest 512 a side for a 2D one), byte cache keyed by URL and ETag, finetuned.ts (the models finetuned here)
+    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice (the largest block that fits for a 3D model, the one nearest 512 a side for a 2D one), byte cache keyed by URL and ETag, finetuned.ts (the models finetuned here); a repo for servers only (a server's export, a model trained with mia-train) is a NoBrowserCopyError saying where it runs
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
                              viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/

@@ -255,6 +255,10 @@ class CellMapFlowBlockwiseProcessor:
             )
         self.input_path = resolve_data_path(self.input_path, scale)
         logger.info(f"Reading: {self.input_path}")
+        # Before anything builds them: a model run at the data's own voxel
+        # size runs at the finest of it (ModelConfig.adopt_native_voxel_size).
+        for model in models:
+            model.adopt_native_voxel_size(self.input_path)
 
         # Support multiple models with model_mode
         self.models = models

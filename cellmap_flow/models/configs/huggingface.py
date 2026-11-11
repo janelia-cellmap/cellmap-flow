@@ -11,10 +11,19 @@ import time
 from types import SimpleNamespace
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
-from cellmap_flow.models.configs.cellmap import CellMapModelConfig, export_finetune_modes, metadata_geometry
+from cellmap_flow.models.configs.cellmap import (
+    CellMapModelConfig, declared_offsets, export_finetune_modes, integer_output_refusal, metadata_geometry,
+)
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
+
+# The fields of an export's metadata.json that to_dict() adds to the entry,
+# for the pipeline builder to show (the mia type's to_dict adds them too).
+DISPLAY_KEYS = ("channels_names", "input_voxel_size", "output_voxel_size",
+                "inference_input_shape", "inference_output_shape",
+                "in_channels", "out_channels", "model_type", "framework",
+                "spatial_dims", "iteration", "model_name", "description")
 
 
 def download_export(repo, revision=None):
@@ -91,7 +100,10 @@ class HuggingFaceModelConfig(ModelConfig):
     def finetune_modes(self):
         """``export_finetune_modes`` of the repo's files. Their list is asked
         for, not the model, once for the life of this config; when the Hub
-        cannot say, both are offered, and the job says which it takes."""
+        cannot say, both are offered, and the job says which it takes. None
+        when its output cannot be trained through (finetune_refusal)."""
+        if self.finetune_refusal():
+            return ()
         if self._files is None and (
             self._files_failed_at is None
             or time.monotonic() - self._files_failed_at >= self.METADATA_RETRY_SECONDS
@@ -126,6 +138,22 @@ class HuggingFaceModelConfig(ModelConfig):
             return None
         return metadata.get("input_norm") or metadata_input_norm(metadata.get("input_normalization"), data_range)
 
+    def finetune_refusal(self):
+        """``integer_output_refusal`` of the repo's metadata.json's ``output_dtype``."""
+        metadata = self._load_metadata()
+        return integer_output_refusal(self.name, metadata.get("output_dtype")) if isinstance(metadata, dict) else None
+
+    def declared_affinity_offsets(self):
+        """The offsets the repo's metadata.json declares (``affinity_offsets``,
+        downloaded as for declared_geometry; None without them."""
+        metadata = self._load_metadata()
+        return declared_offsets(metadata.get("affinity_offsets")) if isinstance(metadata, dict) else None
+
+    def runs_at_native_voxel_size(self) -> bool:
+        """Whether the repo's metadata.json says ``native_voxel_size``."""
+        metadata = self._load_metadata()
+        return isinstance(metadata, dict) and bool(metadata.get("native_voxel_size"))
+
     def _launch_params(self) -> dict:
         # Not to_dict(): that downloads metadata.json for the pipeline builder,
         # and launching a server needs only the constructor arguments.
@@ -151,10 +179,7 @@ class HuggingFaceModelConfig(ModelConfig):
         # Include metadata from HuggingFace model for pipeline builder display
         metadata = self._load_metadata()
         if metadata:
-            for key in ("channels_names", "input_voxel_size", "output_voxel_size",
-                        "inference_input_shape", "inference_output_shape",
-                        "in_channels", "out_channels", "model_type", "framework",
-                        "spatial_dims", "iteration", "model_name", "description"):
+            for key in DISPLAY_KEYS:
                 if key in metadata:
                     result[key] = metadata[key]
 

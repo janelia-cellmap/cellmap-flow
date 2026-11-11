@@ -15,6 +15,10 @@ stat, a file name, a regex, or (only when ``online``) one request.
    - a ``.py`` file: ``script``;
    - a folder with ``metadata.json``: ``cellmap`` (a cellmap-models export,
      which is served from its ``model.ts``);
+   - a folder with a mia-train model's ``config.json`` and
+     ``model.safetensors`` (cellmap_models' ``MIA_FILES``) whose config
+     cellmap_models can serve (``is_mia_config``): ``mia``; one it cannot (a
+     pretraining checkpoint) is refused;
    - a folder with ``rdf.yaml`` or ``bioimageio.yaml``, such a file itself
      (``*.rdf.yaml`` too), or a ``.zip`` with one inside: ``bioimage``;
    - ``model_checkpoint_<n>``, a ``.ts`` or a ``model.pt``: ``fly``, which
@@ -32,7 +36,8 @@ stat, a file name, a regex, or (only when ``online``) one request.
    (``hf:org/repo/folder``: that folder's ONNX web export),
    ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
    ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``,
-   ``onnx:<path, folder or org/repo/folder>``. The type's own name works as
+   ``onnx:<path, folder or org/repo/folder>``, ``mia:<org/repo[@revision] or
+   folder>``. The type's own name works as
    its prefix too (``huggingface:``, ``bioimage:``). Nothing after a prefix
    is looked up online.
 
@@ -50,7 +55,10 @@ stat, a file name, a regex, or (only when ``online``) one request.
    model a folder with its ``manifest.json``: ``onnx``. ``org/repo``
    (``@revision`` optional; not a DOI, which is 7's): a Hugging Face repo.
    Online, its file list is read: with ``metadata.json`` and ``model.ts`` it
-   is a cellmap-models export, ``huggingface``; a repo of web exports is
+   is a cellmap-models export, ``huggingface``; without ``metadata.json`` but
+   with a mia-train model's files, its ``config.json`` is read too (a few
+   kB) and the repo is ``mia`` when cellmap_models can serve that config,
+   else refused with what it is; a repo of web exports is
    refused with its folders, one of which to add; anything else is refused
    with what to do instead. A model a server published has both: the
    export at the root, which ``org/repo`` serves (only the root's files are
@@ -69,9 +77,11 @@ Anything else is a ValueError that says what was tried.
 
 Importing this module imports only the standard library (and
 ``models.entry``, which has no more). Resolving imports
-the model config classes (numpy and funlib, as the registry does), and the
-online checks huggingface_hub; nothing imports torch or a model's framework,
-and ``Resolved.entry()`` is a plain dict.
+the model config classes (numpy and funlib, as the registry does), the
+online checks huggingface_hub, and a mia-train model's check cellmap_models'
+``model_export.mia_model`` (which imports torch, never mia-train); nothing
+else imports torch or a model's framework, and ``Resolved.entry()`` is a
+plain dict.
 """
 
 import os
@@ -182,7 +192,7 @@ def resolve(ref: str, *, name: str = None, voxel_size=None, online: bool = True)
     raise ValueError(
         f"Could not tell what model {ref!r} is. Tried, in order: a local file or folder (there is "
         f"none{' at ' + _expanded(ref) if _looks_like_path(ref) else ''}); a prefix (hf:, bioimageio:, "
-        "cellpose:, fly:, dacapo:, script:, onnx:); a Cellpose model name; a URL; a Hugging Face repo "
+        "cellpose:, fly:, dacapo:, script:, onnx:, mia:); a Cellpose model name; a URL; a Hugging Face repo "
         f"(org/repo, or org/repo/folder of ONNX exports); a BioImage Model Zoo id or nickname; and a folder "
         f"of {ONNX_REPO}{' (offline: not looked up)' if not online else ''}. Say what it is with a prefix, "
         "e.g. fly:/path/to/checkpoint or dacapo:my_run@100000."
@@ -299,6 +309,8 @@ def _folder(path: str, request: _Request) -> Resolved:
                 f"Its model.pt, if it has one, can be served as fly:{os.path.join(path, 'model.pt')}."
             )
         return _resolved("cellmap", {"folder_path": path}, folder, "a cellmap-models export folder", request)
+    if _mia_files(os.listdir(path)):
+        return _mia_folder(path, request)
     rdf = _bioimage_source(path)
     if rdf is not None:
         return _bioimage(rdf, folder, "a bioimage.io model folder", request)
@@ -531,6 +543,7 @@ def _prefixed(ref: str, request: _Request) -> Optional[Resolved]:
         "dacapo": _dacapo_prefixed,
         "script": _script_prefixed,
         "onnx": _onnx_prefixed,
+        "mia": _mia_prefixed,
     }.get(prefix)
     if handler is None:
         return None
@@ -743,6 +756,8 @@ def _hf_checked(repo: str, revision: Optional[str], request: _Request) -> Resolv
     files, notes = _hub_files(repo, revision, request, "a cellmap-models export")
     if files is None:
         return _huggingface(repo, revision, how, request, notes=notes)
+    if EXPORT_METADATA not in files and _mia_files(files):
+        return _mia_repo(repo, revision, request)
     folders = _onnx_folders(files)
     if EXPORT_METADATA not in files and folders:
         raise ValueError(
@@ -769,6 +784,112 @@ def _huggingface(repo, revision, how, request, notes=()) -> Resolved:
     if revision:
         params["revision"] = revision
     return _resolved("huggingface", params, repo.split("/")[-1], how, request, notes=notes)
+
+
+# --- 1, 2 and 5. a model trained with mia-train -------------------------------------------------
+
+_MIA_HOW = "a model trained with mia-train, converted into a cellmap-models export once, on its first start"
+_MIA_NOTE = ("its first start converts it on the job's GPU, in the mia environment, and keeps the export for every "
+             "start after; it runs on a server only")
+
+
+def _mia_adapter():
+    """cellmap_models' ``model_export.mia_model``, or None when the
+    cellmap_models installed has none: then no reference is taken to be a
+    mia-train model."""
+    import importlib
+
+    try:
+        return importlib.import_module("cellmap_models.model_export.mia_model")
+    except ImportError:
+        return None
+
+
+def _mia_files(files) -> bool:
+    """Whether ``files``, the names of a repo's or a folder's files, hold a
+    mia-train model's at the top: every one of cellmap_models' MIA_FILES.
+    Only names with a ``.safetensors`` among them can (mia-train's weights),
+    so the adapter, which imports torch, is imported for no others."""
+    if not any(name.endswith(".safetensors") for name in files):
+        return False
+    mia = _mia_adapter()
+    return mia is not None and all(name in files for name in mia.MIA_FILES)
+
+
+def _hf_config(repo: str, revision: Optional[str]) -> dict:
+    """The ``config.json`` of a Hugging Face repo, downloaded (a few kB).
+
+    Raises:
+        Exception: it cannot be downloaded or read.
+    """
+    import json
+
+    from huggingface_hub import hf_hub_download
+
+    with open(hf_hub_download(repo, "config.json", revision=revision, etag_timeout=ONLINE_TIMEOUT)) as f:
+        return json.load(f)
+
+
+def servable_mia_config(config) -> bool:
+    """Whether cellmap_models can serve the mia-train model whose
+    ``config.json`` is ``config`` (``is_mia_config``: a segmentation network,
+    not a pretraining checkpoint). The Hugging Face listing asks it too
+    (hf_catalog)."""
+    mia = _mia_adapter()
+    return mia is not None and isinstance(config, dict) and bool(mia.is_mia_config(config))
+
+
+def _refuse_unservable(where: str, config) -> None:
+    if not servable_mia_config(config):
+        raise ValueError(
+            f"{where} holds a model trained with mia-train (its config.json and model.safetensors), but not one "
+            "cellmap-flow can serve: its config.json is not a segmentation network's (a semantic_seg or "
+            "affinity_seg model). A pretraining checkpoint, such as a SimMIM one, has no head that predicts anything."
+        )
+
+
+def _mia_repo(repo: str, revision: Optional[str], request: _Request) -> Resolved:
+    """A Hugging Face repo whose files are a mia-train model's: its config.json read, and checked."""
+    try:
+        config = _hf_config(repo, revision)
+    except Exception as e:
+        raise ValueError(f"{repo} holds a model trained with mia-train, but its config.json, which says whether "
+                         f"cellmap-flow can serve it, could not be read ({e})") from None
+    _refuse_unservable(repo, config)
+    params = {"repo": repo}
+    if revision:
+        params["revision"] = revision
+    return _resolved("mia", params, repo.split("/")[-1], _MIA_HOW, request, notes=[_MIA_NOTE])
+
+
+def _mia_folder(path: str, request: _Request) -> Resolved:
+    """A folder with a mia-train model's files: its config.json read, and checked."""
+    import json
+
+    try:
+        with open(os.path.join(path, "config.json")) as f:
+            config = json.load(f)
+    except (OSError, ValueError) as e:
+        raise ValueError(f"{path} holds a model trained with mia-train, but its config.json cannot be read ({e})")
+    _refuse_unservable(path, config)
+    return _resolved("mia", {"path": path}, os.path.basename(path.rstrip("/")), _MIA_HOW, request, notes=[_MIA_NOTE])
+
+
+def _mia_prefixed(value: str, request: _Request) -> Resolved:
+    """``mia:`` a folder (checked, from its files), or ``org/repo[@revision]`` (not looked up)."""
+    path = _expanded(value)
+    if os.path.isdir(path):
+        if not _mia_files(os.listdir(path)):
+            raise ValueError(f"mia:{value}: {path} has no config.json and model.safetensors, a mia-train model's files")
+        return _mia_folder(path, request)
+    if not _HF_REPO.match(value) or os.path.exists(path):
+        raise ValueError(f"mia:{value}: neither a folder with a mia-train model's files nor a Hugging Face repo "
+                         "(org/repo[@revision])")
+    repo, _, revision = value.partition("@")
+    params = {"repo": repo}
+    if revision:
+        params["revision"] = revision
+    return _resolved("mia", params, repo.split("/")[-1], _MIA_HOW, request, notes=[_MIA_NOTE])
 
 
 # --- 6. a zoo id or nickname -------------------------------------------------------------------

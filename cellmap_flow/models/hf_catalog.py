@@ -1,4 +1,10 @@
-"""The cellmap models published on the Hugging Face Hub, for the dashboard's picker.
+"""The models on the Hugging Face Hub that cellmap-flow serves, for the dashboard's picker.
+
+Those of the organizations in ``HUGGING_FACE_ORGS`` that cellmap-flow can
+serve: cellmap-models exports (a ``metadata.json`` at the root), and models
+trained with mia-train whose ``config.json`` cellmap_models can serve
+(``resolve.servable_mia_config``), which are served as type ``mia``
+(``LISTED_TYPE``); any other repo is left out.
 
 ``list_huggingface_models`` answers from a cache file under
 ``~/.cellmap_flow`` once there is one, so opening the dashboard does not
@@ -12,7 +18,9 @@ that runs in the browser, if it has one. Those are read from the repo's file
 list and the sizes of its weights (one listing of the organization's repos
 with their file names, then one request of sizes per repo), and from the
 manifests of cellmap/onnx-web-models, when the cache is built, and kept in it:
-a page's poll never asks the Hub for them.
+a page's poll never asks the Hub for them. A mia-train model has no
+metadata.json; its ``config.json`` is read instead, once per such repo when
+the cache is built.
 """
 
 import json
@@ -21,10 +29,12 @@ from typing import Any, Dict, List, Optional
 
 from huggingface_hub import get_paths_info, hf_hub_download, list_models, list_repo_files
 
-from cellmap_flow.models.configs.cellmap import export_finetune_modes
-from cellmap_flow.models.resolve import _onnx_folders
+from cellmap_flow.models.configs.cellmap import export_finetune_modes, integer_output_refusal
+from cellmap_flow.models.resolve import EXPORT_METADATA, _hf_config, _mia_files, _onnx_folders, servable_mia_config
 
-HUGGING_FACE_ORGS_NAME = "cellmap"
+# The Hugging Face organizations the list shows the models of: cellmap's
+# exports, and the MIA team's (HHMI AI) models trained with mia-train.
+HUGGING_FACE_ORGS = ("cellmap", "ai-hhmi")
 HF_CACHE_DIR = os.path.expanduser("~/.cellmap_flow/hugging_face")
 HF_CACHE_FILE = os.path.join(HF_CACHE_DIR, "models_cache.json")
 
@@ -58,6 +68,22 @@ WEIGHT_ENDINGS = (".ts", ".pt2", ".onnx", ".onnx.data", ".pt", ".pth", ".safeten
 #   filtering on it does not hide a model it knows nothing of;
 # - ``variants``: the copy's precisions, ``{"variant", "file_mb"}`` each.
 FACTS = ("formats", "finetune_modes", "size_mb", "browser_copy", "variants")
+
+# The model type a listed repo is served as, when it is not ``huggingface``:
+# ``mia`` for a model trained with mia-train. In the listing beside the
+# metadata's fields, under a name no metadata.json has; ``listed_entry``
+# reads it.
+LISTED_TYPE = "cellmap_flow_type"
+MIA_DESCRIPTION = ("Trained with mia-train; converted into a cellmap-models export on its first start, "
+                   "on its server's GPU, and served on a server only")
+
+
+def listed_entry(repo: str, metadata: Optional[Dict[str, Any]], name: str) -> Dict[str, Any]:
+    """The model entry of ``repo`` as the list has it (``metadata``, its
+    entry; None when the list has none): ``huggingface``, or the type it is
+    listed as (``LISTED_TYPE``). The Models tab's Submit and the ranking's
+    candidates build each listed model from it."""
+    return {"type": (metadata or {}).get(LISTED_TYPE) or "huggingface", "repo": repo, "name": name}
 
 
 def weight_facts(sizes: Dict[str, Optional[int]]) -> Dict[str, Any]:
@@ -174,26 +200,55 @@ def repo_facts(repo: str, revision: Optional[str] = None) -> Dict[str, Any]:
     return _repo_facts(repo, list_repo_files(repo, revision=revision), {})
 
 
-def _fetch_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]:
-    """Fetch models from Hugging Face Hub and save to cache."""
+def _listed_metadata(repo: str, names: List[str]) -> Optional[Dict[str, Any]]:
+    """What the list keeps of ``repo``, whose files are ``names``, before its
+    facts: a cellmap-models export's metadata.json; for a model trained with
+    mia-train that cellmap-flow can serve, its type and a description (its
+    channels and sizes are its export's, made on its first start). None for
+    any other repo. Raises what downloading a file raises."""
+    if EXPORT_METADATA in names or not names:
+        with open(hf_hub_download(repo, EXPORT_METADATA)) as f:
+            return json.load(f)
+    if _mia_files(names):
+        if not servable_mia_config(_hf_config(repo, None)):
+            print(f"{repo}: a mia-train model cellmap-flow cannot serve (not a segmentation network); not listed")
+            return None
+        return {LISTED_TYPE: "mia", "model_name": repo.split("/")[-1], "description": MIA_DESCRIPTION}
+    print(f"{repo}: neither a cellmap-models export nor a mia-train model; not listed")
+    return None
+
+
+def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
+    """Fetch the models of ``orgs`` (one organization's name, or several)
+    from the Hugging Face Hub, and save them to the cache."""
+    if isinstance(orgs, str):
+        orgs = (orgs,)
     result = {}
     try:
         # With their file names, which the facts read (and their sizes, which
         # no listing gives, asked for per repo).
-        models = list(list_models(author=org_name, expand=["siblings"]))
+        models = [m for org in orgs for m in list_models(author=org, expand=["siblings"])]
     except Exception as e:
         print(f"Error fetching Hugging Face models: {str(e)}")
         return {}
     linked = _linked_copies()
     for m in models:
+        names = [s.rfilename for s in m.siblings or []]
         try:
-            path = hf_hub_download(m.id, "metadata.json")
-            with open(path) as f:
-                metadata = json.load(f)
+            metadata = _listed_metadata(m.id, names)
         except Exception as e:
-            print(f"{m.id}: Could not load metadata.json ({e})")
+            print(f"{m.id}: Could not load its metadata.json or config.json ({e})")
             continue
-        result[m.id] = {**metadata, **_repo_facts(m.id, [s.rfilename for s in m.siblings or []], linked)}
+        if metadata is None:
+            continue
+        result[m.id] = {**metadata, **_repo_facts(m.id, names, linked)}
+        if metadata.get(LISTED_TYPE) == "mia":
+            # Its export's, which is made on its first start: both until then
+            # (configs/mia.py MiaModelConfig.finetune_modes).
+            result[m.id]["finetune_modes"] = ["lora", "full"]
+        elif integer_output_refusal(m.id, metadata.get("output_dtype")):
+            # A whole-number output passes no gradient (HuggingFaceModelConfig.finetune_modes).
+            result[m.id]["finetune_modes"] = []
 
     # Save to cache
     os.makedirs(HF_CACHE_DIR, exist_ok=True)
@@ -203,7 +258,7 @@ def _fetch_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[st
     return result
 
 
-def list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]:
+def list_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """
     List available Hugging Face models, using cache if available.
 
@@ -211,7 +266,7 @@ def list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str,
     again, once: its rows would show nothing of what each model is.
 
     Args:
-        org_name: Hugging Face organization name to filter models (default: "cellmap")
+        orgs: the Hugging Face organizations to list (HUGGING_FACE_ORGS by default)
 
     Returns:
         A dict mapping model IDs to their metadata
@@ -219,7 +274,7 @@ def list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str,
     cached = cached_huggingface_models()
     if cached is not None and all("formats" in metadata for metadata in cached.values()):
         return cached
-    return _fetch_huggingface_models(org_name)
+    return _fetch_huggingface_models(orgs)
 
 
 def cached_huggingface_models() -> Optional[Dict[str, Any]]:
@@ -234,6 +289,6 @@ def cached_huggingface_models() -> Optional[Dict[str, Any]]:
         return None
 
 
-def refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]:
+def refresh_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """Force refresh the Hugging Face models cache."""
-    return _fetch_huggingface_models(org_name)
+    return _fetch_huggingface_models(orgs)

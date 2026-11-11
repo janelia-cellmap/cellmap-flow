@@ -4,7 +4,7 @@
 // found by, and the repos added beside the built-in one by a ref of theirs.
 import { describe, expect, it } from "vitest";
 
-import { createCatalog, LISTING_KEY } from "../../src/models";
+import { createCatalog, LISTING_KEY, NoBrowserCopyError } from "../../src/models";
 import { LISTING_TTL_MS, MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { MemoryByteCache } from "../../src/models/byte-cache";
 import { finetunedRecord, MemoryFinetunedRegistry } from "../../src/models/finetuned";
@@ -115,6 +115,8 @@ describe("another Hugging Face repo", () => {
     // Two models: setup_54's export copied, so its name is the built-in's, and setup_56's.
     "bob/models": { manifests: { copy_54: rawManifest("setup_54"), copy_56: rawManifest("setup_56") } },
     "carol/private": { status: 401 },
+    // A model trained with mia-train, which only a server converts and runs.
+    "dana/vit": { files: ["config.json", "model.safetensors"] },
   };
 
   it("resolves every form of ref the server takes, adds the repo after the built-in one and lists it on the next visit", async () => {
@@ -135,6 +137,7 @@ describe("another Hugging Face repo", () => {
     await expect(catalog.resolve("carol/private/x")).rejects.toThrow(/carol\/private.*401/);
     await expect(catalog.resolve(`${ALICE}/images`)).rejects.toThrow(/images/);
     await expect(catalog.resolve(`${ALICE}/${FT}@dev`)).rejects.toThrow(/dev/);
+    for (const ref of ["dana/vit", "mia:dana/vit"]) await expect(catalog.resolve(ref)).rejects.toBeInstanceOf(NoBrowserCopyError);
     // Not a Hugging Face model: a zoo DOI, a path, a word.
     for (const ref of ["10.5281/zenodo.5764892", "runs/model.onnx", "nothing_here"]) expect(await catalog.resolve(ref)).toBeNull();
 

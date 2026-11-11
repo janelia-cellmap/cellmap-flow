@@ -80,9 +80,11 @@ const REPO_REF = new RegExp(`^(${SEGMENT}/${SEGMENT})(?:/(${SEGMENT}))?(?:@([\\w
 const DOI = /^10\.\d{4,9}\//;
 const FILE_LIKE = /\.(?:onnx|py|ts|pt|zip|ya?ml)$/i;
 /** The prefixes that say a ref is a Hugging Face model's: `hf:` and its
- * long spelling, as on the server, and `onnx:`, the server's for an ONNX
- * export (`onnx:<owner>/<repo>/<folder>`); none is needed. */
-const PREFIX = /^(?:hf|huggingface|onnx):(?!\/\/)/i;
+ * long spelling, as on the server, `onnx:`, the server's for an ONNX
+ * export (`onnx:<owner>/<repo>/<folder>`), and `mia:`, the server's for a
+ * model trained with mia-train (`mia:<owner>/<repo>`, which the catalog
+ * answers runs on a server only); none is needed. */
+const PREFIX = /^(?:hf|huggingface|onnx|mia):(?!\/\/)/i;
 const HUB_HOSTS = ["huggingface.co", "www.huggingface.co", "hf.co"];
 /** The first segments of huggingface.co pages that are not a model repo's. */
 const NOT_A_MODEL = ["datasets", "spaces", "models", "docs", "collections"];

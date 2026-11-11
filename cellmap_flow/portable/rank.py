@@ -60,7 +60,7 @@ from typing import List, Optional, Sequence
 
 import numpy as np
 
-from cellmap_flow.portable.label_it import SIGNED_UNIT, UNBOUNDED, UNIT
+from cellmap_flow.portable.label_it import BYTE_UNIT, SIGNED_UNIT, UNBOUNDED, UNIT
 
 # The most painted blocks one score reads, spread over the paint.
 RANK_BLOCKS = 32
@@ -321,23 +321,26 @@ def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
       the model's own boundary): a ThresholdPostprocessor at it, in place of
       one the chain has, in the units of the output after the activation:
       the probability itself after the sigmoid and on an output in [0, 1]
-      (UNIT); 2p - 1 on one in [-1, 1] (SIGNED_UNIT, a tanh), whose
-      probability label_it.probability reads as (x + 1) / 2.
+      (UNIT); 255p on a probability x 255 (BYTE_UNIT); 2p - 1 on one in
+      [-1, 1] (SIGNED_UNIT, a tanh), whose probability label_it.probability
+      reads as (x + 1) / 2.
 
     A chain with any other step (a watershed, DefaultPostprocessor, a
     ChannelSelection) is the user's and left as it is, but for one thing: a
-    sigmoid on an output that has one already (UNIT, SIGNED_UNIT) is taken
-    away from any chain, as a second sigmoid flattens the contrast (the
+    sigmoid on an output that has one already (UNIT, BYTE_UNIT, SIGNED_UNIT)
+    is taken away from any chain, as a second sigmoid flattens the contrast (the
     model advice warns of it: serving/probe.py review_postprocess).
     """
     steps = [dict(s) for s in postprocess or []]
-    needed = [s for s in steps if s.get("name") != SIGMOID] if output_class in (UNIT, SIGNED_UNIT) else steps
-    if output_class not in (UNBOUNDED, UNIT, SIGNED_UNIT) or any(s.get("name") not in (SIGMOID, THRESHOLD) for s in needed):
+    bounded = (UNIT, BYTE_UNIT, SIGNED_UNIT)
+    needed = [s for s in steps if s.get("name") != SIGMOID] if output_class in bounded else steps
+    if output_class not in (UNBOUNDED, *bounded) or any(s.get("name") not in (SIGMOID, THRESHOLD) for s in needed):
         return None if needed == steps else needed
     if output_class == UNBOUNDED and (not needed or threshold is not None) and all(s.get("name") != SIGMOID for s in needed):
         needed = [{"name": SIGMOID}, *needed]
     if threshold is not None:
-        value = round(2 * float(threshold) - 1, 3) if output_class == SIGNED_UNIT else float(threshold)
+        value = (round(2 * float(threshold) - 1, 3) if output_class == SIGNED_UNIT
+                 else round(255 * float(threshold), 3) if output_class == BYTE_UNIT else float(threshold))
         needed = [s for s in needed if s.get("name") != THRESHOLD] + [{"name": THRESHOLD, "threshold": value}]
     return None if needed == steps else needed
 

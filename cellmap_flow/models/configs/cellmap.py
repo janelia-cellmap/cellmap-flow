@@ -13,6 +13,7 @@ from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 from cellmap_flow.models.geometry import channel_names_of
+from cellmap_flow.portable.label_it import BYTE_UNIT
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,41 @@ def export_finetune_modes(file_names) -> tuple:
     failed at their start.
     """
     return ("lora", "full") if "model.pt2" in file_names else ("full",)
+
+
+def declared_offsets(value):
+    """``affinity_offsets`` as an export's metadata declares them: one
+    ``[dz, dy, dx]`` of whole voxels per affinity channel, in channel order,
+    as lists of ints; None when ``value`` is not that (absent, empty, or
+    not three whole numbers each)."""
+    try:
+        offsets = [[int(v) for v in offset] for offset in value]
+        whole = all(int(v) == v for offset in value for v in offset)
+    except (TypeError, ValueError):
+        return None
+    return offsets if offsets and whole and all(len(offset) == 3 for offset in offsets) else None
+
+
+def _integer_dtype(dtype):
+    """``dtype`` (an export's ``output_dtype``) as a numpy dtype when it is
+    an integer one; None for a float, nothing, or no dtype."""
+    try:
+        dtype = np.dtype(dtype) if dtype else None
+    except TypeError:
+        return None
+    return dtype if dtype is not None and dtype.kind in "iub" else None
+
+
+def integer_output_refusal(name, output_dtype):
+    """Why a model whose export declares ``output_dtype`` cannot be
+    finetuned, or None when it can: an integer output (a probability x 255,
+    rounded) passes no gradient back to the network. The finetune_refusal
+    of an export's folder and of its Hugging Face repository."""
+    dtype = _integer_dtype(output_dtype)
+    if dtype is None:
+        return None
+    return (f"{name} cannot be finetuned: its output is {dtype} (rounded to whole numbers, a probability x 255 "
+            "for a uint8 export), through which no gradient reaches the network")
 
 
 def _other_shapes(metadata):
@@ -155,23 +191,43 @@ class CellMapModelConfig(ModelConfig):
 
         config.block_shape = [*output_shape, metadata.out_channels]
 
-        # Fields cellmap_models' parsed metadata does not have: an overlap, for
-        # a model whose output depends on its whole input, with how its blocks
-        # lie and are blended (ModelGeometry.overlap, block_phase, blend), and
-        # the dtype its output is in when it is not float32 (a uint8 export
-        # keeps an overlap's cached blocks a quarter of the size).
-        written = self._written_metadata()
+        # An overlap, for a model whose output depends on its whole input,
+        # with how its blocks lie and are blended (ModelGeometry.overlap,
+        # block_phase, blend), and the dtype its output is in when it is not
+        # float32 (a uint8 export keeps an overlap's cached blocks a quarter
+        # of the size): fields a cellmap_models before its mia_model had not
+        # parsed (_metadata_field).
         for key in ("overlap", "block_phase", "blend"):
-            if written.get(key):
-                setattr(config, key, written[key])
-        if written.get("output_dtype"):
-            config.output_dtype = np.dtype(written["output_dtype"])
+            value = self._metadata_field(key)
+            if value:
+                setattr(config, key, value)
+        output_dtype = self._metadata_field("output_dtype")
+        if output_dtype:
+            config.output_dtype = np.dtype(output_dtype)
+            # A uint8 export's output is a probability x 255 (cellmap_models
+            # writes one so), which its server reports as that, not as the
+            # unbounded range its probe would see (inference/runner.py).
+            if config.output_dtype == np.uint8:
+                config.output_class = BYTE_UNIT
         return config
+
+    def _metadata_field(self, key):
+        """``key`` of the export's metadata: cellmap_models' parsed metadata's
+        when it has the field and a value for it, else the metadata.json's as
+        written (``_written_metadata``); None when neither has it. Never
+        raises."""
+        try:
+            parsed = getattr(self.cellmap_model.metadata, key, None)
+        except (OSError, ValueError, AttributeError):
+            parsed = None
+        return parsed if parsed is not None else self._written_metadata().get(key)
 
     def _written_metadata(self) -> dict:
         """The export's metadata.json as written, read once; {} when it cannot
         be read. cellmap_models' parsed metadata leaves out the fields it does
-        not know: input_normalization, overlap, block_phase, blend, output_dtype."""
+        not know: input_normalization, and before its mia_model overlap,
+        block_phase, blend, output_dtype, affinity_offsets and
+        native_voxel_size."""
         if self._metadata_file is None:
             try:
                 with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
@@ -184,7 +240,10 @@ class CellMapModelConfig(ModelConfig):
     def finetune_modes(self):
         """``export_finetune_modes`` of its folder's files, read from their
         names without loading them: the model list asks on every poll. Both
-        while the folder cannot be listed."""
+        while the folder cannot be listed; none when its output cannot be
+        trained through (finetune_refusal)."""
+        if self.finetune_refusal():
+            return ()
         folder = getattr(self.cellmap_model, "folder_path", None)
         try:
             return export_finetune_modes(os.listdir(folder)) if folder else ("lora", "full")
@@ -204,6 +263,20 @@ class CellMapModelConfig(ModelConfig):
         (``metadata_input_norm``). cellmap_models' parsed metadata leaves that
         field out, so the file is read for it, once (_written_metadata)."""
         return metadata_input_norm(self._written_metadata().get("input_normalization") or {}, data_range)
+
+    def finetune_refusal(self):
+        """``integer_output_refusal`` of its export's ``output_dtype``."""
+        return integer_output_refusal(self.name, self._metadata_field("output_dtype"))
+
+    def declared_affinity_offsets(self):
+        """The offsets its export's metadata declares (``affinity_offsets``,
+        ``declared_offsets``), read without the model; None without them."""
+        return declared_offsets(self._metadata_field("affinity_offsets"))
+
+    def runs_at_native_voxel_size(self) -> bool:
+        """Whether its export's metadata says it runs at the data's own voxel
+        size (``native_voxel_size``), its input_voxel_size being a default only."""
+        return bool(self._metadata_field("native_voxel_size"))
 
     def to_dict(self):
         """This config as a model entry, which ``registry.build_model`` rebuilds."""

@@ -36,7 +36,7 @@ from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
 from cellmap_flow.models.models_config import (
-    BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
+    BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig, MiaModelConfig,
 )
 from cellmap_flow.models.registry import build_model
 from cellmap_flow.viewer.layers import deleted_layers, prediction_layer, replace_layer
@@ -485,9 +485,14 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
             if name in names:
                 add(name, _built({"type": "cellmap", "folder_path": folder, "name": name,
                                   "run_voxel_size": run_voxel_sizes.get(name)}, name))
+    if hf_repos:
+        from cellmap_flow.models.hf_catalog import cached_huggingface_models, listed_entry
+
+        # As the list has each: a mia-train model's repo is type mia.
+        listed = cached_huggingface_models() or {}
     for repo in hf_repos:
         name = _sanitize_job_name(repo.split("/")[-1])
-        add(name, _built({"type": "huggingface", "repo": repo, "name": name,
+        add(name, _built({**listed_entry(repo, listed.get(repo), name),
                           "run_voxel_size": run_voxel_sizes.get(repo)}, repo))
     for config in _bioimage_configs(bioimage_models) + _cellpose_configs(cellpose_models):
         add(config.name, config)
@@ -547,6 +552,15 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
         _launch(name, run_model, config, st_data)
 
 
+def listed_repo(config):
+    """The Hugging Face repo ``config`` serves, as the Hugging Face list
+    lists it: a huggingface model's, or a mia model's from a repo (not one
+    from a folder); None for any other."""
+    if isinstance(config, HuggingFaceModelConfig) or (isinstance(config, MiaModelConfig) and config.repo):
+        return config.repo
+    return None
+
+
 def served_at_run_voxel_size() -> list:
     """The configs of the models running or starting at a voxel size not
     their own (``ModelConfig.run_voxel_size``): the Models tab fills in their
@@ -601,7 +615,7 @@ def _loaded_entry(name, job, config, catalog_group):
         if _owned_by_finetune(job):
             ended, note, confirm = _finetune_note(training)
             entry.update(note=note, confirm=confirm, status="running" if not ended else "ended")
-    elif isinstance(config, HuggingFaceModelConfig):
+    elif listed_repo(config):
         entry.update(source="huggingface", detail=config.repo, hf_id=config.repo)
     elif isinstance(config, BioModelConfig):
         entry.update(source="bioimage", detail=config.model, zoo_id=config.model)
