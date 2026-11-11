@@ -37,6 +37,7 @@ sets the input normalization the model was trained on, and the
 postprocessing its output wants, before its server has converted it.
 """
 
+import functools
 import hashlib
 import importlib
 import logging
@@ -102,19 +103,39 @@ def device_kind() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
+@functools.lru_cache(maxsize=None)
+def converter_version() -> str:
+    """A fingerprint of the converter installed: the first 12 hex digits of
+    the SHA-1 of cellmap_models' mia_model source file, or "unknown" when it
+    has none (a stand-in module). An export is cached under it, so a
+    cellmap-models whose converter changed (what an export declares, how it
+    wraps the network) converts again rather than serving an export the old
+    one made; cellmap-models' version number stays the same across its
+    commits, so it cannot say this."""
+    source = getattr(mia_model(), "__file__", None)
+    try:
+        with open(source, "rb") as f:
+            return hashlib.sha1(f.read()).hexdigest()[:12]
+    except (OSError, TypeError):
+        return "unknown"
+
+
 def model_dir(repo: Optional[str] = None, commit: Optional[str] = None, path: Optional[str] = None) -> Path:
     """The cache folder of the model of ``repo`` at ``commit`` (a full commit
-    SHA), or of the folder ``path``, which holds its exports by device kind:
-    ``<org>--<repo>/<commit>``, or ``local/<folder name>-<fingerprint>`` with
-    the fingerprint of the folder's path and its MIA_FILES' sizes and times,
-    so that new weights in the same folder are converted again."""
+    SHA), or of the folder ``path``, as the converter installed makes it
+    (``converter_version``), which holds its exports by device kind:
+    ``<org>--<repo>/<commit>/<converter>``, or ``local/<folder
+    name>-<fingerprint>/<converter>`` with the fingerprint of the folder's
+    path and its MIA_FILES' sizes and times, so that new weights in the same
+    folder are converted again."""
     if path is None:
-        return cache_root() / repo.replace("/", "--") / commit
+        return cache_root() / repo.replace("/", "--") / commit / converter_version()
     fingerprint = hashlib.sha1(os.path.abspath(path).encode())
     for name in mia_model().MIA_FILES:
         stat = os.stat(os.path.join(path, name))
         fingerprint.update(f"|{name}:{stat.st_size}:{stat.st_mtime_ns}".encode())
-    return cache_root() / "local" / f"{os.path.basename(os.path.abspath(path))}-{fingerprint.hexdigest()[:12]}"
+    folder = f"{os.path.basename(os.path.abspath(path))}-{fingerprint.hexdigest()[:12]}"
+    return cache_root() / "local" / folder / converter_version()
 
 
 def export_dir(repo: Optional[str] = None, commit: Optional[str] = None, path: Optional[str] = None,

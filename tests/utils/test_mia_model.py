@@ -96,7 +96,7 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
     assert isinstance(first.config.model, torch.jit.ScriptModule)
     assert isinstance(second.config.model, torch.jit.ScriptModule)
     assert converted == [str(snapshot)]
-    assert first.cellmap_model.folder_path == str(tmp_path / "cache" / "ai-hhmi--lmd-vitl" / COMMIT / mia.device_kind())
+    assert first.cellmap_model.folder_path == str(tmp_path / "cache" / "ai-hhmi--lmd-vitl" / COMMIT / mia.converter_version() / mia.device_kind())
     assert build_model(first.to_dict()).launch_entry == first.launch_entry
 
     # Once converted, the dashboard reads it from the cache: its channels,

@@ -208,7 +208,8 @@ The first start converts the model, once, into a cellmap-models export, on
 the GPU of the job that serves it, in the ``mia`` pixi environment (which has
 mia-train; install it first with ``cellmap_flow envs install mia``). The
 export is kept under ``~/.cellmap_flow/mia_exports`` (or
-``CELLMAP_FLOW_MIA_CACHE``), one per commit of the repo, so every later start,
+``CELLMAP_FLOW_MIA_CACHE``), one per commit of the repo and version of the
+converter (a cellmap-models whose converter changed converts again), so every later start,
 and a finetune of the model, serves it at once. The dashboard knows what the
 export will declare before then, from the repo's ``config.json`` and model
 card alone, so Submit sets the input normalization the model was trained on
