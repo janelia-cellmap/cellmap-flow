@@ -26,10 +26,14 @@ rename wins and the other copy is dropped, so no server reads a
 half-written export.
 
 Nothing the dashboard asks (declared_geometry, declared_input_norm,
-declared_affinity_offsets, finetune_modes, to_dict) downloads or converts
-anything: each reads the cached export once a server has made it (the cache
-is in the home folder the dashboard and its jobs share), and says nothing
-before.
+declared_affinity_offsets, finetune_modes, finetune_refusal, to_dict)
+downloads the weights or converts anything: each reads the cached export
+once a server has made it (the cache is in the home folder the dashboard and
+its jobs share). Before that, all but to_dict answer from the metadata the
+export will have, which cellmap_models' ``mia_metadata`` makes from the
+repo's config.json and model card alone (small files, which resolving the
+model has fetched already), so that Submit sets the input normalization the
+model was trained on before its server has converted it.
 """
 
 import hashlib
@@ -208,10 +212,13 @@ class MiaModelConfig(ModelConfig):
         self.revision = revision or None
         self.name = name or (self.repo.split("/")[-1] if self.repo else os.path.basename(self.path.rstrip("/")))
         self.scale = scale
-        # The export served, once _served() has made sure of it; and the one
-        # found in the cache by _cached(), which made nothing.
+        # The export served, once _served() has made sure of it; the one
+        # found in the cache by _cached(), which made nothing; and, before
+        # either, what the export will declare (_planned), False when that
+        # could not be read.
         self._export = None
         self._peeked = None
+        self._plan = None
 
     # --- the export ---------------------------------------------------------------
 
@@ -277,6 +284,30 @@ class MiaModelConfig(ModelConfig):
                 return None
         return self._peeked
 
+    def _planned(self) -> Optional[CellMapModelConfig]:
+        """What the export will declare, before there is one: a
+        CellMapModelConfig of cellmap_models' ``mia_metadata`` of the repo (at
+        ``revision``) or folder, the metadata export_mia_model will write,
+        made from its config.json and model card alone (of a repo, only those
+        are fetched, never its weights). Read once; None when it cannot be (a
+        cellmap_models without mia_metadata, the Hub out of reach with
+        nothing cached), which is logged once."""
+        if self._plan is None:
+            try:
+                metadata = mia_model().mia_metadata(self.repo or self.path, revision=self.revision)
+                self._plan = CellMapModelConfig.from_metadata(metadata, self.name, self.scale)
+            except Exception as e:  # the dashboard's questions never raise
+                logger.warning(f"What {self.name} declares is not known before a server has converted it: {e}")
+                self._plan = False
+        return self._plan or None
+
+    def _declared(self) -> Optional[CellMapModelConfig]:
+        """What answers what the model declares: its export, served or
+        cached (_cached), else what the export will be (_planned); None when
+        neither is known."""
+        export = self._cached()
+        return export if export is not None else self._planned()
+
     @property
     def cellmap_model(self):
         """The export's CellmapModel (the trainer's, finetune.model_loading,
@@ -290,36 +321,41 @@ class MiaModelConfig(ModelConfig):
         return self._served()._get_config()
 
     def runs_at_native_voxel_size(self) -> bool:
-        """The export's (``CellMapModelConfig.runs_at_native_voxel_size``):
-        converted first if it must be, as the server asks right before it
-        builds the model."""
-        return self._served().runs_at_native_voxel_size()
+        """The export's (``CellMapModelConfig.runs_at_native_voxel_size``), or
+        the one it will be (_declared); converted first when neither is
+        known, as the server asks right before it builds the model."""
+        declared = self._declared()
+        return (declared if declared is not None else self._served()).runs_at_native_voxel_size()
 
     def finetune_modes(self):
-        """The export's, once there is one; both before (the job says which
-        it takes, as for a Hugging Face repo that cannot be listed)."""
-        export = self._cached()
-        return export.finetune_modes() if export is not None else ("lora", "full")
+        """The export's, or the one it will be (_declared): both, unless its
+        output cannot be trained through; both when neither is known (the job
+        says which it takes, as for a Hugging Face repo that cannot be
+        listed)."""
+        declared = self._declared()
+        return declared.finetune_modes() if declared is not None else ("lora", "full")
 
     def finetune_refusal(self):
-        """The cached export's; None before it is made."""
-        export = self._cached()
-        return export.finetune_refusal() if export is not None else None
+        """The export's, or the one it will be (_declared); None when neither is known."""
+        declared = self._declared()
+        return declared.finetune_refusal() if declared is not None else None
 
     def declared_geometry(self):
-        """The cached export's; None before it is made."""
-        export = self._cached()
-        return export.declared_geometry() if export is not None else None
+        """The export's, or the one it will be (_declared); None when neither is known."""
+        declared = self._declared()
+        return declared.declared_geometry() if declared is not None else None
 
     def declared_input_norm(self, data_range=None):
-        """The cached export's; None before it is made."""
-        export = self._cached()
-        return export.declared_input_norm(data_range) if export is not None else None
+        """The export's, or the one it will be (_declared): the range its
+        config.json's intensity_range says it read in training; None when
+        neither is known."""
+        declared = self._declared()
+        return declared.declared_input_norm(data_range) if declared is not None else None
 
     def declared_affinity_offsets(self):
-        """The cached export's; None before it is made."""
-        export = self._cached()
-        return export.declared_affinity_offsets() if export is not None else None
+        """The export's, or the one it will be (_declared); None when neither is known."""
+        declared = self._declared()
+        return declared.declared_affinity_offsets() if declared is not None else None
 
     def _launch_params(self) -> dict:
         # Not to_dict(): its display fields are no constructor's arguments.

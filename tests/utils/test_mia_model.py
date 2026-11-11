@@ -85,10 +85,11 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
     monkeypatch.setattr(mia, "export_in_subprocess", export)
     entry = {"type": "mia", "repo": "ai-hhmi/lmd-vitl", "name": "lmd"}
 
-    # Before any server has converted it, the dashboard knows nothing of it,
-    # and asking downloads nothing.
+    # Before any server has converted it, the dashboard knows what its export
+    # will declare (mia_metadata, from its config.json), and asking downloads
+    # nothing.
     dashboard = build_model(entry)
-    assert dashboard.declared_geometry() is None and dashboard.finetune_modes() == ("lora", "full")
+    assert dashboard.declared_geometry()["channels"] == ["mito", "er"] and dashboard.finetune_modes() == ()
     assert not downloaded
 
     first, second = build_model(entry), build_model(entry)
@@ -113,6 +114,42 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
         model.adopt_native_voxel_size(data)
     assert native.geometry.input_voxel_size == (4, 4, 4) and told.geometry.input_voxel_size == (8, 8, 8)
     assert converted == [str(snapshot)]
+
+
+def test_submit_sets_the_input_normalization_a_mia_model_was_trained_on_before_it_is_converted(
+        adapter, dashboard, monkeypatch, tmp_path):
+    """Ticked in the Hugging Face list and submitted before any server has
+    converted it, a mia model's start sets the chain's input normalization
+    from what its export will declare (mia_metadata: read in [0, 1]): the
+    raw data's range scaled onto [0, 1], as a cellmap-models export's
+    min_max [0, 1] is, before its layer is drawn. Not a weight is fetched
+    for it."""
+    import huggingface_hub
+
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.dashboard.services import launch
+    from cellmap_flow.dashboard.state import get_session
+    from cellmap_flow.models import hf_catalog
+    from cellmap_flow.models.configs import mia
+    from cellmap_flow.pipeline_spec import PipelineSpec
+    from tests.utils.test_dashboard_launch import _InlineThread
+
+    repo = "ai-hhmi/lmd-vitl"
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "cache"))  # no export of it there
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda *args, **kwargs: pytest.fail("downloaded"))
+    monkeypatch.setattr(hf_catalog, "cached_huggingface_models", lambda: {repo: {hf_catalog.LISTED_TYPE: "mia"}})
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = get_session()
+    session.set_pipeline(PipelineSpec([], []))
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
+    unit = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
+    assert session.pipeline_spec == PipelineSpec(unit, []) and drawn_through == [PipelineSpec(unit, [])]
 
 
 def test_the_offsets_an_export_declares_win_over_its_channel_names(tmp_path):

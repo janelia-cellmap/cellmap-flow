@@ -5,6 +5,7 @@ as the MIA team's config.json does, by its ``model``, ``head`` and
 ``algorithm``; one without a head (a SimMIM pretraining checkpoint) is not
 one the adapter serves."""
 
+import importlib
 import json
 import sys
 import types
@@ -14,15 +15,44 @@ MIA_FILES = ("config.json", "model.safetensors")
 SEGMENTATION = {"model": {"name": "dinov3_vit3d"}, "head": {"name": "UNETRHead"}, "algorithm": {"name": "semantic_seg"}}
 PRETRAINING = {"model": {"name": "dinov3_vit3d"}, "algorithm": {"name": "simmim"}}
 
+# What mia_metadata says a semantic model's export will declare, from its
+# config.json: read in [0, 1] (its intensity_range), two classes as uint8
+# probabilities x 255, run at the data's own voxel size.
+DECLARED = {
+    "model_name": "lmd", "framework": "torch", "spatial_dims": 3, "in_channels": 1, "out_channels": 2,
+    "channels_names": ["mito", "er"], "input_voxel_size": [8] * 3, "output_voxel_size": [8] * 3,
+    "input_shape": [8] * 3, "output_shape": [8] * 3, "inference_input_shape": [8] * 3,
+    "inference_output_shape": [8] * 3, "input_normalization": {"method": "min_max", "min": 0.0, "max": 1.0},
+    "output_dtype": "uint8", "native_voxel_size": True,
+}
+
+
+def model_metadata(**fields):
+    """cellmap_models' ModelMetadata of ``fields``, as mia_metadata answers,
+    keeping the fields the cellmap_models installed does not know (CI's
+    PyPI release has no output_dtype or native_voxel_size)."""
+    from pydantic import ConfigDict
+
+    from cellmap_models.model_export.generate_metadata import ModelMetadata
+
+    class Metadata(ModelMetadata):
+        model_config = ConfigDict(extra="allow")
+
+    return Metadata(**fields)
+
 
 def install_fake_adapter(monkeypatch):
     """The fake ``cellmap_models.model_export.mia_model``, in sys.modules for
-    the test: its MIA_FILES and is_mia_config. Its export is
-    ``configs/mia.export_in_subprocess``'s to fake, which runs it in a
-    process of its own."""
+    the test: its MIA_FILES, is_mia_config, and mia_metadata, which answers
+    DECLARED of any model. Its export is ``configs/mia.export_in_subprocess``'s
+    to fake, which runs it in a process of its own."""
+    # Its package first (for model_metadata), whose __init__ imports the real
+    # module's names when the cellmap_models installed has one.
+    importlib.import_module("cellmap_models.model_export")
     module = types.ModuleType("cellmap_models.model_export.mia_model")
     module.MIA_FILES = MIA_FILES
     module.is_mia_config = lambda config: isinstance(config, dict) and "head" in config
+    module.mia_metadata = lambda source, revision=None, classes=None: model_metadata(**DECLARED)
     monkeypatch.setitem(sys.modules, module.__name__, module)
     return module
 

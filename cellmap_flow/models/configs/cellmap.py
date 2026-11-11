@@ -7,6 +7,7 @@ model is its TorchScript export.
 import json
 import logging
 import os
+from types import SimpleNamespace
 
 import numpy as np
 from funlib.geometry import Coordinate
@@ -149,6 +150,26 @@ class CellMapModelConfig(ModelConfig):
         self.name = name
         self.scale = scale
         self._metadata_file = None
+
+    @classmethod
+    def from_metadata(cls, metadata, name, scale=None) -> "CellMapModelConfig":
+        """The config of an export not made yet, from the metadata it will
+        have (``metadata``: cellmap_models' ModelMetadata, as it will be
+        written into its metadata.json). It answers what the export declares
+        (declared_geometry, declared_input_norm, declared_affinity_offsets,
+        finetune_refusal, finetune_modes, runs_at_native_voxel_size) from that
+        metadata, by the code an export's folder is answered by, and has no
+        model to serve. A mia model's before its server converts it
+        (configs/mia.py)."""
+        self = cls.__new__(cls)
+        ModelConfig.__init__(self)
+        # The metadata and no folder: finetune_modes says both then, as for a
+        # folder that cannot be listed, unless finetune_refusal refuses.
+        self.cellmap_model = SimpleNamespace(metadata=metadata, folder_path=None)
+        self.name, self.scale = name, scale
+        # Its metadata.json as cellmap_models' write_metadata will write it (_written_metadata).
+        self._metadata_file = metadata.model_dump()
+        return self
 
     def _get_config(self) -> Config:
         config = Config()

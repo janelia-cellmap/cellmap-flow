@@ -209,7 +209,11 @@ the GPU of the job that serves it, in the ``mia`` pixi environment (which has
 mia-train; install it first with ``cellmap_flow envs install mia``). The
 export is kept under ``~/.cellmap_flow/mia_exports`` (or
 ``CELLMAP_FLOW_MIA_CACHE``), one per commit of the repo, so every later start,
-and a finetune of the model, serves it at once. A model trained on each
+and a finetune of the model, serves it at once. The dashboard knows what the
+export will declare before then, from the repo's ``config.json`` and model
+card alone, so Submit sets the input normalization the model was trained on
+(the raw data scaled onto [0, 1] for the ``ai-hhmi`` models) from the first
+start. A model trained on each
 dataset at its own voxel size runs at the finest voxel size of the data it is
 served on, unless its entry gives ``run_voxel_size``. A repo of the framework
 that is not a segmentation model (a pretraining checkpoint) is refused,

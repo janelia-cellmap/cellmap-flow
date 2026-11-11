@@ -392,7 +392,8 @@ class ModelConfig:
 
         Asked only by ``adopt_native_voxel_size``, in a process that is about
         to serve or train the model, so a type may prepare the model to
-        answer (a mia model is converted then); never by the dashboard."""
+        answer (a mia model whose metadata cannot be read is converted
+        then); never by the dashboard."""
         return False
 
     def adopt_native_voxel_size(self, data_path) -> None:
