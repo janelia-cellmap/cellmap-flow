@@ -21,9 +21,10 @@ Called where a person gives a dataset: the CLIs' ``-d`` (``view``,
 dashboard's dataset field and box tool (``dashboard/requests.py`` SetData
 and BbxGenerator). The browser's twin, ``web/src/shared/pasted.ts``
 ``pastedPath``, applies the same pattern, which ``build/export_data.py``
-exports, to its dataset field (``routes/data.ts``) and its ``?dataset=``
-links (``web/src/link.ts`` parseLink); both are held to one table of cases,
-``web/test/fixtures/pasted_paths.json``.
+exports, to its dataset field (``routes/data.ts``), its ``?dataset=``
+links (``web/src/link.ts`` parseLink) and the raw layer of a view it opens
+(``web/src/viewer/state.ts`` datasetUrlFromState); both are held to one
+table of cases, ``web/test/fixtures/pasted_paths.json``.
 """
 
 import re
