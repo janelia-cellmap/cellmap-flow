@@ -7,8 +7,11 @@
 - ``set_declared_input_norm()``: a model's start sets the input normalization
   it declares, or its kind of model's convention, when the chain has none
   (services.launch.update_run_models).
+- ``set_declared_postprocess()``: a model's start sets the postprocessing
+  the model advice suggests for the output it declares, when the chain has
+  none (services.launch.update_run_models).
 - ``set_needed_postprocess()``: a model's start sets the postprocessing its
-  output needs, a sigmoid for logits, when the chain has none, once its
+  output needs, a sigmoid for logits, when the chain has none still, once its
   server's probe says (services.launch.run_model).
 - ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
   replaced, kept for one release as its deprecated aliases.
@@ -33,7 +36,7 @@ from cellmap_flow.io.raw import raw_channels, selected_channel
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.portable import rank
+from cellmap_flow.portable import advice, rank
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, view_of
 from cellmap_flow.serving.client import fetch_model_info
@@ -401,6 +404,87 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
         logger.info(f"Input normalization set from {name}'s declaration: {named}" if declared
                     else f"Input normalization set to the CellMap convention for {name}, which declares none: {named}")
         return name
+    return None
+
+
+def declared_postprocess(model_config) -> list:
+    """The postprocessing ``model_config``'s start sets on a chain with
+    none, from the output it declares (``ModelConfig.declared_output_class``,
+    known without its server): what the model advice suggests for that
+    output on an empty chain (portable/advice.py start_postprocess), each
+    step with its values, for the channels (``declared_geometry``) and
+    affinity offsets it declares; [] when it declares no output, or its
+    output wants nothing."""
+    declared = getattr(model_config, "declared_output_class", None)
+    output_class = declared() if callable(declared) else None
+    if not output_class:
+        return []
+    geometry = model_config.declared_geometry() or {}
+    return advice.start_postprocess(output_class, geometry.get("output_channels"), getattr(model_config, "name", "") or "",
+                                    geometry.get("channels"), model_config.declared_affinity_offsets())
+
+
+def set_declared_postprocess(model_configs) -> Optional[str]:
+    """Set the postprocessing the output a model declares wants as the
+    chain's, as part of starting it, when the chain has none. Returns the
+    name of the model whose steps they are, or None when nothing changed.
+
+    Submit (services.launch.update_run_models) and Add a model call this with
+    the models they are about to start, right after set_declared_input_norm,
+    before their layers are drawn, so they are drawn through it. The first
+    of them that declares its output and whose output wants steps
+    (declared_postprocess: an affinity model's chain into a segmentation, a
+    semantic model's argmax, the sigmoid a logits model's needs) gives them,
+    the steps the model advice suggests for it, so that what a start sets
+    and what the advice suggests agree. A chain with postprocessing (a
+    YAML's, the user's Apply, the ranking's) is left alone; a model that
+    declares nothing is given the sigmoid its logits need later, once its
+    server's probe says (set_needed_postprocess), when the chain has none
+    still. As there, the steps are not set when they would show another
+    model being served wrong (a sigmoid on an output that has one:
+    rank.needed_postprocess), the models started with it by what they
+    declare and those running by what their servers say; and steps naming
+    an op the registry does not have, or a value its class refuses, are
+    skipped with a warning, and the next model's tried. The chain is set
+    through _set_chain_and_redraw, as PUT /api/pipeline sets it, and
+    remembered as the start's (Session.start_postprocess), so the Processing
+    tab says where it came from (postprocess_set_by).
+
+    The browser's twin is web/src/backend/serving.ts setDeclaredPostprocess,
+    over the same rule.
+    """
+    session = get_session()
+    with _start_postprocess_lock:
+        if session.pipeline_spec.postprocess:
+            return None
+        for model_config in model_configs:
+            steps = declared_postprocess(model_config)
+            if not steps:
+                continue
+            name = getattr(model_config, "name", None)
+            named = " → ".join(step["name"] for step in steps)
+            unknown = _unknown_op("postprocessor", [step["name"] for step in steps])
+            if unknown:
+                logger.warning(f"{name}'s declared output's postprocessing is not used: {unknown}")
+                continue
+            others = [(getattr(other, "name", None), getattr(other, "declared_output_class", lambda: None)())
+                      for other in model_configs if other is not model_config]
+            others += [(job.model_name, fetch_model_info(job.host).get("output_class")) for job in session.jobs if job.host]
+            wrong = [other for other, output_class in others if rank.needed_postprocess(output_class, steps) is not None]
+            if wrong:
+                logger.info(f"{name}'s declared output wants {named}, but it is not set: it would show "
+                            f"{', '.join(map(str, wrong))} wrong")
+                return None
+            spec = PipelineSpec(session.pipeline_spec.input_norm, steps)
+            try:
+                built = spec.build()
+            except (TypeError, ValueError) as e:
+                logger.warning(f"{name}'s declared output's postprocessing is not used: {e}")
+                continue
+            _set_chain_and_redraw(spec, None, built=built)
+            session.start_postprocess = {"model": name, "postprocess": steps}
+            logger.info(f"Postprocessing set from the output {name} declares: {named}")
+            return name
     return None
 
 

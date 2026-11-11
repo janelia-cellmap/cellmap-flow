@@ -17,13 +17,23 @@ PRETRAINING = {"model": {"name": "dinov3_vit3d"}, "algorithm": {"name": "simmim"
 
 # What mia_metadata says a semantic model's export will declare, from its
 # config.json: read in [0, 1] (its intensity_range), two classes as uint8
-# probabilities x 255, run at the data's own voxel size.
+# probabilities x 255 (its summed softmax, in the export), run at the data's
+# own voxel size.
 DECLARED = {
     "model_name": "lmd", "framework": "torch", "spatial_dims": 3, "in_channels": 1, "out_channels": 2,
     "channels_names": ["mito", "er"], "input_voxel_size": [8] * 3, "output_voxel_size": [8] * 3,
     "input_shape": [8] * 3, "output_shape": [8] * 3, "inference_input_shape": [8] * 3,
     "inference_output_shape": [8] * 3, "input_normalization": {"method": "min_max", "min": 0.0, "max": 1.0},
+    "inference_output_activation": {"name": "softmax", "apply_after_model": False, "dim": 1},
     "output_dtype": "uint8", "native_voxel_size": True,
+}
+# And an affinity model's: six affinities, its sigmoid in the export, each
+# channel's offset declared.
+OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [10, 0, 0], [0, 10, 0], [0, 0, 10]]
+AFFINITY_DECLARED = {
+    **DECLARED, "out_channels": 6, "channels_names": [f"object_aff_{'_'.join(map(str, o))}" for o in OFFSETS],
+    "inference_output_activation": {"name": "sigmoid", "apply_after_model": False}, "output_dtype": "float32",
+    "affinity_offsets": OFFSETS, "native_voxel_size": False,
 }
 
 
@@ -44,7 +54,8 @@ def model_metadata(**fields):
 def install_fake_adapter(monkeypatch):
     """The fake ``cellmap_models.model_export.mia_model``, in sys.modules for
     the test: its MIA_FILES, is_mia_config, and mia_metadata, which answers
-    DECLARED of any model. Its export is ``configs/mia.export_in_subprocess``'s
+    its ``declared`` (DECLARED, unless a test says otherwise) of any model.
+    Its export is ``configs/mia.export_in_subprocess``'s
     to fake, which runs it in a process of its own."""
     # Its package first (for model_metadata), whose __init__ imports the real
     # module's names when the cellmap_models installed has one.
@@ -52,7 +63,8 @@ def install_fake_adapter(monkeypatch):
     module = types.ModuleType("cellmap_models.model_export.mia_model")
     module.MIA_FILES = MIA_FILES
     module.is_mia_config = lambda config: isinstance(config, dict) and "head" in config
-    module.mia_metadata = lambda source, revision=None, classes=None: model_metadata(**DECLARED)
+    module.declared = DECLARED  # what its mia_metadata answers of any model
+    module.mia_metadata = lambda source, revision=None, classes=None: model_metadata(**module.declared)
     monkeypatch.setitem(sys.modules, module.__name__, module)
     return module
 

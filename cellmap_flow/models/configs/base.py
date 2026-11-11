@@ -384,6 +384,19 @@ class ModelConfig:
         metadata.json declares them."""
         return None
 
+    def declared_output_class(self):
+        """What the model's output is, as what describes it declares it (an
+        activation class of portable/label_it.py: UNIT, BYTE_UNIT,
+        SIGNED_UNIT or UNBOUNDED), or None when it declares nothing: a
+        cellmap-models export's metadata.json does by its output_dtype and
+        inference_output_activation (configs/cellmap.py
+        metadata_output_class). Submit sets the postprocessing the model
+        advice suggests for it on a chain with none, before the model's
+        server has said what its output is
+        (dashboard/routes/pipeline.py set_declared_postprocess). Cheap and
+        never raises, as declared_input_norm."""
+        return None
+
     def runs_at_native_voxel_size(self) -> bool:
         """Whether the model runs at the raw data's own voxel size, its
         declared input voxel size being a default only (a network trained on

@@ -57,8 +57,11 @@ MANIFESTS = {
 def hub(tmp_path, monkeypatch):
     """The fake Hub, and the cache under tmp_path; ``hub.asked`` counts the
     listings of the org."""
+    from cellmap_flow.models.configs import mia
+
     state = SimpleNamespace(asked=0)
     install_fake_adapter(monkeypatch)
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "mia_exports"))  # none of its exports made
 
     def listing(author, expand=None):
         state.asked += 1
@@ -109,11 +112,12 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
         "browser_copy": "cellmap/mito_aff_unet_setup_16_ft/ft-small",
         "variants": [{"variant": "fp32", "file_mb": 43.37}, {"variant": "int8w", "file_mb": 11.0}]}
     assert models["cellmap/mito-aff-resunet-setup-54"]["description"] == "cellmap/mito-aff-resunet-setup-54"
-    # The mia-train model is listed to be served as type mia, which converts it.
+    # The mia-train model is listed to be served as type mia, which converts
+    # it; its uint8 output, which its config says its export will have,
+    # cannot be finetuned.
     mia = models["ai-hhmi/lmd-vitl-p8-cellmap-lvd"]
     assert hf_catalog.listed_entry("ai-hhmi/lmd-vitl-p8-cellmap-lvd", mia, "lmd")["type"] == "mia"
-    assert hf_catalog.facts_of(mia) == {"formats": [], "finetune_modes": ["lora", "full"], "size_mb": 1214.0,
-                                        "browser_copy": None}
+    assert hf_catalog.facts_of(mia) == {"formats": [], "finetune_modes": [], "size_mb": 1214.0, "browser_copy": None}
 
     # Cached: listed again without asking the Hub.
     dashboard.get("/api/huggingface-models")

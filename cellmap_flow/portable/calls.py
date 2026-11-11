@@ -3,14 +3,14 @@ runs through chunkmirage's ``Engine.call("cellmap_flow.portable.calls:<name>",
 args, arrays)`` (``chunkmirage.calls`` says the shape: ``fn(args, arrays)``,
 ``args`` the JSON arguments, ``arrays`` the bytes sent beside them, in order;
 a JSON value, bytes, or a pair of JSON and arrays back). Each decodes its
-arrays, calls the maths in ``rank.py``, ``carry.py`` or ``activation.py``
+arrays, calls the maths in ``rank.py``, ``carry.py``, ``activation.py`` or ``advice.py``
 and encodes the answer; the maths is not here. The workers take turns, so what a call needs
 from the one before (the rank's tallies) travels in its JSON.
 """
 
 import numpy as np
 
-from cellmap_flow.portable import activation, rank
+from cellmap_flow.portable import activation, advice, rank
 from cellmap_flow.portable.carry import Grid, carry as carry_core, parts
 
 _BINS = ("object_bins", "background_bins")
@@ -66,6 +66,15 @@ def needed_postprocess(args, arrays):
     prediction, with a ThresholdPostprocessor at ``threshold`` (a
     probability) when that is given, or null."""
     return rank.needed_postprocess(args.get("output_class"), args["postprocess"], args.get("threshold"))
+
+
+def start_postprocess(args, arrays):
+    """``advice.start_postprocess``: the postprocessing a model's start sets
+    on a chain with none, from its ``output_class`` and its channels
+    (``out_channels``, ``channels_names``, ``affinity_offsets``,
+    ``model_name``), as steps; [] for nothing."""
+    return advice.start_postprocess(args.get("output_class"), args.get("out_channels"), args.get("model_name") or "",
+                                    args.get("channels_names"), args.get("affinity_offsets"))
 
 
 def output_activation(args, arrays):

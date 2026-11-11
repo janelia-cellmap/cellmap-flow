@@ -21,7 +21,7 @@ import { listedInTab } from "../../kept";
 import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
+import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setDeclaredPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
@@ -219,11 +219,11 @@ export function modelRoutes(router: Router): void {
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
     // A chain with no input normalizers takes the ones the first model
     // started declares, and one with no postprocessing what the first
-    // model's output needs, before it is served (serving.ts
-    // setDeclaredInputNorm, setNeededPostprocess).
+    // model's output wants, before it is served (serving.ts
+    // setDeclaredInputNorm, setDeclaredPostprocess).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
     await setDeclaredInputNorm(ctx, starting);
-    await setNeededPostprocess(ctx, starting, resolved.entries);
+    await setDeclaredPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
     return json(200, {
@@ -242,10 +242,11 @@ export function modelRoutes(router: Router): void {
   // input normalization its input part is, and the model whose settings its
   // postprocessing is (postprocess_from) with whether the ranking fitted
   // them to the paint (postprocess_fitted; false: the model's start set
-  // what its output needs, a sigmoid for logits; both null when no loaded
-  // model's: postprocessSetBy). The page reads them after every model
-  // change, since a model's start can set either part (serving.ts
-  // setDeclaredInputNorm, setNeededPostprocess). And the models stopped
+  // what its output wants, a sigmoid for logits, an affinity model's
+  // watershed; both null when no loaded model's: postprocessSetBy). The
+  // page reads them after every model change, since a model's start can
+  // set either part (serving.ts setDeclaredInputNorm,
+  // setDeclaredPostprocess). And the models stopped
   // because their layer was deleted in the viewer, numbered (the session's
   // deletedInViewer: backend/index.ts layerDeleted), for the list to untick
   // the rows of those newer than it has seen, as their ✕ would.
@@ -312,10 +313,10 @@ export function modelRoutes(router: Router): void {
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
     // As Submit: a chain with no input normalizers takes the ones it
-    // declares, one with no postprocessing what its output needs.
+    // declares, one with no postprocessing what its output wants.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
       await setDeclaredInputNorm(ctx, [model]);
-      await setNeededPostprocess(ctx, [model], entries);
+      await setDeclaredPostprocess(ctx, [model], entries);
     }
     await serveModels(ctx, entries, ctx.session.state.chain);
     await ctx.session.update({ models: entries });
@@ -585,7 +586,7 @@ function sameSteps(a: readonly Step[], b: readonly Step[]): boolean {
  * model's rankFits, what Use this model, Fit to Paint and Use these
  * settings set, the sigmoid and the threshold the paint is fitted best
  * at), else a model's start's (startPostprocess, serving.ts
- * setNeededPostprocess: the sigmoid its logits need); null when it is no
+ * setDeclaredPostprocess: what its output wants); null when it is no
  * loaded model's, or the chain has none. An Apply of other steps since is
  * the user's, and nothing has to forget it. */
 function postprocessSetBy(state: SessionState): { model: string; fitted: boolean } | null {

@@ -218,6 +218,15 @@ def _listed_metadata(repo: str, names: List[str]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _mia_finetune_modes(repo: str) -> tuple:
+    """How the mia-train model of ``repo`` can be finetuned, as its config
+    says (``MiaModelConfig.finetune_modes``), so the list and the training
+    form agree."""
+    from cellmap_flow.models.configs.mia import MiaModelConfig
+
+    return MiaModelConfig(repo=repo).finetune_modes()
+
+
 def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """Fetch the models of ``orgs`` (one organization's name, or several)
     from the Hugging Face Hub, and save them to the cache."""
@@ -243,9 +252,11 @@ def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
             continue
         result[m.id] = {**metadata, **_repo_facts(m.id, names, linked)}
         if metadata.get(LISTED_TYPE) == "mia":
-            # Its export's, which is made on its first start: both until then
-            # (configs/mia.py MiaModelConfig.finetune_modes).
-            result[m.id]["finetune_modes"] = ["lora", "full"]
+            # Its config's (configs/mia.py MiaModelConfig.finetune_modes): from
+            # what its export will declare, which cellmap_models makes from
+            # the config.json read above and the model card, without the
+            # weights or converting; none for a uint8 output.
+            result[m.id]["finetune_modes"] = list(_mia_finetune_modes(m.id))
         elif integer_output_refusal(m.id, metadata.get("output_dtype")):
             # A whole-number output passes no gradient (HuggingFaceModelConfig.finetune_modes).
             result[m.id]["finetune_modes"] = []

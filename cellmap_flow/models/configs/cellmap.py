@@ -14,7 +14,7 @@ from funlib.geometry import Coordinate
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 from cellmap_flow.models.geometry import channel_names_of
-from cellmap_flow.portable.label_it import BYTE_UNIT
+from cellmap_flow.portable.label_it import BYTE_UNIT, SIGNED_UNIT, UNBOUNDED, UNIT
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,41 @@ def integer_output_refusal(name, output_dtype):
         return None
     return (f"{name} cannot be finetuned: its output is {dtype} (rounded to whole numbers, a probability x 255 "
             "for a uint8 export), through which no gradient reaches the network")
+
+
+# The activation an export's inference_output_activation names, by the class
+# of the output it gives once applied: a sigmoid's and a softmax's are
+# probabilities, a tanh's [-1, 1].
+_ACTIVATION_CLASSES = {"sigmoid": UNIT, "softmax": UNIT, "tanh": SIGNED_UNIT}
+
+
+def metadata_output_class(output_dtype, activation):
+    """What an export's output is (portable/label_it.py's classes), as its
+    metadata.json declares it, or None when it does not: BYTE_UNIT for a
+    uint8 ``output_dtype``, a probability x 255 (cellmap_models writes one
+    so); else by its ``inference_output_activation`` (``activation``, its
+    dict, or a string such as "sigmoid"), as cellmap_models takes it: a
+    sigmoid, softmax or tanh with ``apply_after_model`` false is in the
+    export (UNIT, UNIT, SIGNED_UNIT), and with it true is to come after it,
+    so the export gives logits (UNBOUNDED; setup_53's, 54's, 56's and 61's
+    say so). "identity", which ModelMetadata writes when nothing is said,
+    and any other name declare nothing."""
+    if _integer_dtype(output_dtype) == np.uint8:
+        return BYTE_UNIT
+    if isinstance(activation, str):
+        # cellmap_models' reading of a string: applied after the model
+        # unless it says it is in it.
+        text = activation.strip().lower()
+        name = next((n for n in _ACTIVATION_CLASSES if n in text), None)
+        after = not any(phrase in text for phrase in ("included", "in exported model", "in model"))
+    elif isinstance(activation, dict):
+        name = str(activation.get("name") or "").strip().lower()
+        after = bool(activation.get("apply_after_model"))
+    else:
+        return None
+    if name not in _ACTIVATION_CLASSES:
+        return None
+    return UNBOUNDED if after else _ACTIVATION_CLASSES[name]
 
 
 def _other_shapes(metadata):
@@ -293,6 +328,13 @@ class CellMapModelConfig(ModelConfig):
         """The offsets its export's metadata declares (``affinity_offsets``,
         ``declared_offsets``), read without the model; None without them."""
         return declared_offsets(self._metadata_field("affinity_offsets"))
+
+    def declared_output_class(self):
+        """``metadata_output_class`` of its export's metadata.json, read
+        without the model: as written, as cellmap_models' parsed metadata
+        gives inference_output_activation its default when none is written."""
+        written = self._written_metadata()
+        return metadata_output_class(written.get("output_dtype"), written.get("inference_output_activation"))
 
     def runs_at_native_voxel_size(self) -> bool:
         """Whether its export's metadata says it runs at the data's own voxel

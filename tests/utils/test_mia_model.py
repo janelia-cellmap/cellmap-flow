@@ -14,11 +14,11 @@ import torch
 
 from cellmap_flow.models.registry import build_model
 from tests.finetune.test_export_web import _cellmap_folder
-from tests.utils.mia_helpers import MIA_FILES, PRETRAINING, SEGMENTATION, install_fake_adapter, write_mia_folder
+from tests.utils.mia_helpers import (
+    AFFINITY_DECLARED, DECLARED, MIA_FILES, OFFSETS, PRETRAINING, SEGMENTATION, install_fake_adapter, write_mia_folder,
+)
 
 COMMIT = "1ceca0ef" + "0" * 32
-# What the adapter declares of an affinity model's six channels.
-OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [10, 0, 0], [0, 10, 0], [0, 0, 10]]
 
 
 @pytest.fixture
@@ -116,14 +116,28 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
     assert converted == [str(snapshot)]
 
 
-def test_submit_sets_the_input_normalization_a_mia_model_was_trained_on_before_it_is_converted(
-        adapter, dashboard, monkeypatch, tmp_path):
+# What Submit sets after a model that declares its output, on a chain of no
+# postprocessing: what the model advice suggests for it (portable/advice.py).
+ARGMAX = [{"name": "ArgmaxPostprocessor", "threshold": 127.5}]
+WATERSHED = [{"name": "DefaultPostprocessor", "clip_min": 0.0, "clip_max": 1.0, "bias": 0.0, "multiplier": 255.0},
+             {"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": str(OFFSETS)}]
+THEIRS = [{"name": "ThresholdPostprocessor", "threshold": 0.3}]
+
+
+@pytest.mark.parametrize("declared, chain, expected", [
+    pytest.param(DECLARED, [], ARGMAX, id="semantic: its classes' argmax at 0.5"),
+    pytest.param(AFFINITY_DECLARED, [], WATERSHED, id="affinities: the watershed at its offsets"),
+    pytest.param(AFFINITY_DECLARED, THEIRS, THEIRS, id="a chain with steps is left alone"),
+])
+def test_submit_sets_what_a_mia_model_declares_before_it_is_converted(adapter, dashboard, monkeypatch, tmp_path,
+                                                                     declared, chain, expected):
     """Ticked in the Hugging Face list and submitted before any server has
     converted it, a mia model's start sets the chain's input normalization
-    from what its export will declare (mia_metadata: read in [0, 1]): the
+    and postprocessing from what its export will declare (mia_metadata): the
     raw data's range scaled onto [0, 1], as a cellmap-models export's
-    min_max [0, 1] is, before its layer is drawn. Not a weight is fetched
-    for it."""
+    min_max [0, 1] is, and the steps the model advice suggests for its
+    output, on a chain that has none, before its layer is drawn. The page is
+    told whose they are. Not a weight is fetched for it."""
     import huggingface_hub
 
     from cellmap_flow.dashboard.routes import model_advice
@@ -132,9 +146,10 @@ def test_submit_sets_the_input_normalization_a_mia_model_was_trained_on_before_i
     from cellmap_flow.models import hf_catalog
     from cellmap_flow.models.configs import mia
     from cellmap_flow.pipeline_spec import PipelineSpec
-    from tests.utils.test_dashboard_launch import _InlineThread
+    from tests.utils.test_dashboard_launch import _InlineThread, _Job
 
     repo = "ai-hhmi/lmd-vitl"
+    adapter.declared = declared
     monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "cache"))  # no export of it there
     monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda *args, **kwargs: pytest.fail("downloaded"))
     monkeypatch.setattr(hf_catalog, "cached_huggingface_models", lambda: {repo: {hf_catalog.LISTED_TYPE: "mia"}})
@@ -144,12 +159,16 @@ def test_submit_sets_the_input_normalization_a_mia_model_was_trained_on_before_i
                         lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     session = get_session()
-    session.set_pipeline(PipelineSpec([], []))
+    session.set_pipeline(PipelineSpec([], chain))
     session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
 
     assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
     unit = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
-    assert session.pipeline_spec == PipelineSpec(unit, []) and drawn_through == [PipelineSpec(unit, [])]
+    assert session.pipeline_spec == PipelineSpec(unit, expected) and drawn_through == [PipelineSpec(unit, expected)]
+    (name,) = [model.name for model in session.models_config]
+    session.jobs = [_Job(name)]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert loaded["postprocess_from"] == (None if chain else name) and not loaded["postprocess_fitted"]
 
 
 def test_the_offsets_an_export_declares_win_over_its_channel_names(tmp_path):

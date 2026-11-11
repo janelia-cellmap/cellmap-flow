@@ -99,7 +99,7 @@ neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", rev = "f
 # Marwan's onnx-web-export-and-pruning) until a release has them, so here and
 # not in pyproject, as the fork above; pinned to the commit these were
 # written against.
-cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "a5b1eef2b7cf352cd1449d841142255622458a45", extras = ["export"] }
+cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "103b0621a80827a497137234b64109c844b3c35b", extras = ["export"] }
 
 # Cellpose (Cellpose-SAM, Cellpose 4) lives in an environment of its own,
 # solved separately, where the `cellpose` model type runs and finetunes by

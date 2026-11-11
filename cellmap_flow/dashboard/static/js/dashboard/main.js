@@ -81,7 +81,9 @@ function say(notice, text) {
 // normalization the model declares, or its kind of model's convention, when
 // the chain had none (routes/pipeline.py set_declared_input_norm,
 // web/src/backend/serving.ts setDeclaredInputNorm), and the postprocessing
-// its output needs, a sigmoid for logits (set_needed_postprocess: once its
+// the output it declares wants (set_declared_postprocess, serving.ts
+// setDeclaredPostprocess: an affinity model's watershed, a semantic model's
+// argmax), or else the sigmoid logits need (set_needed_postprocess: once its
 // server answers, which the model advice's poll sees as the chain's digest
 // moving, and says with CHAIN_CHANGED_EVENT); and Use this model sets what
 // the ranking fitted. So after every model change (MODELS_CHANGED_EVENT) the
@@ -167,7 +169,7 @@ function initApply(inputChain, postChain) {
   // model, which the Flask dashboard sets for a CellMap model that declares
   // none); `postBy` the model whose settings its postprocessing is (or
   // null), and `fitted` whether the ranking fitted them to the paint (false:
-  // the model's start set the sigmoid its logits need). A list whose chain
+  // the model's start set them, for its output). A list whose chain
   // changed shows the new one, as applied, and its notice says why; an edit
   // in it not applied yet is replaced, while the other list keeps its edits.
   function showLive(pipeline, setBy, declared, postBy, fitted) {
@@ -188,9 +190,14 @@ function initApply(inputChain, postChain) {
           : `Input normalization set to the CellMap convention, [-1, 1], when ${setBy} started: the model does not declare one. Change it here if the model was trained on another range.`;
       }
       if (part.key === "postprocess" && postBy) {
+        // A start sets the sigmoid logits need, or what the output its model
+        // declares wants (an affinity model's watershed, a semantic one's argmax).
+        const sigmoid = steps.length === 1 && steps[0].name === "SigmoidPostprocessor";
         why = fitted
           ? `Postprocessing fitted to your paint by the ranking for ${postBy}: ${postText(steps)}.`
-          : `Postprocessing set when ${postBy} started: its output is logits, so ${postText(steps)} turns it into probabilities.`;
+          : sigmoid
+            ? `Postprocessing set when ${postBy} started: its output is logits, so ${postText(steps)} turns it into probabilities.`
+            : `Postprocessing set when ${postBy} started, for the output it declares: ${postText(steps)}.`;
       }
       say(part.notice, why);
     });

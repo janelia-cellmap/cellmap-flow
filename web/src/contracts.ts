@@ -134,7 +134,7 @@ export interface SessionState {
    * server's `rank_fits` on its dashboard session. */
   rankFits: Record<string, RankFit>;
   /** The postprocessing a model's start set on a chain with none, and the
-   * model (serving.ts setNeededPostprocess), which GET /api/models/loaded
+   * model (serving.ts setDeclaredPostprocess), which GET /api/models/loaded
    * says the chain's came from while it is still that; null until a start
    * sets any. The server's `start_postprocess`. */
   startPostprocess: { model: string; postprocess: Step[] } | null;

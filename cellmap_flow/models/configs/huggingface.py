@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import (
     CellMapModelConfig, declared_offsets, export_finetune_modes, integer_output_refusal, metadata_geometry,
+    metadata_output_class,
 )
 from cellmap_flow.serving.probe import metadata_input_norm
 
@@ -148,6 +149,14 @@ class HuggingFaceModelConfig(ModelConfig):
         downloaded as for declared_geometry; None without them."""
         metadata = self._load_metadata()
         return declared_offsets(metadata.get("affinity_offsets")) if isinstance(metadata, dict) else None
+
+    def declared_output_class(self):
+        """``metadata_output_class`` of the repo's metadata.json (downloaded
+        as for declared_geometry); None when it says nothing of its output."""
+        metadata = self._load_metadata()
+        if not isinstance(metadata, dict):
+            return None
+        return metadata_output_class(metadata.get("output_dtype"), metadata.get("inference_output_activation"))
 
     def runs_at_native_voxel_size(self) -> bool:
         """Whether the repo's metadata.json says ``native_voxel_size``."""
