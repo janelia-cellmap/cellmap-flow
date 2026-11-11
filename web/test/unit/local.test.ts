@@ -91,10 +91,10 @@ function session(datasetUrl: string | null): SessionStore {
 }
 
 describe("the local URL", () => {
-  it("ends the local URL as the folder does, so the viewer's raw layer tells an N5 from a zarr", () => {
+  it("ends the local URL as the folder does, so the viewer's raw layer names an N5's or a zarr's format", () => {
     expect(rawSource(localUrl(localKeyFor("volume.n5", "fixed0"), ROOT_PAGE))).toBe("n5://http://localhost:5173/local/fixed0-volume.n5/");
     expect(rawSource(localUrl(localKeyFor("volume.zarr", "fixed0"), ROOT_PAGE))).toBe("zarr://http://localhost:5173/local/fixed0-volume.zarr/");
-    expect(rawSource(localUrl(localKeyFor("volume", "fixed0"), ROOT_PAGE))).toBe("zarr://http://localhost:5173/local/fixed0-volume/");
+    expect(rawSource(localUrl(localKeyFor("volume", "fixed0"), ROOT_PAGE))).toBe("http://localhost:5173/local/fixed0-volume/");
   });
 });
 

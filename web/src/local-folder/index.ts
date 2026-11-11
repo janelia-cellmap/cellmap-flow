@@ -105,9 +105,10 @@ const SLUG_LENGTH = 64;
  * twice is stored twice; neither pick's URL goes stale) and the URL still
  * reads as the folder. The name comes last, with its extension kept, so
  * `local/<key>/` ends in `.zarr/` or `.n5/` as the folder does, which is how
- * the viewer's raw layer tells an N5 from a zarr (viewer/layers.ts
- * rawSource). The letters a name loses (spaces, slashes, anything outside
- * [A-Za-z0-9._-]) become hyphens; accents are dropped. */
+ * the viewer's raw layer names its format (viewer/layers.ts rawSource;
+ * Neuroglancer finds the format of a folder named neither). The letters a
+ * name loses (spaces, slashes, anything outside [A-Za-z0-9._-]) become
+ * hyphens; accents are dropped. */
 export function localKeyFor(name: string, random: string = randomChars(RANDOM_LENGTH)): string {
   let slug = name
     .normalize("NFKD")

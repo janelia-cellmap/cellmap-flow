@@ -1,12 +1,14 @@
 // A dataset path as a person pastes it, as the app reads it: the browser's
 // twin of cellmap_flow/portable/pasted.py, through the same pattern
 // (exported by build/export_data.py), for the dataset field
-// (backend/routes/data.ts) and a link's ?dataset= (link.ts parseLink). A path
-// copied from Neuroglancer names its format too, in front (zarr://, zarr2://,
-// zarr3://, n5://) or after it (|zarr2:, |zarr3:, |n5:, ...); the format is
-// dropped, a path after its colon joined to the location (x.zarr|zarr2:raw is
-// x.zarr/raw), and a precomputed volume named precomputed://<location>, as
-// the app names one. Both twins are held to web/test/fixtures/pasted_paths.json.
+// (backend/routes/data.ts), a link's ?dataset= (link.ts parseLink) and the
+// raw layer of a view the page opens (viewer/state.ts datasetUrlFromState).
+// A path copied from Neuroglancer names its format too, in front (zarr://,
+// zarr2://, zarr3://, n5://) or after it (|zarr2:, |zarr3:, |n5:, ...); the
+// format is dropped, a path after its colon joined to the location
+// (x.zarr|zarr2:raw is x.zarr/raw), and a precomputed volume named
+// precomputed://<location>, as the app names one. Both twins are held to
+// web/test/fixtures/pasted_paths.json.
 import { PYTHON, pyRegExp } from "../generated/python-data";
 
 /** The text, split into the location, the format named after it and the path after that format's colon. */

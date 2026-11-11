@@ -111,9 +111,13 @@ describe("viewDepthAxisOf (geometry.depth_axis_for_view)", () => {
 });
 
 describe("datasetUrlFromState", () => {
-  it("gives the raw layer's URL without its format", () => {
+  it("gives the raw layer's URL without its format, a precomputed volume's as the app names one", () => {
     expect(datasetUrlFromState(state)).toBe("https://x/dataset.zarr/recon-1/em/fibsem-uint8");
     expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source: [{ url: "n5://s3://bucket/x.n5/em" }] }] })).toBe("s3://bucket/x.n5/em");
-    expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source: "precomputed://gs://bucket/vol" }] })).toBe("gs://bucket/vol");
+    expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source: "precomputed://gs://bucket/vol" }] })).toBe("precomputed://gs://bucket/vol");
+  });
+  it("reads the form Neuroglancer's source field writes, the format after the location", () => {
+    const source = { url: "https://host/volume/|n5:em/" };
+    expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source }] })).toBe("https://host/volume/em/");
   });
 });

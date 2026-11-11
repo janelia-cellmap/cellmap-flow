@@ -80,7 +80,11 @@ describe("rawSource (raw.neuroglancer_source)", () => {
     expect(rawSource("s3://bucket/x.zarr/em/s0")).toBe("zarr://s3://bucket/x.zarr/em/s0");
     expect(rawSource("https://h/vol.n5/em")).toBe("n5://https://h/vol.n5/em");
     expect(rawSource("https://h/a.zarr/b.n5/em")).toBe("n5://https://h/a.zarr/b.n5/em"); // the last container wins
-    expect(rawSource("https://h/plain/path")).toBe("zarr://https://h/plain/path");
+  });
+  it("gives a path that names no format bare, for Neuroglancer to find it there", () => {
+    // An N5 whose names lack the suffix: named zarr://, Neuroglancer refused it.
+    const n5 = "https://host/volume/em";
+    expect(rawSource(n5)).toBe(n5);
   });
   it("takes a gs:// path with no container as a precomputed volume", () => {
     expect(rawSource("gs://bucket/volume")).toBe("precomputed://gs://bucket/volume");

@@ -7,6 +7,7 @@
 import { AXIS_NAMES, LAYOUT_DEPTH_SLOT, slotAxis } from "../ai-annotate/geometry";
 import type { LayerSpec } from "../contracts";
 import { PYTHON } from "../generated/python-data";
+import { pastedPath } from "../shared/pasted";
 
 /** A layer in the state: at least its name; `visible: false` when hidden
  * (Neuroglancer leaves the key out when it is shown). */
@@ -304,14 +305,17 @@ export function sourceUrl(source: unknown): string | null {
   return null;
 }
 
-/** The dataset a state shows: the raw layer's source URL without the data
- * format in front of it (`zarr://https://...` gives `https://...`), as the
- * session's datasetUrl holds it. The raw layer is the one named "data"
- * (RAW_LAYER_NAME), else the first image layer. Null without one. */
+/** The dataset a state shows: the raw layer's source URL read as a pasted
+ * dataset is (shared/pasted.ts pastedPath), so without the data format
+ * Neuroglancer names in front of it (`zarr://https://...` gives
+ * `https://...`) or after it, as its source field's completion writes a
+ * source edited there (`https://host/root/|n5:em/` gives
+ * `https://host/root/em/`), as the session's datasetUrl holds it. The raw
+ * layer is the one named "data" (RAW_LAYER_NAME), else the first image
+ * layer. Null without one. */
 export function datasetUrlFromState(state: NgState | null | undefined): string | null {
   const layers = layersOf(state);
   const raw = layers.find((layer) => layer.name === "data") ?? layers.find((layer) => layer.type === "image");
   const url = raw ? sourceUrl(raw.source) : null;
-  if (!url) return null;
-  return url.replace(/^(zarr|zarr2|zarr3|n5|precomputed):\/\//, "");
+  return url ? pastedPath(url) || null : null;
 }

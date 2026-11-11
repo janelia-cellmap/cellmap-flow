@@ -89,19 +89,24 @@ export function nmToMetres(nm: number): number {
 const SOURCE_FORMAT = /^(zarr|zarr2|zarr3|n5|precomputed):\/\//;
 
 /** The source Neuroglancer reads the raw data at `url` from itself
- * (raw.py's neuroglancer_source): the format in front of the location,
- * `zarr://` for a .zarr container (v2 or v3, an OME-Zarr multiscale group
- * or one array; Neuroglancer tells them apart and reads a group's levels
- * itself), `n5://` for a .n5 one, `precomputed://` for a gs:// path that
- * names neither (Neuroglancer's cloud volumes are precomputed). A url that
- * already names its format is kept. */
+ * (raw.py's neuroglancer_source): the format in front of the location where
+ * the path names it, `zarr://` for a .zarr container (v2 or v3, an OME-Zarr
+ * multiscale group or one array; Neuroglancer tells them apart and reads a
+ * group's levels itself), `n5://` for a .n5 one, `precomputed://` for a
+ * gs:// path that names neither (Neuroglancer's cloud volumes are
+ * precomputed, as cellmap-flow reads a gs:// path: docs/source/data_paths.rst).
+ * A url that already names its format is kept. Any other url is given bare,
+ * and Neuroglancer finds its format from the metadata it finds there, as
+ * worldarray finds it for raw.py: an N5 whose names lack the suffix
+ * (https://host/volume/em) was named zarr:// here, and Neuroglancer then
+ * refused it, finding no zarr metadata. */
 export function rawSource(url: string): string {
   if (SOURCE_FORMAT.test(url)) return url;
   const container = /\.(zarr|n5)(?=\/|$)/g;
   let format: string | null = null;
   for (let match = container.exec(url); match; match = container.exec(url)) format = match[1];
-  if (format === null && url.startsWith("gs://")) return `precomputed://${url}`;
-  return `${format ?? "zarr"}://${url}`;
+  if (format !== null) return `${format}://${url}`;
+  return url.startsWith("gs://") ? `precomputed://${url}` : url;
 }
 
 /** The raw data's layer (layers.py's raw_layer over raw.py's get_raw_layer
