@@ -1,6 +1,7 @@
-// The Hugging Face list: cellmap's models on the Hub (GET
-// /api/huggingface-models, cached; POST .../refresh), in a section of its own
-// (shared/model-list.js, as every model list is made), loaded when it opens,
+// The Hugging Face list: the models on the Hub of the organizations listed
+// (GET /api/huggingface-models, cached; POST .../refresh), one section for
+// each organization (shared/model-list.js, as every model list is made), as
+// the Local Catalog has one for each of its groups, loaded when one opens,
 // each row tagged with what its listing says the model is (its formats,
 // finetune modes, size and browser copy). On a server every model is shown
 // to start, and Runs in the browser, ticked, shows only those with a copy
@@ -19,12 +20,19 @@ import { listControls, modelRow, modelSection, notice, runAtField, runVoxelSizes
 // removed from the Loaded models list is taken out.
 let running = new Set();
 let loaded = false;
-// The section, its search bar and Refresh (shown once there is a list), the
-// line it shows until it is loaded, and its rows.
-let section = null;
-let controls = null;
-let placeholder = null;
-let list = null;
+// One group for each organization listed (pageData().hf_orgs: a server's
+// hf_catalog.HUGGING_FACE_ORGS, cellmap and ai-hhmi; the browser's page,
+// cellmap), in that order: its organization, its section, its search bar and
+// Refresh (shown once there is a list), the line it shows until it is
+// loaded, and its rows. The first keeps the ids the page has always had
+// (hf, hfModelsContainer). One listing fills them all; a repo of an
+// organization not listed (one added in the browser) goes in the first.
+let groups = [];
+
+function groupOf(modelId) {
+  const org = modelId.split("/")[0];
+  return groups.find((group) => group.org === org) ?? groups[0];
+}
 
 // One row; repo ids and model card descriptions come from Hugging Face, not
 // from us, and modelRow builds it from nodes rather than an HTML string.
@@ -32,7 +40,9 @@ let list = null;
 // its metadata.json declares it reads (input_voxel_size).
 function row(modelId, metadata) {
   const displayName = modelId.split("/").pop();
-  const id = "chk_hf_" + displayName;
+  // Unique across the groups: another organization's repo of the same name has its own id.
+  const group = groupOf(modelId);
+  const id = "chk_hf_" + (group === groups[0] ? "" : group.id + "_") + displayName;
   // Ticked when the page started with it, or when the listing says it is
   // being served (the browser mode's, after a reload or from a link).
   const checked = running.has(modelId) || metadata.selected === true;
@@ -49,31 +59,38 @@ function row(modelId, metadata) {
 }
 
 function render(data) {
-  placeholder.remove();
+  for (const group of groups) group.placeholder.remove();
   if (data.error) {
-    list.replaceChildren(notice("Error: " + data.error, true));
+    for (const group of groups) group.list.replaceChildren(notice("Error: " + data.error, true));
     return;
   }
   const modelIds = Object.keys(data);
-  if (modelIds.length === 0) {
-    list.replaceChildren(notice("No models found."));
-    return;
+  for (const group of groups) {
+    const ids = modelIds.filter((modelId) => groupOf(modelId) === group);
+    if (ids.length === 0) {
+      group.list.replaceChildren(notice("No models found."));
+      continue;
+    }
+    group.controls.element.hidden = false;
+    group.list.replaceChildren(...ids.map((modelId) => row(modelId, data[modelId])));
+    filter(group);
   }
-  controls.element.hidden = false;
-  list.replaceChildren(...modelIds.map((modelId) => row(modelId, data[modelId])));
-  filter();
+}
+
+function loading(on) {
+  for (const group of groups) group.section.loading(on);
 }
 
 function load(url) {
-  section.loading(true);
+  loading(true);
   (url.includes("refresh") ? postJSON(url) : getJSON(url))
     .then((data) => {
-      section.loading(false);
+      loading(false);
       render(data);
       loaded = true;
     })
     .catch((err) => {
-      section.loading(false);
+      loading(false);
       if (err instanceof ApiError) {
         // The routes answer a failed listing with {"error": ...} and a
         // 500; show it in the list like any other answer.
@@ -81,7 +98,7 @@ function load(url) {
         loaded = true;
         return;
       }
-      placeholder.textContent = "Error loading models: " + err;
+      for (const group of groups) group.placeholder.textContent = "Error loading models: " + err;
       loaded = false;
     });
 }
@@ -92,11 +109,13 @@ function load(url) {
 function addListed() {
   getJSON("/api/huggingface-models")
     .then((data) => {
-      const shown = new Set([...list.querySelectorAll(".hf-model-checkbox")].map((box) => box.value));
-      const rows = Object.keys(data).filter((modelId) => !shown.has(modelId)).map((modelId) => row(modelId, data[modelId]));
-      if (!rows.length) return;
-      list.append(...rows);
-      filter();
+      const shown = new Set(groups.flatMap((group) => [...group.list.querySelectorAll(".hf-model-checkbox")].map((box) => box.value)));
+      for (const modelId of Object.keys(data).filter((modelId) => !shown.has(modelId))) {
+        const group = groupOf(modelId);
+        group.list.append(row(modelId, data[modelId]));
+        group.controls.element.hidden = false;
+        filter(group);
+      }
     })
     .catch((err) => console.warn("Could not list the Hugging Face models again:", err));
 }
@@ -106,8 +125,10 @@ function addListed() {
 // view, as the zoo's does, so nothing is submitted unseen: the models
 // running start ticked, with a copy or not. Then the rows in the order
 // chosen, and the count of those shown.
-function filter() {
+function filter(group) {
+  const { controls, list } = group;
   const rows = [...list.querySelectorAll(".hf-model-item")];
+  if (!rows.length) return;
   let noCopy = 0;
   const shown = rows.filter((item) => {
     const show = controls.matches(item.dataset) || item.querySelector(".hf-model-checkbox").checked;
@@ -119,32 +140,38 @@ function filter() {
   controls.count(shown.length, rows.length, noCopy);
 }
 
-export function init() {
-  running = new Set(pageData().default_hf_repos || []);
-  // Titled by the organizations listed (hf_catalog.HUGGING_FACE_ORGS on a
-  // server: "cellmap · ai-hhmi"); the browser's page lists cellmap's.
-  section = modelSection({
-    id: "hf", title: (pageData().hf_orgs || ["cellmap"]).join(" · "), bodyId: "hfModelsContainer",
+// An organization's group, appended to the page's Hugging Face accordion.
+function addGroup(org, index) {
+  const id = index === 0 ? "hf" : "hf_" + org.replace(/[^A-Za-z0-9]/g, "_");
+  const group = { org, id };
+  group.section = modelSection({
+    id, title: org, bodyId: index === 0 ? "hfModelsContainer" : `${id}ModelsContainer`,
     onOpen: () => {
       if (!loaded) load("/api/huggingface-models");
     },
   });
-  controls = listControls({
-    id: "hf", placeholder: "Search: mito aff, 16 nm, 2d",
+  group.controls = listControls({
+    id, placeholder: "Search: mito aff, 16 nm, 2d",
     title: "Every word typed, in the repo, its metadata, its voxel size or its 2D/3D",
-    refreshTitle: "Refresh from Hugging Face", onRefresh: () => load("/api/huggingface-models/refresh"), onChange: filter,
+    refreshTitle: "Refresh from Hugging Face", onRefresh: () => load("/api/huggingface-models/refresh"), onChange: () => filter(group),
     browser: !isBrowserMode(), sort: true,
   });
-  controls.element.hidden = true;
-  placeholder = h("p", { class: "text-muted" }, "Click to load Hugging Face models...");
-  list = h("div");
-  section.body.append(controls.element, placeholder, list);
-  document.getElementById("hfModelAccordion").append(section.item);
+  group.controls.element.hidden = true;
+  group.placeholder = h("p", { class: "text-muted" }, "Click to load Hugging Face models...");
+  group.list = h("div");
+  group.section.body.append(group.controls.element, group.placeholder, group.list);
+  document.getElementById("hfModelAccordion").append(group.section.item);
+  return group;
+}
+
+export function init() {
+  running = new Set(pageData().default_hf_repos || []);
+  groups = (pageData().hf_orgs || ["cellmap"]).map(addGroup);
   // A list not loaded yet lists it when it opens; one with no rows (an
   // error, or none found) is loaded again whole.
   listen(MODEL_LIST_CHANGED_EVENT, () => {
     if (!loaded) return;
-    if (list.querySelector(".hf-model-checkbox")) addListed();
+    if (groups.some((group) => group.list.querySelector(".hf-model-checkbox"))) addListed();
     else load("/api/huggingface-models");
   });
 }
