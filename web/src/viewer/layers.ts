@@ -98,9 +98,8 @@ const SOURCE_FORMAT = /^(zarr|zarr2|zarr3|n5|precomputed):\/\//;
  * A url that already names its format is kept. Any other url is given bare,
  * and Neuroglancer finds its format from the metadata it finds there, as
  * worldarray finds it for raw.py: an N5 whose names lack the suffix
- * (https://s3.janelia.org/…/jrc_euplotes_2_preview/imaging_preview) was
- * named zarr:// here, and Neuroglancer then refused it, finding no zarr
- * metadata. */
+ * (https://host/volume/em) was named zarr:// here, and Neuroglancer then
+ * refused it, finding no zarr metadata. */
 export function rawSource(url: string): string {
   if (SOURCE_FORMAT.test(url)) return url;
   const container = /\.(zarr|n5)(?=\/|$)/g;

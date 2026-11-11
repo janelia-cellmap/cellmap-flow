@@ -117,8 +117,7 @@ describe("datasetUrlFromState", () => {
     expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source: "precomputed://gs://bucket/vol" }] })).toBe("precomputed://gs://bucket/vol");
   });
   it("reads the form Neuroglancer's source field writes, the format after the location", () => {
-    const source = { url: "https://s3.janelia.org/fib-sem-technology/FIBSEM/jrc_euplotes_2_preview/|n5:imaging_preview/" };
-    expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source }] }))
-      .toBe("https://s3.janelia.org/fib-sem-technology/FIBSEM/jrc_euplotes_2_preview/imaging_preview/");
+    const source = { url: "https://host/volume/|n5:em/" };
+    expect(datasetUrlFromState({ layers: [{ name: "data", type: "image", source }] })).toBe("https://host/volume/em/");
   });
 });

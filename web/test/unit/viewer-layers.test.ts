@@ -83,7 +83,7 @@ describe("rawSource (raw.neuroglancer_source)", () => {
   });
   it("gives a path that names no format bare, for Neuroglancer to find it there", () => {
     // An N5 whose names lack the suffix: named zarr://, Neuroglancer refused it.
-    const n5 = "https://s3.janelia.org/fib-sem-technology/FIBSEM/jrc_euplotes_2_preview/imaging_preview";
+    const n5 = "https://host/volume/em";
     expect(rawSource(n5)).toBe(n5);
   });
   it("takes a gs:// path with no container as a precomputed volume", () => {
