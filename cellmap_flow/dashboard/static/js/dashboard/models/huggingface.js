@@ -121,8 +121,10 @@ function filter() {
 
 export function init() {
   running = new Set(pageData().default_hf_repos || []);
+  // Titled by the organizations listed (hf_catalog.HUGGING_FACE_ORGS on a
+  // server: "cellmap · ai-hhmi"); the browser's page lists cellmap's.
   section = modelSection({
-    id: "hf", title: "cellmap", bodyId: "hfModelsContainer",
+    id: "hf", title: (pageData().hf_orgs || ["cellmap"]).join(" · "), bodyId: "hfModelsContainer",
     onOpen: () => {
       if (!loaded) load("/api/huggingface-models");
     },

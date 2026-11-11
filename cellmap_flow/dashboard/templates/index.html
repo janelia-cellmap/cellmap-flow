@@ -352,7 +352,7 @@
      mode is "browser" when web/build/render.py rendered the page for the
      browser mode and "server" for Flask, which passes none: the finetune tab's
      scripts ask it (isBrowserMode) where the two modes differ. #}
-  <script type="application/json" id="page-data">{{ {"default_hf_repos": default_hf_repos, "default_bioimage_models": default_bioimage_models, "resample": resample, "mode": mode|default("server")} | tojson }}</script>
+  <script type="application/json" id="page-data">{{ {"default_hf_repos": default_hf_repos, "hf_orgs": hf_orgs|default(["cellmap"]), "default_bioimage_models": default_bioimage_models, "resample": resample, "mode": mode|default("server")} | tojson }}</script>
   {# The browser build (web/build/render.py) names its own entry, which starts the
      in-page backend and then loads this same dashboard script. #}
   {% if app_entry %}
