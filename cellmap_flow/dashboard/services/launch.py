@@ -519,9 +519,9 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     When the chain has no input normalizers, the first model started that
     declares some (an onnx model's manifest) sets them, as part of its start
     (routes.pipeline.set_declared_input_norm); and when it has no
-    postprocessing, the first that declares its output sets what that output
-    wants (routes.pipeline.set_declared_postprocess). Any other chain is left
-    as it is, and only the page's Apply changes it."""
+    postprocessing, the first whose metadata declares a step applied after
+    it (a sigmoid) sets that (routes.pipeline.set_declared_postprocess). Any
+    other chain is left as it is, and only the page's Apply changes it."""
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
@@ -543,8 +543,8 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # declared ones, before the blob its layers are drawn with is taken, so
     # they are drawn through them (routes.pipeline.set_declared_input_norm).
     # After the stop, so the layers of the models stopped are not redrawn.
-    # And one with no postprocessing the steps the first of them that declares
-    # its output wants (routes.pipeline.set_declared_postprocess).
+    # And one with no postprocessing the step the first of them declares is
+    # applied after it (routes.pipeline.set_declared_postprocess).
     from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm, set_declared_postprocess
 
     set_declared_input_norm([config for _, config in starting])

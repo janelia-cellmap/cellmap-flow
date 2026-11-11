@@ -345,6 +345,46 @@ def needed_postprocess(output_class: Optional[str], postprocess: Sequence[dict],
     return None if needed == steps else needed
 
 
+# The step that applies each activation a model's metadata declares comes
+# after it. An activation no postprocessor applies (softmax) declares none.
+_APPLIED_AFTER = {"sigmoid": SIGMOID}
+# What cellmap-models reads in an activation's string as "in the model already".
+_IN_THE_MODEL = ("included", "in exported model", "in model")
+
+
+def declared_postprocess(activation) -> List[dict]:
+    """The postprocessing a model's start sets on a chain with none, without
+    asking, from what its metadata declares: the step that applies the
+    activation it says is applied after the model, ``[{"name": ...}]``; []
+    for any other. Its start sets nothing else from what a model says of its
+    output: what an output wants beyond that (an affinity model's watershed,
+    a semantic model's argmax, a tanh's 0-255) is the model advice's
+    suggestion (serving/probe.py review_postprocess), for the user to Apply,
+    and the sigmoid logits need comes from ``needed_postprocess`` once the
+    model's output is known.
+
+    ``activation`` is a cellmap-models export's
+    ``inference_output_activation``: ``{"name", "apply_after_model"}``, or a
+    string, which cellmap-models reads as applied after the model unless it
+    says it is in it ("sigmoid" is; "sigmoid included in model" is not).
+    cellmap's setup 53-67 exports declare ``{"name": "sigmoid",
+    "apply_after_model": true}``: a SigmoidPostprocessor. An activation in
+    the model (``apply_after_model`` false, as cellmap-models' mia-train
+    exports declare theirs), identity, none, or one no postprocessor applies
+    (softmax) declares nothing.
+    """
+    if isinstance(activation, str):
+        text = activation.strip().lower()
+        name = next((n for n in _APPLIED_AFTER if n in text), None)
+        after = not any(phrase in text for phrase in _IN_THE_MODEL)
+    elif isinstance(activation, dict):
+        name = str(activation.get("name") or "").strip().lower()
+        after = activation.get("apply_after_model") is True
+    else:
+        return []
+    return [{"name": _APPLIED_AFTER[name]}] if after and name in _APPLIED_AFTER else []
+
+
 def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict],
               raw: Optional[Sequence[float]], norm_from: str = "session",
               others: Sequence[dict] = ()) -> Optional[dict]:

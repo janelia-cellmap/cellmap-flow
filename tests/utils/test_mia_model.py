@@ -116,28 +116,34 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
     assert converted == [str(snapshot)]
 
 
-# What Submit sets after a model that declares its output, on a chain of no
-# postprocessing: what the model advice suggests for it (portable/advice.py).
+# What the model advice suggests after each, from what its server says its
+# output is (the uint8 export's declared probabilities x 255; the sigmoid its
+# network ends in), for the user to Apply: Submit sets none of it.
 ARGMAX = [{"name": "ArgmaxPostprocessor", "threshold": 127.5}]
 WATERSHED = [{"name": "DefaultPostprocessor", "clip_min": 0.0, "clip_max": 1.0, "bias": 0.0, "multiplier": 255.0},
              {"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": str(OFFSETS)}]
+SEMANTIC_SERVED = {"available": True, "output_class": "byte_unit", "output_class_from": "declared", "output_channels": 2}
+AFFINITY_SERVED = {"available": True, "output_class": "unit", "output_class_from": "graph", "output_op": "Sigmoid",
+                   "output_channels": 6}
 THEIRS = [{"name": "ThresholdPostprocessor", "threshold": 0.3}]
 
 
-@pytest.mark.parametrize("declared, chain, expected", [
-    pytest.param(DECLARED, [], ARGMAX, id="semantic: its classes' argmax at 0.5"),
-    pytest.param(AFFINITY_DECLARED, [], WATERSHED, id="affinities: the watershed at its offsets"),
-    pytest.param(AFFINITY_DECLARED, THEIRS, THEIRS, id="a chain with steps is left alone"),
+@pytest.mark.parametrize("declared, served, chain, suggested", [
+    pytest.param(DECLARED, SEMANTIC_SERVED, [], ARGMAX, id="semantic: its classes' argmax"),
+    pytest.param(AFFINITY_DECLARED, AFFINITY_SERVED, [], WATERSHED, id="affinities: the watershed at its offsets"),
+    pytest.param(AFFINITY_DECLARED, AFFINITY_SERVED, THEIRS, None, id="a chain with steps is left alone"),
 ])
-def test_submit_sets_what_a_mia_model_declares_before_it_is_converted(adapter, dashboard, monkeypatch, tmp_path,
-                                                                     declared, chain, expected):
+def test_submit_sets_what_a_mia_model_declares_and_the_advice_suggests_the_rest(
+        adapter, dashboard, monkeypatch, tmp_path, declared, served, chain, suggested):
     """Ticked in the Hugging Face list and submitted before any server has
     converted it, a mia model's start sets the chain's input normalization
-    and postprocessing from what its export will declare (mia_metadata): the
-    raw data's range scaled onto [0, 1], as a cellmap-models export's
-    min_max [0, 1] is, and the steps the model advice suggests for its
-    output, on a chain that has none, before its layer is drawn. The page is
-    told whose they are. Not a weight is fetched for it."""
+    from what its export will declare (mia_metadata): the raw data's range
+    scaled onto [0, 1], as a cellmap-models export's min_max [0, 1] is,
+    before its layer is drawn. Its postprocessing is not set: its export
+    declares its activation in it, so nothing is to be applied after it, and
+    what its output wants is the model advice's suggestion, to Apply. The
+    page is told whose the input normalization is, after an Apply that
+    sends it as the page writes it too. Not a weight is fetched for it."""
     import huggingface_hub
 
     from cellmap_flow.dashboard.routes import model_advice
@@ -164,11 +170,21 @@ def test_submit_sets_what_a_mia_model_declares_before_it_is_converted(adapter, d
 
     assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
     unit = [{"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}]
-    assert session.pipeline_spec == PipelineSpec(unit, expected) and drawn_through == [PipelineSpec(unit, expected)]
+    assert session.pipeline_spec == PipelineSpec(unit, chain) and drawn_through == [PipelineSpec(unit, chain)]
+
+    # Once its server answers, the advice suggests what its output wants.
     (name,) = [model.name for model in session.models_config]
     session.jobs = [_Job(name)]
+    monkeypatch.setattr(model_advice, "_fetch_probe", lambda host: served)
+    if suggested:
+        review = dashboard.get("/api/model_advice").get_json()["models"][0]["postprocess_review"]
+        assert [{"name": step, **review["params"].get(step, {})} for step in review["suggest"]] == suggested
+
     loaded = dashboard.get("/api/models/loaded").get_json()
-    assert loaded["postprocess_from"] == (None if chain else name) and not loaded["postprocess_fitted"]
+    assert (loaded["input_norm_from"], loaded["postprocess_from"]) == (name, None)
+    page = [{"name": "MinMaxNormalizer", "min_value": "0.0", "max_value": "255.0", "invert": "false"}]
+    assert dashboard.put("/api/pipeline", json={"input_norm": page, "postprocess": chain}).status_code == 200
+    assert dashboard.get("/api/models/loaded").get_json()["input_norm_from"] == name
 
 
 def test_the_offsets_an_export_declares_win_over_its_channel_names(tmp_path):

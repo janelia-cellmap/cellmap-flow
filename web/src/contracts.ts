@@ -133,11 +133,13 @@ export interface SessionState {
    * chain's postprocessing was fitted to the paint while it is theirs. The
    * server's `rank_fits` on its dashboard session. */
   rankFits: Record<string, RankFit>;
-  /** The postprocessing a model's start set on a chain with none, and the
-   * model (serving.ts setDeclaredPostprocess), which GET /api/models/loaded
-   * says the chain's came from while it is still that; null until a start
-   * sets any. The server's `start_postprocess`. */
-  startPostprocess: { model: string; postprocess: Step[] } | null;
+  /** The postprocessing a model's start set on a chain with none, the
+   * model, and whether its manifest declared it (serving.ts
+   * setDeclaredPostprocess; else setNeededPostprocess, what its output
+   * needs), which GET /api/models/loaded says the chain's came from while it
+   * is still that; null until a start sets any. The server's
+   * `start_postprocess`. */
+  startPostprocess: { model: string; postprocess: Step[]; declared?: boolean } | null;
   /** The models stopped because the person deleted their layer in the
    * viewer (backend/index.ts layerDeleted), the latest of each name, each
    * numbered from 1 up in the order they went, which GET /api/models/loaded
@@ -228,6 +230,13 @@ export interface ModelManifest {
   output: string;
   /** The normalizers the model expects, as cellmap-flow steps. */
   input_norm: Step[];
+  /** The activation that comes after the model, when the manifest declares
+   * one as a cellmap-models export's metadata.json does: `{name,
+   * apply_after_model}` (a sigmoid with apply_after_model true is set as its
+   * SigmoidPostprocessor when the model starts, serving.ts
+   * setDeclaredPostprocess), or cellmap-models' string form. Absent from
+   * Marwan's manifests, whose `output` text says "raw logits". */
+  inference_output_activation?: OutputActivationDeclared;
   io: { input: string; output: string; [k: string]: unknown };
   variants: ModelVariant[];
   /** Where the export came from, as Marwan's manifests say since
@@ -248,6 +257,10 @@ export interface ModelManifest {
    * as the publish wrote it. */
   published?: PublishedBlock;
 }
+
+/** A manifest's declared inference_output_activation, as cellmap-models
+ * writes one in an export's metadata.json. */
+export type OutputActivationDeclared = string | { name: string; apply_after_model?: boolean; dim?: number | null };
 
 /** A published model's manifest's "published" block. */
 export interface PublishedBlock {

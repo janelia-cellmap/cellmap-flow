@@ -87,7 +87,21 @@ export function parseManifest(raw: unknown, where = "manifest.json"): ModelManif
     ...provenance(m),
     ...finetuneOf(m),
     ...publishedOf(m),
+    ...activationOf(m),
   };
+}
+
+// The activation the manifest declares comes after the model, when it
+// declares one as cellmap-models does (a string, or a block with a name).
+function activationOf(m: Record<string, unknown>): Pick<ModelManifest, "inference_output_activation"> {
+  const value = m.inference_output_activation;
+  if (isString(value)) return { inference_output_activation: value };
+  const block = record(value);
+  if (!block || !isString(block.name)) return {};
+  return { inference_output_activation: {
+    name: block.name,
+    ...(typeof block.apply_after_model === "boolean" ? { apply_after_model: block.apply_after_model } : {}),
+  } };
 }
 
 function finetuneOf(m: Record<string, unknown>): Pick<ModelManifest, "finetune"> {

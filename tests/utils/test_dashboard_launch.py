@@ -225,6 +225,46 @@ def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one
     assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
 
 
+# What cellmap/mito-aff-unetiso-setup-53's metadata.json says follows the
+# model (as 54's, 56's, 61's and 67's do): a sigmoid, not in the export.
+SIGMOID_AFTER = {"framework": "torch", "input_normalization": MIN_MAX,
+                 "inference_output_activation": {"name": "sigmoid", "apply_after_model": True, "dim": None}}
+
+
+@pytest.mark.parametrize("chain, expected", [
+    pytest.param([], [{"name": "SigmoidPostprocessor"}], id="no postprocessing"),
+    pytest.param([{"name": "ThresholdPostprocessor", "threshold": 0.3}], None, id="the user's"),
+])
+def test_a_cellmap_export_that_declares_its_sigmoid_after_it_gets_it_at_its_start(dashboard, monkeypatch, chain,
+                                                                                 expected):
+    """A step a cellmap-models export's metadata.json declares is applied
+    after the model (inference_output_activation, apply_after_model true) is
+    set at its start, without asking, on a chain with no postprocessing,
+    before its layer is drawn; and the page is told it came from the
+    model's metadata. A chain with steps is left alone."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: SIGMOID_AFTER)
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = get_session()
+    session.set_pipeline(PipelineSpec([], chain))
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": ["cellmap/mito-aff-unetiso-setup-53"]})
+    assert answer.status_code == 200
+    expected = expected or chain
+    assert session.pipeline_spec == PipelineSpec(SIGNED, expected) and drawn_through == [PipelineSpec(SIGNED, expected)]
+    (name,) = [model.name for model in session.models_config]
+    session.jobs = [_Job(name)]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["postprocess_from"], loaded["postprocess_declared"]) == ((None, None) if chain else (name, True))
+
+
 def test_submit_runs_a_model_at_the_voxel_size_typed_beside_it(viewer, dashboard, monkeypatch):
     """POST /api/models' run_voxel_sizes: a ticked Hugging Face model's server
     builds it at the voxel size typed in its row, which the listing gives

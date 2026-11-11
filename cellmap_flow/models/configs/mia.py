@@ -26,15 +26,15 @@ rename wins and the other copy is dropped, so no server reads a
 half-written export.
 
 Nothing the dashboard asks (declared_geometry, declared_input_norm,
-declared_affinity_offsets, declared_output_class, finetune_modes,
+declared_affinity_offsets, declared_postprocess, finetune_modes,
 finetune_refusal, to_dict) downloads the weights or converts anything: each
 reads the cached export once a server has made it (the cache is in the home
 folder the dashboard and its jobs share). Before that, all but to_dict answer
 from the metadata the export will have, which cellmap_models'
 ``mia_metadata`` makes from the repo's config.json and model card alone
 (small files, which resolving the model has fetched already), so that Submit
-sets the input normalization the model was trained on, and the
-postprocessing its output wants, before its server has converted it.
+sets the input normalization the model was trained on before its server
+has converted it.
 """
 
 import functools
@@ -379,12 +379,13 @@ class MiaModelConfig(ModelConfig):
         declared = self._declared()
         return declared.declared_affinity_offsets() if declared is not None else None
 
-    def declared_output_class(self):
-        """The export's, or the one it will be (_declared): what cellmap_models
-        declares the output is (an affinity model's affinities, a semantic
-        model's uint8 probabilities x 255); None when neither is known."""
+    def declared_postprocess(self):
+        """The export's, or the one it will be (_declared): the step its
+        metadata declares is applied after the model. cellmap_models declares
+        a mia-train export's activation in the export, so none; [] when
+        neither is known."""
         declared = self._declared()
-        return declared.declared_output_class() if declared is not None else None
+        return declared.declared_postprocess() if declared is not None else []
 
     def _launch_params(self) -> dict:
         # Not to_dict(): its display fields are no constructor's arguments.

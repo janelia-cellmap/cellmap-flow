@@ -13,8 +13,8 @@ from types import SimpleNamespace
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import (
     CellMapModelConfig, declared_offsets, export_finetune_modes, integer_output_refusal, metadata_geometry,
-    metadata_output_class,
 )
+from cellmap_flow.portable import rank
 from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
@@ -150,13 +150,13 @@ class HuggingFaceModelConfig(ModelConfig):
         metadata = self._load_metadata()
         return declared_offsets(metadata.get("affinity_offsets")) if isinstance(metadata, dict) else None
 
-    def declared_output_class(self):
-        """``metadata_output_class`` of the repo's metadata.json (downloaded
-        as for declared_geometry); None when it says nothing of its output."""
+    def declared_postprocess(self):
+        """The step the repo's metadata.json declares is applied after the
+        model (its ``inference_output_activation``: portable/rank.py
+        declared_postprocess), downloaded as for declared_geometry; [] for
+        none."""
         metadata = self._load_metadata()
-        if not isinstance(metadata, dict):
-            return None
-        return metadata_output_class(metadata.get("output_dtype"), metadata.get("inference_output_activation"))
+        return rank.declared_postprocess(metadata.get("inference_output_activation")) if isinstance(metadata, dict) else []
 
     def runs_at_native_voxel_size(self) -> bool:
         """Whether the repo's metadata.json says ``native_voxel_size``."""
