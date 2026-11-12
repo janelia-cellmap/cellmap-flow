@@ -161,6 +161,24 @@ def precheck(yaml_config: str) -> dict:
     }
 
 
+def _refuse_overlap(model, overlap) -> None:
+    """A ConfigError when ``overlap`` (one number of output voxels, or one per
+    axis; None or empty for none) is not zero.
+
+    A model with an overlap has its blocks blended where they meet by the
+    inference server (chunkmirage's Op.overlap). A worker writes each tile on
+    its own: for such a model, whole windows side by side, with a seam at
+    every face."""
+    if overlap is None or not np.any(overlap):
+        return
+    shown = int(overlap) if np.isscalar(overlap) else [int(v) for v in overlap]
+    raise ConfigError(
+        f"{getattr(model, 'name', None) or 'A model'} has an overlap {shown}: "
+        "its blocks are blended where they meet, which the inference server does and blockwise does "
+        "not yet. Serve it, or run blockwise with an export of it without an overlap."
+    )
+
+
 class CellMapFlowBlockwiseProcessor:
 
     def __init__(self, yaml_config: str, create=False):
@@ -255,6 +273,14 @@ class CellMapFlowBlockwiseProcessor:
             )
         self.input_path = resolve_data_path(self.input_path, scale)
         logger.info(f"Reading: {self.input_path}")
+        # A model with an overlap is refused below (_refuse_overlap), from
+        # what it serves. One that declares its overlap without being built
+        # (ModelConfig.declared_overlap: an export's metadata, or the one a
+        # mia model's will have) is refused here, before anything builds it:
+        # a mia model's first build converts it, minutes on the master's CPU,
+        # only to be refused.
+        for model in models:
+            _refuse_overlap(model, model.declared_overlap())
         # Before anything builds them: a model run at the data's own voxel
         # size runs at the finest of it (ModelConfig.adopt_native_voxel_size).
         for model in models:
@@ -285,19 +311,11 @@ class CellMapFlowBlockwiseProcessor:
                 f"Processing only channels: {self.process_only} with merge mode: {self.cross_channels_mode}"
             )
 
-        # A model with an overlap has its blocks blended where they meet by
-        # the inference server (chunkmirage's Op.overlap). A worker writes each
-        # tile on its own: for such a model, whole windows side by side, with
-        # a seam at every face. Any of the task's models, as they all run: the
-        # first everywhere, the others where the workers build them anyway,
-        # so the master builds no more models than it did.
+        # Any of the task's models, as they all run: the first everywhere,
+        # the others where the workers build them anyway, so the master
+        # builds no more models than it did.
         for model in models if not create else models[:1]:
-            if any(model.geometry.overlap):
-                raise ConfigError(
-                    f"{getattr(model, 'name', None) or 'A model'} has an overlap {list(model.geometry.overlap)}: "
-                    "its blocks are blended where they meet, which the inference server does and blockwise does "
-                    "not yet. Serve it, or run blockwise with an export of it without an overlap."
-                )
+            _refuse_overlap(model, model.geometry.overlap)
 
         self.model_config = models[0]
         geometry = self.model_config.geometry

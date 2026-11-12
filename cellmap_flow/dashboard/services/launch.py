@@ -21,6 +21,8 @@
   going, and why its last one failed, which the Finetune tab's Use this
   model waits on (routes/finetune/rank_routes.py _served_geometry), and the
   model advice says while any is (routes/model_advice.py).
+  ``others_starting()``: the starts the chain's postprocessing waits on
+  (routes/pipeline.py set_start_postprocess).
 - ``served_at_run_voxel_size()``: the models running or starting at a voxel
   size not their own (``ModelConfig.run_voxel_size``), whose Run at (nm)
   fields the Models tab fills in.
@@ -134,15 +136,49 @@ def run_model(config, st_data, queue=None):
     Submit, Add a model and the Training tab's Use this model, which gives
     the Training tab's GPU queues as ``queue`` (the Models tab's otherwise).
 
-    A chain with no postprocessing takes what the model's output needs (a
-    sigmoid for logits) once its server's probe says what that is
-    (routes.pipeline.set_needed_postprocess); the redraw that sets it draws
-    this model's layer too."""
-    from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
+    A model that runs at the raw data's own voxel size is set to run at the
+    finest of the session's raw first (at_native_voxel_size). A chain with
+    no postprocessing takes the step a model's metadata declares follows
+    it, else the sigmoid a model's logits need, once every model started
+    has its server (routes.pipeline.set_start_postprocess); the redraw that
+    sets it draws this model's layer too. A start that ended without a
+    server is told too: the others may have waited on it."""
+    from cellmap_flow.dashboard.routes.pipeline import set_start_postprocess
 
+    at_native_voxel_size(config)
     job = _start(config, queue)
-    if job is not None and not set_needed_postprocess(job):
+    if not set_start_postprocess() and job is not None:
         _show(job, st_data)
+
+
+def at_native_voxel_size(config, data_path=None):
+    """Have ``config`` run at the finest voxel size of the session's raw when
+    the model runs at the data's own (a cellmap-models export whose metadata
+    says native_voxel_size, as a mia-train model's does), as its server,
+    its trainer and blockwise run it (ModelConfig.adopt_native_voxel_size):
+    then the dashboard's config says the sizes the model is served at, in
+    the entry its server is started with and in what the Finetune tab lists
+    of it while its server is not up, or stopped (its declared_geometry:
+    the training form's sizes, the ranking's facts). The Models tab's Run at
+    (nm) shows it as the voxel size it runs at (served_at_run_voxel_size).
+    A run voxel size its entry gives wins, as it does there.
+
+    Only once what the model declares is known (its declared_geometry
+    answers, from its metadata): asked before that, a mia model converts
+    itself to answer (MiaModelConfig.runs_at_native_voxel_size), which is
+    its server's to do, never the dashboard's. Reading its metadata and the
+    raw's levels may go over the network, so this is never called under a
+    lock. Never raises: a model whose raw cannot be read is left for its
+    server to set. ``data_path`` is the session's raw unless given (a YAML's
+    models, started before the session has its dataset: yaml_cli)."""
+    data_path = data_path or get_session().dataset_path
+    try:
+        if config.run_voxel_size is not None or not data_path or config.declared_geometry() is None:
+            return
+        config.adopt_native_voxel_size(data_path)
+    except Exception as e:
+        logger.warning(f"Could not tell the voxel size {getattr(config, 'name', None)} runs at on "
+                       f"{data_path}; its server works it out: {e}")
 
 
 def _built(entry: dict, label: str):
@@ -288,10 +324,18 @@ def _cellpose_configs(selections) -> list:
 def _settings_changed(config) -> bool:
     """Whether the model named as ``config`` was started with other settings
     than ``config``'s: another run voxel size, or, a Cellpose model, another
-    voxel size or slice linking."""
+    voxel size or slice linking.
+
+    A model that runs at the raw's own voxel size was started at the raw's
+    finest (run_model's at_native_voxel_size); ticked again with no run
+    voxel size typed, it is asked the same before the two are compared, so
+    it is not started again for that, unless the raw it would run on now
+    is another."""
     for mc in get_session().models_config:
         if getattr(mc, "name", None) != config.name:
             continue
+        if getattr(mc, "run_voxel_size", None) is not None and config.run_voxel_size is None:
+            at_native_voxel_size(config)
         if getattr(mc, "run_voxel_size", None) != config.run_voxel_size:
             return True
         if isinstance(mc, CellposeModelConfig) and isinstance(config, CellposeModelConfig):
@@ -385,6 +429,18 @@ def launching(name=None) -> bool:
     no ``name``, whether any model's is."""
     with _launching_lock:
         return bool(_launching) if name is None else name in _launching
+
+
+def others_starting() -> set:
+    """The models whose start is still going, but for the one the calling
+    thread runs: launched, and with no job of theirs serving yet. A launch
+    whose server is up is not waited on, though its thread has still to
+    draw its layer and return. The postprocessing the starts set waits for
+    them (routes.pipeline.set_start_postprocess)."""
+    current = getattr(_this_launch, "current", None)
+    with _launching_lock:
+        launching = {name for name, launch in _launching.items() if launch is not current}
+    return launching - {job.model_name for job in get_session().jobs if job.host}
 
 
 def start_error(name):
@@ -518,10 +574,11 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
 
     When the chain has no input normalizers, the first model started that
     declares some (an onnx model's manifest) sets them, as part of its start
-    (routes.pipeline.set_declared_input_norm); and when it has no
-    postprocessing, the first whose metadata declares a step applied after
-    it (a sigmoid) sets that (routes.pipeline.set_declared_postprocess). Any
-    other chain is left as it is, and only the page's Apply changes it."""
+    (routes.pipeline.set_declared_input_norm). When it has no
+    postprocessing, the step a model's metadata declares is applied after
+    it (a sigmoid), or else the sigmoid a model's logits need, is set once
+    the servers are up and say what each output is (run_model). Any other
+    chain is left as it is, and only the page's Apply changes it."""
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
@@ -543,12 +600,9 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # declared ones, before the blob its layers are drawn with is taken, so
     # they are drawn through them (routes.pipeline.set_declared_input_norm).
     # After the stop, so the layers of the models stopped are not redrawn.
-    # And one with no postprocessing the step the first of them declares is
-    # applied after it (routes.pipeline.set_declared_postprocess).
-    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm, set_declared_postprocess
+    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
 
     set_declared_input_norm([config for _, config in starting])
-    set_declared_postprocess([config for _, config in starting])
     st_data = session.layer_blob()
     for name, config in starting:
         _keep_config(config)

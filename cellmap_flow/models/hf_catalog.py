@@ -7,10 +7,13 @@ trained with mia-train whose ``config.json`` cellmap_models can serve
 (``LISTED_TYPE``); any other repo is left out.
 
 ``list_huggingface_models`` answers from a cache file under
-``~/.cellmap_flow`` once there is one, so opening the dashboard does not
-query the Hub each time; ``refresh_huggingface_models`` rebuilds it;
-``cached_huggingface_models`` reads the cache alone, for a list that must
-not wait on the Hub. Each model is keyed by its repo id, with the
+``~/.cellmap_flow`` once it holds every organization's listing, so opening
+the dashboard does not query the Hub each time; ``refresh_huggingface_models``
+rebuilds it; ``cached_huggingface_models`` reads the cache alone, for a list
+that must not wait on the Hub. Each organization is listed on its own, and
+the cache says which it holds the listing of (``LISTED_ORGS``): one not
+listed yet, or whose listing failed, is asked for again by the next listing,
+the others answered from the cache. Each model is keyed by its repo id, with the
 ``metadata.json`` it publishes and, beside its fields, what every model list
 shows of a model without downloading it (``FACTS``): its weight formats, how
 it can be finetuned, the size of its largest weights file, and the copy of it
@@ -20,23 +23,34 @@ with their file names, then one request of sizes per repo), and from the
 manifests of cellmap/onnx-web-models, when the cache is built, and kept in it:
 a page's poll never asks the Hub for them. A mia-train model has no
 metadata.json; its ``config.json`` is read instead, once per such repo when
-the cache is built.
+the cache is built, and how it can be finetuned is read from that same
+download (``_mia_finetune_modes``).
 """
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from huggingface_hub import get_paths_info, hf_hub_download, list_models, list_repo_files
 
 from cellmap_flow.models.configs.cellmap import export_finetune_modes, integer_output_refusal
-from cellmap_flow.models.resolve import EXPORT_METADATA, _hf_config, _mia_files, _onnx_folders, servable_mia_config
+from cellmap_flow.models.resolve import EXPORT_METADATA, _mia_files, _onnx_folders, servable_mia_config
 
 # The Hugging Face organizations the list shows the models of: cellmap's
 # exports, and the MIA team's (HHMI AI) models trained with mia-train.
 HUGGING_FACE_ORGS = ("cellmap", "ai-hhmi")
 HF_CACHE_DIR = os.path.expanduser("~/.cellmap_flow/hugging_face")
-HF_CACHE_FILE = os.path.join(HF_CACHE_DIR, "models_cache.json")
+# The cache: every model listed, by its repo id, and under LISTED_ORGS the
+# organizations whose listing it holds. Not the models_cache.json beside it,
+# which a cellmap-flow from before ai-hhmi was listed reads and writes in the
+# same home: that one caches cellmap's models alone, which here would leave
+# the ai-hhmi group empty until a Refresh, and lists whatever its cache holds
+# as type huggingface, so ai-hhmi's repos there would be listed where they
+# cannot run. Each version keeps its own, and neither reads the other's.
+HF_CACHE_FILE = os.path.join(HF_CACHE_DIR, "listed_models.json")
+# Where the cache says which organizations it holds the listing of, beside
+# the repo ids, none of which it can be: each is "<org>/<name>".
+LISTED_ORGS = "listed_orgs"
 
 # The repo of the models exported for the browser (the browser's catalog,
 # web/src/models), one folder each with its manifest.json and .onnx files.
@@ -203,44 +217,102 @@ def repo_facts(repo: str, revision: Optional[str] = None) -> Dict[str, Any]:
 def _listed_metadata(repo: str, names: List[str]) -> Optional[Dict[str, Any]]:
     """What the list keeps of ``repo``, whose files are ``names``, before its
     facts: a cellmap-models export's metadata.json; for a model trained with
-    mia-train that cellmap-flow can serve, its type and a description (its
-    channels and sizes are its export's, made on its first start). None for
-    any other repo. Raises what downloading a file raises."""
+    mia-train that cellmap-flow can serve, its type, a description (its
+    channels and sizes are its export's, made on its first start) and, when
+    that is known, how it can be finetuned (``_mia_finetune_modes``), which
+    its files cannot say. None for any other repo. Raises what downloading a
+    file raises."""
     if EXPORT_METADATA in names or not names:
         with open(hf_hub_download(repo, EXPORT_METADATA)) as f:
             return json.load(f)
     if _mia_files(names):
-        if not servable_mia_config(_hf_config(repo, None)):
+        path = hf_hub_download(repo, "config.json")
+        with open(path) as f:
+            config = json.load(f)
+        if not servable_mia_config(config):
             print(f"{repo}: a mia-train model cellmap-flow cannot serve (not a segmentation network); not listed")
             return None
-        return {LISTED_TYPE: "mia", "model_name": repo.split("/")[-1], "description": MIA_DESCRIPTION}
+        metadata = {LISTED_TYPE: "mia", "model_name": repo.split("/")[-1], "description": MIA_DESCRIPTION}
+        modes = _mia_finetune_modes(repo, os.path.dirname(path))
+        return metadata if modes is None else {**metadata, "finetune_modes": modes}
     print(f"{repo}: neither a cellmap-models export nor a mia-train model; not listed")
     return None
 
 
-def _mia_finetune_modes(repo: str) -> tuple:
+def _mia_finetune_modes(repo: str, folder: str) -> Optional[List[str]]:
     """How the mia-train model of ``repo`` can be finetuned, as its config
-    says (``MiaModelConfig.finetune_modes``), so the list and the training
-    form agree."""
+    says (``MiaModelConfig.finetune_modes``: from what its export will
+    declare, none for a uint8 output), so the list and the training form
+    agree. None when what the export will declare cannot be read
+    (``planned_metadata``): what its config answers then is not the model's
+    (it says none while it does not know), which the list leaves out rather
+    than cache as what the model takes until a Refresh.
+
+    The config is built of ``folder``, where Hugging Face's cache keeps the
+    config.json _listed_metadata has just downloaded: that is all
+    cellmap_models' mia_metadata needs, as such a folder says its repo and
+    commit. Built of the repo id, it would list the repo's snapshot and
+    download its model card and licence besides, for every mia-train repo at
+    every build of the list, and those say only the export's name, licence
+    and description, which the list does not keep. (Nor does it look for an
+    export a server has made already, which declares what mia_metadata says
+    it will.)"""
     from cellmap_flow.models.configs.mia import MiaModelConfig
 
-    return MiaModelConfig(repo=repo).finetune_modes()
+    config = MiaModelConfig(path=folder, name=repo.split("/")[-1])
+    if config.planned_metadata() is None:
+        print(f"{repo}: what its export will declare could not be read; listed without how it can be finetuned")
+        return None
+    return list(config.finetune_modes())
+
+
+def _of(orgs: Iterable[str], models: Dict[str, Any]) -> Dict[str, Any]:
+    """The models of ``orgs`` among ``models`` (keyed by repo id)."""
+    return {repo: metadata for repo, metadata in models.items() if repo.split("/")[0] in orgs}
+
+
+def _as_orgs(orgs) -> Tuple[str, ...]:
+    """``orgs``, one organization's name or several, as a tuple."""
+    return (orgs,) if isinstance(orgs, str) else tuple(orgs)
+
+
+def _read_cache() -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    """The models cached, by repo id (None when nothing is cached, or the
+    cache cannot be read), and the organizations whose listing the cache
+    holds (``LISTED_ORGS``; none when it does not say)."""
+    try:
+        with open(HF_CACHE_FILE) as f:
+            cache = json.load(f)
+    except (OSError, ValueError):
+        return None, []
+    return cache, cache.pop(LISTED_ORGS, [])
 
 
 def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """Fetch the models of ``orgs`` (one organization's name, or several)
-    from the Hugging Face Hub, and save them to the cache."""
-    if isinstance(orgs, str):
-        orgs = (orgs,)
+    from the Hugging Face Hub, and cache them beside what the cache has of
+    any other organization; answers every model cached.
+
+    Each organization is listed on its own: one that cannot be (a rate
+    limit, one renamed or made private, the Hub failing for a moment) is
+    left out, saying why, and the others listed all the same. What the cache
+    had of it is kept, so a Refresh at such a moment does not empty its
+    group, but the cache no longer says it holds its listing, so the next
+    listing asks for it again rather than serving a cache that lacks it as
+    whole."""
+    orgs = _as_orgs(orgs)
+    listed, models = [], []
+    for org in orgs:
+        try:
+            # With their file names, which the facts read (and their sizes, which
+            # no listing gives, asked for per repo).
+            models += list(list_models(author=org, expand=["siblings"]))
+        except Exception as e:
+            print(f"{org}: could not list its Hugging Face models ({e}); listed again next time")
+            continue
+        listed.append(org)
     result = {}
-    try:
-        # With their file names, which the facts read (and their sizes, which
-        # no listing gives, asked for per repo).
-        models = [m for org in orgs for m in list_models(author=org, expand=["siblings"])]
-    except Exception as e:
-        print(f"Error fetching Hugging Face models: {str(e)}")
-        return {}
-    linked = _linked_copies()
+    linked = _linked_copies() if models else None
     for m in models:
         names = [s.rfilename for s in m.siblings or []]
         try:
@@ -250,22 +322,26 @@ def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
             continue
         if metadata is None:
             continue
-        result[m.id] = {**metadata, **_repo_facts(m.id, names, linked)}
+        facts = _repo_facts(m.id, names, linked)
         if metadata.get(LISTED_TYPE) == "mia":
-            # Its config's (configs/mia.py MiaModelConfig.finetune_modes): from
-            # what its export will declare, which cellmap_models makes from
-            # the config.json read above and the model card, without the
-            # weights or converting; none for a uint8 output.
-            result[m.id]["finetune_modes"] = list(_mia_finetune_modes(m.id))
+            # Not from its files: its config's, which _listed_metadata gave
+            # when it is known (configs/mia.py MiaModelConfig.finetune_modes).
+            del facts["finetune_modes"]
         elif integer_output_refusal(m.id, metadata.get("output_dtype")):
             # A whole-number output passes no gradient (HuggingFaceModelConfig.finetune_modes).
-            result[m.id]["finetune_modes"] = []
+            facts["finetune_modes"] = []
+        result[m.id] = {**metadata, **facts}
 
-    # Save to cache
+    # The cache's models of every organization not listed now are kept; it
+    # holds the listing of those listed now, and of those not asked for that
+    # it held before.
+    cached, cached_orgs = _read_cache()
+    kept = {repo: metadata for repo, metadata in (cached or {}).items() if repo.split("/")[0] not in listed}
+    result = {**kept, **result}
+    whole = [org for org in cached_orgs if org not in orgs] + listed
     os.makedirs(HF_CACHE_DIR, exist_ok=True)
     with open(HF_CACHE_FILE, "w") as f:
-        json.dump(result, f)
-
+        json.dump({**result, LISTED_ORGS: whole}, f)
     return result
 
 
@@ -273,8 +349,10 @@ def list_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """
     List available Hugging Face models, using cache if available.
 
-    A cache written before the listing gave each model's ``FACTS`` is fetched
-    again, once: its rows would show nothing of what each model is.
+    The organizations whose listing the cache does not hold (every one
+    before a first listing; one whose listing failed,
+    ``_fetch_huggingface_models``) are fetched, and the others answered from
+    the cache.
 
     Args:
         orgs: the Hugging Face organizations to list (HUGGING_FACE_ORGS by default)
@@ -282,10 +360,12 @@ def list_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     Returns:
         A dict mapping model IDs to their metadata
     """
-    cached = cached_huggingface_models()
-    if cached is not None and all("formats" in metadata for metadata in cached.values()):
-        return cached
-    return _fetch_huggingface_models(orgs)
+    orgs = _as_orgs(orgs)
+    cached, listed = _read_cache()
+    missing = [org for org in orgs if org not in listed]
+    if missing:
+        cached = _fetch_huggingface_models(missing)
+    return _of(orgs, cached or {})
 
 
 def cached_huggingface_models() -> Optional[Dict[str, Any]]:
@@ -293,13 +373,10 @@ def cached_huggingface_models() -> Optional[Dict[str, Any]]:
     cached (or the cache cannot be read), without asking the Hub: the
     Finetune tab's ranking lists them so (routes/finetune/rank_routes.py),
     and its Refresh is the Models tab's, ``refresh_huggingface_models``."""
-    try:
-        with open(HF_CACHE_FILE) as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return None
+    return _read_cache()[0]
 
 
 def refresh_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """Force refresh the Hugging Face models cache."""
-    return _fetch_huggingface_models(orgs)
+    orgs = _as_orgs(orgs)
+    return _of(orgs, _fetch_huggingface_models(orgs))

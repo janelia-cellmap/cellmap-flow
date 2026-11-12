@@ -237,6 +237,18 @@ it("lists each organization's Hugging Face models in a group of its own", async 
   expect(groupNames("hfModelsContainer").sort()).toEqual(["mito-aff", "nuc-model"]);
   expect(groupNames("hf_ai_hhmiModelsContainer")).toEqual(["lmd-vitl"]);
   expect(page.getElementById("heading_hf_ai_hhmi").querySelector("button")!.childNodes[0].textContent).toBe("ai-hhmi");
+
+  // A Refresh that lists none of ai-hhmi's: its group hides its search bar
+  // and count, as before its first list, rather than keep the old count.
+  const controlsOf = (id: string) => page.getElementById(`${id}SearchBar`).parentNode!.parentNode!;
+  expect([controlsOf("hf_ai_hhmi").hidden, page.getElementById("hf_ai_hhmiCount").textContent]).toEqual([false, "1 / 1"]);
+  vi.stubGlobal("fetch", async () => ({ ok: true, status: 200, json: async () => HF }));
+  page.getElementById("hfRefreshBtn").dispatchEvent({ type: "click" });
+  await settled();
+  expect(groupNames("hf_ai_hhmiModelsContainer")).toEqual([]);
+  expect(page.getElementById("hf_ai_hhmiModelsContainer").textContent).toContain("No models found.");
+  expect(controlsOf("hf_ai_hhmi").hidden).toBe(true);
+  expect([controlsOf("hf").hidden, page.getElementById("hfCount").textContent]).toEqual([false, "2 / 2"]);
 });
 
 it("shows on a server every Hugging Face model, or with Runs in the browser those with a browser copy and the ticked ones, by name or by size", async () => {

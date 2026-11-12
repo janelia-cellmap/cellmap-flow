@@ -384,16 +384,27 @@ class ModelConfig:
         metadata.json declares them."""
         return None
 
+    def declared_overlap(self):
+        """The overlap the model declares, read without building it (one
+        number of output voxels, or one per axis, as its metadata gives it),
+        or None when it declares none. Blockwise refuses a model with an
+        overlap from this before it builds anything (blockwise_processor), as
+        it does not blend blocks yet, and building some models is costly (a
+        mia model's first build converts it). Cheap and never raises, as
+        declared_input_norm: a cellmap-models export's metadata.json declares
+        it."""
+        return None
+
     def declared_postprocess(self) -> list:
         """The postprocessing the model's description declares is to be
         applied after it, as cellmap-flow steps (``[{"name": ...}]``); [] when
         it declares none: a cellmap-models export's metadata.json does with an
         inference_output_activation applied after the model (a sigmoid:
-        portable/rank.py declared_postprocess). Submit sets it on a chain
-        with none without asking (dashboard/routes/pipeline.py
-        set_declared_postprocess); anything else the output wants is the
-        model advice's suggestion. Cheap and never raises, as
-        declared_input_norm."""
+        portable/rank.py declared_postprocess). A start sets it on a chain
+        with none without asking, once the servers say it shows every model
+        running right (dashboard/routes/pipeline.py set_start_postprocess);
+        anything else the output wants is the model advice's suggestion.
+        Cheap and never raises, as declared_input_norm."""
         return []
 
     def runs_at_native_voxel_size(self) -> bool:
@@ -402,10 +413,12 @@ class ModelConfig:
         each dataset at that dataset's own: a cellmap-models export whose
         metadata.json says ``native_voxel_size``). False by default.
 
-        Asked only by ``adopt_native_voxel_size``, in a process that is about
-        to serve or train the model, so a type may prepare the model to
-        answer (a mia model whose metadata cannot be read is converted
-        then); never by the dashboard."""
+        Asked by ``adopt_native_voxel_size``, in a process that is about to
+        serve or train the model, so a type may prepare the model to answer
+        (a mia model whose metadata cannot be read is converted then). The
+        dashboard asks it only once what the model declares is known (its
+        declared_geometry answers: dashboard/services/launch.py
+        at_native_voxel_size), so it never converts a model."""
         return False
 
     def adopt_native_voxel_size(self, data_path) -> None:

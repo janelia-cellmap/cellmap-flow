@@ -125,11 +125,11 @@ class Session:
         self.models_config = []
         # {group: {model name: path}}, the Models tab's catalog.
         self.model_catalog = yaml.safe_load(files("cellmap_flow.models").joinpath("models.yaml").read_text()) or {}
-        # {"model", "postprocess"}: the postprocessing a model's start set on
-        # a chain with none, and the model (routes/pipeline.py
-        # set_needed_postprocess), which GET /api/models/loaded says the
-        # chain's came from while it is still that; None until a start sets
-        # any.
+        # {"model", "postprocess", "declared"}: the postprocessing the models'
+        # starts set on a chain with none, the model it is for and whether its
+        # metadata declares it (routes/pipeline.py set_start_postprocess),
+        # which GET /api/models/loaded says the chain's came from while it is
+        # still that; None until a start sets any.
         self.start_postprocess = None
         # [{"number", "name", "hf_id", "zoo_id", "cellpose"}]: the models
         # stopped because the person deleted their layer in the viewer

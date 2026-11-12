@@ -125,9 +125,15 @@ def run_multiple(
         queue: The GPU queues each job may run on (a list)
         resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
     """
+    # Imported here so --help and config errors do not pay for the dashboard.
+    from cellmap_flow.dashboard.services.launch import at_native_voxel_size
+
     def _submit_model(model):
         model_name = getattr(model, "name", None) or type(model).__name__
         logger.info(f"Submitting job for model: {model_name}")
+        # As the dashboard's own starts do (services.launch.run_model): the
+        # config the dashboard keeps says the voxel size the model runs at.
+        at_native_voxel_size(model, dataset_path)
         launch(model, dataset_path, queue=queue, charge_group=charge_group, resample=resample)
         return model_name
 

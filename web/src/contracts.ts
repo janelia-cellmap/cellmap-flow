@@ -233,7 +233,8 @@ export interface ModelManifest {
   /** The activation that comes after the model, when the manifest declares
    * one as a cellmap-models export's metadata.json does: `{name,
    * apply_after_model}` (a sigmoid with apply_after_model true is set as its
-   * SigmoidPostprocessor when the model starts, serving.ts
+   * SigmoidPostprocessor when the model starts, unless it would show a model
+   * served wrong, its own network ending in a sigmoid among them: serving.ts
    * setDeclaredPostprocess), or cellmap-models' string form. Absent from
    * Marwan's manifests, whose `output` text says "raw logits". */
   inference_output_activation?: OutputActivationDeclared;

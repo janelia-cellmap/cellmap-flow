@@ -380,14 +380,10 @@ def _finetune_modes(model_config):
 
 
 def _finetune_refusal(model_config):
-    """Why the model cannot be finetuned (``ModelConfig.finetune_refusal``),
-    for the training form to say; None when it can, or nothing says (then
-    its entry has no ``finetune_refusal``)."""
-    refusal = getattr(model_config, "finetune_refusal", None)
-    try:
-        return refusal() if callable(refusal) else None
-    except Exception:
-        return None
+    """Why the model cannot be finetuned (``ModelConfig.finetune_refusal``,
+    which never raises), for the training form to say; None when it can, or
+    there is no config to ask (then its entry has no ``finetune_refusal``)."""
+    return model_config.finetune_refusal() if model_config is not None else None
 
 
 @finetune_bp.route("/api/finetune/models", methods=["GET"])

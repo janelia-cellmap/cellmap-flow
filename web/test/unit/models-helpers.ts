@@ -61,6 +61,8 @@ export interface FakeRepo {
   manifests?: Record<string, unknown>;
   dirs?: string[];
   files?: string[];
+  /** What a file of `files` at the root answers as JSON, by name (a config.json). */
+  json?: Record<string, unknown>;
   status?: number;
 }
 
@@ -120,6 +122,8 @@ export function fakeHub(options: HubOptions = {}): FakeHub {
       const files = ["README.md", ...(repo.files ?? [])];
       return jsonResponse([...folders.map((path) => ({ type: "directory", path })), ...files.map((path) => ({ type: "file", path, size: 900 }))]);
     }
+    const rootFile = repo && /\/raw\/main\/([^/]+)$/.exec(url);
+    if (rootFile && repo.json && rootFile[1]! in repo.json) return jsonResponse(repo.json[rootFile[1]!]);
     const repoManifest = repo && /\/raw\/main\/([^/]+)\/manifest\.json$/.exec(url);
     if (repoManifest) return repoManifest[1]! in (repo.manifests ?? {}) ? jsonResponse(repo.manifests![repoManifest[1]!]) : statusResponse(404, "Entry not found");
     if (/\/api\/models\/[^/]+\/[^/]+\/tree\/main$/.test(url)) {

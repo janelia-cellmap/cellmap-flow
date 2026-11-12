@@ -23,41 +23,48 @@ fp32, each cached apart, so a server serves the export traced on its own
 kind of device. Two servers starting at once each convert into a folder of
 their own beside the cache folder and rename it into place: the first
 rename wins and the other copy is dropped, so no server reads a
-half-written export.
+half-written export. A conversion killed outright (bkill, SIGKILL) leaves its
+folder behind, which the next conversion removes once it has not changed for
+an hour; and a conversion done removes the same model's exports for the same
+device that other converters made (``converter_version``), which would only
+take room (an install with another converter converts again, in a minute).
 
-Nothing the dashboard asks (declared_geometry, declared_input_norm,
-declared_affinity_offsets, declared_postprocess, finetune_modes,
-finetune_refusal, to_dict) downloads the weights or converts anything: each
+Nothing the dashboard or blockwise asks (declared_geometry,
+declared_input_norm, declared_affinity_offsets, declared_postprocess,
+declared_overlap, finetune_modes, finetune_refusal, planned_metadata,
+to_dict) downloads the weights or converts anything: each
 reads the cached export once a server has made it (the cache is in the home
 folder the dashboard and its jobs share). Before that, all but to_dict answer
 from the metadata the export will have, which cellmap_models'
 ``mia_metadata`` makes from the repo's config.json and model card alone
 (small files, which resolving the model has fetched already), so that Submit
 sets the input normalization the model was trained on before its server
-has converted it.
+has converted it. While that cannot be read either (the Hub out of reach,
+with nothing cached), they say nothing is declared and that the model cannot
+be finetuned yet, and it is read again a minute on (``PLAN_RETRY_SECONDS``).
 """
 
 import functools
 import hashlib
-import importlib
 import logging
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import CellMapModelConfig
-from cellmap_flow.models.configs.huggingface import DISPLAY_KEYS
-from cellmap_flow.models.resolve import EXPORT_METADATA, EXPORT_MODEL
+from cellmap_flow.models.configs.huggingface import DISPLAY_KEYS, HuggingFaceModelConfig
+# cellmap_models' model_export.mia_model, which knows mia-train's networks,
+# has one loader, resolve's, which tells the references that are such models.
+from cellmap_flow.models.resolve import EXPORT_METADATA, EXPORT_MODEL, mia_model
 
 logger = logging.getLogger(__name__)
 
-# What knows mia-train's networks, in cellmap-models.
-MIA_MODULE = "cellmap_models.model_export.mia_model"
 # The pixi environment with mia-train in it (pixi.toml), the type's default.
 MIA_ENV = "mia"
 # Where the exports are cached: this variable's folder, else
@@ -67,20 +74,6 @@ MIA_CACHE_ENV = "CELLMAP_FLOW_MIA_CACHE"
 # A repo's files downloaded beside its MIA_FILES, when it has them: its model
 # card and licence, which the export's model card names.
 CARD_FILES = ("README.md", "LICENSE.md")
-
-
-def mia_model():
-    """cellmap_models' ``model_export.mia_model``.
-
-    Raises:
-        ImportError: the cellmap_models installed has none.
-    """
-    try:
-        return importlib.import_module(MIA_MODULE)
-    except ImportError as e:
-        raise ImportError(
-            f"A model trained with mia-train needs a cellmap-models that has {MIA_MODULE} ({e})"
-        ) from e
 
 
 def cache_root() -> Path:
@@ -179,6 +172,61 @@ def export_in_subprocess(source, out) -> None:
         )
 
 
+# What a conversion's work folder is named, beside its export's: ``.<device
+# kind>.converting-<random>`` (convert_once).
+WORK_SUFFIX = ".converting-"
+# How long a work folder may go unchanged before it is taken to be a killed
+# conversion's: a conversion under way writes into it, and the longest it
+# goes without (loading a ViT-L, tracing it on a CPU) is minutes.
+STALE_WORK_SECONDS = 3600
+
+
+def _last_change(folder) -> float:
+    """The newest modification time of ``folder`` or anything in it."""
+    newest = os.stat(folder).st_mtime
+    for root, dirs, files in os.walk(folder):
+        for name in dirs + files:
+            newest = max(newest, os.lstat(os.path.join(root, name)).st_mtime)
+    return newest
+
+
+def remove_stale_work(root) -> None:
+    """Remove the work folders under ``root`` (the cache) of conversions
+    killed before they could remove their own: a bkill or a SIGKILL ends a
+    job without running convert_once's ``finally``, and leaves a folder the
+    size of the model's weights behind. One unchanged for STALE_WORK_SECONDS
+    is such a folder; one changed since is a conversion's under way."""
+    now = time.time()
+    for work in list(Path(root).glob(f"**/.*{WORK_SUFFIX}*")):
+        try:
+            stale = now - _last_change(work) > STALE_WORK_SECONDS
+        except OSError:  # removed meanwhile, by its own conversion or another sweep
+            continue
+        if stale:
+            logger.info(f"Removing {work}, the work folder of a conversion that was killed")
+            shutil.rmtree(work, ignore_errors=True)
+
+
+def remove_other_converters(target) -> None:
+    """Remove the exports for ``target``'s device of the same model made by
+    other converters than ``target``'s (``model_dir``'s
+    ``<converter>/<device>``, beside ``<converter>`` in the model's folder).
+    An install with another converter converts again rather than serve one
+    (``converter_version``), so they only take room; a server that loaded one
+    already keeps serving it, from memory."""
+    target = Path(target)
+    for converter in target.parent.parent.iterdir():
+        old = converter / target.name
+        if converter == target.parent or not is_export(old):
+            continue
+        logger.info(f"Removing {old}, an export of the same model by another converter")
+        shutil.rmtree(old, ignore_errors=True)
+        try:
+            converter.rmdir()  # when that was its last export
+        except OSError:
+            pass
+
+
 def convert_once(source, target) -> None:
     """Export the mia-train model at ``source`` (a folder with its MIA_FILES)
     into ``target``, unless another process does first, in a process of its
@@ -187,11 +235,14 @@ def convert_once(source, target) -> None:
     It is exported into a new folder beside ``target`` and renamed into
     place, which is atomic: a process that finds ``target`` finds the whole
     export. When another rename got there first, that export is kept and
-    this one dropped.
+    this one dropped. Before, the cache is rid of killed conversions' work
+    folders (``remove_stale_work``); after, of the same model's exports by
+    other converters (``remove_other_converters``).
     """
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    work = tempfile.mkdtemp(dir=target.parent, prefix=f".{target.name}.converting-")
+    remove_stale_work(cache_root())
+    work = tempfile.mkdtemp(dir=target.parent, prefix=f".{target.name}{WORK_SUFFIX}")
     try:
         # A folder of its own inside work, which the exporter creates.
         out = os.path.join(work, "export")
@@ -207,6 +258,7 @@ def convert_once(source, target) -> None:
             logger.info(f"{target} was converted by another process meanwhile; serving that one")
     finally:
         shutil.rmtree(work, ignore_errors=True)
+    remove_other_converters(target)
 
 
 class MiaModelConfig(ModelConfig):
@@ -222,6 +274,12 @@ class MiaModelConfig(ModelConfig):
     # A YAML's relative path is from the YAML's folder.
     config_relative_paths = ("path",)
 
+    # How long a plan (_planned) that could not be read is not asked for
+    # again: as long as a Hugging Face model's metadata.json is not, for the
+    # same reason (the dashboard asks on every poll, and an unreachable Hub
+    # costs a timeout a try).
+    PLAN_RETRY_SECONDS = HuggingFaceModelConfig.METADATA_RETRY_SECONDS
+
     def __init__(self, repo: str = None, path: str = None, revision: str = None, name: str = None, scale=None):
         super().__init__()
         if bool(repo) == bool(path):
@@ -236,11 +294,12 @@ class MiaModelConfig(ModelConfig):
         self.scale = scale
         # The export served, once _served() has made sure of it; the one
         # found in the cache by _cached(), which made nothing; and, before
-        # either, what the export will declare (_planned), False when that
-        # could not be read.
+        # either, what the export will declare (_planned), None until it has
+        # been read, with when reading it last failed.
         self._export = None
         self._peeked = None
         self._plan = None
+        self._plan_failed_at = None
 
     # --- the export ---------------------------------------------------------------
 
@@ -311,17 +370,32 @@ class MiaModelConfig(ModelConfig):
         CellMapModelConfig of cellmap_models' ``mia_metadata`` of the repo (at
         ``revision``) or folder, the metadata export_mia_model will write,
         made from its config.json and model card alone (of a repo, only those
-        are fetched, never its weights). Read once; None when it cannot be (a
-        cellmap_models without mia_metadata, the Hub out of reach with
-        nothing cached), which is logged once."""
-        if self._plan is None:
+        are fetched, never its weights). Read once; None while it cannot be
+        (a cellmap_models without mia_metadata, the Hub out of reach with
+        nothing cached), which is logged, and read again PLAN_RETRY_SECONDS
+        on: a brief Hub error hides it for a minute, not for the life of the
+        config the dashboard keeps."""
+        if self._plan is None and (
+            self._plan_failed_at is None or time.monotonic() - self._plan_failed_at >= self.PLAN_RETRY_SECONDS
+        ):
             try:
                 metadata = mia_model().mia_metadata(self.repo or self.path, revision=self.revision)
                 self._plan = CellMapModelConfig.from_metadata(metadata, self.name, self.scale)
             except Exception as e:  # the dashboard's questions never raise
-                logger.warning(f"What {self.name} declares is not known before a server has converted it: {e}")
-                self._plan = False
-        return self._plan or None
+                self._plan_failed_at = time.monotonic()
+                logger.warning(f"What {self.name} declares is not known before a server has converted it ({e}); "
+                               f"trying again after {self.PLAN_RETRY_SECONDS} s")
+        return self._plan
+
+    def planned_metadata(self):
+        """What the export will declare: cellmap_models' ModelMetadata that
+        ``mia_metadata`` made (_planned), read as _planned reads it; None
+        while it cannot be read. Until a server has converted the model, what
+        this config answers is answered from it, so while it is None those
+        answers are no answers (finetune_modes none, declared_input_norm
+        None), and a list of models (hf_catalog) keeps none of them."""
+        plan = self._planned()
+        return plan.cellmap_model.metadata if plan is not None else None
 
     def _declared(self) -> Optional[CellMapModelConfig]:
         """What answers what the model declares: its export, served or
@@ -351,16 +425,34 @@ class MiaModelConfig(ModelConfig):
 
     def finetune_modes(self):
         """The export's, or the one it will be (_declared): both, unless its
-        output cannot be trained through; both when neither is known (the job
-        says which it takes, as for a Hugging Face repo that cannot be
-        listed)."""
+        output cannot be trained through; none while neither is known, as
+        finetune_refusal says."""
         declared = self._declared()
-        return declared.finetune_modes() if declared is not None else ("lora", "full")
+        return declared.finetune_modes() if declared is not None else ()
 
     def finetune_refusal(self):
-        """The export's, or the one it will be (_declared); None when neither is known."""
+        """The export's, or the one it will be (_declared). While neither is
+        known, that the model cannot be finetuned until it is: its output may
+        be a whole number (a semantic model's uint8 probabilities x 255),
+        which no gradient goes through, so a guess would offer a training
+        that fails on the GPU."""
         declared = self._declared()
-        return declared.finetune_refusal() if declared is not None else None
+        if declared is not None:
+            return declared.finetune_refusal()
+        return (
+            f"{self.name} cannot be finetuned until it is known what its export will declare: that could not be "
+            "read from its config.json (the log says why), and no server has converted it yet. Starting its "
+            f"server converts it; else it is read again in {self.PLAN_RETRY_SECONDS} s."
+        )
+
+    def declared_overlap(self):
+        """The overlap the export declares, or the one it will be
+        (_declared): one number of output voxels, or one per axis, as its
+        metadata gives it; None when neither is known. Never converts, so
+        that blockwise refuses a model with an overlap before anything
+        builds it (a first build converts it: minutes on a CPU)."""
+        declared = self._declared()
+        return declared._metadata_field("overlap") if declared is not None else None
 
     def declared_geometry(self):
         """The export's, or the one it will be (_declared); None when neither is known."""

@@ -188,7 +188,7 @@ def get_loaded_models():
     (routes.pipeline.postprocess_set_by). The page reads them after every
     model change: a model's start can set the input normalization
     (routes.pipeline.set_declared_input_norm) and the postprocessing
-    (set_declared_postprocess, set_needed_postprocess), and the Processing
+    (set_start_postprocess, once their servers answer), and the Processing
     tab's list then shows it, saying from which model and on what grounds.
     ``deleted_in_viewer`` lists the models stopped because their layer was
     deleted in the viewer, numbered in the order they went (the session's

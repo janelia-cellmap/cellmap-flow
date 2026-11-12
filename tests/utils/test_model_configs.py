@@ -94,6 +94,23 @@ def test_a_finetune_declares_its_bases_geometry_at_the_voxel_size_it_was_trained
                                         "output_voxel_size": [8] * 3, "output_channels": 3, "channels": None}
 
 
+def test_a_finetune_declares_its_bases_affinity_offsets_and_activation(monkeypatch):
+    """A finetune of the MIA affinity model was taken to compare the three
+    nearest neighbours its object_aff_* names give: finetuned again, it was
+    trained on those three, its long-range channels masked out. And its
+    base's sigmoid, applied after the model, is its too."""
+    from cellmap_flow.dashboard.routes.finetune.common import model_target
+
+    offsets = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [10, 0, 0], [0, 10, 0], [0, 0, 10]]
+    names = [f"object_aff_{'_'.join(map(str, o))}" for o in offsets]
+    metadata = {"channels_names": names, "affinity_offsets": offsets,
+                "inference_output_activation": {"name": "sigmoid", "apply_after_model": True}}
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: metadata)
+    finetune = FinetuneModelConfig(weights_path="/w.pt", base_model={"type": "huggingface", "repo": "cellmap/aff"})
+    assert model_target(finetune, lambda: names) == ("affinities", offsets)
+    assert finetune.declared_postprocess() == [{"name": "SigmoidPostprocessor"}]
+
+
 # A script model reading 16 nm voxels and writing 8 nm ones, 10 in and 8 out.
 SCRIPT_16_TO_8 = """
 import torch

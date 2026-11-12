@@ -41,7 +41,7 @@ import { PYTHON } from "../generated/python-data";
 
 import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
 import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry, publishedRef } from "./finetuned";
-import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError } from "./hf";
+import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchJson, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError, rawUrl } from "./hf";
 import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
 import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, modelFolders, parseManifest } from "./manifest";
@@ -89,8 +89,34 @@ const SERVER_FORM = ["metadata.json", "model.ts"];
  * team's, ai-hhmi on Hugging Face; cellmap_models' MIA_FILES), which a
  * cellmap-flow server converts into its export for servers on its first
  * start (cellmap_flow/models/configs/mia.py). Its networks are vision
- * transformers over 256³ windows, far too big for the browser. */
+ * transformers over 256³ windows, far too big for the browser. Many other
+ * repos have the same two files, so the config.json says (isMiaConfig). */
 const MIA_FORM = ["config.json", "model.safetensors"];
+
+/** What the config.json of a mia-train model a server serves names: its
+ * network (`model`), `head` and `algorithm`, each by its `name`, as
+ * cellmap_models' is_mia_config checks them, which is what the server asks
+ * (cellmap_flow/models/resolve.py servable_mia_config). The browser cannot
+ * ask Python, so it holds the same names (cellmap_models' _NETWORKS, _HEADS
+ * and _ALGORITHMS, to follow when its pin moves). A repo whose config.json
+ * names anything else (a SimMIM pretraining checkpoint's has no head; most
+ * repos' name none of these) is no mia-train model in either mode, and is
+ * answered as any other repo is. */
+const MIA_CONFIG: Record<string, readonly string[]> = {
+  model: ["dinov3_vit3d"],
+  head: ["UNETRHead"],
+  algorithm: ["semantic_seg", "affinity_seg"],
+};
+
+/** Whether `config`, a parsed config.json, names what MIA_CONFIG does. */
+function isMiaConfig(config: unknown): boolean {
+  const blocks = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+  return Object.entries(MIA_CONFIG).every(([key, names]) => {
+    const block = blocks[key];
+    const name = block && typeof block === "object" ? (block as { name?: unknown }).name : undefined;
+    return typeof name === "string" && names.includes(name);
+  });
+}
 
 /** What a server's publish names the folder of a smaller copy for the
  * browser, after the model's own (cellmap_flow/portable/publish.py
@@ -310,7 +336,8 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
 
   // `repo`'s raw manifests by folder, from the Hub. A repo with none that
   // holds a model for servers (SERVER_FORM), or a model trained with
-  // mia-train (MIA_FORM), is a NoBrowserCopyError.
+  // mia-train (MIA_FORM, with a config.json that isMiaConfig), is a
+  // NoBrowserCopyError.
   async function fetchRepo(repo: string): Promise<Record<string, unknown>> {
     const tree = await fetchTree(fetchImpl, repo);
     const folders = modelFolders(tree);
@@ -325,7 +352,10 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
       throw new NoBrowserCopyError(`${repo} has no copy for the browser: it holds a model for cellmap-flow servers (Add a model on a server takes ${repo}). A smaller copy for the browser, if its publish asked for one, is added as a folder of it once trained`);
     }
     if (Object.keys(manifests).length === 0 && holds(MIA_FORM)) {
-      throw new NoBrowserCopyError(`${repo} holds a model trained with mia-train, which runs on a GPU server only: its network (a vision transformer over 256³ windows) is far too big for the browser. On the cellmap-flow dashboard (server mode), Add a model takes ${repo}, converts it once on the server's GPU and serves it there`);
+      const config = await fetchJson(fetchImpl, rawUrl("config.json", repo), `${repo}'s config.json`);
+      if (isMiaConfig(config)) {
+        throw new NoBrowserCopyError(`${repo} holds a model trained with mia-train, which runs on a GPU server only: its network (a vision transformer over 256³ windows) is far too big for the browser. On the cellmap-flow dashboard (server mode), Add a model takes ${repo}, converts it once on the server's GPU and serves it there`);
+      }
     }
     return manifests;
   }

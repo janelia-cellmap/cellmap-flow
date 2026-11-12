@@ -73,8 +73,7 @@ def resolve_model_type(model_config) -> str:
         )
     # Here, before the job manager makes the run's directory, so a refusal
     # leaves nothing behind.
-    refusal = getattr(model_config, "finetune_refusal", None)
-    refusal = refusal() if callable(refusal) else None
+    refusal = model_config.finetune_refusal()
     if refusal:
         raise ValueError(refusal)
     _check_env_can_finetune(model_config)

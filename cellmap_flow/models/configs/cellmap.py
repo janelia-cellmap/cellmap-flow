@@ -20,6 +20,10 @@ from cellmap_flow.serving.probe import metadata_input_norm
 
 logger = logging.getLogger(__name__)
 
+# The export folders whose metadata cellmap_models could not parse, logged
+# once each, so the dashboard's polls do not log them again.
+_unparsed_logged = set()
+
 
 def runs_at(model, input_shape, output_shape) -> bool:
     """Whether the TorchScript ``model`` runs on an input of ``input_shape``
@@ -68,21 +72,24 @@ def declared_offsets(value):
     """``affinity_offsets`` as an export's metadata declares them: one
     ``[dz, dy, dx]`` of whole voxels per affinity channel, in channel order,
     as lists of ints; None when ``value`` is not that (absent, empty, or
-    not three whole numbers each)."""
+    not three whole numbers each: an OverflowError is a metadata.json's
+    Infinity)."""
     try:
         offsets = [[int(v) for v in offset] for offset in value]
         whole = all(int(v) == v for offset in value for v in offset)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return offsets if offsets and whole and all(len(offset) == 3 for offset in offsets) else None
 
 
 def _integer_dtype(dtype):
     """``dtype`` (an export's ``output_dtype``) as a numpy dtype when it is
-    an integer one; None for a float, nothing, or no dtype."""
+    an integer one; None for a float, nothing, or no dtype (numpy refuses
+    a name it does not know with a TypeError, a malformed dict with a
+    ValueError)."""
     try:
         dtype = np.dtype(dtype) if dtype else None
-    except TypeError:
+    except (TypeError, ValueError):
         return None
     return dtype if dtype is not None and dtype.kind in "iub" else None
 
@@ -233,15 +240,35 @@ class CellMapModelConfig(ModelConfig):
                 config.output_class = BYTE_UNIT
         return config
 
+    def _parsed_metadata(self):
+        """cellmap_models' parsed metadata of the export (its ModelMetadata),
+        or None when it cannot be had, which is logged once per folder.
+
+        Never raises, as what the dashboard asks on every poll is answered
+        from it (finetune_modes asks finetune_refusal first). A metadata.json
+        cellmap_models refuses raises not only pydantic's ValidationError (a
+        ValueError: a field of the wrong type) but a TypeError, which pydantic
+        passes on unwrapped: ModelMetadata's own validators raise one for an
+        input_normalization or inference_output_activation that is a list or
+        a number, and so does a file that is not one JSON object. Building
+        the model reads it again, and fails saying why."""
+        try:
+            return self.cellmap_model.metadata
+        except (OSError, TypeError, ValueError, AttributeError) as e:
+            folder = getattr(getattr(self, "cellmap_model", None), "folder_path", None)
+            if folder not in _unparsed_logged:
+                _unparsed_logged.add(folder)
+                logger.warning(f"cellmap_models cannot parse the metadata.json of {self.name} ({folder}): "
+                               f"{type(e).__name__}: {e}. The model will not build until it is fixed; "
+                               "until then what it declares is read from the file as written")
+            return None
+
     def _metadata_field(self, key):
         """``key`` of the export's metadata: cellmap_models' parsed metadata's
         when it has the field and a value for it, else the metadata.json's as
         written (``_written_metadata``); None when neither has it. Never
-        raises."""
-        try:
-            parsed = getattr(self.cellmap_model.metadata, key, None)
-        except (OSError, ValueError, AttributeError):
-            parsed = None
+        raises (``_parsed_metadata``)."""
+        parsed = getattr(self._parsed_metadata(), key, None)
         return parsed if parsed is not None else self._written_metadata().get(key)
 
     def _written_metadata(self) -> dict:
@@ -255,7 +282,7 @@ class CellMapModelConfig(ModelConfig):
                 with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
                     written = json.load(f)
                 self._metadata_file = written if isinstance(written, dict) else {}
-            except (OSError, ValueError, AttributeError):
+            except (OSError, TypeError, ValueError, AttributeError):  # TypeError: no folder
                 self._metadata_file = {}
         return self._metadata_file
 
@@ -273,12 +300,11 @@ class CellMapModelConfig(ModelConfig):
             return ("lora", "full")
 
     def declared_geometry(self):
-        """Its export's metadata.json's (``metadata_geometry``), read without the model."""
-        try:
-            metadata = self.cellmap_model.metadata
-        except (OSError, ValueError):
-            return None
-        return metadata_geometry(metadata)
+        """Its export's metadata.json's (``metadata_geometry``), read without
+        the model; None while cellmap_models cannot parse that file
+        (``_parsed_metadata``), as the model cannot be built then either."""
+        metadata = self._parsed_metadata()
+        return metadata_geometry(metadata) if metadata is not None else None
 
     def declared_input_norm(self, data_range=None):
         """Its export's metadata.json's input_normalization
@@ -294,6 +320,11 @@ class CellMapModelConfig(ModelConfig):
         """The offsets its export's metadata declares (``affinity_offsets``,
         ``declared_offsets``), read without the model; None without them."""
         return declared_offsets(self._metadata_field("affinity_offsets"))
+
+    def declared_overlap(self):
+        """The overlap its export's metadata.json declares, read without the
+        model; None without one."""
+        return self._metadata_field("overlap")
 
     def declared_postprocess(self):
         """The step its export's metadata.json declares is applied after the

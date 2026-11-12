@@ -209,16 +209,18 @@ the GPU of the job that serves it, in the ``mia`` pixi environment (which has
 mia-train; install it first with ``cellmap_flow envs install mia``). The
 export is kept under ``~/.cellmap_flow/mia_exports`` (or
 ``CELLMAP_FLOW_MIA_CACHE``), one per commit of the repo and version of the
-converter (a cellmap-models whose converter changed converts again), so every later start,
+converter (a cellmap-models whose converter changed converts again, and the
+older converter's export of that commit is then removed), so every later start,
 and a finetune of the model, serves it at once. The dashboard knows what the
 export will declare before then, from the repo's ``config.json`` and model
 card alone, so Submit sets the input normalization the model was trained on
 (the raw data scaled onto [0, 1] for the ``ai-hhmi`` models) from the first
 start. A model trained on each
 dataset at its own voxel size runs at the finest voxel size of the data it is
-served on, unless its entry gives ``run_voxel_size``. A repo of the framework
-that is not a segmentation model (a pretraining checkpoint) is refused,
-saying so.
+served on, unless its entry gives ``run_voxel_size``. A repo whose
+``config.json`` is not a mia-train segmentation model (a pretraining
+checkpoint, or another framework's model) is answered as any repo
+cellmap-flow cannot serve; with ``mia:`` before it, the answer says why.
 
 These models run on a server only: the browser app's Add a model says so for
 such a repo, as its vision transformers over 256³ windows are far too big for

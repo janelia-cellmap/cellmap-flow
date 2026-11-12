@@ -58,21 +58,26 @@ function row(modelId, metadata) {
   });
 }
 
+// The answer of a listing in every group. One listed with no models hides
+// its search bar, Refresh and count again, as before its first list, while
+// another group has some (whose Refresh lists every group); when none has
+// any, or after an error, each keeps them as they were, a Refresh shown to
+// try again, its count cleared.
 function render(data) {
   for (const group of groups) group.placeholder.remove();
   if (data.error) {
-    for (const group of groups) group.list.replaceChildren(notice("Error: " + data.error, true));
+    for (const group of groups) {
+      group.list.replaceChildren(notice("Error: " + data.error, true));
+      filter(group);
+    }
     return;
   }
   const modelIds = Object.keys(data);
   for (const group of groups) {
     const ids = modelIds.filter((modelId) => groupOf(modelId) === group);
-    if (ids.length === 0) {
-      group.list.replaceChildren(notice("No models found."));
-      continue;
-    }
-    group.controls.element.hidden = false;
-    group.list.replaceChildren(...ids.map((modelId) => row(modelId, data[modelId])));
+    if (ids.length) group.controls.element.hidden = false;
+    else if (modelIds.length) group.controls.element.hidden = true;
+    group.list.replaceChildren(...(ids.length ? ids.map((modelId) => row(modelId, data[modelId])) : [notice("No models found.")]));
     filter(group);
   }
 }
@@ -124,11 +129,15 @@ function addListed() {
 // typed and, while that is ticked, a browser copy. A ticked row stays in
 // view, as the zoo's does, so nothing is submitted unseen: the models
 // running start ticked, with a copy or not. Then the rows in the order
-// chosen, and the count of those shown.
+// chosen, and the count of those shown; a group with no rows keeps the line
+// its list shows instead (No models found., an error), its count cleared.
 function filter(group) {
   const { controls, list } = group;
   const rows = [...list.querySelectorAll(".hf-model-item")];
-  if (!rows.length) return;
+  if (!rows.length) {
+    controls.count(0, 0);
+    return;
+  }
   let noCopy = 0;
   const shown = rows.filter((item) => {
     const show = controls.matches(item.dataset) || item.querySelector(".hf-model-checkbox").checked;

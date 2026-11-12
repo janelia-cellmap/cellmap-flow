@@ -220,8 +220,9 @@ export function modelRoutes(router: Router): void {
     // A chain with no input normalizers takes the ones the first model
     // started declares, and one with no postprocessing the step the first
     // model's manifest declares follows it, else what the first model's
-    // output needs, before it is served (serving.ts setDeclaredInputNorm,
-    // setDeclaredPostprocess, setNeededPostprocess).
+    // output needs, when it shows every model served right, before they are
+    // served (serving.ts setDeclaredInputNorm, setDeclaredPostprocess,
+    // setNeededPostprocess).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
     await setDeclaredInputNorm(ctx, starting);
     await setDeclaredPostprocess(ctx, starting, resolved.entries);
@@ -317,8 +318,9 @@ export function modelRoutes(router: Router): void {
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
     // As Submit: a chain with no input normalizers takes the ones it
-    // declares, one with no postprocessing the step it declares follows it,
-    // else what its output needs.
+    // declares, one with no postprocessing the step a model's manifest
+    // declares follows it, else what a model's output needs, when it shows
+    // every model served right.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
       await setDeclaredInputNorm(ctx, [model]);
       await setDeclaredPostprocess(ctx, [model], entries);

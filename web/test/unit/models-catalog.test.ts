@@ -115,8 +115,10 @@ describe("another Hugging Face repo", () => {
     // Two models: setup_54's export copied, so its name is the built-in's, and setup_56's.
     "bob/models": { manifests: { copy_54: rawManifest("setup_54"), copy_56: rawManifest("setup_56") } },
     "carol/private": { status: 401 },
-    // A model trained with mia-train, which only a server converts and runs.
-    "dana/vit": { files: ["config.json", "model.safetensors"] },
+    // A model trained with mia-train, which only a server converts and runs,
+    // and a repo with the same two files that is none.
+    "dana/vit": { files: ["config.json", "model.safetensors"], json: { "config.json": { model: { name: "dinov3_vit3d" }, head: { name: "UNETRHead" }, algorithm: { name: "semantic_seg" } } } },
+    "erin/bert": { files: ["config.json", "model.safetensors"], json: { "config.json": { architectures: ["BertModel"] } } },
   };
 
   it("resolves every form of ref the server takes, adds the repo after the built-in one and lists it on the next visit", async () => {
@@ -138,6 +140,7 @@ describe("another Hugging Face repo", () => {
     await expect(catalog.resolve(`${ALICE}/images`)).rejects.toThrow(/images/);
     await expect(catalog.resolve(`${ALICE}/${FT}@dev`)).rejects.toThrow(/dev/);
     for (const ref of ["dana/vit", "mia:dana/vit"]) await expect(catalog.resolve(ref)).rejects.toBeInstanceOf(NoBrowserCopyError);
+    await expect(catalog.resolve("erin/bert")).rejects.not.toBeInstanceOf(NoBrowserCopyError);
     // Not a Hugging Face model: a zoo DOI, a path, a word.
     for (const ref of ["10.5281/zenodo.5764892", "runs/model.onnx", "nothing_here"]) expect(await catalog.resolve(ref)).toBeNull();
 

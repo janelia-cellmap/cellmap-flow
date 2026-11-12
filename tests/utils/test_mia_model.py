@@ -7,6 +7,8 @@ one: no test imports mia-train, downloads a model or traces a ViT."""
 
 import ast
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -54,6 +56,11 @@ def test_a_mia_repo_or_folder_resolves_to_the_mia_type_and_a_pretraining_one_is_
     assert resolve_module.resolve(str(folder)).entry() == {"type": "mia", "path": str(folder), "name": "lmd"}
     with pytest.raises(ValueError):
         resolve_module.resolve(str(write_mia_folder(tmp_path / "simmim", PRETRAINING)))
+    # The same two files with a config.json that is no mia-train model's:
+    # the folder is what its other files say.
+    zoo = write_mia_folder(tmp_path / "zoo", {"architectures": ["UNet"]})
+    (zoo / "rdf.yaml").write_text("")
+    assert resolve_module.resolve(str(zoo)).type == "bioimage"
     # Said outright, not looked up.
     assert resolve_module.resolve("mia:ai-hhmi/other", online=False).entry() == {
         "type": "mia", "repo": "ai-hhmi/other", "name": "other"}
@@ -114,6 +121,90 @@ def test_a_mia_model_is_converted_once_and_served_as_its_export(adapter, monkeyp
         model.adopt_native_voxel_size(data)
     assert native.geometry.input_voxel_size == (4, 4, 4) and told.geometry.input_voxel_size == (8, 8, 8)
     assert converted == [str(snapshot)]
+
+
+def test_a_plan_that_could_not_be_read_is_read_again_a_minute_on_and_never_guessed_finetunable(
+        adapter, monkeypatch, tmp_path):
+    """The Hub times out once as Submit builds the config the session keeps:
+    until the plan is read, nothing is declared and the model is not offered
+    for finetuning (an affinity model, which can be); a minute on, it is
+    read, and is."""
+    import huggingface_hub
+
+    from cellmap_flow.models.configs import mia
+
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "cache"))
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda repo, filename, revision=None: None)
+    adapter.declared = AFFINITY_DECLARED
+    plan, failures = adapter.mia_metadata, [TimeoutError("the Hub timed out")]
+
+    def metadata(source, revision=None):
+        if failures:
+            raise failures.pop()
+        return plan(source)
+
+    adapter.mia_metadata = metadata
+    clock = [1000.0]
+    monkeypatch.setattr(mia.time, "monotonic", lambda: clock[0])
+
+    model = mia.MiaModelConfig(repo="ai-hhmi/lmd-aff")
+    assert model.planned_metadata() is None and model.declared_affinity_offsets() is None
+    assert model.finetune_modes() == () and model.finetune_refusal()
+    clock[0] += mia.MiaModelConfig.PLAN_RETRY_SECONDS
+    assert model.planned_metadata() is not None and model.declared_affinity_offsets() == OFFSETS
+    assert model.finetune_modes() == ("lora", "full") and model.finetune_refusal() is None
+
+
+def test_a_conversion_removes_killed_conversions_folders_and_other_converters_exports(monkeypatch, tmp_path):
+    """A conversion killed outright left its work folder; an older converter
+    left its export for this device. Converting removes both, and keeps a
+    conversion under way and the other device's export."""
+    from cellmap_flow.models.configs import mia
+
+    def export(folder):
+        folder.mkdir(parents=True)
+        for name in ("metadata.json", "model.ts"):
+            (folder / name).write_text("{}")
+        return folder
+
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path))
+    model = tmp_path / "ai-hhmi--lmd-vitl" / COMMIT
+    killed, running = model / "new" / ".cuda.converting-1", model / "old" / ".cpu.converting-2"
+    for work in (killed, running):
+        (work / "export").mkdir(parents=True)
+    hours_ago = time.time() - 2 * mia.STALE_WORK_SECONDS
+    for path in (killed / "export", killed):
+        os.utime(path, (hours_ago, hours_ago))
+    old_cuda, old_cpu = export(model / "old" / "cuda"), export(model / "old" / "cpu")
+    monkeypatch.setattr(mia, "export_in_subprocess", lambda source, out: export(Path(out)))
+
+    mia.convert_once(tmp_path / "source", model / "new" / "cuda")
+    assert mia.is_export(model / "new" / "cuda") and not killed.exists() and running.exists()
+    assert not old_cuda.exists() and mia.is_export(old_cpu)
+
+
+def test_blockwise_refuses_a_mia_model_with_an_overlap_before_converting_it(adapter, monkeypatch, tmp_path, raw_zarr):
+    """Its overlap is in what its export will declare: the master refuses
+    it without converting the model only to find it there."""
+    import huggingface_hub
+    import yaml
+
+    from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
+    from cellmap_flow.config.yaml import ConfigError
+    from cellmap_flow.models.configs import mia
+
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "cache"))
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache", lambda repo, filename, revision=None: None)
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda *args, **kwargs: pytest.fail("downloaded"))
+    adapter.declared = {**DECLARED, "overlap": 2}
+    task = tmp_path / "task.yaml"
+    task.write_text(yaml.safe_dump({
+        "data_path": raw_zarr(), "output_path": str(tmp_path / "out.zarr"), "task_name": "t", "workers": 1,
+        "charge_group": "grp", "queue": "gpu_h100",
+        "models": [{"type": "mia", "repo": "ai-hhmi/lmd-vitl", "name": "lmd"}],
+    }))
+    with pytest.raises(ConfigError, match="overlap"):
+        CellMapFlowBlockwiseProcessor(str(task), create=True)
 
 
 # What the model advice suggests after each, from what its server says its

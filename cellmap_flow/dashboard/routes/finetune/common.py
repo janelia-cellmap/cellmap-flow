@@ -245,8 +245,7 @@ def model_target(model_config, channel_names):
     declared = declared_output_type(model_config)
     if declared is not None:
         return declared, None
-    declared_offsets = getattr(model_config, "declared_affinity_offsets", None)
-    offsets = declared_offsets() if callable(declared_offsets) else None
+    offsets = model_config.declared_affinity_offsets() if model_config is not None else None
     if offsets:
         return "affinities", offsets
     if hasattr(model_config, "script_path"):
