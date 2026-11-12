@@ -7,6 +7,7 @@ network."""
 
 import json
 import os
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -42,6 +43,21 @@ FILES = {
     "ai-hhmi/simmim-vitl": {"config.json": 900, "model.safetensors": 1214 * MB},
 }
 CONFIGS = {"ai-hhmi/lmd-vitl-p8-cellmap-lvd": SEGMENTATION, "ai-hhmi/simmim-vitl": PRETRAINING}
+# When the Hub says each repo last changed; a repo it gives no date for has none.
+MODIFIED = {"cellmap/mito-aff-resunet-setup-54": datetime(2026, 10, 17, 19, 24, 6, tzinfo=timezone.utc)}
+# The mia-train model's card, as the MIA team's open: its front matter, its
+# title, then what it is.
+CARD = """---
+license: other
+---
+
+# lmd-vitl-p8-cellmap-lvd
+
+Organelle segmentation model for volumetric EM data. The encoder is
+[ai-hhmi/lmd-vitl-p8-simmim-lvd](https://huggingface.co/ai-hhmi/lmd-vitl-p8-simmim-lvd), **fine-tuned**.
+
+| Model | Starts from |
+"""
 
 MANIFESTS = {
     (hf_catalog.WEB_MODELS_REPO, "setup_54"): {"source_repo": "cellmap/mito-aff-resunet-setup-54", "variants": [
@@ -73,16 +89,21 @@ def hub(tmp_path, monkeypatch):
 
     def listing(author, expand=None):
         state.asked += 1
-        assert expand == ["siblings"]
+        assert expand == ["siblings", "lastModified"]
         if author in state.failing:
             raise OSError("429 Too Many Requests")
-        return [SimpleNamespace(id=repo, siblings=[SimpleNamespace(rfilename=name) for name in files])
+        return [SimpleNamespace(id=repo, siblings=[SimpleNamespace(rfilename=name) for name in files], last_modified=MODIFIED.get(repo))
                 for repo, files in FILES.items() if repo.startswith(f"{author}/")]
 
     def download(repo, filename):
         folder, _, name = filename.rpartition("/")
         if name in ("metadata.json", "config.json") and name not in FILES[repo]:
             raise OSError("404 Entry Not Found")
+        if name == "README.md":
+            path = tmp_path / "downloads" / repo / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(CARD)
+            return str(path)
         if name == "metadata.json":
             content = {"description": repo}
         elif name == "config.json":
@@ -115,7 +136,8 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
     assert facts["cellmap/mito-aff-resunet-setup-54"] == {
         "formats": ["TorchScript", "torch.export", "ONNX"], "finetune_modes": ["lora", "full"], "size_mb": 56.0,
         "browser_copy": "cellmap/onnx-web-models/setup_54",
-        "variants": [{"variant": "fp32", "file_mb": 42.91}, {"variant": "fp16", "file_mb": 21.55}]}
+        "variants": [{"variant": "fp32", "file_mb": 42.91}, {"variant": "fp16", "file_mb": 21.55}],
+        "last_modified": "2026-10-17T19:24:06Z"}
     # No model.pt2: full finetuning only, as the training form offers; and no
     # browser copy, the conv3d/ manifest that names it not being one.
     assert facts["cellmap/jrc_mus-livers_16nm_to_8nm_mito"] == {
@@ -132,6 +154,10 @@ def test_each_model_is_listed_with_its_formats_size_and_browser_copy(dashboard, 
     mia = models["ai-hhmi/lmd-vitl-p8-cellmap-lvd"]
     assert hf_catalog.listed_entry("ai-hhmi/lmd-vitl-p8-cellmap-lvd", mia, "lmd")["type"] == "mia"
     assert hf_catalog.facts_of(mia) == {"formats": [], "finetune_modes": [], "size_mb": 1214.0, "browser_copy": None}
+    # Its row says what its card says it is, as plain text, and what it is served as.
+    assert mia["description"].startswith(
+        "Organelle segmentation model for volumetric EM data. The encoder is ai-hhmi/lmd-vitl-p8-simmim-lvd, fine-tuned. "
+        "Served here as 2 channels: mito, er.")
     # What its export will declare is read from the config.json downloaded
     # to tell what it is, in its folder, not asked of the repo again (which
     # lists its snapshot and downloads its model card).

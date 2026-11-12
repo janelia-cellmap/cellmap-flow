@@ -341,6 +341,15 @@ export interface ModelEntry {
    * Every reader of the model's geometry sees it scaled to this
    * (infer/geometry.ts modelVoxelSizes); the manifest stays the model's. */
   runVoxelSize?: number[];
+  /** When the model's folder last changed on Hugging Face: its last
+   * commit's date, ISO 8601 UTC as the Hub gives it
+   * ("2026-10-17T19:24:06.000Z"), from the catalog's listing of the repo
+   * (models/index.ts). The model lists' Sort by newest orders by it (its
+   * listing's last_modified, models/metadata.ts listFacts). Absent where
+   * the listing gave none (the built-in folder list stood in for the
+   * Hub's) and for a model finetuned in this browser or opened from a
+   * file, which is on no Hub. */
+  lastModified?: string;
 }
 
 /** What a model's network ends in: the class of its output and the op that

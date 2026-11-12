@@ -28,7 +28,8 @@ import { serverParams } from "./config";
  * the id "cellmap/onnx-web-models/setup_54" (huggingface.js shows its last
  * segment and the metadata's description), with what its row tags it with
  * and sorts it by (models/metadata.ts listFacts: its format, its ways to
- * finetune, its size and precisions), as the ranking's candidates have
+ * finetune, its size and precisions, when its folder last changed on the
+ * Hub), as the ranking's candidates have
  * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing

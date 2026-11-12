@@ -98,6 +98,10 @@ export interface HubOptions {
   headFails?: boolean;
   /** Other repos, by id; their .onnx files are `onnx`'s, by name, like the built-in repo's. */
   repos?: Record<string, FakeRepo>;
+  /** The date of a folder's last commit, by folder, that a tree listing
+   * gives it (its lastCommit.date), in any repo; a folder not named has
+   * none, as in the saved listing, which was fetched without expand=true. */
+  commitDates?: Record<string, string>;
 }
 
 export interface FakeHub {
@@ -117,17 +121,23 @@ export function fakeHub(options: HubOptions = {}): FakeHub {
     if (method === "HEAD" && options.headFails) throw new TypeError("Failed to fetch");
     const repo = options.repos?.[/^https:\/\/huggingface\.co\/(?:api\/models\/)?([^/]+\/[^/]+)\//.exec(url)?.[1] ?? ""];
     if (repo?.status) return statusResponse(repo.status);
-    if (repo && url.endsWith("/tree/main")) {
+    // The tree listing, asked for with ?expand=true (hf.ts fetchTree).
+    const tree = /\/api\/models\/[^/]+\/[^/]+\/tree\/main(?:\?|$)/.test(url);
+    const dated = (entry: { type: string; path: string }) => {
+      const date = entry.type === "directory" ? options.commitDates?.[entry.path] : undefined;
+      return date === undefined ? entry : { ...entry, lastCommit: { id: "0", title: "commit", date } };
+    };
+    if (repo && tree) {
       const folders = [...Object.keys(repo.manifests ?? {}), ...(repo.dirs ?? [])];
       const files = ["README.md", ...(repo.files ?? [])];
-      return jsonResponse([...folders.map((path) => ({ type: "directory", path })), ...files.map((path) => ({ type: "file", path, size: 900 }))]);
+      return jsonResponse([...folders.map((path) => dated({ type: "directory", path })), ...files.map((path) => ({ type: "file", path, size: 900 }))]);
     }
     const rootFile = repo && /\/raw\/main\/([^/]+)$/.exec(url);
     if (rootFile && repo.json && rootFile[1]! in repo.json) return jsonResponse(repo.json[rootFile[1]!]);
     const repoManifest = repo && /\/raw\/main\/([^/]+)\/manifest\.json$/.exec(url);
     if (repoManifest) return repoManifest[1]! in (repo.manifests ?? {}) ? jsonResponse(repo.manifests![repoManifest[1]!]) : statusResponse(404, "Entry not found");
-    if (/\/api\/models\/[^/]+\/[^/]+\/tree\/main$/.test(url)) {
-      return options.treeStatus && options.treeStatus !== 200 ? statusResponse(options.treeStatus) : jsonResponse(treeListing());
+    if (tree) {
+      return options.treeStatus && options.treeStatus !== 200 ? statusResponse(options.treeStatus) : jsonResponse((treeListing() as { type: string; path: string }[]).map(dated));
     }
     const manifest = /\/raw\/main\/([^/]+)\/manifest\.json$/.exec(url);
     if (manifest) {

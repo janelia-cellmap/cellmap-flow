@@ -23,12 +23,14 @@ with their file names, then one request of sizes per repo), and from the
 manifests of cellmap/onnx-web-models, when the cache is built, and kept in it:
 a page's poll never asks the Hub for them. A mia-train model has no
 metadata.json; its ``config.json`` is read instead, once per such repo when
-the cache is built, and how it can be finetuned is read from that same
-download (``_mia_finetune_modes``).
+the cache is built, with its model card for its description, and how it
+can be finetuned is read from those same downloads (``_mia_plan``).
 """
 
 import json
 import os
+import re
+from datetime import timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from huggingface_hub import get_paths_info, hf_hub_download, list_models, list_repo_files
@@ -80,8 +82,11 @@ WEIGHT_ENDINGS = (".ts", ".pt2", ".onnx", ".onnx.data", ".pt", ".pth", ".safeten
 #   the repo's own folder), or None when it has none. Left out when that
 #   could not be found out (cellmap/onnx-web-models not read), so a list
 #   filtering on it does not hide a model it knows nothing of;
-# - ``variants``: the copy's precisions, ``{"variant", "file_mb"}`` each.
-FACTS = ("formats", "finetune_modes", "size_mb", "browser_copy", "variants")
+# - ``variants``: the copy's precisions, ``{"variant", "file_mb"}`` each;
+# - ``last_modified``: when the repo last changed on the Hub (its
+#   lastModified, as "2026-11-11T17:12:49Z"), which Sort by newest orders by;
+#   left out when not known (a cache written before it was listed).
+FACTS = ("formats", "finetune_modes", "size_mb", "browser_copy", "variants", "last_modified")
 
 # The model type a listed repo is served as, when it is not ``huggingface``:
 # ``mia`` for a model trained with mia-train. In the listing beside the
@@ -90,6 +95,11 @@ FACTS = ("formats", "finetune_modes", "size_mb", "browser_copy", "variants")
 LISTED_TYPE = "cellmap_flow_type"
 MIA_DESCRIPTION = ("Trained with mia-train; converted into a cellmap-models export on its first start, "
                    "on its server's GPU, and served on a server only")
+# After a mia-train model's own description, the first paragraph of its
+# model card (_card_summary), which says what it predicts and how it was
+# trained: what tells the MIA team's repos apart in the list, as their
+# names alone do not.
+MIA_NOTE = "(trained with mia-train; runs on a GPU server only, converted on its first start)"
 
 
 def listed_entry(repo: str, metadata: Optional[Dict[str, Any]], name: str) -> Dict[str, Any]:
@@ -217,10 +227,10 @@ def repo_facts(repo: str, revision: Optional[str] = None) -> Dict[str, Any]:
 def _listed_metadata(repo: str, names: List[str]) -> Optional[Dict[str, Any]]:
     """What the list keeps of ``repo``, whose files are ``names``, before its
     facts: a cellmap-models export's metadata.json; for a model trained with
-    mia-train that cellmap-flow can serve, its type, a description (its
-    channels and sizes are its export's, made on its first start) and, when
-    that is known, how it can be finetuned (``_mia_finetune_modes``), which
-    its files cannot say. None for any other repo. Raises what downloading a
+    mia-train that cellmap-flow can serve, its type, a description (the
+    first paragraph of its model card, then the channels it is served as) and,
+    when that is known, how it can be finetuned (``_mia_plan``), which its
+    files cannot say. None for any other repo. Raises what downloading a
     file raises."""
     if EXPORT_METADATA in names or not names:
         with open(hf_hub_download(repo, EXPORT_METADATA)) as f:
@@ -232,38 +242,81 @@ def _listed_metadata(repo: str, names: List[str]) -> Optional[Dict[str, Any]]:
         if not servable_mia_config(config):
             print(f"{repo}: a mia-train model cellmap-flow cannot serve (not a segmentation network); not listed")
             return None
-        metadata = {LISTED_TYPE: "mia", "model_name": repo.split("/")[-1], "description": MIA_DESCRIPTION}
-        modes = _mia_finetune_modes(repo, os.path.dirname(path))
+        summary = _card_summary(repo) if "README.md" in names else None
+        modes, served = _mia_plan(repo, os.path.dirname(path))
+        description = " ".join(part for part in (summary, served, MIA_NOTE) if part) if summary else MIA_DESCRIPTION
+        metadata = {LISTED_TYPE: "mia", "model_name": repo.split("/")[-1], "description": description}
         return metadata if modes is None else {**metadata, "finetune_modes": modes}
     print(f"{repo}: neither a cellmap-models export nor a mia-train model; not listed")
     return None
 
 
-def _mia_finetune_modes(repo: str, folder: str) -> Optional[List[str]]:
-    """How the mia-train model of ``repo`` can be finetuned, as its config
-    says (``MiaModelConfig.finetune_modes``: from what its export will
-    declare, none for a uint8 output), so the list and the training form
-    agree. None when what the export will declare cannot be read
+def _card_summary(repo: str) -> Optional[str]:
+    """The first paragraph of ``repo``'s model card (README.md), past its
+    front matter and title, as plain text (a link's text kept, its address
+    and the emphasis dropped); None when it has none or cannot be read. The
+    MIA team's cards open with what the model predicts, what its encoder
+    started from and how long it was trained, which is what tells their
+    repos apart."""
+    try:
+        with open(hf_hub_download(repo, "README.md"), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except Exception as e:
+        print(f"{repo}: could not read its model card ({e})")
+        return None
+    if lines and lines[0].strip() == "---":
+        ends = [i for i, line in enumerate(lines[1:], 1) if line.strip() == "---"]
+        lines = lines[ends[0] + 1:] if ends else []
+    paragraph: List[str] = []
+    for line in lines:
+        text = line.strip()
+        if not text:
+            if paragraph:
+                break
+            continue
+        if text.startswith(("#", "|", "```", "<", "!", "-", "*", ">")) and not paragraph:
+            continue
+        paragraph.append(text)
+    if not paragraph:
+        return None
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", " ".join(paragraph))
+    return text.replace("**", "").replace("`", "")
+
+
+def _mia_plan(repo: str, folder: str) -> Tuple[Optional[List[str]], Optional[str]]:
+    """What the export of the mia-train model of ``repo`` will be, for its
+    row: how it can be finetuned, as its config says
+    (``MiaModelConfig.finetune_modes``: none for a uint8 output), so the list
+    and the training form agree; and a sentence naming the channels it is
+    served as, which are not its network's (the semantic model's card names
+    its 75 classes, of which it is served as the 12 organelles summed). Both
+    None when what the export will declare cannot be read
     (``planned_metadata``): what its config answers then is not the model's
     (it says none while it does not know), which the list leaves out rather
     than cache as what the model takes until a Refresh.
 
     The config is built of ``folder``, where Hugging Face's cache keeps the
-    config.json _listed_metadata has just downloaded: that is all
-    cellmap_models' mia_metadata needs, as such a folder says its repo and
-    commit. Built of the repo id, it would list the repo's snapshot and
-    download its model card and licence besides, for every mia-train repo at
-    every build of the list, and those say only the export's name, licence
-    and description, which the list does not keep. (Nor does it look for an
-    export a server has made already, which declares what mia_metadata says
-    it will.)"""
+    config.json (and model card) _listed_metadata has just downloaded: that
+    is all cellmap_models' mia_metadata needs, as such a folder says its repo
+    and commit. Built of the repo id, it would list the repo's snapshot and
+    download its licence besides, for every mia-train repo at every build of
+    the list, which the list does not keep. (Nor does it look for an export a
+    server has made already, which declares what mia_metadata says it will.)"""
     from cellmap_flow.models.configs.mia import MiaModelConfig
 
     config = MiaModelConfig(path=folder, name=repo.split("/")[-1])
-    if config.planned_metadata() is None:
+    planned = config.planned_metadata()
+    if planned is None:
         print(f"{repo}: what its export will declare could not be read; listed without how it can be finetuned")
-        return None
-    return list(config.finetune_modes())
+        return None, None
+    names = list(planned.channels_names or [])
+    # A field of the cellmap_models pinned, not of the PyPI release (CI's).
+    offsets = getattr(planned, "affinity_offsets", None)
+    if offsets:
+        served = f"Served here as {len(names)} affinities, offsets {', '.join(str(list(o)) for o in offsets)}."
+    else:
+        served = f"Served here as {len(names)} channels: {', '.join(names)}." if names else None
+    return list(config.finetune_modes()), served
 
 
 def _of(orgs: Iterable[str], models: Dict[str, Any]) -> Dict[str, Any]:
@@ -305,8 +358,8 @@ def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     for org in orgs:
         try:
             # With their file names, which the facts read (and their sizes, which
-            # no listing gives, asked for per repo).
-            models += list(list_models(author=org, expand=["siblings"]))
+            # no listing gives, asked for per repo), and when each last changed.
+            models += list(list_models(author=org, expand=["siblings", "lastModified"]))
         except Exception as e:
             print(f"{org}: could not list its Hugging Face models ({e}); listed again next time")
             continue
@@ -330,6 +383,8 @@ def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
         elif integer_output_refusal(m.id, metadata.get("output_dtype")):
             # A whole-number output passes no gradient (HuggingFaceModelConfig.finetune_modes).
             facts["finetune_modes"] = []
+        if m.last_modified is not None:
+            facts["last_modified"] = m.last_modified.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         result[m.id] = {**metadata, **facts}
 
     # The cache's models of every organization not listed now are kept; it

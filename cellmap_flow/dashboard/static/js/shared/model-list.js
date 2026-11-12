@@ -118,16 +118,18 @@ export function modelSection({ id, title, bodyId, open = false, onOpen }) {
 // name's tooltip. `facts` are what the model's listing says it is
 // (factTags), tagged after the place's own tags. `search`, `em` and `dims`
 // are the row's data (data-search, data-em, data-dims), which a section's
-// controls match (listControls), with its name, size and whether it has a
-// browser copy ("yes", "no", or none when that is not known), from `facts`,
-// which they order and filter by.
+// controls match (listControls), with its name, size, when it last changed
+// on the Hub (`modified`, its facts' last_modified, an ISO date) and whether
+// it has a browser copy ("yes", "no", or none when that is not known), from
+// `facts`, which they order and filter by.
 export function modelRow({
   id, value, name, note, tags, facts, link, description, below, title, checked = false, disabled = false, onTick,
   rowClass = "form-check mb-2", boxClass, boxName, search, em, dims,
 }) {
   const browser = facts && "browser_copy" in facts ? (facts.browser_copy ? "yes" : "no") : undefined;
   const size = facts && Number.isFinite(facts.size_mb) ? String(facts.size_mb) : undefined;
-  const data = Object.fromEntries(Object.entries({ search, em, dims, browser, size, name: typeof name === "string" ? name : undefined })
+  const modified = facts && typeof facts.last_modified === "string" ? facts.last_modified : undefined;
+  const data = Object.fromEntries(Object.entries({ search, em, dims, browser, size, modified, name: typeof name === "string" ? name : undefined })
     .filter(([, v]) => v !== undefined));
   return h("div", { class: rowClass, dataset: data },
     h("input", {
@@ -230,7 +232,8 @@ export function runVoxelSizes(boxes) {
 // 3D; for a list of Hugging Face models, Runs in the browser (`browser`, a
 // server's: in the browser every model does), unticked to start, as a
 // server runs them all, and the
-// order of its rows (`sort`: by name, or by size, smallest first); and with
+// order of its rows (`sort`: by name, by size, smallest first, or newest
+// first, by when each last changed on the Hub); and with
 // any of those the count of the rows shown (count). `id` prefixes their ids
 // (<id>SearchBar, <id>RefreshBtn, <id>EmOnly, <id>2d, <id>3d, <id>Browser,
 // <id>Sort, <id>Count). onChange runs on every change to them, onRefresh on
@@ -241,8 +244,8 @@ export function runVoxelSizes(boxes) {
 // neither: any), and it has a browser copy when Runs in the browser is
 // ticked (one not known to have none passes: its listing did not say).
 // noCopy(data) is whether that box alone hides it, for the count. sorted(rows)
-// gives the rows in the order chosen, by their data's name and size (one of
-// no size last); as they came without `sort`. What a row that does not match
+// gives the rows in the order chosen, by their data's name, size or date (one
+// of no size or no date last, then by name); as they came without `sort`. What a row that does not match
 // does, and whether a ticked one stays shown regardless, is the place's.
 export function listControls({ id, placeholder, title, refreshTitle, onRefresh, onChange, zoo = false, browser = false, sort = false }) {
   const search = h("input", { type: "text", class: "form-control", id: `${id}SearchBar`, placeholder, title, onInput: onChange });
@@ -261,8 +264,9 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
     ? box("Browser", "Runs in the browser", "Only models with a copy that runs in the browser (an ONNX export, cellmap/onnx-web-models' or a folder of the repo's own). Ticked models are always shown.", false)
     : [];
   const order = sort && h("select", {
-    class: "form-select form-select-sm w-auto", id: `${id}Sort`, title: "The order of the models: by name, or by size (the largest weights file), smallest first", onChange,
-  }, h("option", { value: "name" }, "Sort by name"), h("option", { value: "size" }, "Sort by size"));
+    class: "form-select form-select-sm w-auto", id: `${id}Sort`, onChange,
+    title: "The order of the models: by name, by size (the largest weights file), smallest first, or newest first (when each last changed on Hugging Face)",
+  }, h("option", { value: "name" }, "Sort by name"), h("option", { value: "size" }, "Sort by size"), h("option", { value: "newest" }, "Sort by newest"));
   const shown = h("span", { class: "zoo-count ms-auto", id: `${id}Count`, title: "Shown / listed. Ticked models are always shown." });
   const element = h("div", {},
     h("div", { class: "d-flex gap-2 mb-2" }, search, refresh),
@@ -270,6 +274,15 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
   const noCopy = (data) => Boolean(browserOnly && browserOnly.checked && data.browser === "no");
   const byName = (a, b) => (a.dataset.name || "").localeCompare(b.dataset.name || "");
   const size = (row) => (row.dataset.size ? Number(row.dataset.size) : Infinity);
+  // Milliseconds since the epoch, newest the largest; none (or unreadable): -Infinity, last.
+  const modified = (row) => {
+    const time = row.dataset.modified ? Date.parse(row.dataset.modified) : NaN;
+    return Number.isNaN(time) ? -Infinity : time;
+  };
+  const orders = {
+    size: (a, b) => size(a) - size(b) || byName(a, b),
+    newest: (a, b) => (modified(b) - modified(a)) || byName(a, b),
+  };
   return {
     element,
     refresh,
@@ -283,7 +296,7 @@ export function listControls({ id, placeholder, title, refreshTitle, onRefresh, 
     noCopy,
     sorted(rows) {
       if (!order) return [...rows];
-      return [...rows].sort(order.value === "size" ? (a, b) => size(a) - size(b) || byName(a, b) : byName);
+      return [...rows].sort(orders[order.value] || byName);
     },
     count: (n, listed, hiddenNoCopy = 0) => {
       shown.textContent = listed ? `${n} / ${listed}${hiddenNoCopy ? `, ${hiddenNoCopy} hidden: no browser copy` : ""}` : "";

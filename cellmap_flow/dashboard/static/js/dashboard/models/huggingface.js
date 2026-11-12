@@ -5,7 +5,7 @@
 // each row tagged with what its listing says the model is (its formats,
 // finetune modes, size and browser copy). On a server every model is shown
 // to start, and Runs in the browser, ticked, shows only those with a copy
-// that runs there; the rows are in order of name, or of size. A ticked row takes the
+// that runs there; the rows are in order of name, of size, or newest first. A ticked row takes the
 // voxel size to run it at, filled in with the one it is served at (its
 // listing's run_voxel_size). Submit sends the ticked repos as
 // selected_hf_models, and the voxel sizes typed as run_voxel_sizes.

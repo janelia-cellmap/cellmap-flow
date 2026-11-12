@@ -326,9 +326,15 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
  * serving.ts), and a finetuned manifest has one variant, so a finetuned
  * entry comes through unchanged. The voxel size it is run at stays too
  * (ModelEntry.runVoxelSize): the variant is how it runs on this GPU, not
- * at what scale. */
+ * at what scale; and so does the date its folder last changed on the Hub
+ * (ModelEntry.lastModified), which is the folder's, not the variant's. */
 export function withVariant(entry: ModelEntry, variant: ModelVariant): ModelEntry {
-  return { ...entryFor(entry.folder, entry.manifest, variant, entry.repo), name: entry.name, ...(entry.runVoxelSize ? { runVoxelSize: entry.runVoxelSize } : {}) };
+  return {
+    ...entryFor(entry.folder, entry.manifest, variant, entry.repo),
+    name: entry.name,
+    ...(entry.runVoxelSize ? { runVoxelSize: entry.runVoxelSize } : {}),
+    ...(entry.lastModified ? { lastModified: entry.lastModified } : {}),
+  };
 }
 
 /** The byte-cache key a finetuned entry's bytes are kept under, and so its
