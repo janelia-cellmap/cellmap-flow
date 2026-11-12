@@ -111,7 +111,8 @@ export function modelSection({ id, title, bodyId, open = false, onOpen }) {
 // One model's row, as the Models tab's are: its box, its name, a quiet note
 // beside the name of what the model is (a Hugging Face model's description,
 // the ranking's task and voxel size), its tags after (tag), a link, a
-// one-line description under them (the zoo's), and whatever the place adds
+// one-line description under them (the zoo's, a Hugging Face model's), which a
+// click shows whole and a second one line again, and whatever the place adds
 // under that (`below`: a zoo row's voxel size, say). `value` is the box's
 // value, and `boxClass` and `boxName` what a place's Submit finds the ticked
 // boxes by; `rowClass` is the row's, for a list's own spacing; `title` the
@@ -138,7 +139,11 @@ export function modelRow({
     }),
     h("label", { class: "form-check-label", for: id, title },
       name, note ? [" ", h("small", { style: { color: "#aaa" } }, "- " + note)] : null),
-    tags, facts && factTags(facts), link, description ? h("div", { class: "zoo-desc", title: description }, description) : null, below);
+    tags, facts && factTags(facts), link,
+    description ? h("div", {
+      class: "zoo-desc", title: description, onClick: (e) => e.currentTarget.classList.toggle("expanded"),
+    }, description) : null,
+    below);
 }
 
 // The voxel size a zoo model was trained at, from cellmap-flow's own table

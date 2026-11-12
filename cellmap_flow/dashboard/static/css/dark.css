@@ -775,13 +775,19 @@ textarea.form-control[readonly] {
   color: var(--accent-hover);
 }
 
-/* One line; the full text is the row's tooltip. */
+/* One line; the full text is the row's tooltip, and a click shows it all
+   (expanded), a second click one line again. */
 .zoo-desc {
   font-size: 13px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.zoo-desc.expanded {
+  white-space: normal;
 }
 
 .zoo-voxel-row {

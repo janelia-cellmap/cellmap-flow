@@ -35,7 +35,10 @@ function groupOf(modelId) {
 }
 
 // One row; repo ids and model card descriptions come from Hugging Face, not
-// from us, and modelRow builds it from nodes rather than an HTML string.
+// from us, and modelRow builds it from nodes rather than an HTML string. Its
+// description is one line under it, as a zoo model's, shown whole on a click:
+// beside the name it took several lines a row (a mia-train model's, the first
+// paragraph of its card, most of ten).
 // Under it while it is ticked, the voxel size to run it at: blank, the one
 // its metadata.json declares it reads (input_voxel_size).
 function row(modelId, metadata) {
@@ -48,7 +51,7 @@ function row(modelId, metadata) {
   const checked = running.has(modelId) || metadata.selected === true;
   const runAt = runAtField({ id: `${id}_run`, value: metadata.run_voxel_size, own: metadata.input_voxel_size, checked });
   return modelRow({
-    id, value: modelId, name: displayName, note: metadata.description,
+    id, value: modelId, name: displayName, description: metadata.description,
     rowClass: "form-check mb-2 hf-model-item", boxClass: "hf-model-checkbox", boxName: "selected_hf_models", facts: metadata,
     checked, onTick: runAt.show, below: runAt.element,
     // What lib/search.js matches: the repo, its metadata, and the words the
