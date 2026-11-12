@@ -34,7 +34,7 @@ from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving import chunkmirage_ops
 from cellmap_flow.serving.chunkmirage_ops import chunk_roi
 from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
-from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
+from cellmap_flow.serving.protocol import ARGS_KEY, DATASET_CONTROL_PATH, FORMAT
 from cellmap_flow.serving.restart_token import TOKEN_HEADER
 from tests.utils.serving_helpers import (
     COARSER_MODEL,
@@ -347,6 +347,98 @@ def test_after_new_weights_a_new_layer_is_computed_anew(tmp_path):
     assert _forwards(server) - start == 1
 
 
+# --- switching datasets ----------------------------------------------------------
+
+TOKEN = "the-launchers-token"
+
+
+def _switch(client, path, token=TOKEN):
+    return client.post(DATASET_CONTROL_PATH, json={"path": path}, headers={TOKEN_HEADER: token} if token else {})
+
+
+def test_a_server_switched_to_a_dataset_serves_it_as_one_started_there(tmp_path):
+    """Started on A and switched to B: a layer naming B gets what a server
+    started on B serves, placement and voxels (B's corner is elsewhere, and
+    the model reads context around each chunk), and so does a layer naming
+    none; one naming A still loads, A having been current before. Switched
+    on to C, A is closed and refused."""
+    a = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8), name="a")
+    b = write_raw(tmp_path, (np.arange(12**3) % 251).astype(np.uint8).reshape((12,) * 3), offset=(16, 8, 0), name="b")
+    c = write_raw(tmp_path, np.full((8,) * 3, 30, np.uint8), name="c")
+    script = write_script(tmp_path, SERVED_CASES["corner_at_-4nm"][0])
+    server, client = _server(a, script, control_token=TOKEN)
+    _, started_on_b = _server(b, script)
+    assert np.all(read_chunk(client, layer(), (0, 0, 0)) == 10)
+
+    answer = _switch(client, b)
+
+    assert answer.status_code == 200, answer.text
+    assert answer.json() == {"success": True, "path": b, "model_info": get_json(client, "/__control__/model_info")}
+    for name in (layer(data=b), layer()):
+        for meta in (".zattrs", "s0/.zarray"):
+            assert get_json(client, f"/{name}/{FORMAT}/{meta}") == get_json(started_on_b, f"/{name}/{FORMAT}/{meta}")
+        for index in [(0, 0, 0), (1, 2, 1)]:
+            np.testing.assert_array_equal(read_chunk(client, name, index), read_chunk(started_on_b, name, index))
+    assert np.all(read_chunk(client, layer(data=a), (0, 0, 0)) == 10)
+
+    assert _switch(client, c).status_code == 200
+    assert client.get(f"/{layer(data=a)}/{FORMAT}/s0/.zarray").status_code == 400
+    np.testing.assert_array_equal(read_chunk(client, layer(data=b), (1, 2, 1)),
+                                  read_chunk(started_on_b, layer(data=b), (1, 2, 1)))
+    assert np.all(read_chunk(client, layer(), (0, 0, 0)) == 30)
+
+
+def test_only_the_launchers_token_switches_datasets(tmp_path, monkeypatch):
+    """``cellmap_flow serve`` reads the token from the file the launcher names
+    in the job's environment; a server without one has the route turned off.
+    A dataset that cannot be opened is refused, and the server goes on
+    serving the one it had."""
+    from click.testing import CliRunner
+
+    from cellmap_flow.cli.main import cli
+    from cellmap_flow.serving.restart_token import CONTROL_TOKEN_FILE_ENV, write_token_file
+
+    a = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8), name="a")
+    b = write_raw(tmp_path, np.full((8,) * 3, 20, np.uint8), name="b")
+    script = write_script(tmp_path, IDENTITY_MODEL)
+    token = write_token_file(tmp_path / "token")
+    monkeypatch.setenv(CONTROL_TOKEN_FILE_ENV, str(tmp_path / "token"))
+    served = []
+    monkeypatch.setattr(ChunkmirageServer, "run", lambda self, **kwargs: served.append(self))
+    entry = json.dumps({"type": "script", "script_path": script})
+    result = CliRunner().invoke(cli, ["serve", "--model", entry, "-d", a])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+    client = TestClient(served[0].app)
+    _, without_token = _server(a, script)
+
+    assert _switch(without_token, b, token).status_code == 501
+    assert _switch(client, b, None).status_code == 401
+    assert _switch(client, b, "guess").status_code == 401
+    refused = _switch(client, str(tmp_path / "nothing.zarr"), token)
+    assert refused.status_code == 400 and refused.json()["success"] is False and refused.json()["error"]
+    assert np.all(read_chunk(client, layer(), (0, 0, 0)) == 10)
+    assert _switch(client, b, token).status_code == 200
+    assert np.all(read_chunk(client, layer(), (0, 0, 0)) == 20)
+
+
+def test_new_weights_reach_every_open_dataset(tmp_path):
+    """A finetune iteration on a server holding two datasets: nothing the old
+    weights made is served on either."""
+    a = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8), name="a")
+    b = write_raw(tmp_path, np.full((8,) * 3, 20, np.uint8), name="b")
+    server, client = _server(a, write_script(tmp_path, COUNTING_MODEL), control_token=TOKEN)
+    assert _switch(client, b).status_code == 200
+    for data in (a, b):
+        read_chunk(client, layer(model="model_iteration_1", data=data), (0, 0, 0))
+    start = _forwards(server)
+
+    server.weights_changed()
+    for data in (a, b):
+        read_chunk(client, layer(model="model_iteration_2", data=data), (0, 0, 0))
+
+    assert _forwards(server) - start == 2
+
+
 # --- the dashboard's routes, and running ----------------------------------------
 
 
@@ -354,7 +446,7 @@ def test_only_the_job_managers_token_restarts_training(tmp_path):
     asked = []
     path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
     _, closed = _server(path, script)
-    _, client = _server(path, script, restart_callback=lambda p: asked.append(p) or True, restart_token="secret")
+    _, client = _server(path, script, restart_callback=lambda p: asked.append(p) or True, control_token="secret")
 
     assert closed.post("/__control__/restart", json={}).status_code == 501
     assert client.post("/__control__/restart", json={"lr": 1}, headers={TOKEN_HEADER: "guess"}).status_code == 401
