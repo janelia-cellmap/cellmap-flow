@@ -77,6 +77,10 @@ or N5 folder dropped on it from the file manager. Nothing is uploaded: the
 page reads the files itself. The browser asks once to allow reading the
 folder, and again after a reload. Firefox and Safari have no directory picker.
 
+**Another volume.** *Open Volume* in the header shows the connect panel in
+the viewer's place, for a URL or a folder; the models you have running carry
+over and run on the volume it opens. *Cancel* puts the viewer back.
+
 **A volume on your institution's network.** A host with a private address
 (``10.x``, ``192.168.x``, a ``.local`` name) opens as it does in
 Neuroglancer. To Chrome such a host is on your *local network*, which a

@@ -53,6 +53,17 @@ def test_behind_a_reverse_proxy_the_viewer_is_loaded_through_it(dashboard, monke
         assert answer.get_json()["viewer_url"] == expected
 
 
+def test_with_a_viewer_open_another_dataset_can_be_opened(dashboard):
+    """The connect panel's field and Connect are on the page with a viewer
+    too, after it (index.html's style hides the panel there until the
+    header's Open Dataset shows it in the viewer's place): before, only a
+    dashboard with no dataset open had them."""
+    get_session().neuroglancer_url = "http://10.0.0.7:8765/v/abc/"
+    html = dashboard.get("/").get_data(as_text=True)
+    assert 'id="openDatasetBtn"' in html
+    assert html.index('id="my_iframe"') < html.index('id="noNeuroglancerPanel"') < html.index('id="setDataBtn"')
+
+
 def _rows(html, row_class, checkbox_class):
     """(name, checked, {param: value}) for each list row, in page order."""
     rows = []

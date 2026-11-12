@@ -222,12 +222,34 @@
     .no-data-link:hover {
       color: var(--accent-hover);
     }
+
+    /* With a viewer (the iframe before the panel, in either mode) the
+       connect panel is hidden, and its viewer-only lines with it. The
+       header's Open Dataset puts choosing-dataset on the viewer's column
+       (connect.js initOpenDataset): the panel then shows in the viewer's
+       place, saying it opens another, its no-viewer-only lines hidden.
+       Without a viewer the panel shows as it always has and the class
+       changes nothing. */
+    #my_iframe ~ #noNeuroglancerPanel,
+    #noNeuroglancerPanel .viewer-only,
+    #iframe-column.choosing-dataset #my_iframe,
+    #iframe-column.choosing-dataset #my_iframe ~ #noNeuroglancerPanel .no-viewer-only {
+      display: none;
+    }
+
+    #iframe-column.choosing-dataset #my_iframe ~ #noNeuroglancerPanel {
+      display: flex;
+    }
+
+    #iframe-column.choosing-dataset #my_iframe ~ #noNeuroglancerPanel .viewer-only {
+      display: block;
+    }
   </style>
   {% if mode == "browser" %}
   {# Before the first paint: a volume is about to open, because the page is a
      link naming one (?dataset=, or a shared #! view) or a dataset is open in
      this browser's session (web/src/state keeps the flag). The connect panel
-     then says it is opening one until the viewer replaces it, instead of
+     then says it is opening one until the viewer takes its place, instead of
      asking for a URL the page already has. #}
   <script>
     (function () {
@@ -254,6 +276,14 @@
       <button class="action-btn" type="button" id="toggleDashboardBtn">
         <span class="wide-only">Toggle </span>Dashboard
       </button>
+      {# The connect panel in the viewer's place, to open another dataset while
+         one is open (connect.js initOpenDataset). The running models carry
+         over: the servers switch (services/datasets.py), and the browser
+         mode's models run on whatever is open. #}
+      <button class="action-btn" type="button" id="openDatasetBtn" aria-pressed="false"
+        title="{% if mode == 'browser' %}Open another volume in the viewer; the models carry over and run on it{% else %}Open another dataset in the viewer; the running models carry over to it, with no new job{% endif %}">
+        <span class="wide-only">Open </span>{% if mode == "browser" %}Volume{% else %}Dataset{% endif %}
+      </button>
       {# server-only: the browser mode (web/) hides what only a server can
          serve; the class does nothing in the Flask dashboard. #}
       <a class="action-btn primary server-only" href="/pipeline-builder" role="button">
@@ -274,12 +304,16 @@
 
   <div class="content bg-dark text-light">
     <div class="col-9" id="iframe-column">
+      {# The connect panel is on the page with a viewer too, after it and
+         hidden, for the header's Open Dataset to show in its place (the style
+         block above). The browser mode's viewer (web/src/viewer) puts its
+         iframe before the panel in the same way. #}
       {% if neuroglancer_url %}
         <iframe src="{{ neuroglancer_url }}" style="width:100%;height:100%;border:none;" title="Neuroglancer Data Viewer"
           id="my_iframe">
           Your browser does not support iframes.
         </iframe>
-      {% else %}
+      {% endif %}
         <div id="noNeuroglancerPanel" class="no-data-panel">
           <div class="no-data-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -291,12 +325,22 @@
              (data-viewer="pending", web/src/browser.css); main.ts names it. #}
           <div id="viewerOpening" class="no-data-desc" role="status">Opening the volume&hellip;</div>
           {% endif %}
-          <div class="no-data-title">No Viewer Connected</div>
+          <div class="no-data-title no-viewer-only">No Viewer Connected</div>
+          {# viewer-only: what the panel says when Open Dataset shows it over a
+             viewer, in place of the no-viewer-only lines. #}
+          <div class="no-data-title viewer-only">Open another {% if mode == "browser" %}volume{% else %}dataset{% endif %}</div>
+          <div class="no-data-desc viewer-only">
+            {% if mode == "browser" %}
+            Enter its URL below, or pick a folder on this machine. The models carry over and run on it.
+            {% else %}
+            Enter its path below. The running models carry over to it, each shown as soon as its server has opened it: no new job, no model loaded again.
+            {% endif %}
+          </div>
           {# In the browser mode (mode == "browser", set by web/build/render.py) the
              data is read from a URL, not a path on a file system, the line's
              rest under an "i" (css/dark.css details.more). Flask passes no
              mode, so it keeps the wording below. #}
-          <div class="no-data-desc">
+          <div class="no-data-desc no-viewer-only">
             {% if mode == "browser" %}
             Enter the URL of an OME-Zarr volume below to open it in the viewer. <details class="more"><summary aria-label="More">i</summary><span class="more-body">No volume is open. The URL must be that of a public OME-Zarr volume, one served with CORS, such as an OpenOrganelle dataset; or pick a folder on this machine. The models run in this browser.</span></details>
             {% else %}
@@ -323,11 +367,13 @@
           </div>
           {% endif %}
           <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
-          <div class="server-only">
+          <div class="viewer-only">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cancelOpenDatasetBtn">Cancel</button>
+          </div>
+          <div class="server-only no-viewer-only">
             <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
           </div>
         </div>
-      {% endif %}
     </div>
     <div class="col-3" id="dashboard-column">
       {# How a model reads the data's scale (js/dashboard/model-advice.js):
