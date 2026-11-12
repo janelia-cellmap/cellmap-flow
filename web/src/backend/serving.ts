@@ -11,11 +11,14 @@
 // one is Inference.serve and stopping one is ServedModel.dispose. A model's
 // start sets the input normalization it declares when the chain has none
 // (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm), and
-// the postprocessing its output needs when the chain has none
-// (setNeededPostprocess).
+// the postprocessing a model's manifest declares is applied after it, or
+// else the postprocessing a model's output needs, when the chain has none
+// and they show every model served right (setDeclaredPostprocess,
+// setNeededPostprocess; routes/pipeline.py's set_start_postprocess).
 import { ARGS_KEY } from "../contracts";
 import type { AppContext, Chain, DatasetInfo, ModelEntry, ServedModel, Step } from "../contracts";
 import { selectedChannel, SUPPORTED_NORMALIZERS, withChannelPick, withoutChannelPick } from "../infer/norms";
+import { SUPPORTED_POSTPROCESSORS } from "../infer/post";
 import { withVariant } from "../models";
 import { finetuneNumber } from "../models/finetuned";
 import { chainDigest, encodeArgs, servedViewName, viewName } from "../shared/args";
@@ -122,48 +125,105 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
   return null;
 }
 
-/** Set the postprocessing a model's output needs as the chain's, as part of
- * starting it, when the chain has none (routes/pipeline.py's
- * set_needed_postprocess, as a model's server first answers its probe).
- * Returns the name of the model whose output it is for, or null when
- * nothing changed.
+/** Set the postprocessing a model's manifest declares is applied after it
+ * as the chain's, without asking, as part of starting models, when the
+ * chain has none (routes/pipeline.py's set_start_postprocess, its
+ * declarations). Returns the name of the model whose declaration it is, or
+ * null when nothing changed.
  *
  * The Models tab's Submit and Add (routes/models.ts) call this with the
  * models they are about to serve that are not served yet (`starting`) and
- * every model they serve (`serving`, those among them), after
- * setDeclaredInputNorm and before serving them. A model's output class is
- * what its served ModelInfo will say (servedOutputClass: its network's, read
- * from the bytes of the variant it is served in, else its manifest's), and
- * what it needs is cellmap_flow/portable/rank.py's
- * needed_postprocess on an empty chain with no threshold, the rule the
- * ranking's rows follow too: a sigmoid for logits, affinities' included,
- * nothing for an output that has its activation. The first of `starting`
- * that needs steps gives them, unless they would show another of `serving`
- * wrong (a sigmoid on an output that has one: the rule would take it away
- * again), set through setChain so the models served already are drawn
- * through them too, and remembered as the start's (the session's
- * startPostprocess), so GET /api/models/loaded can say where they came
- * from. A chain with postprocessing already is the user's (or a model's, or
- * the ranking's) and is left alone. A start does not fail on this: when the
- * Python cannot be called, the chain is left as it is, saying why. */
-export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
-  if (ctx.session.state.chain.postprocess.length) return null;
-  const needed = async (entry: ModelEntry, postprocess: Step[]) =>
-    ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: await servedOutputClass(ctx, entry), postprocess, threshold: null });
-  for (const entry of starting) {
-    let steps: Step[] | null;
-    const wrong: string[] = [];
+ * every model they serve, in the tab's order (`serving`), after
+ * setDeclaredInputNorm and before setNeededPostprocess; a call that starts
+ * nothing sets nothing, as no server comes up in server mode. A manifest
+ * declares it as a cellmap-models export's metadata.json does, by its
+ * `inference_output_activation` (a sigmoid with `apply_after_model` true),
+ * and the step is cellmap_flow/portable/rank.py's declared_postprocess, the
+ * server's rule; a manifest that declares none (Marwan's say "raw logits"
+ * in their `output` text alone) is left to setNeededPostprocess. What else
+ * an output wants (an affinity model's watershed) is the model advice's
+ * suggestion, for the user to Apply. The first of `serving` that declares a
+ * step gives it, when it shows every one of `serving` right, its own model
+ * among them (rank.needed_postprocess has nothing to change, by each
+ * one's output class, servedOutputClass: a sigmoid is not put on an output
+ * that has one, whatever a manifest says); set through setChain and
+ * remembered as the start's, declared (the session's startPostprocess), so
+ * GET /api/models/loaded says it came from the model's metadata. A chain
+ * with postprocessing is left alone, a step the browser cannot run is not
+ * set, and a start does not fail on this: when the Python cannot be
+ * called, nothing is set, saying why. */
+export async function setDeclaredPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
+  if (!starting.length || ctx.session.state.chain.postprocess.length) return null;
+  for (const entry of serving) {
+    const activation = entry.manifest.inference_output_activation;
+    if (activation === undefined) continue;
+    let steps: Step[];
+    let wrong: string[];
     try {
-      steps = await needed(entry, []);
+      steps = await ctx.infer.python<Step[]>(`${PORTABLE}:declared_postprocess`, { activation });
+      if (!steps.length) continue;
+      wrong = await shownWrong(ctx, serving, steps);
+    } catch (e) {
+      ctx.log(`The postprocessing ${entry.name}'s manifest declares was not set: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+    const unsupported = steps.find((step) => !SUPPORTED_POSTPROCESSORS.includes(step.name));
+    if (unsupported) {
+      ctx.log(`${entry.name}'s manifest declares ${unsupported.name} after it, which is not available in the browser: not set`);
+      continue;
+    }
+    if (wrong.length) {
+      ctx.log(`${entry.name}'s manifest declares ${stepNames(steps).join(" → ")} after it, but it is not set: it would show ${wrong.join(", ")} wrong`);
+      continue;
+    }
+    await setChain(ctx, { input_norm: ctx.session.state.chain.input_norm, postprocess: steps });
+    await ctx.session.update({ startPostprocess: { model: entry.name, postprocess: steps, declared: true } });
+    ctx.log(`Postprocessing set from ${entry.name}'s manifest, which declares it is applied after the model: ${stepNames(steps).join(" → ")}`);
+    return entry.name;
+  }
+  return null;
+}
+
+/** Set the postprocessing a model's output needs as the chain's, as part of
+ * starting models, when the chain has none (routes/pipeline.py's
+ * set_start_postprocess, when no model declares any). Returns the name of
+ * the model whose output it is for, or null when nothing changed.
+ *
+ * The Models tab's Submit and Add (routes/models.ts) call this with the
+ * models they are about to serve that are not served yet (`starting`) and
+ * every model they serve, in the tab's order (`serving`), after
+ * setDeclaredPostprocess and before serving them; a call that starts
+ * nothing sets nothing. A model's output class is what its served
+ * ModelInfo will say (servedOutputClass: its network's, read from the bytes
+ * of the variant it is served in, else its manifest's), and what it needs
+ * is cellmap_flow/portable/rank.py's needed_postprocess on an empty chain
+ * with no threshold, the rule the ranking's rows follow too: a sigmoid for
+ * logits, affinities' included, nothing for an output that has its
+ * activation. The first of `serving` that needs steps gives them, when they
+ * show every one of `serving` right (a sigmoid on an output that has one:
+ * the rule would take it away again), set through setChain so the models
+ * served already are drawn through them too, and remembered as the start's
+ * (the session's startPostprocess), so GET /api/models/loaded can say where
+ * they came from. A chain with postprocessing already is the user's (or a
+ * model's, or the ranking's) and is left alone. A start does not fail on
+ * this: when the Python cannot be called, the chain is left as it is,
+ * saying why. */
+export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
+  if (!starting.length || ctx.session.state.chain.postprocess.length) return null;
+  for (const entry of serving) {
+    let steps: Step[] | null;
+    let wrong: string[];
+    try {
+      steps = await neededPostprocess(ctx, entry, []);
       if (!steps?.length) continue;
-      for (const other of serving) if (other.id !== entry.id && (await needed(other, steps)) !== null) wrong.push(other.name);
+      wrong = await shownWrong(ctx, serving, steps);
     } catch (e) {
       ctx.log(`The postprocessing ${entry.name}'s output needs was not set: ${e instanceof Error ? e.message : String(e)}`);
       return null;
     }
     if (wrong.length) {
       ctx.log(`${entry.name}'s output needs ${stepNames(steps).join(" → ")}, but it is not set: it would show ${wrong.join(", ")} wrong`);
-      return null;
+      continue;
     }
     await setChain(ctx, { input_norm: ctx.session.state.chain.input_norm, postprocess: steps });
     await ctx.session.update({ startPostprocess: { model: entry.name, postprocess: steps } });
@@ -171,6 +231,21 @@ export async function setNeededPostprocess(ctx: AppContext, starting: readonly M
     return entry.name;
   }
   return null;
+}
+
+/** What `entry`'s layer needs instead of `postprocess` to show a good
+ * prediction (rank.needed_postprocess, with no threshold, by its output
+ * class: servedOutputClass), or null when it shows one through it. */
+async function neededPostprocess(ctx: AppContext, entry: ModelEntry, postprocess: Step[]): Promise<Step[] | null> {
+  return ctx.infer.python<Step[] | null>(`${PORTABLE}:needed_postprocess`, { output_class: await servedOutputClass(ctx, entry), postprocess, threshold: null });
+}
+
+/** The names of the models of `serving` that `steps` would show wrong
+ * (neededPostprocess has something to change for them). */
+async function shownWrong(ctx: AppContext, serving: readonly ModelEntry[], steps: Step[]): Promise<string[]> {
+  const wrong: string[] = [];
+  for (const entry of serving) if ((await neededPostprocess(ctx, entry, steps)) !== null) wrong.push(entry.name);
+  return wrong;
 }
 
 /** The output class `entry`'s served ModelInfo says, or will say once it
@@ -198,22 +273,6 @@ async function servedVariant(ctx: AppContext, entry: ModelEntry): Promise<ModelE
 
 /** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
 export const PORTABLE = "cellmap_flow.portable.calls";
-
-/** The name of the first of `entries` whose declared input normalization is
- * `chain`'s input part (its channel pick aside), step for step; null when
- * none is, or the chain has no input normalizers (pipeline.py's
- * input_norm_set_by). GET
- * /api/models/loaded answers it beside the chain, so the page can say where
- * an input normalization a model's start set came from. Every model here
- * declares its own (its manifest), so the answer has no
- * input_norm_declared, which the Flask dashboard's says false for a
- * convention it set; the page reads none as declared. */
-export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
-  const steps = withoutChannelPick(chain.input_norm);
-  if (!steps.length) return null;
-  const live = JSON.stringify(steps);
-  return entries.find((entry) => JSON.stringify(withoutChannelPick(declaredInputNorm(entry))) === live)?.name ?? null;
-}
 
 export interface ServeOptions {
   /** The chain's blob, when the caller has it already. */

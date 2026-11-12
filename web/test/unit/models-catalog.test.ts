@@ -1,14 +1,17 @@
 // createCatalog's list(), resolve() and refresh(): the Hub listing, its
 // day-long cache, the fallback when the Hub rate-limits the tree listing and
 // the failure when it rate-limits everything, the references an entry is
-// found by, and the repos added beside the built-in one by a ref of theirs.
+// found by, and the repos added beside the built-in one by a ref of theirs;
+// and the date each folder last changed, which the listing pages bring.
 import { describe, expect, it } from "vitest";
 
-import { createCatalog, LISTING_KEY } from "../../src/models";
+import type { ModelEntry } from "../../src/contracts";
+import { createCatalog, listFacts, LISTING_KEY, NoBrowserCopyError } from "../../src/models";
 import { LISTING_TTL_MS, MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { MemoryByteCache } from "../../src/models/byte-cache";
 import { finetunedRecord, MemoryFinetunedRegistry } from "../../src/models/finetuned";
-import { entryFixture, fakeHub, fakeLog, FOLDERS, type HubOptions, publishedManifest, rawManifest } from "./models-helpers";
+import { type FetchLike, fetchTree } from "../../src/models/hf";
+import { entryFixture, fakeHub, fakeLog, FOLDERS, type HubOptions, jsonResponse, publishedManifest, rawManifest } from "./models-helpers";
 
 const T0 = Date.UTC(2026, 9, 14, 12, 0, 0);
 
@@ -38,7 +41,7 @@ describe("list()", () => {
       "er_setup67_8nm",
     ]);
     expect(entries.every((e) => e.id === `cellmap/onnx-web-models/${e.folder}`)).toBe(true);
-    expect(treeCalls(hub.calls)).toEqual(["https://huggingface.co/api/models/cellmap/onnx-web-models/tree/main"]);
+    expect(treeCalls(hub.calls)).toEqual(["https://huggingface.co/api/models/cellmap/onnx-web-models/tree/main?expand=true"]);
     expect(manifestCalls(hub.calls)).toEqual(FOLDERS.map((f) => `https://huggingface.co/cellmap/onnx-web-models/raw/main/${f}/manifest.json`));
     expect(hub.calls.some((u) => u.includes("conv3d"))).toBe(false);
   });
@@ -59,6 +62,28 @@ describe("list()", () => {
     const nextDay = catalogWith({}, storage, () => T0 + LISTING_TTL_MS);
     await nextDay.catalog.list();
     expect(treeCalls(nextDay.hub.calls)).toHaveLength(1);
+  });
+
+  it("keeps when each folder last changed on the Hub, through the cache too, and lists a cache from before the dates without them", async () => {
+    const commitDates = { setup_54: "2026-10-17T19:24:06.000Z", copy_56: "2026-11-01T08:00:00.000Z" };
+    const repos = { "bob/models": { manifests: { copy_56: rawManifest("setup_56") } } };
+    const dates = (entries: ModelEntry[]) => Object.fromEntries(entries.map((e) => [e.folder, listFacts(e).last_modified]));
+    const storage = new MemoryKeyValueStore();
+    const first = catalogWith({ commitDates, repos }, storage).catalog;
+    await first.resolve("bob/models");
+    const fresh = dates(await first.list());
+    expect(fresh).toMatchObject({ setup_54: commitDates.setup_54, copy_56: commitDates.copy_56, setup_55: null });
+
+    // The next visit lists from the cache, with the dates.
+    const next = catalogWith({ repos }, storage);
+    expect(dates(await next.catalog.list())).toEqual(fresh);
+    expect(next.hub.calls).toHaveLength(0);
+
+    // A listing cached before the dates were kept still lists, its models of no date.
+    const { lastModified: _dates, ...older } = JSON.parse(storage.getItem(LISTING_KEY)!);
+    storage.setItem(LISTING_KEY, JSON.stringify(older));
+    const old = await catalogWith({ repos }, storage).catalog.list();
+    expect(old.filter((e) => e.repo === "cellmap/onnx-web-models").map((e) => listFacts(e).last_modified)).toEqual(FOLDERS.map(() => null));
   });
 
   it("uses the built-in folder list when the tree listing is rate-limited", async () => {
@@ -115,6 +140,10 @@ describe("another Hugging Face repo", () => {
     // Two models: setup_54's export copied, so its name is the built-in's, and setup_56's.
     "bob/models": { manifests: { copy_54: rawManifest("setup_54"), copy_56: rawManifest("setup_56") } },
     "carol/private": { status: 401 },
+    // A model trained with mia-train, which only a server converts and runs,
+    // and a repo with the same two files that is none.
+    "dana/vit": { files: ["config.json", "model.safetensors"], json: { "config.json": { model: { name: "dinov3_vit3d" }, head: { name: "UNETRHead" }, algorithm: { name: "semantic_seg" } } } },
+    "erin/bert": { files: ["config.json", "model.safetensors"], json: { "config.json": { architectures: ["BertModel"] } } },
   };
 
   it("resolves every form of ref the server takes, adds the repo after the built-in one and lists it on the next visit", async () => {
@@ -135,6 +164,8 @@ describe("another Hugging Face repo", () => {
     await expect(catalog.resolve("carol/private/x")).rejects.toThrow(/carol\/private.*401/);
     await expect(catalog.resolve(`${ALICE}/images`)).rejects.toThrow(/images/);
     await expect(catalog.resolve(`${ALICE}/${FT}@dev`)).rejects.toThrow(/dev/);
+    for (const ref of ["dana/vit", "mia:dana/vit"]) await expect(catalog.resolve(ref)).rejects.toBeInstanceOf(NoBrowserCopyError);
+    await expect(catalog.resolve("erin/bert")).rejects.not.toBeInstanceOf(NoBrowserCopyError);
     // Not a Hugging Face model: a zoo DOI, a path, a word.
     for (const ref of ["10.5281/zenodo.5764892", "runs/model.onnx", "nothing_here"]) expect(await catalog.resolve(ref)).toBeNull();
 
@@ -162,5 +193,26 @@ describe("another Hugging Face repo", () => {
     await catalog.addFinetuned({ ...record, published: { repo: ALICE, folder: FT, at: "2026-10-26T11:00:00.000Z" } }, new ArrayBuffer(8));
     expect((await catalog.list()).map((e) => e.name)).not.toContain(`${FT}_2`);
     for (const ref of [`${ALICE}/${FT}`, ALICE]) expect((await catalog.resolve(ref))!.id).toBe(record.id);
+  });
+});
+
+describe("fetchTree", () => {
+  it("reads every page of the expanded listing, the next named by the Link header, with each entry's last commit date", async () => {
+    const first = "https://huggingface.co/api/models/bob/big/tree/main?expand=true";
+    const second = `${first}&cursor=abc`;
+    const pages: Record<string, { rows: unknown[]; next?: string }> = {
+      [first]: { rows: [{ type: "file", path: "README.md", size: 900 }], next: second },
+      [second]: { rows: [{ type: "directory", path: "model", lastCommit: { id: "1", title: "add", date: "2026-11-01T08:00:00.000Z" } }] },
+    };
+    const fetch: FetchLike = async (url) => {
+      const page = pages[url]!;
+      const answer = jsonResponse(page.rows);
+      if (page.next) answer.headers.set("link", `<${page.next}>; rel="next"`);
+      return answer;
+    };
+    expect(await fetchTree(fetch, "bob/big")).toEqual([
+      { type: "file", path: "README.md", size: 900 },
+      { type: "directory", path: "model", lastModified: "2026-11-01T08:00:00.000Z" },
+    ]);
   });
 });

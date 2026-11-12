@@ -79,9 +79,9 @@ function rankFitsOf(stored: unknown): Record<string, RankFit> {
 
 /** A stored `startPostprocess` made whole, or null when it is not one. */
 function startPostprocessOf(stored: unknown): SessionState["startPostprocess"] {
-  const s = stored as { model?: unknown; postprocess?: unknown } | null;
+  const s = stored as { model?: unknown; postprocess?: unknown; declared?: unknown } | null;
   return s && typeof s === "object" && typeof s.model === "string" && Array.isArray(s.postprocess)
-    ? { model: s.model, postprocess: s.postprocess as Step[] } : null;
+    ? { model: s.model, postprocess: s.postprocess as Step[], ...(s.declared === true ? { declared: true } : {}) } : null;
 }
 
 /** A stored `deletedInViewer` made whole: its entries that are one; none for

@@ -143,15 +143,43 @@ class FinetuneModelConfig(ModelConfig):
         """Its base's: continuing a finetune trains the same network."""
         return self.base_model_config.finetune_modes()
 
+    def _base_declares(self, ask, default):
+        """``ask(base)`` of its base model's config, for what a finetune
+        declares as its base does; ``default`` when the base entry does not
+        build. The dashboard asks these on every poll, and they never raise:
+        a base entry that does not build says why when the model is built."""
+        try:
+            return ask(self.base_model_config)
+        except Exception as e:
+            logger.debug(f"{self.name}'s base model declares nothing, as it does not build: {e}")
+            return default
+
+    def finetune_refusal(self):
+        """Its base's: a finetune serves its base's output, in its dtype
+        (``_get_config``), so an output no gradient goes through is its too."""
+        return self._base_declares(lambda base: base.finetune_refusal(), None)
+
+    def declared_affinity_offsets(self):
+        """Its base's: a finetune's affinity channels compare what its base's
+        do, and it was trained on those offsets (common.model_target), so
+        finetuning it again trains on them, and its watershed is suggested
+        them; not the three nearest neighbours its channel names give."""
+        return self._base_declares(lambda base: base.declared_affinity_offsets(), None)
+
+    def declared_postprocess(self):
+        """Its base's: a finetune's weights change what its layers compute,
+        not the activation its base declares is applied after them (as
+        output_graph)."""
+        return self._base_declares(lambda base: base.declared_postprocess(), [])
+
+    def declared_overlap(self):
+        """Its base's: a finetune keeps its base's overlap."""
+        return self._base_declares(lambda base: base.declared_overlap(), None)
+
     def declared_geometry(self):
         """Its base's, at the voxel sizes the finetune was trained at
         (``trained_at_geometry``); None when the base declares none."""
-        try:
-            base = self.base_model_config.declared_geometry()
-        except Exception as e:
-            # A base entry that does not build says why when the model is built.
-            logger.debug(f"No declared geometry for {self.name}: {e}")
-            return None
+        base = self._base_declares(lambda base: base.declared_geometry(), None)
         if base is None:
             return None
         voxel_size, shape = _at_voxel_size(base["write_shape"], base["output_voxel_size"], self.output_voxel_size)

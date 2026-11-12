@@ -21,14 +21,15 @@ import { listedInTab } from "../../kept";
 import { HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
+import { declaredInputNorm, serveModels, setDeclaredInputNorm, setDeclaredPostprocess, setNeededPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
  * the id "cellmap/onnx-web-models/setup_54" (huggingface.js shows its last
  * segment and the metadata's description), with what its row tags it with
  * and sorts it by (models/metadata.ts listFacts: its format, its ways to
- * finetune, its size and precisions), as the ranking's candidates have
+ * finetune, its size and precisions, when its folder last changed on the
+ * Hub), as the ranking's candidates have
  * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing
@@ -218,11 +219,14 @@ export function modelRoutes(router: Router): void {
     if ("error" in resolved) return badRequest(resolved.error);
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
     // A chain with no input normalizers takes the ones the first model
-    // started declares, and one with no postprocessing what the first
-    // model's output needs, before it is served (serving.ts
-    // setDeclaredInputNorm, setNeededPostprocess).
+    // started declares, and one with no postprocessing the step the first
+    // model's manifest declares follows it, else what the first model's
+    // output needs, when it shows every model served right, before they are
+    // served (serving.ts setDeclaredInputNorm, setDeclaredPostprocess,
+    // setNeededPostprocess).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
     await setDeclaredInputNorm(ctx, starting);
+    await setDeclaredPostprocess(ctx, starting, resolved.entries);
     await setNeededPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
@@ -242,10 +246,12 @@ export function modelRoutes(router: Router): void {
   // input normalization its input part is, and the model whose settings its
   // postprocessing is (postprocess_from) with whether the ranking fitted
   // them to the paint (postprocess_fitted; false: the model's start set
-  // what its output needs, a sigmoid for logits; both null when no loaded
-  // model's: postprocessSetBy). The page reads them after every model
-  // change, since a model's start can set either part (serving.ts
-  // setDeclaredInputNorm, setNeededPostprocess). And the models stopped
+  // them) and whether that start set what the model's manifest declares
+  // follows it (postprocess_declared; false: what its output needs, a
+  // sigmoid for logits); all null when no loaded model's:
+  // postprocessSetBy. The page reads them after every model change, since a
+  // model's start can set either part (serving.ts setDeclaredInputNorm,
+  // setDeclaredPostprocess, setNeededPostprocess). And the models stopped
   // because their layer was deleted in the viewer, numbered (the session's
   // deletedInViewer: backend/index.ts layerDeleted), for the list to untick
   // the rows of those newer than it has seen, as their ✕ would.
@@ -254,7 +260,8 @@ export function modelRoutes(router: Router): void {
     const post = postprocessSetBy(ctx.session.state);
     return json(200, {
       success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models),
-      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null, deleted_in_viewer: deletedInViewer,
+      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null,
+      postprocess_declared: post?.declared ?? null, deleted_in_viewer: deletedInViewer,
     });
   });
 
@@ -312,9 +319,12 @@ export function modelRoutes(router: Router): void {
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
     // As Submit: a chain with no input normalizers takes the ones it
-    // declares, one with no postprocessing what its output needs.
+    // declares, one with no postprocessing the step a model's manifest
+    // declares follows it, else what a model's output needs, when it shows
+    // every model served right.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
       await setDeclaredInputNorm(ctx, [model]);
+      await setDeclaredPostprocess(ctx, [model], entries);
       await setNeededPostprocess(ctx, [model], entries);
     }
     await serveModels(ctx, entries, ctx.session.state.chain);
@@ -585,10 +595,12 @@ function sameSteps(a: readonly Step[], b: readonly Step[]): boolean {
  * model's rankFits, what Use this model, Fit to Paint and Use these
  * settings set, the sigmoid and the threshold the paint is fitted best
  * at), else a model's start's (startPostprocess, serving.ts
- * setNeededPostprocess: the sigmoid its logits need); null when it is no
- * loaded model's, or the chain has none. An Apply of other steps since is
- * the user's, and nothing has to forget it. */
-function postprocessSetBy(state: SessionState): { model: string; fitted: boolean } | null {
+ * setDeclaredPostprocess: what its manifest declares follows it, or
+ * setNeededPostprocess: the sigmoid its logits need), with whether its
+ * manifest declared them; null when it is no loaded model's, or the chain
+ * has none. An Apply of other steps since is the user's, and nothing has to
+ * forget it. */
+function postprocessSetBy(state: SessionState): { model: string; fitted: boolean; declared: boolean } | null {
   const live = state.chain.postprocess;
   if (!live.length) return null;
   const names = state.models.map((m) => m.name);
@@ -596,7 +608,24 @@ function postprocessSetBy(state: SessionState): { model: string; fitted: boolean
     const fitted = state.rankFits[name]?.postprocess;
     return fitted && sameSteps(fitted, live);
   });
-  if (ranked) return { model: ranked, fitted: true };
+  if (ranked) return { model: ranked, fitted: true, declared: false };
   const started = state.startPostprocess;
-  return started && names.includes(started.model) && sameSteps(started.postprocess, live) ? { model: started.model, fitted: false } : null;
+  return started && names.includes(started.model) && sameSteps(started.postprocess, live)
+    ? { model: started.model, fitted: false, declared: started.declared === true } : null;
+}
+
+/** The name of the first of `entries` whose declared input normalization is
+ * `chain`'s input part (its channel pick aside), step for step, each value
+ * as sameSteps compares it (the chain keeps what the page's Apply sent,
+ * "0.0" for 0); null when none is, or the chain has no input normalizers
+ * (pipeline.py's input_norm_set_by). GET /api/models/loaded answers it
+ * beside the chain, so the page can say where an input normalization a
+ * model's start set came from. Every model here declares its own (its
+ * manifest), so the answer has no input_norm_declared, which the Flask
+ * dashboard's says false for a convention it set; the page reads none as
+ * declared. */
+function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
+  const steps = withoutChannelPick(chain.input_norm);
+  if (!steps.length) return null;
+  return entries.find((entry) => sameSteps(withoutChannelPick(declaredInputNorm(entry)), steps))?.name ?? null;
 }

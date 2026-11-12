@@ -6,11 +6,13 @@
 // published to from a browser), and after them the models finetuned in this
 // browser (finetuned.ts).
 //
-// list() reads the repo's folder list from the Hub API and each folder's
-// manifest, keeps them in localStorage for a day (listing-cache.ts), and
-// falls back to the folders known at the time of writing when the Hub will
-// not answer (it rate-limits anonymous requests). Each manifest becomes one
-// ModelEntry with a default variant (fp32, the smallest block: the choice
+// list() reads the repo's folder list from the Hub API, with the date each
+// folder last changed (ModelEntry.lastModified, what Sort by newest orders
+// by), and each folder's manifest, keeps them in localStorage for a day
+// (listing-cache.ts), and falls back to the folders known at the time of
+// writing, which have no dates, when the Hub will not answer (it
+// rate-limits anonymous requests). Each manifest becomes one ModelEntry
+// with a default variant (fp32, the smallest block: the choice
 // for a GPU nobody has asked yet). Whoever knows the GPU, the inference
 // side, calls chooseVariant again with its limits and swaps the variant in.
 // The added repos are listed the same way, each cached for a day under its
@@ -41,8 +43,8 @@ import { PYTHON } from "../generated/python-data";
 
 import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
 import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry, publishedRef } from "./finetuned";
-import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError } from "./hf";
-import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
+import { bareRef, type FetchLike, fetchEtag, fetchFile, fetchJson, fetchManifest, fetchTree, HF_REPO, HF_REVISION, hubRef, isMissing, NoBrowserCopyError, RateLimitError, rawUrl, type TreeEntry } from "./hf";
+import { AddedRepos, defaultKeyValueStore, type KeyValueStore, ListingCache, type RepoListing } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
 import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, freeName, hubName, modelFolders, parseManifest } from "./manifest";
 
@@ -84,6 +86,39 @@ export const ADDED_REPOS_KEY = "cellmap-flow:models:added-repos:v1";
  * (cellmap_flow/finetune/export_web.py), which has a folder for the browser
  * only when its network fits an .onnx file. */
 const SERVER_FORM = ["metadata.json", "model.ts"];
+
+/** The files at a repo's root of a model trained with mia-train (the MIA
+ * team's, ai-hhmi on Hugging Face; cellmap_models' MIA_FILES), which a
+ * cellmap-flow server converts into its export for servers on its first
+ * start (cellmap_flow/models/configs/mia.py). Its networks are vision
+ * transformers over 256³ windows, far too big for the browser. Many other
+ * repos have the same two files, so the config.json says (isMiaConfig). */
+const MIA_FORM = ["config.json", "model.safetensors"];
+
+/** What the config.json of a mia-train model a server serves names: its
+ * network (`model`), `head` and `algorithm`, each by its `name`, as
+ * cellmap_models' is_mia_config checks them, which is what the server asks
+ * (cellmap_flow/models/resolve.py servable_mia_config). The browser cannot
+ * ask Python, so it holds the same names (cellmap_models' _NETWORKS, _HEADS
+ * and _ALGORITHMS, to follow when its pin moves). A repo whose config.json
+ * names anything else (a SimMIM pretraining checkpoint's has no head; most
+ * repos' name none of these) is no mia-train model in either mode, and is
+ * answered as any other repo is. */
+const MIA_CONFIG: Record<string, readonly string[]> = {
+  model: ["dinov3_vit3d"],
+  head: ["UNETRHead"],
+  algorithm: ["semantic_seg", "affinity_seg"],
+};
+
+/** Whether `config`, a parsed config.json, names what MIA_CONFIG does. */
+function isMiaConfig(config: unknown): boolean {
+  const blocks = config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+  return Object.entries(MIA_CONFIG).every(([key, names]) => {
+    const block = blocks[key];
+    const name = block && typeof block === "object" ? (block as { name?: unknown }).name : undefined;
+    return typeof name === "string" && names.includes(name);
+  });
+}
 
 /** What a server's publish names the folder of a smaller copy for the
  * browser, after the model's own (cellmap_flow/portable/publish.py
@@ -199,12 +234,15 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   // cache (even stale) and the built-in folder list as fallbacks.
   async function loadHub(force: boolean): Promise<ModelEntry[]> {
     const cached = listing.read();
-    if (!force && cached && listing.isFresh(cached, now())) return build(HF_REPO, cached.manifests, "the browser's cache");
+    if (!force && cached && listing.isFresh(cached, now())) return build(HF_REPO, cached, "the browser's cache");
 
     let folders: string[];
+    let lastModified: Record<string, string> = {};
     try {
-      folders = modelFolders(await fetchTree(fetchImpl, HF_REPO));
+      const tree = await fetchTree(fetchImpl, HF_REPO);
+      folders = modelFolders(tree);
       if (folders.length === 0) throw new Error("the listing names no model folder");
+      lastModified = folderDates(tree, folders);
     } catch (error) {
       folders = FALLBACK_FOLDERS.slice();
       log(`model catalog: could not list ${HF_REPO} (${message(error)}); using the built-in list of ${folders.length} folders`);
@@ -223,7 +261,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (Object.keys(manifests).length === 0) {
       if (cached) {
         log(`model catalog: no manifest could be fetched; showing the list cached on ${new Date(cached.fetchedAt).toISOString()}`);
-        return build(HF_REPO, cached.manifests, "the browser's cache (stale)");
+        return build(HF_REPO, cached, "the browser's cache (stale)");
       }
       const rateLimited = results.some((r) => r.status === "rejected" && r.reason instanceof RateLimitError);
       throw new Error(
@@ -238,10 +276,16 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (failures.length > 0 && cached) {
       for (const [folder, manifest] of Object.entries(cached.manifests)) manifests[folder] ??= manifest;
     }
-    if (failures.length === 0 && !listing.write({ fetchedAt: now(), manifests })) {
+    // A folder the Hub's listing gave no date for (the built-in folder list
+    // stood in for it) keeps its cached date, so the fallback does not cache
+    // a day of models without dates.
+    for (const [folder, date] of Object.entries(cached?.lastModified ?? {})) {
+      if (folder in manifests) lastModified[folder] ??= date;
+    }
+    if (failures.length === 0 && !listing.write({ fetchedAt: now(), manifests, lastModified })) {
       log("model catalog: could not cache the model list (storage blocked or full)");
     }
-    return build(HF_REPO, manifests, "Hugging Face");
+    return build(HF_REPO, { manifests, lastModified }, "Hugging Face");
   }
 
   // The added repos' entries, in the order they were added. A repo that
@@ -276,34 +320,36 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   async function loadRepo(repo: string, force: boolean): Promise<ModelEntry[]> {
     const cache = new ListingCache(storage, listingKey(repo));
     const cached = cache.read();
-    let manifests: Record<string, unknown>;
+    let repoListing: RepoListing;
     let source: string;
     if (!force && cached && cache.isFresh(cached, now())) {
-      manifests = cached.manifests;
+      repoListing = cached;
       source = "the browser's cache";
     } else {
       try {
-        manifests = await fetchRepo(repo);
+        repoListing = await fetchRepo(repo);
         source = "Hugging Face";
-        if (!cache.write({ fetchedAt: now(), manifests })) log(`model catalog: could not cache the model list of ${repo} (storage blocked or full)`);
+        if (!cache.write({ fetchedAt: now(), ...repoListing })) log(`model catalog: could not cache the model list of ${repo} (storage blocked or full)`);
       } catch (error) {
         if (!cached || isMissing(error)) throw error;
         log(`model catalog: could not list ${repo} (${message(error)}); showing the list cached on ${new Date(cached.fetchedAt).toISOString()}`);
-        manifests = cached.manifests;
+        repoListing = cached;
         source = "the browser's cache (stale)";
       }
     }
     const skipped: string[] = [];
-    const built = build(repo, manifests, source, skipped);
+    const built = build(repo, repoListing, source, skipped);
     if (built.length === 0) {
       throw new Error(skipped.length ? `${repo} has no model the browser can run: ${skipped.join("; ")}` : `${repo} has no model folder (a top-level folder with a manifest.json and the .onnx files it names)`);
     }
     return built;
   }
 
-  // `repo`'s raw manifests by folder, from the Hub. A repo with none that
-  // holds a model for servers (SERVER_FORM) is a NoBrowserCopyError.
-  async function fetchRepo(repo: string): Promise<Record<string, unknown>> {
+  // `repo`'s raw manifests by folder, and their folders' dates, from the
+  // Hub. A repo with none that holds a model for servers (SERVER_FORM), or
+  // a model trained with mia-train (MIA_FORM, with a config.json that
+  // isMiaConfig), is a NoBrowserCopyError.
+  async function fetchRepo(repo: string): Promise<RepoListing> {
     const tree = await fetchTree(fetchImpl, repo);
     const folders = modelFolders(tree);
     const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, repo, folder)));
@@ -312,20 +358,30 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
       if (result.status === "fulfilled") manifests[folders[i]!] = result.value;
       else if (!isMissing(result.reason)) throw result.reason;
     });
-    if (Object.keys(manifests).length === 0 && SERVER_FORM.every((name) => tree.some((e) => e.type === "file" && e.path === name))) {
+    const holds = (names: readonly string[]) => names.every((name) => tree.some((e) => e.type === "file" && e.path === name));
+    if (Object.keys(manifests).length === 0 && holds(SERVER_FORM)) {
       throw new NoBrowserCopyError(`${repo} has no copy for the browser: it holds a model for cellmap-flow servers (Add a model on a server takes ${repo}). A smaller copy for the browser, if its publish asked for one, is added as a folder of it once trained`);
     }
-    return manifests;
+    if (Object.keys(manifests).length === 0 && holds(MIA_FORM)) {
+      const config = await fetchJson(fetchImpl, rawUrl("config.json", repo), `${repo}'s config.json`);
+      if (isMiaConfig(config)) {
+        throw new NoBrowserCopyError(`${repo} holds a model trained with mia-train, which runs on a GPU server only: its network (a vision transformer over 256³ windows) is far too big for the browser. On the cellmap-flow dashboard (server mode), Add a model takes ${repo}, converts it once on the server's GPU and serves it there`);
+      }
+    }
+    return { manifests, lastModified: folderDates(tree, Object.keys(manifests)) };
   }
 
-  // Entries from raw manifests, folder order; a manifest the parser rejects
+  // Entries from a listing's raw manifests, folder order, each with its
+  // folder's date when the listing has one; a manifest the parser rejects
   // is logged, left out and said in `skipped`.
-  function build(repo: string, manifests: Record<string, unknown>, source: string, skipped: string[] = []): ModelEntry[] {
+  function build(repo: string, { manifests, lastModified }: RepoListing, source: string, skipped: string[] = []): ModelEntry[] {
     const built: ModelEntry[] = [];
     for (const folder of Object.keys(manifests).sort()) {
       try {
         const manifest = parseManifest(manifests[folder], `${folder}/manifest.json`);
-        built.push(entryFor(folder, manifest, chooseVariant(manifest, UNKNOWN_LIMITS), repo));
+        const entry = entryFor(folder, manifest, chooseVariant(manifest, UNKNOWN_LIMITS), repo);
+        const date = lastModified[folder];
+        built.push(date === undefined ? entry : { ...entry, lastModified: date });
       } catch (error) {
         log(`model catalog: skipping ${repo === HF_REPO ? "" : `${repo}/`}${folder}: ${message(error)}`);
         skipped.push(message(error));
@@ -612,6 +668,13 @@ function withUniqueNames(list: ModelEntry[]): ModelEntry[] {
     taken.add(name);
     return name === e.name ? e : { ...e, name };
   });
+}
+
+/** The date each of `folders` last changed, by folder, from `tree`, the
+ * listing they are folders of: what fetchTree read of each one's last
+ * commit (TreeEntry.lastModified), where it read one. */
+function folderDates(tree: readonly TreeEntry[], folders: readonly string[]): Record<string, string> {
+  return Object.fromEntries(tree.filter((e) => e.lastModified !== undefined && folders.includes(e.path)).map((e) => [e.path, e.lastModified!]));
 }
 
 /** modelBytes's progress callback: bytes so far, and the total when the server said (null otherwise). */

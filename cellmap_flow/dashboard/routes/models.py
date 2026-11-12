@@ -5,7 +5,8 @@ from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import (
-    NotRemovable, configs_by_name, loaded_models, remove_model, served_at_run_voxel_size, update_run_models,
+    NotRemovable, configs_by_name, listed_repo, loaded_models, remove_model, served_at_run_voxel_size,
+    update_run_models,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
@@ -64,10 +65,7 @@ def _with_run_voxel_sizes(hf_models: dict) -> dict:
     size not its own (services.launch.served_at_run_voxel_size), for its
     row's Run at (nm). The browser's listing (web/src/backend/routes/models.ts)
     answers the same key."""
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
-
-    served = {mc.repo: list(mc.run_voxel_size) for mc in served_at_run_voxel_size()
-              if isinstance(mc, HuggingFaceModelConfig)}
+    served = {listed_repo(mc): list(mc.run_voxel_size) for mc in served_at_run_voxel_size() if listed_repo(mc)}
     return {repo: {**meta, "run_voxel_size": served[repo]} if repo in served else meta
             for repo, meta in hf_models.items()}
 
@@ -175,7 +173,8 @@ def get_loaded_models():
 
     ``{"success": true, "models": [...], "pipeline": {"input_norm",
     "postprocess"}, "input_norm_from", "input_norm_declared",
-    "postprocess_from", "postprocess_fitted"}``: ``pipeline`` is the chain
+    "postprocess_from", "postprocess_fitted", "postprocess_declared"}``:
+    ``pipeline`` is the chain
     as it is set (PUT /api/pipeline's answer gives it the same way),
     ``input_norm_from`` the loaded model whose start set its input part as
     it is, else None, and ``input_norm_declared`` whether that model
@@ -183,12 +182,14 @@ def get_loaded_models():
     such model; routes.pipeline.input_norm_set_by). ``postprocess_from`` is
     the loaded model whose settings its postprocessing is, else None, and
     ``postprocess_fitted`` whether the ranking fitted them to the paint
-    (False: the model's start set the sigmoid its logits need; None with no
-    such model; routes.pipeline.postprocess_set_by). The page reads them
-    after every model change: a model's start can set the input
-    normalization (routes.pipeline.set_declared_input_norm) and the
-    postprocessing (set_needed_postprocess), and the Processing tab's list
-    then shows it, saying from which model and on what grounds.
+    (False: the model's start set them), and ``postprocess_declared``
+    whether that start set what the model's metadata declares follows it
+    (False: the sigmoid its logits need); None with no such model
+    (routes.pipeline.postprocess_set_by). The page reads them after every
+    model change: a model's start can set the input normalization
+    (routes.pipeline.set_declared_input_norm) and the postprocessing
+    (set_start_postprocess, once their servers answer), and the Processing
+    tab's list then shows it, saying from which model and on what grounds.
     ``deleted_in_viewer`` lists the models stopped because their layer was
     deleted in the viewer, numbered in the order they went (the session's
     record: services.launch._layers_deleted), for the list to untick the
@@ -199,11 +200,12 @@ def get_loaded_models():
     models = loaded_models()
     configs = configs_by_name()
     set_by, declared = input_norm_set_by([configs[m["name"]] for m in models if m["name"] in configs])
-    post_by, fitted = postprocess_set_by([m["name"] for m in models])
+    post_by, fitted, post_declared = postprocess_set_by([m["name"] for m in models])
     session = get_session()
     return jsonify({"success": True, "models": models, "pipeline": session.pipeline_spec.to_json_data(),
                     "input_norm_from": set_by, "input_norm_declared": declared,
                     "postprocess_from": post_by, "postprocess_fitted": fitted,
+                    "postprocess_declared": post_declared,
                     "deleted_in_viewer": session.deleted_in_viewer})
 
 

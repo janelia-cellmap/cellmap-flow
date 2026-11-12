@@ -7,9 +7,10 @@
 - ``set_declared_input_norm()``: a model's start sets the input normalization
   it declares, or its kind of model's convention, when the chain has none
   (services.launch.update_run_models).
-- ``set_needed_postprocess()``: a model's start sets the postprocessing its
-  output needs, a sigmoid for logits, when the chain has none, once its
-  server's probe says (services.launch.run_model).
+- ``set_start_postprocess()``: the models' starts set the step a model's
+  metadata declares is applied after it (a sigmoid), else the sigmoid a
+  model's logits need, when the chain has none, once every model started
+  has its server and so says what its output is (services.launch.run_model).
 - ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
   replaced, kept for one release as its deprecated aliases.
 - ``/api/blockwise-config``: the builder's blockwise settings.
@@ -354,14 +355,15 @@ def set_declared_input_norm(model_configs) -> Optional[str]:
     starting it, when the chain has none. Returns the name of the model
     whose input normalization it is, or None when nothing changed.
 
-    The Models tab's Submit (services.launch.update_run_models) calls this
-    with the models it is about to start, in the tab's order, before their
-    layers are drawn, so they are drawn through it. The first of them with
-    any steps to set (start_input_norm: declared, or a CellMap or DaCapo
-    model's convention) gives them, and the postprocessing stays as it is;
-    the chain is set through _set_chain_and_redraw, as PUT /api/pipeline
-    sets it, so the layers of the models already running are redrawn
-    through it too. A chain that has input normalizers already (a YAML's,
+    The Models tab's Submit (services.launch.update_run_models) and Add a
+    model call this with the models they are about to start, in the tab's
+    order, before their layers are drawn, so they are drawn through it. The
+    first of them with any steps to set (start_input_norm: declared, or a
+    CellMap or DaCapo model's convention) gives them, and the postprocessing
+    stays as it is (set_start_postprocess sets that once their servers are
+    up); the chain is set through _set_chain_and_redraw, as PUT
+    /api/pipeline sets it, so the layers of the models already running are
+    redrawn through it too. A chain that has input normalizers already (a YAML's,
     the user's Apply) is left alone, and after this only Apply changes it:
     the Processing tab's input list shows the chain as set (GET
     /api/models/loaded's ``pipeline``, which the page reads after every
@@ -422,88 +424,182 @@ def input_norm_set_by(model_configs):
     raw_dtype, raw_range = model_advice.raw_dtype_and_range(session.dataset_path)
     for model_config in model_configs:
         steps, declared = start_input_norm(model_config, raw_dtype, raw_range)
-        if steps == live:
+        # By value: the chain keeps what the page's Apply sent ("0.0", "false").
+        if rank.same_steps(steps, live):
             return getattr(model_config, "name", None), declared
     return None, None
 
 
 # The models' starts run in launch threads of their own: one at a time
-# decides on an empty chain's postprocessing, so two models started together
-# do not both set it.
+# decides on an empty chain's postprocessing, so two models whose servers
+# come up together do not both set it. What a decision asks of the servers
+# and of the models' metadata is asked before it is taken.
 _start_postprocess_lock = threading.Lock()
 
 
-def set_needed_postprocess(job) -> bool:
-    """Set the postprocessing ``job``'s model needs to show a good prediction
-    as the chain's, as part of starting it, when the chain has none: the
-    sigmoid its output needs when it is logits (portable/rank.py
-    needed_postprocess, with no threshold; an affinity model's too).
-    Returns whether it set any.
+def _running_jobs() -> list:
+    """The session's jobs that have their server's host."""
+    return [job for job in get_session().jobs if job.host]
 
-    services.launch.run_model calls this once the model's server has its
-    host, before the model's layer is drawn: every start goes through it
-    (the Models tab's Submit, Add a model, the Finetune tab's Use this
-    model). Unlike the input normalization (set_declared_input_norm), which
-    a model's config says, its output is known only from its server's probe
-    (serving/client.fetch_model_info's ``output_class``), so this comes
-    after its job starts. The chain is set through _set_chain_and_redraw,
-    as PUT /api/pipeline sets it, so every layer is redrawn through it,
-    this model's among them; and so it is not set when it would show
-    another model being served wrong (a sigmoid on top of an output that
-    has one already). A chain with postprocessing (a YAML's, the user's
-    Apply, the ranking's) is left alone: the first model started into an
-    empty chain that needs any gives it, and after that only Apply changes
-    it. The session remembers which model's start it was
-    (Session.start_postprocess, which postprocess_set_by reads).
 
-    The browser's twin is web/src/backend/serving.ts, at serve, from the
-    manifest's declared output.
+def _start_facts(jobs) -> dict:
+    """What the postprocessing a start sets is decided from, for each of
+    ``jobs`` (running), by its host: (the output class its server's probe
+    says, serving/client.fetch_model_info's ``output_class``; the steps its
+    model's metadata declares are applied after it,
+    ``ModelConfig.declared_postprocess``, [] for a job no config of the
+    session's is named as, a finetune job's). Both may go over the network
+    (a Hugging Face model's metadata.json is downloaded the first time it is
+    asked for), so set_start_postprocess asks before it takes its lock."""
+    configs = {getattr(mc, "name", None): mc for mc in get_session().models_config or []}
+    facts = {}
+    for job in jobs:
+        config = configs.get(job.model_name)
+        facts[job.host] = (fetch_model_info(job.host).get("output_class"),
+                           config.declared_postprocess() if config is not None else [])
+    return facts
+
+
+def _start_choice(jobs, facts):
+    """What the starts set on a chain with no postprocessing, ``jobs`` being
+    every model running and ``facts`` what _start_facts says of each: (the
+    model whose steps they are, the chain with them as a PipelineSpec, its
+    steps built, whether the model's metadata declares them); None when
+    nothing is to be set.
+
+    The models are taken in the order they were submitted (the session's
+    models), and every declaration comes first: the first model whose
+    metadata declares steps applied after it gives them, without asking;
+    else the first whose output needs steps (rank.needed_postprocess on an
+    empty chain, with no threshold: the sigmoid logits need, an affinity
+    model's too) gives those. Steps are given only when they show every
+    model running right, their own model's among them
+    (rank.needed_postprocess has nothing to change for any, by what its
+    server says): a sigmoid is not put on an output that has one, as a
+    second one flattens its contrast. Steps that name an op the registry does not have, or a value
+    its class refuses, are skipped with a warning.
     """
     session = get_session()
-    name, host = getattr(job, "model_name", None), getattr(job, "host", None)
-    with _start_postprocess_lock:
-        if not host or session.pipeline_spec.postprocess:
-            return False
-        steps = rank.needed_postprocess(fetch_model_info(host).get("output_class"), [])
+    order = {getattr(mc, "name", None): i for i, mc in enumerate(session.models_config or [])}
+    jobs = sorted(jobs, key=lambda job: order.get(job.model_name, len(order)))
+    candidates = ([(job.model_name, facts[job.host][1], True) for job in jobs]
+                  + [(job.model_name, rank.needed_postprocess(facts[job.host][0], []), False) for job in jobs])
+    for name, steps, declared in candidates:
         if not steps:
-            return False
+            continue
         named = " → ".join(step["name"] for step in steps)
-        wrong = [other.model_name for other in session.jobs if other is not job and other.host and rank.needed_postprocess(
-            fetch_model_info(other.host).get("output_class"), steps) is not None]
+        what = f"{name}'s metadata declares {named} after it" if declared else f"{name}'s output is logits, which want {named}"
+        wrong = [job.model_name for job in jobs if rank.needed_postprocess(facts[job.host][0], steps) is not None]
         if wrong:
-            logger.info(f"{name}'s output is logits, but {named} is not set: it would show {', '.join(wrong)} wrong")
+            logger.info(f"{what}, but it is not set: it would show {', '.join(wrong)} wrong")
+            continue
+        spec = PipelineSpec(session.pipeline_spec.input_norm, steps)
+        try:
+            unknown = _unknown_op("postprocessor", [step["name"] for step in steps])
+            if unknown:
+                raise ValueError(unknown)
+            built = spec.build()
+        except (TypeError, ValueError) as e:
+            logger.warning(f"{what}, but it is not used: {e}")
+            continue
+        return name, spec, built, declared
+    return None
+
+
+def set_start_postprocess() -> bool:
+    """Set the postprocessing the models' starts call for as the chain's,
+    when it has none, once every model started has its server: the step a
+    model's metadata declares is applied after it (a sigmoid), without
+    asking, else the sigmoid a model's logits need (_start_choice). Returns
+    whether it set any, and so drew every running model's layer.
+
+    services.launch.run_model calls this as each start ends: once the
+    model's server has its host, before its layer is drawn; and when the
+    start ended without a server, as it may be the one the others waited
+    on. Every start goes through it (the Models tab's Submit, Add a model,
+    the Finetune tab's Use this model). What a chain shows a model is known
+    only once its server says what its output is (its probe,
+    serving/client.fetch_model_info's ``output_class``): set at Submit, a
+    declared sigmoid showed a model whose network ends in one already
+    flattened, that one or another submitted with it. So while another
+    model's start is still going (services.launch.others_starting) nothing
+    is set, and the start that ends last decides, over every model running.
+    The chain is set through _set_chain_and_redraw, as PUT /api/pipeline
+    sets it, so every layer is redrawn through it, the starting model's
+    among them; and the session remembers which model's start it was and
+    whether its metadata declares the steps (Session.start_postprocess,
+    which postprocess_set_by reads), so the Processing tab says where they
+    came from. Nothing else is set at a start from what a model says of its
+    output: what it wants beyond that (an affinity model's watershed, a
+    semantic model's argmax) is the model advice's suggestion, for the user
+    to Apply. A chain with postprocessing (a YAML's, the user's Apply, the
+    ranking's) is left alone, and after a start set it only Apply changes
+    it.
+
+    The browser's twin is web/src/backend/serving.ts setDeclaredPostprocess
+    and setNeededPostprocess, which know every model's output before they
+    serve it, from its network.
+    """
+    from cellmap_flow.dashboard.services.launch import others_starting
+
+    session = get_session()
+    if session.pipeline_spec.postprocess:
+        return False
+    waiting = others_starting()
+    if waiting:
+        logger.info(f"The postprocessing a model's start sets is decided once {', '.join(sorted(waiting))} "
+                    f"{'has' if len(waiting) == 1 else 'have'} started too")
+        return False
+    facts = _start_facts(_running_jobs())
+    with _start_postprocess_lock:
+        # Another start decided meanwhile, or a model was started since,
+        # whose start decides once its server is up.
+        if session.pipeline_spec.postprocess or others_starting():
             return False
-        _set_chain_and_redraw(PipelineSpec(session.pipeline_spec.input_norm, steps), None)
-        session.start_postprocess = {"model": name, "postprocess": steps}
-        logger.info(f"Postprocessing set for {name}, whose output is logits: {named}")
+        running = _running_jobs()
+        # A server that came up while the others were asked and has no
+        # start of its own to decide after it (a finetune job's) is asked
+        # here.
+        facts.update(_start_facts([other for other in running if other.host not in facts]))
+        choice = _start_choice(running, facts)
+        if choice is None:
+            return False
+        name, spec, built, declared = choice
+        _set_chain_and_redraw(spec, None, built=built)
+        steps = spec.to_json_data()["postprocess"]
+        session.start_postprocess = {"model": name, "postprocess": steps, "declared": declared}
+        named = " → ".join(step["name"] for step in steps)
+        logger.info(f"Postprocessing set from {name}'s metadata, which declares it is applied after the model: {named}"
+                    if declared else f"Postprocessing set for {name}, whose output is logits: {named}")
         return True
 
 
 def postprocess_set_by(model_names):
     """The model of ``model_names`` whose settings the chain's
     postprocessing is, step for step, as (its name, whether the ranking
-    fitted them to the paint); ``(None, None)`` when it is none's, or the
-    chain has none.
+    fitted them to the paint, whether its metadata declares them);
+    ``(None, None, None)`` when it is none's, or the chain has none.
 
     The ranking's (Session.rank_fits: what Use this model, Fit to Paint and
     Use these settings set, a sigmoid and the threshold the paint is fitted
     best at), else a model's start's (Session.start_postprocess:
-    set_needed_postprocess, the sigmoid its logits need). GET
+    set_start_postprocess, the step its metadata declares follows it, or
+    the sigmoid its logits need). GET
     /api/models/loaded answers them beside the chain, as it answers where
     the input normalization came from (input_norm_set_by).
     """
     session = get_session()
     live = [dict(step) for step in session.pipeline_spec.postprocess]
     if not live:
-        return None, None
+        return None, None, None
     for name in model_names:
         fitted = (session.rank_fits.get(name) or {}).get("postprocess")
         if fitted is not None and rank.same_steps(fitted, live):
-            return name, True
+            return name, True, False
     started = session.start_postprocess
     if started and started["model"] in model_names and rank.same_steps(started["postprocess"], live):
-        return started["model"], False
-    return None, None
+        return started["model"], False, bool(started.get("declared"))
+    return None, None, None
 
 
 def _problems_with_models(postprocess):

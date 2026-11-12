@@ -84,9 +84,10 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
 }
 
 /** What a model list's row shows of a model, as its tags, and what its
- * Sort by size and Runs in the browser read (static/js/shared/model-list.js),
- * under the names the server's listing gives them (models/hf_catalog.py,
- * routes/finetune/rank_routes.py candidates), so one page reads both. */
+ * Sort by size, Sort by newest and Runs in the browser read
+ * (static/js/shared/model-list.js), under the names the server's listing
+ * gives them (models/hf_catalog.py, routes/finetune/rank_routes.py
+ * candidates), so one page reads both. */
 export interface ListFacts {
   /** The files it comes as: here always the ONNX export, which is all the
    * browser runs; the server's lists TorchScript and torch.export too. */
@@ -106,6 +107,14 @@ export interface ListFacts {
   variants: { variant: VariantName; file_mb: number }[];
   /** Its parameter count, or null when the manifest does not say. */
   params: number | null;
+  /** When it last changed on Hugging Face, ISO 8601 UTC, or null when that
+   * is unknown: what Sort by newest orders by, newest first and those of
+   * no date last. Here the last commit to its folder
+   * (ModelEntry.lastModified), as a repo's folders are the browser's
+   * models; the server's is its repo's lastModified. A model finetuned in
+   * this browser or opened from a file is on no Hub and has null (when it
+   * was made is its record's created_at, the metadata's version). */
+  last_modified: string | null;
 }
 
 export function listFacts(entry: ModelEntry): ListFacts {
@@ -123,6 +132,7 @@ export function listFacts(entry: ModelEntry): ListFacts {
     browser_copy: entry.id,
     variants: [...sizes].map(([variant, file_mb]) => ({ variant, file_mb })),
     params: entry.manifest.params > 0 ? entry.manifest.params : null,
+    last_modified: entry.lastModified ?? null,
   };
 }
 

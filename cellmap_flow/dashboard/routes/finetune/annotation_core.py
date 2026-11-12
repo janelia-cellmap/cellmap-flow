@@ -379,6 +379,13 @@ def _finetune_modes(model_config):
         return None
 
 
+def _finetune_refusal(model_config):
+    """Why the model cannot be finetuned (``ModelConfig.finetune_refusal``,
+    which never raises), for the training form to say; None when it can, or
+    there is no config to ask (then its entry has no ``finetune_refusal``)."""
+    return model_config.finetune_refusal() if model_config is not None else None
+
+
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     """The models to finetune, and the raw's levels: ``{"models",
@@ -388,7 +395,8 @@ def get_finetune_models():
     "output_channels", "channels", "channel_choice", "finetune_modes"}``:
     ``channels`` the output channels' names (None when nothing names them),
     ``channel_choice`` whether training takes one of them at a time
-    (common.channel_choice). One whose geometry nothing knows yet is
+    (common.channel_choice); with ``finetune_refusal`` too, why, when it
+    cannot be finetuned at all. One whose geometry nothing knows yet is
     ``{"name", "status", "finetune_modes"}`` instead, its ``status``
     "waiting for its server" or, stopped on the Models tab, "not running".
     """
@@ -428,7 +436,11 @@ def get_finetune_models():
                 # By the same rule, so without building it either.
                 geometry["channel_choice"] = channel_choice(config, geometry["output_channels"], geometry["channels"])
             seen.add(name)
-            models.append({"name": name, **geometry, "finetune_modes": _finetune_modes(config)})
+            entry = {"name": name, **geometry, "finetune_modes": _finetune_modes(config)}
+            refusal = _finetune_refusal(config)
+            if refusal:
+                entry["finetune_refusal"] = refusal
+            models.append(entry)
 
         selected = models[0]["name"] if len(models) == 1 else None
         # The raw's levels, which New Volume offers as the voxel size of a

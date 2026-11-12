@@ -274,10 +274,11 @@ class ModelRunner:
 
         self.use_half_prediction = use_half_prediction
         self.model_config = model_config
-        # What the model's output is (portable/label_it.py's classes): read
-        # off its network's graph (output_class_from "graph", output_op the
-        # op that ends it), else measured by the warmup probe ("probe");
-        # None when neither says. output_range is the probe's, whenever it ran.
+        # What the model's output is (portable/label_it.py's classes): as its
+        # config declares it (output_class_from "declared": a uint8 export's
+        # probability x 255), else read off its network's graph ("graph",
+        # output_op the op that ends it), else measured by the warmup probe
+        # ("probe"); None when none says. output_range is the probe's, whenever it ran.
         self.output_range = None
         self.output_class = None
         self.output_class_from = None
@@ -331,9 +332,17 @@ class ModelRunner:
         on noise (jrc_mus-livers_16nm_to_8nm_peroxisome's was -0.9595
         everywhere, read as a tanh's, when its network ends in a Conv). The
         probe decides only when the graph does not say, or cannot be read.
+        A config's own ``output_class`` comes before either: a uint8 export's
+        probability x 255 (configs/cellmap.py), whose graph ends in a cast
+        and whose range reads as unbounded.
         """
         from cellmap_flow.portable.activation import output_activation
 
+        declared = getattr(self.model_config.config, "output_class", None)
+        if declared:
+            self.output_class, self.output_class_from = declared, "declared"
+            logger.info(f"The model's config declares its output: {declared}")
+            return
         try:
             graph = self.model_config.output_graph()
             found = output_activation(*graph) if graph is not None else None
@@ -558,8 +567,9 @@ class ModelRunner:
                 logger.info("Output probe saw non-finite values; skipping")
                 return
             self.output_range = (lo, hi)
-            if self.output_class_from == "graph":
-                logger.info(f"Model output range [{lo:.4g}, {hi:.4g}]; its graph says {self.output_class}")
+            if self.output_class_from in ("graph", "declared"):
+                logger.info(f"Model output range [{lo:.4g}, {hi:.4g}]; its {self.output_class_from} output is "
+                            f"{self.output_class}")
                 return
             self.output_class = classify_output_range(lo, hi)
             self.output_class_from = "probe" if self.output_class else None

@@ -152,6 +152,14 @@ def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
     return suggestion, declared
 
 
+def _declared_affinity_offsets(model_config):
+    """``ModelConfig.declared_affinity_offsets`` of ``model_config``; None
+    for a job whose model is not among the session's. Not caught, as
+    declared_input_norm is not: both never raise, a metadata.json that
+    cannot be parsed included (CellMapModelConfig._parsed_metadata)."""
+    return model_config.declared_affinity_offsets() if model_config is not None else None
+
+
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
     return fetch_model_info(host)
@@ -165,11 +173,11 @@ def model_advice():
     per served model; ``starting``, whether a model's start is still on its
     way (services/launch.py launching: its job may be listed already while
     its start is still to set the chain's postprocessing,
-    routes.pipeline.set_needed_postprocess), and ``digest``, the chain's
+    routes.pipeline.set_start_postprocess), and ``digest``, the chain's
     (PipelineSpec.digest). The page asks again while ``starting``, and reads
-    the chain again when the digest moves: a model's start sets the
-    postprocessing its output needs once its server answers, after the
-    Submit that started it.
+    the chain again when the digest moves: the models' starts set the
+    postprocessing they call for once their servers answer, after the
+    Submit that started them.
     """
     from cellmap_flow.dashboard.services.launch import launching
 
@@ -244,6 +252,8 @@ def model_advice():
                 # The threshold the ranking fitted to the paint for it, which
                 # an affinity chain's watershed joins neighbours above.
                 threshold=(session.rank_fits.get(name) or {}).get("threshold"),
+                # The offsets its affinity channels compare, when it declares them.
+                affinity_offsets=_declared_affinity_offsets(by_name.get(name)),
             )
 
         # Input side is a declared convention, not something we can observe.

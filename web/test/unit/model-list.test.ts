@@ -86,11 +86,11 @@ let page: ReturnType<typeof fakePage>;
 // The page in `mode`, the server's or the browser's, whose ranking lists
 // `candidates` and whose Hugging Face list is `hf`, with the repos of
 // `running` running (ticked on the Models tab), and whose Local Catalog is
-// `catalog`.
-function setUp(mode: string, candidates: unknown, hf: unknown = HF, running: string[] = [], catalog: unknown = CATALOG) {
+// `catalog`, the page data having `more` too.
+function setUp(mode: string, candidates: unknown, hf: unknown = HF, running: string[] = [], catalog: unknown = CATALOG, more: Record<string, unknown> = {}) {
   vi.resetModules();
   page = fakePage({
-    "page-data": { mode, default_hf_repos: running },
+    "page-data": { mode, default_hf_repos: running, ...more },
     "model-catalog-data": catalog,
   });
   const answers: Record<string, unknown> = { "/api/huggingface-models": hf, "/api/finetune/rank/candidates": candidates };
@@ -225,6 +225,30 @@ it("gives the browser's Hugging Face list, cellmap's repo, the search bar, and l
   // Every model runs in the browser there: no box to show only those.
   expect(page.body.querySelector("#rankHfBrowser")).toBe(null);
   expect(page.body.querySelector("#hfBrowser")).toBe(null);
+});
+
+it("lists each organization's Hugging Face models in a group of its own", async () => {
+  setUp("server", CANDIDATES, { ...HF, "ai-hhmi/lmd-vitl": { description: "organelles" } }, [], CATALOG, { hf_orgs: ["cellmap", "ai-hhmi"] });
+  const huggingface = await import(/* @vite-ignore */ module("dashboard/models/huggingface.js"));
+  huggingface.init();
+  page.getElementById("collapse_hf").dispatchEvent({ type: "show.bs.collapse" });
+  await settled();
+  const groupNames = (bodyId: string) => page.getElementById(bodyId).querySelectorAll(".hf-model-item").map(nameOf);
+  expect(groupNames("hfModelsContainer").sort()).toEqual(["mito-aff", "nuc-model"]);
+  expect(groupNames("hf_ai_hhmiModelsContainer")).toEqual(["lmd-vitl"]);
+  expect(page.getElementById("heading_hf_ai_hhmi").querySelector("button")!.childNodes[0].textContent).toBe("ai-hhmi");
+
+  // A Refresh that lists none of ai-hhmi's: its group hides its search bar
+  // and count, as before its first list, rather than keep the old count.
+  const controlsOf = (id: string) => page.getElementById(`${id}SearchBar`).parentNode!.parentNode!;
+  expect([controlsOf("hf_ai_hhmi").hidden, page.getElementById("hf_ai_hhmiCount").textContent]).toEqual([false, "1 / 1"]);
+  vi.stubGlobal("fetch", async () => ({ ok: true, status: 200, json: async () => HF }));
+  page.getElementById("hfRefreshBtn").dispatchEvent({ type: "click" });
+  await settled();
+  expect(groupNames("hf_ai_hhmiModelsContainer")).toEqual([]);
+  expect(page.getElementById("hf_ai_hhmiModelsContainer").textContent).toContain("No models found.");
+  expect(controlsOf("hf_ai_hhmi").hidden).toBe(true);
+  expect([controlsOf("hf").hidden, page.getElementById("hfCount").textContent]).toEqual([false, "2 / 2"]);
 });
 
 it("shows on a server every Hugging Face model, or with Runs in the browser those with a browser copy and the ticked ones, by name or by size", async () => {

@@ -1,4 +1,15 @@
 <form id="modelSelectionForm">
+    {# Submit, in reach wherever the tab is scrolled, as the Processing tab's
+       Apply is (dark.css: sticky under the tabs). It runs the models ticked
+       below, with the GPUs and options at the foot of the tab. #}
+    <div class="submit-bar d-flex align-items-center gap-2 py-2 mb-2" id="submitBar"
+         style="background: var(--bg-base); border-bottom: 1px solid var(--border);">
+      <h6 class="mb-0 me-auto">Models to run</h6>
+      <button type="button" class="btn btn-sm btn-primary" id="submitModelsBtn"
+              title="Runs the ticked models{% if on_cluster %}, each as a GPU job on the cluster,{% endif %} and stops the others. The steps they run through are set on the Processing tab, by its Apply.">
+        Submit Models
+      </button>
+    </div>
     <!-- Loaded models: every model running or starting, wherever it was
          picked, with a ✕ that stops that one (js/dashboard/models/loaded.js; GET
          /api/models/loaded and POST /api/models/remove, which the browser
@@ -184,7 +195,7 @@
       </div>
     </div>
 
-    <!-- GPU type + submit -->
+    <!-- The GPUs and options Submit (the bar at the top) uses -->
     <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
       {% if on_cluster %}
       <div>
@@ -210,10 +221,6 @@
         <input class="form-check-input" type="checkbox" id="resampleCheckbox" />
         <label class="form-check-label" for="resampleCheckbox">Resample if no scale matches the model</label>
       </div>
-      <button type="button" class="btn btn-primary" id="submitModelsBtn"
-              title="Runs the ticked models{% if on_cluster %}, each as a GPU job on the cluster,{% endif %} and stops the others. The steps they run through are set on the Processing tab, by its Apply.">
-        Submit Models
-      </button>
     </div>
     {% if on_cluster %}
     <div id="gpuQueueHint" class="form-text mt-1"></div>

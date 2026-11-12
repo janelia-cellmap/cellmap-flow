@@ -526,13 +526,22 @@ def _metadata(root, network, geometry, description) -> dict:
 def _base_metadata(root) -> dict:
     """The metadata.json of the model ``root`` (a model entry) when it is a
     cellmap-models export, ``type: cellmap``'s folder or ``type:
-    huggingface``'s repository; {} for a model of another type."""
+    huggingface``'s repository, or ``type: mia``'s export, which its first
+    start converted (configs/mia.py), from the cache; {} for a model of
+    another type, or a mia model not converted here."""
     if root.get("type") == "cellmap":
         path = os.path.join(root["folder_path"], "metadata.json")
     elif root.get("type") == "huggingface":
         from huggingface_hub import hf_hub_download
 
         path = hf_hub_download(root["repo"], "metadata.json", revision=root.get("revision"))
+    elif root.get("type") == "mia":
+        from cellmap_flow.finetune.model_loading import model_config_from_entry
+
+        export = model_config_from_entry(root).cellmap_model
+        if export is None:
+            return {}
+        path = os.path.join(export.folder_path, "metadata.json")
     else:
         return {}
     with open(path) as f:

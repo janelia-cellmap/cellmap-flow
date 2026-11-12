@@ -72,7 +72,7 @@ function displayModelInfo(model) {
   }
   document.getElementById("modelInfo").style.display = "block";
   if (isBrowserMode()) setBrowserTraining(model);
-  else applyFinetuneModes(model.finetune_modes);
+  else applyFinetuneModes(model.finetune_modes, model.finetune_refusal);
 }
 
 // Offer only the LoRA ranks the model can take: a compiled (TorchScript)
@@ -83,7 +83,8 @@ function displayModelInfo(model) {
 // model's whole network, as its manifest declares them) are the Training
 // field's instead (training-form.js setBrowserTraining): there is no rank to
 // pick there, and its group is server-only.
-function applyFinetuneModes(modes) {
+// refusal: why the model cannot be finetuned at all, when its server says.
+function applyFinetuneModes(modes, refusal) {
   const rank = document.getElementById("loraRank");
   const note = document.getElementById("loraRankNote");
   const lora = !modes || modes.includes("lora");
@@ -97,7 +98,7 @@ function applyFinetuneModes(modes) {
   }
   rank.disabled = !lora && !full;
   if (!lora && !full) {
-    setHint(note, "This model cannot be finetuned.", "Its weights are in a format that cannot be trained.");
+    setHint(note, "This model cannot be finetuned.", refusal || "Its weights are in a format that cannot be trained.");
   } else if (!lora) {
     setHint(note, "Full finetune only: rank 0.", "This model's network is compiled (TorchScript), so LoRA adapters cannot be attached.");
   } else {

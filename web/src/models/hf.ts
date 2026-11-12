@@ -80,9 +80,11 @@ const REPO_REF = new RegExp(`^(${SEGMENT}/${SEGMENT})(?:/(${SEGMENT}))?(?:@([\\w
 const DOI = /^10\.\d{4,9}\//;
 const FILE_LIKE = /\.(?:onnx|py|ts|pt|zip|ya?ml)$/i;
 /** The prefixes that say a ref is a Hugging Face model's: `hf:` and its
- * long spelling, as on the server, and `onnx:`, the server's for an ONNX
- * export (`onnx:<owner>/<repo>/<folder>`); none is needed. */
-const PREFIX = /^(?:hf|huggingface|onnx):(?!\/\/)/i;
+ * long spelling, as on the server, `onnx:`, the server's for an ONNX
+ * export (`onnx:<owner>/<repo>/<folder>`), and `mia:`, the server's for a
+ * model trained with mia-train (`mia:<owner>/<repo>`, which the catalog
+ * answers runs on a server only); none is needed. */
+const PREFIX = /^(?:hf|huggingface|onnx|mia):(?!\/\/)/i;
 const HUB_HOSTS = ["huggingface.co", "www.huggingface.co", "hf.co"];
 /** The first segments of huggingface.co pages that are not a model repo's. */
 const NOT_A_MODEL = ["datasets", "spaces", "models", "docs", "collections"];
@@ -168,6 +170,11 @@ export interface TreeEntry {
   type: "file" | "directory";
   path: string;
   size?: number;
+  /** When the last commit that changed it was made, ISO 8601 UTC as the
+   * Hub gives it ("2026-10-17T19:24:06.000Z"): its `lastCommit.date`, which
+   * an expanded listing has (fetchTree). For a folder, the last commit to
+   * anything in it: when a model's folder last changed. */
+  lastModified?: string;
 }
 
 /** `url`'s body as JSON; a RateLimitError on 429, an Error naming the status otherwise. */
@@ -177,24 +184,51 @@ export async function fetchJson(fetchImpl: FetchLike, url: string, what: string)
   return response.json();
 }
 
-/** The folders and files at `path` in `repo`. A repo the Hub does not let
- * this page read (HTTP 401 or 404) is a HubStatusError that says so. */
+/** The most pages fetchTree reads of one listing: 1000 entries at the 50 a
+ * page the Hub answers an expanded listing with, which is what one page of
+ * an unexpanded listing holds, all the catalog read before it asked for the
+ * dates. A folder with more entries is listed that far, as it was then. */
+const MAX_TREE_PAGES = 20;
+
+/** The folders and files at `path` in `repo`, each with the date of its
+ * last commit (TreeEntry.lastModified), what the catalog's Sort by newest
+ * orders models by. The listing is asked for with expand=true for those
+ * dates, and the Hub then answers 50 entries a page instead of 1000, with
+ * a Link header naming the next page (checked 2026-11-12: bigscience/bloom's
+ * 153 root files come as 50 and a rel="next"; the header is exposed to the
+ * page by CORS), so the pages are followed, up to MAX_TREE_PAGES; a model
+ * repo's top level is one page. A repo the Hub does not let this page read
+ * (HTTP 401 or 404) is a HubStatusError that says so. */
 export async function fetchTree(fetchImpl: FetchLike, repo: string, path = ""): Promise<TreeEntry[]> {
-  let listing: unknown;
-  try {
-    listing = await fetchJson(fetchImpl, treeUrl(path, repo), `the file list of ${repo}`);
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-    throw new HubStatusError(error.status, `There is no public Hugging Face model repo ${repo} (HTTP ${error.status}): it does not exist, or it is private or gated, and the browser reads public repos only`);
-  }
-  if (!Array.isArray(listing)) throw new Error(`The file list of ${repo} is not a JSON array`);
   const entries: TreeEntry[] = [];
-  for (const item of listing) {
-    if (item && typeof item === "object" && typeof item.path === "string" && (item.type === "file" || item.type === "directory")) {
-      entries.push({ type: item.type, path: item.path, ...(typeof item.size === "number" ? { size: item.size } : {}) });
+  let url: string | null = `${treeUrl(path, repo)}?expand=true`;
+  for (let page = 0; url !== null && page < MAX_TREE_PAGES; page++) {
+    const response = await fetchImpl(url, { headers: { Accept: "application/json" } });
+    try {
+      throwForStatus(response, `the file list of ${repo}`);
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+      throw new HubStatusError(error.status, `There is no public Hugging Face model repo ${repo} (HTTP ${error.status}): it does not exist, or it is private or gated, and the browser reads public repos only`);
     }
+    const listing: unknown = await response.json();
+    if (!Array.isArray(listing)) throw new Error(`The file list of ${repo} is not a JSON array`);
+    for (const item of listing) {
+      if (item && typeof item === "object" && typeof item.path === "string" && (item.type === "file" || item.type === "directory")) {
+        const date: unknown = item.lastCommit?.date;
+        entries.push({ type: item.type, path: item.path, ...(typeof item.size === "number" ? { size: item.size } : {}), ...(typeof date === "string" ? { lastModified: date } : {}) });
+      }
+    }
+    url = nextPage(response);
   }
   return entries;
+}
+
+/** The page after `response`'s of a paginated Hub listing: the URL its Link
+ * header names rel="next", or null on the last page (and on one with no
+ * Link header, as a listing that fits one page has none). */
+function nextPage(response: Response): string | null {
+  const link = response.headers.get("link");
+  return (link && /<([^>]+)>\s*;\s*rel="next"/.exec(link)?.[1]) || null;
 }
 
 /** `repo`'s `<folder>/manifest.json`, parsed but not yet checked (models/manifest.ts does that). */

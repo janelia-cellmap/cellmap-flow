@@ -88,7 +88,8 @@ def servers(monkeypatch, ome_pyramid):
     session = get_session()
     session.dataset_path = ome_pyramid(((RAW_VOXEL_SIZE, None),))
     session.jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000") for name in MODELS]
-    session.models_config = [SimpleNamespace(name="silent", config=SimpleNamespace(output_voxel_size=(16, 16, 16)))]
+    session.models_config = [SimpleNamespace(name="silent", config=SimpleNamespace(output_voxel_size=(16, 16, 16)),
+                                             declared_postprocess=lambda: [])]
     session.shaders, session.shader_controls, session.extra_layers = {}, {}, {}
     session.set_pipeline(PipelineSpec.from_steps(INPUT_NORM, []))
     return session.dataset_path
@@ -257,6 +258,8 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, place
         return job
 
     monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
+    # What a start reads of a Hugging Face model's metadata.json: nothing here.
+    monkeypatch.setattr("cellmap_flow.models.configs.huggingface.HuggingFaceModelConfig._load_metadata", lambda self: {})
     get_session().jobs = []
     blob = PipelineSpec.from_steps(INPUT_NORM, []).to_url_blob()
     for name in MODELS:

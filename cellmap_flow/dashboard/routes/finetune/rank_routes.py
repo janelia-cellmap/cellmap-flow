@@ -208,7 +208,7 @@ def rank_candidates():
     from cellmap_flow.dashboard.services.launch import _sanitize_job_name, bioimage_model_entry
     from cellmap_flow.models.bioimage_catalog import cached_bioimage_models
     from cellmap_flow.models.configs.finetune import FinetuneModelConfig
-    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts
+    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts, listed_entry
 
     session = get_session()
     volume_id, volume = session_store().session_volume()
@@ -254,7 +254,7 @@ def rank_candidates():
         name = _sanitize_job_name(repo.split("/")[-1])
         add(name, HUGGING_FACE, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
             voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
-            entry={"type": "huggingface", "repo": repo, "name": name}, **facts_of(meta))
+            entry=listed_entry(repo, meta, name), **facts_of(meta))
     zoo = cached_bioimage_models()
     for model in (zoo or {}).get("models", []):
         # Built as the Models tab's Submit builds it with its voxel size
