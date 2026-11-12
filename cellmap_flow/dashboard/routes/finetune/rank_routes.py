@@ -565,12 +565,21 @@ def _serving(name, config, queue):
     """``(host, job)``: the running server of ``name``, or one started now for
     a score (its job, to stop after), as the dashboard starts any model, on
     ``queue``, the Training tab's GPU queues ticked (the Models tab's when
-    none are given)."""
+    none are given). A running server that serves another dataset than the
+    one open, the one painted on, is switched to it first
+    (services.datasets), and refused if it cannot be: it would score that
+    dataset's prediction against this paint."""
+    from cellmap_flow.dashboard.services.datasets import to_open_dataset
     from cellmap_flow.dashboard.services.launch import running_names
     from cellmap_flow.serving.launch import launch
 
     host = running_job_host(name)
     if host:
+        running = next(j for j in get_session().jobs if getattr(j, "model_name", None) == name)
+        error = to_open_dataset(running)
+        if error:
+            raise RuntimeError(f"its server serves another dataset and could not open this one ({error}); "
+                               "Submit on the Models tab starts it again on this one")
         return host, None
     if name in running_names():
         raise RuntimeError("it is starting on the Models tab; score it once its server is up")

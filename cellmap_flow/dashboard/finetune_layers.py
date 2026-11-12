@@ -23,6 +23,7 @@ earlier dashboard) call it first.
 import logging
 import threading
 
+from cellmap_flow.dashboard.services.datasets import to_open_dataset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.listener import FinetuneJobListener
 from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs, recorded_model_entry
@@ -30,6 +31,7 @@ from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
 from cellmap_flow.serving.client import fetch_model_info
+from cellmap_flow.serving.restart_token import read_restart_token
 from cellmap_flow.viewer.layers import prediction_layer, replace_layer
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,22 @@ def training_job_of(inference_job):
     return None if training_job_id is None else get_session().finetune_job_manager.jobs.get(training_job_id)
 
 
+def _served_dataset(job):
+    """The dataset ``job``'s server was started on, as the dashboard names it:
+    the one its corrections were painted on (job_manager.submit, which
+    starts the server on it), or None when that cannot be read."""
+    corrections = getattr(job, "corrections_path", None)
+    if not corrections:
+        return None
+    from cellmap_flow.finetune.job_manager.submit import extract_data_path_from_corrections
+
+    try:
+        return extract_data_path_from_corrections(corrections)
+    except (OSError, ValueError) as e:
+        logger.debug(f"Not known which dataset {job.job_id}'s server reads: {e}")
+        return None
+
+
 def add_finetuned_layer(job, model_name):
     """Add (or replace) the layer of ``job``'s model, ``model_name``.
 
@@ -56,6 +74,13 @@ def add_finetuned_layer(job, model_name):
     the server in place of any earlier iteration's, so Submit and the
     pipeline builder see the model as running. Nothing is added before the
     server is up.
+
+    The server is the training job's own, one process for every iteration,
+    so it serves the dataset the previous iteration's job last had it
+    switch to (services.datasets), else the one the job was started on, the
+    one its paint was made on. When that is not the dataset open, it is
+    switched first, with the job's restart token, and no layer is drawn if
+    it cannot be: the Loaded models list says why.
     """
     session = get_session()
     server_url = job.inference_server_url
@@ -76,6 +101,14 @@ def add_finetuned_layer(job, model_name):
     # The Finetune tab owns it: the Models tab's Submit must not kill it.
     inference_job.owned_by_finetune = True
     inference_job.training_job_id = job.job_id
+    # A switch asks the server where the dashboard reaches it, with the
+    # token its control routes take (a restart's).
+    inference_job.control_url = server_url
+    output_dir = getattr(job, "output_dir", None)
+    inference_job.control_token = read_restart_token(output_dir) if output_dir else None
+    previous = next((j for j in session.jobs if getattr(j, "training_job_id", None) == job.job_id), None)
+    inference_job.dataset_path = (getattr(previous, "dataset_path", None) if previous is not None
+                                  else _served_dataset(job))
 
     # Replace any old finetuned jobs for this base model. One assignment of
     # a new list, rather than filter-then-append on the shared one: this
@@ -91,6 +124,10 @@ def add_finetuned_layer(job, model_name):
     viewer = session.viewer
     if viewer is None:
         logger.error("The viewer is None - neuroglancer not initialized yet")
+        return
+    error = to_open_dataset(inference_job)
+    if error:
+        logger.warning(f"{model_name} is not shown: its server could not open {session.dataset_path} ({error})")
         return
 
     # The server is asked at the address the dashboard reaches it by; the

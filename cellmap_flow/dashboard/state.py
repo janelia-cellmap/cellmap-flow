@@ -28,7 +28,8 @@ rather than being stored beside the real one:
   ``raw``, ``neuroglancer_url``, ``dashboard_url``, ``shaders``,
   ``shader_controls``, ``extra_layers``, ``shown_channels``; and
   ``layer_blob()``, the chain as every prediction layer's URL carries it,
-  and ``shown_channel()``, the channel a model's layer opens on.
+  ``shown_channel()``, the channel a model's layer opens on, and
+  ``on_current_dataset()``, whether a job's server serves the open dataset.
 - The models: ``models_config``, ``model_catalog``,
   ``start_postprocess``, the postprocessing a model's start set, and
   ``deleted_in_viewer``, the models stopped because their layer was deleted
@@ -63,6 +64,7 @@ import yaml
 from cellmap_flow.jobs.launch import started_jobs
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS, launcher_settings
 from cellmap_flow.process_chain import process_chain
+from cellmap_flow.serving.protocol import DATA_KEY
 
 # The builder's node lists, as /api/pipeline/apply stores them.
 _BUILDER_KEYS = ("inputs", "outputs", "edges", "normalizers", "models", "postprocessors")
@@ -278,11 +280,25 @@ class Session:
         the dashboard's own (``dashboard_url``, by IP, which a server on the
         cluster can reach), or else ``dashboard_url`` as given, the address
         a request reached the dashboard by; left out when neither is known.
+        It names the dataset the layer shows, ``dataset_path``
+        (serving.protocol.DATA_KEY), once one is open: a server holding
+        another as well serves this one, and one that has not opened it
+        refuses rather than show another dataset's prediction over this raw.
         """
         spec = self.pipeline_spec
         url = self.dashboard_url or dashboard_url
         extras = {"dashboard_url": url} if url else {}
+        if self.dataset_path:
+            extras[DATA_KEY] = self.dataset_path
         return spec.to_url_blob(**extras, digest=spec.digest())
+
+    def on_current_dataset(self, job):
+        """Whether ``job``'s server serves the open dataset: its
+        ``dataset_path`` is ``dataset_path``, or not known (a job started on
+        whatever was open, as every job was before servers could switch).
+        Only a job on it gets a layer (services.datasets switches the others)."""
+        served = getattr(job, "dataset_path", None)
+        return served is None or served == self.dataset_path
 
     def shown_channel(self, model_name):
         """The channel ``model_name``'s layer opens on (viewer.layers

@@ -26,9 +26,16 @@
   fields the Models tab fills in.
 - ``watch_layer_deletes()``: a model whose layer the person deletes in the
   viewer is stopped, as its ✕ stops it.
+- ``draw_layer()``: a running model's layer, as Submit draws it, which
+  opening another dataset draws too (services.datasets).
+
+A model whose server serves another dataset than the one open (its switch
+failed, services.datasets) gets no layer, is listed as not on this volume,
+and is started again by the next Submit.
 """
 
 from cellmap_flow.config.yaml import ConfigError
+from cellmap_flow.dashboard.services.datasets import to_open_dataset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.serving.launch import launch as launch_server
 from cellmap_flow.jobs.launch import starting_jobs
@@ -39,6 +46,8 @@ from cellmap_flow.models.models_config import (
     BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
 )
 from cellmap_flow.models.registry import build_model
+from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.serving.protocol import DATA_KEY
 from cellmap_flow.viewer.layers import deleted_layers, prediction_layer, replace_layer
 import copy
 import threading
@@ -95,23 +104,56 @@ def _start(config, queue=None):
     return job
 
 
-def _show(job, st_data):
-    """Add the started model's layer, the one Submit would give it; none for
-    a model removed from the Loaded models list since its job came up
-    (``remove_model`` stopped that job)."""
-    if _withdrawn():
-        return
+def draw_layer(job, viewer, st_data=None, info=None):
+    """Draw ``job``'s model's layer into ``viewer``, the one Submit gives it:
+    over ``st_data`` (the session's layer blob when None), with the shader
+    and controls the user set on its name, the colour of its place among
+    the session's jobs and the channel picked to show (Session.shown_channel).
+    ``info``, its server's model_info, saves asking for it again. In place
+    of a layer of its name, keeping what the user set on that one."""
     session = get_session()
     names = [j.model_name for j in session.jobs]
     index = names.index(job.model_name) if job.model_name in names else 0
     layer = prediction_layer(
-        job.model_name, job.host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
-        shader=session.shaders.get(job.model_name), shader_controls=session.shader_controls.get(job.model_name),
-        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], channel=session.shown_channel(job.model_name),
+        job.model_name, job.host, st_data or session.layer_blob(), dataset_path=session.dataset_path,
+        postprocess=session.postprocess, shader=session.shaders.get(job.model_name),
+        shader_controls=session.shader_controls.get(job.model_name),
+        color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)], info=info,
+        channel=session.shown_channel(job.model_name),
     )
-    with session.viewer.txn() as s:
+    with viewer.txn() as s:
         # A model started again keeps what the user set on its layer.
         replace_layer(s.layers, job.model_name, layer)
+
+
+def _on_open_dataset(job) -> bool:
+    """Whether ``job``'s server serves the dataset open now, once asked to:
+    one launched before another was opened is switched to it first
+    (services.datasets). One that cannot switch gets no layer; the Loaded
+    models list says why, and Submit starts it again on this dataset."""
+    error = to_open_dataset(job)
+    if error:
+        logger.warning(f"{job.model_name} is up, but not shown: its server could not open "
+                       f"{get_session().dataset_path} ({error}). Submit starts it again on it.")
+    return error is None
+
+
+def _show(job, st_data):
+    """Add the started model's layer, the one Submit would give it; none for
+    a model removed from the Loaded models list since its job came up
+    (``remove_model`` stopped that job).
+
+    Another dataset may have been opened while it started: its server is
+    switched to it first, and gets no layer if it cannot be
+    (``_on_open_dataset``). Its layer is then drawn over the session's
+    blob, which names the dataset open, rather than ``st_data``, which
+    names the one it was launched on."""
+    if _withdrawn() or not _on_open_dataset(job):
+        return
+    session = get_session()
+    if PipelineSpec.from_url_blob(st_data)[1].get(DATA_KEY) not in (None, session.dataset_path):
+        st_data = session.layer_blob()
+    draw_layer(job, session.viewer, st_data)
 
 
 def _reported(launch):
@@ -141,7 +183,10 @@ def run_model(config, st_data, queue=None):
     from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
 
     job = _start(config, queue)
-    if job is not None and not set_needed_postprocess(job):
+    # Switched first, should another dataset have been opened while it
+    # started: the redraw set_needed_postprocess makes draws only the models
+    # on the open one.
+    if job is not None and _on_open_dataset(job) and not set_needed_postprocess(job):
         _show(job, st_data)
 
 
@@ -506,7 +551,9 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
     and stop every other model. ``run_voxel_sizes`` ({name or repo: [z, y,
     x]}) is what voxel size a catalog, Hugging Face or by-name model is run
-    at, when not its own (``_picked``). A ValueError, before anything
+    at, when not its own (``_picked``). A model running on another dataset
+    than the one open, its server unable to switch, is started again on
+    it. A ValueError, before anything
     changes, when an entry cannot be built: a zoo model needs a voxel size, a
     Cellpose model's settings are missing or wrong, a catalog folder is not
     there, a model that reads its input itself is given a run voxel size.
@@ -521,8 +568,13 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # A running model whose run voxel size was changed, or a Cellpose model's
     # voxel size, output or slice linking, is stopped and started again with
     # them: its name does not say them, so it would otherwise be kept as it
-    # was, and the change silently ignored.
-    restarted = {name for name, config in picked if _settings_changed(config)}
+    # was, and the change silently ignored. So is one whose server serves
+    # another dataset than the one open (its switch failed: a server from
+    # before switching, or one started without a token), as the Loaded
+    # models list says Submit does; not one whose switch is still under way.
+    elsewhere = {j.model_name for j in session.jobs if not _owned_by_finetune(j) and not session.on_current_dataset(j)
+                 and getattr(j, "switching_to", None) != session.dataset_path}
+    restarted = {name for name, config in picked if _settings_changed(config) or name in elsewhere}
     kept = (set(names) | {name for name, _ in picked}) - restarted
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
@@ -617,6 +669,16 @@ def _loaded_entry(name, job, config, catalog_group):
         from cellmap_flow.models.registry import cli_name_of
 
         entry.update(source="added", detail=cli_name_of(type(config)) if config is not None else None)
+    session = get_session()
+    if job is not None and entry["status"] != "ended" and not session.on_current_dataset(job):
+        if getattr(job, "switching_to", None) == session.dataset_path:
+            entry["status"] = "switching"
+        else:
+            # The note is the ✕'s tooltip too, so it says what the ✕ does:
+            # a finetune job's own note, which says what it does to the job.
+            reason = getattr(job, "switch_error", None) or "it reads another dataset"
+            then = entry["note"] or "Submit starts it again on this volume; ✕ stops it."
+            entry.update(status="not on this volume", note=f"Not shown on this volume: {reason}. {then}")
     return entry
 
 
@@ -627,9 +689,12 @@ def loaded_models() -> list:
     Each is ``{"name", "source"`` (one of SOURCES), ``"detail"`` (the
     catalog group, the repo, the zoo id, the Cellpose model and output, the
     model type, or the base a finetune started from), ``"status"``
-    ("running", "starting", or "ended" for a finetune job's model whose job
-    has), ``"removable"`` (true: every model's ✕ works), ``"note"`` (what ✕
-    does, for a finetune job's), ``"confirm"`` (what ✕ asks first, when it
+    ("running", "starting", "ended" for a finetune job's model whose job
+    has, "switching" while its server opens the dataset just opened, "not
+    on this volume" when it serves another: services.datasets),
+    ``"removable"`` (true: every model's ✕ works), ``"note"`` (what ✕
+    does, for a finetune job's, and why a model is not on this volume),
+    ``"confirm"`` (what ✕ asks first, when it
     does more than stop the model: a finetune job's, which it cancels; else
     None), and what the tab's rows know it by, to untick them: ``"hf_id"``
     (the Hugging Face row's repo), ``"zoo_id"`` (the zoo row's id) and

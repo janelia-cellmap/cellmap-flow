@@ -110,7 +110,10 @@ def launch(model, data_path: str, *, queue=None, charge_group=None, resample: bo
     ``charge_group`` default to the saved launcher settings
     (``jobs.settings``). The job is named after the
     model, and is returned once its server has announced its address, or at
-    once when ``wait_for_host`` is off.
+    once when ``wait_for_host`` is off. Its ``dataset_path`` is
+    ``data_path`` as given, before the scale: the name the dashboard knows
+    the dataset by (Session.dataset_path), which a layer names it by
+    (serving.protocol.DATA_KEY) and a switch compares with.
 
     Raises:
         ConfigError: ``model`` is an entry that does not describe a model.
@@ -136,5 +139,8 @@ def launch(model, data_path: str, *, queue=None, charge_group=None, resample: bo
     # like"); here it is a 600-character line that buried the lines around it.
     logger.debug(f"Server command for {name}: {command}")
     # Through the module, so that a test's stand-in for start_hosts stands in here too.
-    return jobs_launch.start_hosts(command, job_name=name, queue=queue, charge_group=charge_group,
-                                   wait_for_host=wait_for_host)
+    job = jobs_launch.start_hosts(command, job_name=name, queue=queue, charge_group=charge_group,
+                                  wait_for_host=wait_for_host)
+    if job is not None:  # a test's stand-in may give none
+        job.dataset_path = data_path
+    return job
