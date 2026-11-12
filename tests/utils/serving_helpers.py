@@ -10,7 +10,7 @@ import zarr
 
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import ChannelSelection, ThresholdPostprocessor
-from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
+from cellmap_flow.serving.protocol import ARGS_KEY, DATA_KEY, FORMAT
 
 
 def write_raw(tmp_path, data, resolution=(8, 8, 8), offset=(0, 0, 0), name="raw"):
@@ -78,9 +78,11 @@ model = Pool()
 """
 
 
-def layer(norms=(), posts=(), model="m"):
-    """The dataset path a layer URL for this chain asks the server for."""
-    return f"{model}{ARGS_KEY}{PipelineSpec.from_steps(list(norms), list(posts)).to_url_blob()}{ARGS_KEY}"
+def layer(norms=(), posts=(), model="m", data=None):
+    """The dataset path a layer URL for this chain asks the server for; on
+    the dataset ``data`` (protocol.DATA_KEY), or the server's current one."""
+    extras = {} if data is None else {DATA_KEY: data}
+    return f"{model}{ARGS_KEY}{PipelineSpec.from_steps(list(norms), list(posts)).to_url_blob(**extras)}{ARGS_KEY}"
 
 
 def read_chunk(client, name, index):

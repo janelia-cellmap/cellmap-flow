@@ -9,6 +9,7 @@ reported; LSF itself is never called.
 import json
 import logging
 import signal
+import stat
 import subprocess
 import threading
 from pathlib import Path
@@ -22,6 +23,7 @@ from cellmap_flow.jobs.lsf import BsubTimeoutError
 from cellmap_flow.jobs.ready import READY_ENV
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.spec import JobStartError, JobStatus
+from cellmap_flow.serving.restart_token import CONTROL_TOKEN_FILE_ENV
 
 QUEUES = ("gpu_h100", "gpu_a100", "gpu_h200")
 P, R, F = JobStatus.PENDING, JobStatus.RUNNING, JobStatus.FAILED
@@ -97,7 +99,7 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
 
     monkeypatch.setattr(launch, "is_bsub_available", lambda: bsub)
     monkeypatch.setattr(launch, "submit_bsub_job", submit)
-    monkeypatch.setattr(launch, "run_locally", lambda command, name, log_file=None: calls.append("local") or local)
+    monkeypatch.setattr(launch, "run_locally", lambda command, name, **_: calls.append("local") or local)
     monkeypatch.setattr(launch, "gpu_queue_candidates", lambda queues, cycle=True: list(queues))
     settings = launcher_settings()
     settings.queue, settings.charge_group = ["gpu_h100"], "saved_group"
@@ -121,12 +123,17 @@ def test_where_start_hosts_runs_a_server(case, monkeypatch, caplog):
         assert jobs["gpu_h100"].waits == 2, "it was given time to load its model"
 
 
-def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
-    """What the server does once it runs, with the environment LSF copies into the job."""
+def test_start_hosts_hands_each_job_a_ready_file_and_a_token_and_reads_it(fake_lsf):
+    """What the server does once it runs, with the environment LSF copies
+    into the job. Its control token is in a file only the user can read,
+    which the environment names: never on the command line, where bjobs -l
+    shows it to everyone on the cluster."""
+    token_files = []
 
     def bsub(argv, kwargs):
         target = Path(kwargs["env"][READY_ENV])
         assert target.parent == launch.SERVER_LOG_DIR
+        token_files.append(Path(kwargs["env"][CONTROL_TOKEN_FILE_ENV]))
         target.write_text(json.dumps({"url": "http://10.1.2.3:8123", "job_id": "4242"}))
         return "Job <4242> is submitted to queue <gpu_h100>.\n"
 
@@ -134,6 +141,10 @@ def test_start_hosts_hands_each_job_a_ready_file_and_reads_it(fake_lsf):
     job = start_hosts("serve", queue=["gpu_h100"], job_name="m", cycle_queues=False)
     assert job.host == "http://10.1.2.3:8123" and started_jobs() == [job]
     assert fake_lsf.commands() == ["which", "bjobs", "bsub"], "no bpeek, and no bjobs for the job itself"
+    (token_file,) = token_files
+    assert token_file.parent == launch.SERVER_LOG_DIR and stat.S_IMODE(token_file.stat().st_mode) == 0o600
+    assert job.control_token and job.control_token == token_file.read_text()
+    assert not any(job.control_token in word for argv in fake_lsf.calls for word in argv)
 
 
 def test_the_cleanup_handler_kills_the_jobs_and_exits_with_the_signals_status():

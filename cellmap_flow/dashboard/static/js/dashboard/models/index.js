@@ -60,7 +60,15 @@ export function initModelsTab() {
   poll(() => Promise.all([loadedModels.refresh(), logs.watching() && logs.look()]),
        { intervalMs: jobLogs.POLL_MS, immediate: false, pauseWhenHidden: true });
 
-  document.getElementById("submitModelsBtn").addEventListener("click", () => {
+  // One Submit at a time: the button is greyed out and says so until the
+  // dashboard has answered. A second press while the first was unanswered
+  // (its answer slow to come back over a VPN) started each model twice.
+  const submitButton = document.getElementById("submitModelsBtn");
+  const submitLabel = submitButton.textContent;
+  submitButton.addEventListener("click", () => {
+    if (submitButton.disabled) return;
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting…";
     const body = submitBody(LISTS.map((list) => list.payload()), resampleCheckbox.checked);
     console.log("Selected models:", body);
     postJSON("/api/models", body)
@@ -80,6 +88,10 @@ export function initModelsTab() {
         const message = err instanceof ApiError ? err.message : String(err);
         log(`Not submitted: ${message}`);
         alert("Could not submit: " + message);
+      })
+      .finally(() => {
+        submitButton.disabled = false;
+        submitButton.textContent = submitLabel;
       });
   });
 }

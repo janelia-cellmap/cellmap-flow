@@ -1,6 +1,9 @@
-// The "No Viewer Connected" panel, shown instead of Neuroglancer when no
-// viewer is set: point the dashboard at a dataset through /api/set-data,
-// then reload the page, which then has the viewer.
+// The connect panel: point the dashboard at a dataset through /api/set-data,
+// then reload the page, which then has the viewer. It is shown instead of
+// Neuroglancer when no viewer is set ("No Viewer Connected"), and in the
+// viewer's place when the header's Open Dataset asks for it, to open another
+// one; the running models carry over to it (routes/index_page.set_data, in
+// the browser web/src/backend/routes/data.ts).
 //
 // The datasets connected to before are offered in the path field, newest
 // first (its datalist, #recentDatasets). The field had only the browser's
@@ -44,9 +47,44 @@ function showRecentDatasets() {
   }));
 }
 
+// The phone layout of templates/index.html (its max-width: 767.98px block),
+// where the dashboard, toggled, covers the viewer's column.
+const PHONE = window.matchMedia("(max-width: 767.98px)");
+
+// The header's Open Dataset (Open Volume in the browser mode): with a viewer
+// open, the panel in the viewer's place, its field focused; the button
+// again, or Cancel, puts the viewer back. templates/index.html shows the
+// one or the other from the column's choosing-dataset class. Without a
+// viewer the panel is showing already, and the button only focuses the
+// field. The browser mode's viewer comes after the page is drawn
+// (web/src/viewer), so it is looked for on each click.
+function initOpenDataset() {
+  const open = document.getElementById("openDatasetBtn");
+  const column = document.getElementById("iframe-column");
+  const input = document.getElementById("datasetPathInput");
+  if (!open || !column || !input) return;
+  function choose(on) {
+    column.classList.toggle("choosing-dataset", on);
+    open.setAttribute("aria-pressed", String(on));
+    if (!on) return;
+    if (PHONE.matches) document.body.classList.remove("dashboard-toggled");
+    input.focus();
+  }
+  open.addEventListener("click", () => {
+    if (!document.getElementById("my_iframe")) {
+      input.focus();
+      return;
+    }
+    choose(!column.classList.contains("choosing-dataset"));
+  });
+  const cancel = document.getElementById("cancelOpenDatasetBtn");
+  if (cancel) cancel.addEventListener("click", () => choose(false));
+}
+
 export function initConnect() {
   const btn = document.getElementById("setDataBtn");
-  if (!btn) return;  // a viewer is connected, so the panel isn't on the page
+  if (!btn) return;  // not on this page
+  initOpenDataset();
   const statusEl = document.getElementById("setDataStatus");
   showRecentDatasets();
 

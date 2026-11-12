@@ -11,9 +11,11 @@ A layer's pipeline is ``layer_ops``:
   same ``PostProcessor`` steps the dashboard's Output tab builds, run as they
   always were. Changing them leaves the model's cached output valid.
 
-The model itself, loaded and warmed up once per process, is a ``ServedModel``
-registered by name (``serve_model``): ops are frozen pydantic models that
-chunkmirage rebuilds whenever a pipeline is built, so they only name it.
+The model itself, loaded and warmed up once per process, is placed on each
+dataset a server has open as a ``ServedModel``, registered by name
+(``serve_model``, and ``unserve_model`` once the dataset is closed): ops are
+frozen pydantic models that chunkmirage rebuilds whenever a pipeline is
+built, so they only name it.
 
 Importing this module is cheap (no torch), since chunkmirage loads the ops
 through the ``chunkmirage.ops`` entry point in any process that serves.
@@ -96,6 +98,11 @@ _SERVED: dict = {}
 
 def serve_model(served: ServedModel):
     _SERVED[served.name] = served
+
+
+def unserve_model(name: str):
+    """Let the model served as ``name`` go: a server closed the dataset it was placed on."""
+    _SERVED.pop(name, None)
 
 
 def served_model(name: str) -> ServedModel:
@@ -192,15 +199,19 @@ class InferenceOp(Op):
 
     _norms: list = PrivateAttr(default_factory=list)
     _chunks: int = PrivateAttr(0)
+    _served: Any = PrivateAttr(None)
 
     def model_post_init(self, __context):
         from cellmap_flow.pipeline_spec import PipelineSpec
 
         self._norms = PipelineSpec(self.input_norm, ()).build()[0]
+        # Held from when the op is built: a chunk in flight as its server
+        # closes the dataset (unserve_model) is still computed.
+        self._served = served_model(self.model)
 
     @property
     def served(self) -> ServedModel:
-        return served_model(self.model)
+        return self._served
 
     @property
     def halo(self):  # type: ignore[override]
@@ -312,11 +323,13 @@ class PostprocessOp(Op):
     _dataset: str = PrivateAttr("")
     _sent_at: float = PrivateAttr(0.0)
     _send_lock: Any = PrivateAttr(default_factory=threading.Lock)
+    _served: Any = PrivateAttr(None)
 
     def model_post_init(self, __context):
         from cellmap_flow.pipeline_spec import PipelineSpec
 
         self._step = PipelineSpec((), (self.step,)).build()[1][0]
+        self._served = served_model(self.model)  # as InferenceOp holds it
 
     def for_dashboard(self, dashboard_url, dataset):
         """Send merged ids to ``dashboard_url`` as those of layer ``dataset``."""
@@ -325,7 +338,7 @@ class PostprocessOp(Op):
 
     @property
     def served(self) -> ServedModel:
-        return served_model(self.model)
+        return self._served
 
     def output_info(self, info: ArrayInfo) -> ArrayInfo:
         has_channel = info.ndim == 4

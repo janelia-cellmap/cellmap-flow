@@ -43,7 +43,7 @@ import { datasetUrlFromState, deletedLayers, displayDimensionsOf, layerShaderOf,
 export const NG_PAGE = "./ng/index.html";
 
 /** The ids the dashboard's template (templates/index.html) gives the viewer's
- * iframe and, without a viewer, the connect panel and its parts. The
+ * iframe and the connect panel and its parts. The
  * dashboard's own JavaScript looks them up (connect.js, the finetune tab's
  * reloadViewer), so they are kept. */
 const FRAME_ID = "my_iframe";
@@ -139,7 +139,7 @@ export function withSelectedLayer(state: NgState, name: string, tab?: string): N
 /** The page boots with data-viewer="pending" on <html> when it is a link
  * naming a volume or the session has a dataset (index.html's inline
  * script), which turns the connect panel into a line saying the volume is
- * opening (browser.css) until the viewer replaces it; cleared when the
+ * opening (browser.css) until the viewer takes its place; cleared when the
  * viewer is mounted, or when restore() finds nothing to show. */
 function viewerSettled(): void {
   if (typeof document !== "undefined" && document.documentElement?.dataset) delete document.documentElement.dataset.viewer;
@@ -354,10 +354,12 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     else mouse.active = false;
   }
 
-  /** The iframe showing Neuroglancer at `hash`: created in place of the
-   * connect panel (or in the viewer column, or the body, whichever the page
-   * has) the first time, with the id and title the template gives it; after
-   * that its URL is set to the new hash. */
+  /** The iframe showing Neuroglancer at `hash`: created before the connect
+   * panel (or in the viewer column, or the body, whichever the page has) the
+   * first time, with the id and title the template gives it; after that its
+   * URL is set to the new hash. The panel stays on the page, hidden behind
+   * the viewer, for the header's Open Volume to show in its place, as the
+   * Flask page has it (templates/index.html, the dashboard's connect.js). */
   function mountFrame(hash: string): HTMLIFrameElement {
     if (!frame) {
       frame = document.getElementById(FRAME_ID) as HTMLIFrameElement | null;
@@ -368,7 +370,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       frame.title = "Neuroglancer Data Viewer";
       frame.style.cssText = "width:100%;height:100%;border:none;";
       const panel = document.getElementById(PANEL_ID);
-      if (panel) panel.replaceWith(frame);
+      if (panel) panel.before(frame);
       else (document.getElementById(COLUMN_ID) ?? document.body).appendChild(frame);
     }
     if (!stopMirror) {

@@ -42,8 +42,8 @@
 /* While the page boots with a volume to open (index.html's inline script
    sets data-viewer="pending": the page is a link naming one, or the
    session's sessionStorage flag says one is open), the connect panel shows
-   only that it is opening it: the viewer replaces the panel with the
-   iframe, or clears the attribute when there is nothing to show. */
+   only that it is opening it: the viewer's iframe takes the panel's
+   place, or the viewer clears the attribute when there is nothing to show. */
 #viewerOpening {
   display: none;
   overflow-wrap: anywhere;

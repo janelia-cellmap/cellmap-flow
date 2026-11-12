@@ -184,22 +184,43 @@ def index():
 
 @index_bp.route("/api/set-data", methods=["POST"])
 def set_data():
-    """Set up neuroglancer viewer with a dataset path."""
+    """Open a dataset: a new neuroglancer viewer showing its raw, and every
+    running model on it.
+
+    The models keep running: each server is asked to open the dataset
+    (services.datasets.switch_all), in the background, and each model's
+    layer appears on the new viewer as its own server has. The answer does
+    not wait for them; one that cannot switch is listed on the Models tab
+    as not on this volume, and Submit starts it again on it. A viewer that
+    cannot be made changes nothing.
+    """
     body, error = parse(SetData, request.get_json(silent=True))
     if error:
         return error
     dataset_path = body.dataset_path
     try:
+        from cellmap_flow.dashboard.routes.pipeline import _save_shaders_from_viewer
+        from cellmap_flow.dashboard.services import datasets
         from cellmap_flow.dashboard.services.launch import watch_layer_deletes
 
         session = get_session()
-        session.dataset_path = dataset_path
         # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
         # does not take its dimensions from the raw.
-        session.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
-        watch_layer_deletes(session.viewer)
-        session.neuroglancer_url = viewer_url(session.viewer)
+        viewer = new_viewer(dataset_path, scales=(8, 8, 8))
+        watch_layer_deletes(viewer)
+        # A job not known to serve any dataset in particular was started on
+        # the one open until now; it is switched from that one.
+        for job in list(session.jobs):
+            if getattr(job, "dataset_path", None) is None and session.dataset_path:
+                job.dataset_path = session.dataset_path
+        # Each model is drawn on the new viewer with what the user set on
+        # its layer on the old one, as a redraw keeps it.
+        _save_shaders_from_viewer()
+        session.dataset_path = dataset_path
+        session.viewer = viewer
+        session.neuroglancer_url = viewer_url(viewer)
         logger.debug(f"Neuroglancer viewer set up: {session.neuroglancer_url}")
+        datasets.switch_all(dataset_path, viewer)
 
         return jsonify({
             "success": True,
