@@ -44,12 +44,12 @@ def test_the_token_is_private_and_made_once(tmp_path):
 
 def test_a_restart_needs_the_jobs_token():
     model_config = ScriptModelConfig(script_path=os.path.join(SCRIPT_TEST, "fake_model_script.py"))
-    with pytest.raises(ValueError, match="restart_token"):
+    with pytest.raises(ValueError, match="control_token"):
         ChunkmirageServer(RAW, model_config, restart_callback=lambda payload: True)
 
     trainer = JobControl()
     server = ChunkmirageServer(RAW, model_config, restart_callback=trainer.request_restart,
-                               restart_token="the-job-token")
+                               control_token="the-job-token")
     client = TestClient(server.app)
     signal = {"params": {"learning_rate": 5e-4}}
     for headers in ({}, {TOKEN_HEADER: "guess"}):
@@ -70,7 +70,7 @@ def test_stop_early_reaches_a_serving_job_over_its_control_endpoint(make_job, mo
     control = JobControl()
     server = ChunkmirageServer(RAW, ScriptModelConfig(script_path=os.path.join(SCRIPT_TEST, "fake_model_script.py")),
                                restart_callback=control.request_restart, stop_callback=control.request_stop,
-                               restart_token=write_restart_token(job.output_dir))
+                               control_token=write_restart_token(job.output_dir))
     client = TestClient(server.app)
     monkeypatch.setattr(restart.requests, "post",
                         lambda url, timeout, **kwargs: client.post(url.removeprefix("http://gpu1:9000"), **kwargs))
