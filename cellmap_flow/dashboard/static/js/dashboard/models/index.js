@@ -88,10 +88,23 @@ export function initModelsTab() {
       if (!needs?.length) alert("Could not submit: " + message);
     });
 
-  document.getElementById("submitModelsBtn").addEventListener("click", () => {
+  // One Submit at a time: the button is greyed out and says so until the
+  // dashboard has answered (the question about installing an environment,
+  // and the Submit sent again after it, included). A second press while the
+  // first was unanswered (its answer slow to come back over a VPN) started
+  // each model twice.
+  const submitButton = document.getElementById("submitModelsBtn");
+  const submitLabel = submitButton.textContent;
+  submitButton.addEventListener("click", () => {
+    if (submitButton.disabled) return;
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting…";
     const body = submitBody(LISTS.map((list) => list.payload()), resampleCheckbox.checked);
     console.log("Selected models:", body);
-    submit(body);
+    submit(body).finally(() => {
+      submitButton.disabled = false;
+      submitButton.textContent = submitLabel;
+    });
   });
 }
 

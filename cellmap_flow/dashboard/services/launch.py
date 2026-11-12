@@ -645,7 +645,20 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     none of the models running before this Submit is left after it, which
     is cleared before the starts
     (routes.pipeline.reset_postprocess_of_models_gone)."""
+    # One Submit at a time, from deciding what starts to its launches being
+    # counted as running: two at once (the page's button pressed again while
+    # the first's answer was slow to come back) each found the model not
+    # started yet, and each submitted a GPU job for it.
+    with _submit_lock:
+        return _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes, install_envs)
+
+
+_submit_lock = threading.Lock()
+
+
+def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes, install_envs):
     from cellmap_flow.models import envs
+
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
