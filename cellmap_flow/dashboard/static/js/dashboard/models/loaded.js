@@ -88,9 +88,17 @@ export function init({ untick, log }) {
     document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
     const startingCount = models.filter((m) => m.status === "starting").length;
     const waitingCount = models.filter((m) => m.status === "waiting").length;
+    // A server moving to the volume just opened, or one that could not
+    // (services/datasets.py): running, but not shown here. Only the server
+    // dashboard has these; the browser's models run on whatever is open.
+    const switchingCount = models.filter((m) => m.status === "switching").length;
+    const offVolumeCount = models.filter((m) => m.status === "not on this volume").length;
+    const runningCount = models.length - startingCount - waitingCount - switchingCount - offVolumeCount;
     const counts = [];
-    if (models.length - startingCount - waitingCount) counts.push((models.length - startingCount - waitingCount) + " running");
+    if (runningCount) counts.push(runningCount + " running");
     if (startingCount) counts.push(startingCount + " starting");
+    if (switchingCount) counts.push(switchingCount + " switching to this volume");
+    if (offVolumeCount) counts.push(offVolumeCount + " not on this volume");
     if (waitingCount) counts.push(waitingCount + " waiting for a volume");
     document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
     // The Cellpose panel's "N running", after a remove or a Submit as on load.
