@@ -562,6 +562,18 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     declares some (an onnx model's manifest) sets them, as part of its start
     (routes.pipeline.set_declared_input_norm); any other chain is left as it
     is, and only the page's Apply changes it."""
+    # One Submit at a time, from deciding what starts to its launches being
+    # counted as running: two at once (the page's button pressed again while
+    # the first's answer was slow to come back) each found the model not
+    # started yet, and each submitted a GPU job for it.
+    with _submit_lock:
+        _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes)
+
+
+_submit_lock = threading.Lock()
+
+
+def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes):
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 

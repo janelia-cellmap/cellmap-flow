@@ -6,6 +6,7 @@ layers in test_layer_sources_snapshot."""
 import json
 import shlex
 import threading
+import time
 from types import SimpleNamespace
 
 import neuroglancer
@@ -589,6 +590,34 @@ def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_c
     session.jobs = [_Job("mine")]
     launch.update_run_models(["mine"])  # running already: not started twice
     assert started == ["mine"]
+
+
+def test_two_submits_at_once_start_a_model_once(viewer, monkeypatch, tmp_path):
+    """Two Submits a second apart (the button pressed again while the first's
+    answer was slow to come back) each found the model not started yet, and
+    each submitted a GPU job for it: both decided before either launched,
+    while the first set the chain's input normalization from the raw."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    started, release = [], threading.Event()
+    monkeypatch.setattr(launch, "run_model", lambda config, st: (started.append(config.name), release.wait(10)))
+    monkeypatch.setattr(pipeline, "set_declared_input_norm", lambda configs: time.sleep(0.3))
+    session = get_session()
+    session.models_config = [build_model({"type": "script", "script_path": str(script)}, "mine")]
+    session.jobs = []
+
+    submits = [threading.Thread(target=launch.update_run_models, args=(["mine"],)) for _ in range(2)]
+    try:
+        for submit in submits:
+            submit.start()
+        for submit in submits:
+            submit.join(10)
+        time.sleep(0.2)  # a second launch thread, had there been one, has run by now
+        assert started == ["mine"]
+    finally:
+        release.set()
 
 
 def test_a_models_scale_picks_the_level_its_server_reads(viewer, monkeypatch, tmp_path):
