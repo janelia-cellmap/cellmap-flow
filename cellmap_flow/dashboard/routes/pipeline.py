@@ -164,15 +164,21 @@ def update_equivalences():
     return jsonify({"message": "Equivalences updated successfully"})
 
 
+def _shown(session):
+    """The jobs a redraw gives a layer: each that has a host and serves the
+    open dataset (Session.on_current_dataset). One whose server serves
+    another (it could not switch, or its switch is under way) is left out:
+    its layer would show that dataset's prediction over this raw."""
+    return [job for job in session.jobs if job.host and session.on_current_dataset(job)]
+
+
 def _shows(viewer, jobs, url_blob) -> bool:
-    """Whether ``viewer`` already shows each job that has a host its layer
-    over ``url_blob``: then a redraw would show nothing new. The raw is not
-    asked for: a viewer is made with it, so one without it is one the person
-    deleted it from, and a redraw does not put it back."""
+    """Whether ``viewer`` already shows each of ``jobs`` (``_shown``'s) its
+    layer over ``url_blob``: then a redraw would show nothing new. The raw is
+    not asked for: a viewer is made with it, so one without it is one the
+    person deleted it from, and a redraw does not put it back."""
     layers = viewer.state.layers
     for job in jobs:
-        if not job.host:
-            continue
         if job.model_name not in layers:
             return False
         if layers[job.model_name].source[0].url != prediction_url(job.host, job.model_name, url_blob):
@@ -202,8 +208,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     (a layer hidden, an opacity).
 
     Returns the names of the prediction layers shown through the chain. A
-    job with no host yet gets no layer, and with no viewer yet (no dataset
-    opened) nothing is drawn.
+    job with no host yet gets no layer, nor one whose server serves another
+    dataset than the one open (``_shown``), and with no viewer yet (no
+    dataset opened) nothing is drawn.
     """
     session = get_session()
     previous_digest = session.pipeline_spec.digest()
@@ -231,9 +238,10 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # The blob every other path gives a layer (Session.layer_blob), so a
     # layer a launch drew over this chain is left as it is.
     st_data = session.layer_blob(dashboard_url)
-    if spec.digest() == previous_digest and _shows(session.viewer, session.jobs, st_data):
+    shown = _shown(session)
+    if spec.digest() == previous_digest and _shows(session.viewer, shown, st_data):
         logger.debug("The viewer already shows this chain; it is left as it is")
-        return [job.model_name for job in session.jobs if job.host]
+        return [job.model_name for job in shown]
 
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
@@ -299,6 +307,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 # Submitted without waiting for a host (wait_for_host=False)
                 # and not up yet: there is no URL to point a layer at.
                 logger.info(f"Skipping layer for {model}: its job has no host yet")
+                continue
+            if not session.on_current_dataset(job):
+                logger.info(f"Skipping layer for {model}: its server serves {job.dataset_path}, not this dataset")
                 continue
             # Without a shader of the user's, one over the chain's range in
             # the colour the layer had, if its shader was dropped above.

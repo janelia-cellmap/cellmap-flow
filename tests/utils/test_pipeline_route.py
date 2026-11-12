@@ -92,6 +92,16 @@ def test_the_old_routes_still_set_the_chain_and_say_they_are_deprecated(call, da
     assert _drawn() == PipelineSpec.from_json_data(chain)
 
 
+def test_apply_draws_no_layer_for_a_model_whose_server_serves_another_dataset(call):
+    """After an Open, a server that has not switched (it could not, or is
+    still at it) serves the dataset open before: Apply drew its prediction
+    of that one over this raw."""
+    session = get_session()
+    session.jobs = session.jobs + [SimpleNamespace(model_name="nuc", host="http://gpu:8001", dataset_path="/data/old.zarr")]
+    assert call("PUT", "/api/pipeline", SUBMITTED)[1]["layers"] == ["mito"]
+    assert "nuc" not in session.viewer.state.layers
+
+
 def test_what_the_user_set_on_a_layer_survives_a_redraw(call):
     """A redraw rebuilds every layer, and neuroglancer showed each as built: a
     model's additive blending and the raw's opacity were back at their

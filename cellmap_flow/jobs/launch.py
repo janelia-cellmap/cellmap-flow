@@ -22,6 +22,7 @@ started.
 import contextlib
 import logging
 import os
+import secrets
 import shlex
 import signal
 import sys
@@ -39,7 +40,8 @@ from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.ready import READY_ENV, ready_path
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
+from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus, log_stem
+from cellmap_flow.serving.restart_token import CONTROL_TOKEN_FILE_ENV, write_token_file
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,24 @@ def _install_env_first(command: str, job_name: str) -> None:
         f"The pixi environment {env!r} for {job_name} is not installed yet. "
         f"Install it first: cellmap_flow envs install {env}"
     ))
+
+
+def _control_token(job_name: str):
+    """``(path, token)``: a new control token for one submission of
+    ``job_name``, written (0600) to a fresh file beside its ready file.
+
+    The server reads it at startup (CONTROL_TOKEN_FILE_ENV names the file in
+    its environment, never on its command line) and asks for it on its
+    control routes, the dataset switch's among them
+    (serving.restart_token). A new one for every submission, like the ready
+    file: the token of a job given up on in one queue opens nothing on the
+    next. A server too old to know the variable ignores it, and cannot
+    switch.
+    """
+    log_dir = Path(SERVER_LOG_DIR)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / f"{log_stem(job_name)}_{secrets.token_hex(4)}.token"
+    return path, write_token_file(path)
 
 
 def starting_jobs() -> list:
@@ -337,6 +357,7 @@ def start_hosts(
             # A server too old to know the variable ignores it, and
             # wait_for_host reads its marker through bpeek instead.
             ready_file = ready_path(SERVER_LOG_DIR, job_name)
+            token_file, token = _control_token(job_name)
             try:
                 job = submit_bsub_job(
                     command,
@@ -344,7 +365,7 @@ def start_hosts(
                     charge_group,
                     job_name=f"{job_name}",
                     walltime=walltime,
-                    env={READY_ENV: str(ready_file)},
+                    env={READY_ENV: str(ready_file), CONTROL_TOKEN_FILE_ENV: str(token_file)},
                 )
             except BsubTimeoutError:
                 # Not a refusal: the job may still appear on this queue, and
@@ -353,8 +374,11 @@ def start_hosts(
             except Exception as e:
                 logger.error(f"Failed to submit bsub job to {candidate}: {e}")
                 submit_errors.append(f"{candidate}: {e}")
+                # Refused: no server will read it.
+                token_file.unlink(missing_ok=True)
                 continue
             job.queue = candidate
+            job.control_token = token
 
             if not wait_for_host:
                 started_jobs().append(job)
@@ -372,7 +396,9 @@ def start_hosts(
     else:
         logger.info("bsub not available, running locally")
 
-    job = run_locally(command, job_name)
+    token_file, token = _control_token(job_name)
+    job = run_locally(command, job_name, env={CONTROL_TOKEN_FILE_ENV: str(token_file)})
+    job.control_token = token
 
     with _while_starting(job):
         if wait_for_host and not job.wait_for_host():

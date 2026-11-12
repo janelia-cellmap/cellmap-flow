@@ -113,13 +113,20 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         # Ctrl+C or SIGTERM from here on kills the job this starts.
         install_cleanup_handlers()
         try:
-            launch(model_config, data_path, queue=queue, charge_group=project, resample=resample)
+            job = launch(model_config, data_path, queue=queue, charge_group=project, resample=resample)
         except JobStartError as e:
             raise click.ClickException(str(e))
         from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
 
+        viewed = resolve_data_path(data_path, getattr(model_config, "scale", None))
+        # The dashboard names the dataset by the level it shows, so the job
+        # is named by it too: a job named otherwise serves another dataset
+        # as far as the dashboard can tell, and gets no layer
+        # (Session.on_current_dataset).
+        if job is not None:
+            job.dataset_path = viewed
         # Serves the dashboard, on the level the model reads; does not return.
-        generate_neuroglancer_url(resolve_data_path(data_path, getattr(model_config, "scale", None)))
+        generate_neuroglancer_url(viewed)
 
     # Add docstring
     command_func.__doc__ = f"""

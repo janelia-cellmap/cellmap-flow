@@ -152,9 +152,10 @@ def _bound_dashboard(monkeypatch, startup):
 
 
 def _carried(chain, dashboard_url=DASHBOARD):
-    """``chain`` as a layer's URL carries it: with the dashboard's address (None: no dashboard bound) and the chain's digest."""
+    """``chain`` as a layer's URL carries it: with the dashboard's address (None: no dashboard bound), the
+    dataset it shows and the chain's digest."""
     address = {"dashboard_url": dashboard_url} if dashboard_url else {}
-    return dict(chain, **address, digest=get_session().pipeline_spec.digest())
+    return dict(chain, **address, data=get_session().dataset_path, digest=get_session().pipeline_spec.digest())
 
 
 def test_the_startup_viewer(servers, monkeypatch):
@@ -222,7 +223,8 @@ def test_submit(submit):
     assert submit([]) == {
         "layers": [("old", "image"), ("data", "image"), ("new", "image"), ("flat", "image"), ("silent", "image")],
         "dimensions": EIGHT_NM,
-        "chain": dict(SUBMITTED, postprocess=[], dashboard_url="http://localhost/", digest="5ba6d02f85d55e92"),
+        "chain": dict(SUBMITTED, postprocess=[], dashboard_url="http://localhost/", data=get_session().dataset_path,
+                      digest="5ba6d02f85d55e92"),
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, "void main() {}", {"brightness": 0.5}),
         "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
         "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID_3D, _unit("blue")),
@@ -235,7 +237,8 @@ def test_submit_shows_a_labelling_chain_as_segmentations(submit):
         "layers": [("old", "segmentation"), ("data", "image"), ("new", "segmentation"), ("flat", "segmentation"),
                    ("silent", "segmentation")],
         "dimensions": EIGHT_NM,
-        "chain": dict(SUBMITTED, postprocess=THRESHOLD, dashboard_url="http://localhost/", digest="724f969450d08854"),
+        "chain": dict(SUBMITTED, postprocess=THRESHOLD, dashboard_url="http://localhost/", data=get_session().dataset_path,
+                      digest="724f969450d08854"),
         "old": ("segmentation", "zarr://http://old:8000/old", OVERLAID, None),
         "new": ("segmentation", "zarr://http://new:8000/new", None, None),
         "flat": ("segmentation", "zarr://http://flat:8000/flat", OVERLAID_3D, None),
@@ -362,9 +365,19 @@ def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
     }
 
 
-def test_the_viewers_set_data_and_the_box_tool_open(servers, dashboard):
+def test_the_viewers_set_data_and_the_box_tool_open(servers, dashboard, monkeypatch):
+    """The running models come back on the dataset opened, here the one
+    they serve already, once set-data's switch in the background is done."""
+    from cellmap_flow.dashboard.services import datasets
+
+    switches, switch_all = [], datasets.switch_all
+    monkeypatch.setattr(datasets, "switch_all", lambda path, viewer: switches.append(switch_all(path, viewer)))
     assert dashboard.post("/api/set-data", json={"dataset_path": servers}).status_code == 200
-    assert _viewer(get_session().viewer) == {"layers": [("data", "image")], "dimensions": EIGHT_NM}
+    for switch in switches:
+        switch.join(10)
+    pinned = _viewer(get_session().viewer, MODELS)
+    assert (pinned["layers"][0], sorted(pinned["layers"][1:]), pinned["dimensions"], pinned["chain"]) == (
+        ("data", "image"), sorted((name, "image") for name in MODELS), EIGHT_NM, _carried(CHAIN, dashboard_url=None))
     drawn = [{"offset": [8, 16, 24], "shape": [80, 40, 40]}]
     assert dashboard.post("/api/bbx-generator", json={"dataset_path": servers, "existing_bounding_boxes": drawn}
                           ).status_code == 200
