@@ -7,9 +7,11 @@
 - ``deprecated``: a command under the name it had before 0.3.0, which says
   what replaces it and then runs it.
 - ``resample_option``: ``--resample``, of ``infer <type>`` and ``serve``.
+- ``dataset_path``: the dataset a person gave as ``-d``, checked.
 """
 
 import logging
+import os
 
 import click
 
@@ -64,6 +66,29 @@ def resample_option():
         "resample a level to it, axis by axis (the default), or, with --no-resample, "
         "read the nearest level as if it were at that size.",
     )
+
+
+def dataset_path(text: str) -> str:
+    """The dataset ``text``, given as ``-d`` to ``view``, ``infer <type>`` or
+    ``add --run``, as cellmap-flow reads it (``portable.pasted.pasted_path``:
+    a path copied from Neuroglancer without the format it names).
+
+    A local path that is not there is a usage error that says so, before
+    anything starts: otherwise it surfaces as worldarray's list of the
+    metadata files it did not find, at the bottom of a traceback, which reads
+    as if the data were there but malformed. A URL is left to the reader.
+    """
+    from cellmap_flow.io.paths import normalize_path
+    from cellmap_flow.portable.pasted import pasted_path
+
+    path = pasted_path(text)
+    if "://" not in path and not os.path.exists(normalize_path(path)):
+        raise click.BadParameter(
+            f"{path} does not exist. Give a zarr or N5 directory, or an http(s), s3 or gs URL "
+            "(https://janelia-cellmap.github.io/cellmap-flow/data_paths.html).",
+            param_hint="'-d'",
+        )
+    return path
 
 
 class ModelTypeGroup(click.Group):

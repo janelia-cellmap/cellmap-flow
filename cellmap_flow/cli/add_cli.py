@@ -11,7 +11,7 @@ as fast as the group's.
 
 import click
 
-from cellmap_flow.cli.common import resample_option
+from cellmap_flow.cli.common import dataset_path, resample_option
 
 
 def entry_yaml(resolved) -> str:
@@ -73,6 +73,10 @@ def add(ref, name, voxel_size, offline, run_now, data_path, queue, project, resa
 
     if run_now and not data_path:
         raise click.UsageError("--run needs --data-path (-d), the dataset to serve the model on")
+    if run_now:
+        # A path copied from Neuroglancer is read without the format it names,
+        # and one that is not there stops here, before REF is looked up.
+        data_path = dataset_path(data_path)
     try:
         resolved = resolve(ref, name=name, voxel_size=voxel_size, online=not offline)
     except ValueError as e:
@@ -90,7 +94,6 @@ def _run(resolved, data_path, queue, project, resample):
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.spec import JobStartError
     from cellmap_flow.models.registry import build_model
-    from cellmap_flow.portable.pasted import pasted_path
     from cellmap_flow.serving.launch import remembered
 
     if resolved.needs:
@@ -111,7 +114,6 @@ def _run(resolved, data_path, queue, project, resample):
     session.resample = resample
     install_cleanup_handlers()
     try:
-        # A path copied from Neuroglancer is read without the format it names.
-        run_multiple([model], pasted_path(data_path), project, queue, resample=resample)
+        run_multiple([model], data_path, project, queue, resample=resample)
     except JobStartError as e:
         raise click.ClickException(str(e))
