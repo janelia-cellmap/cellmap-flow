@@ -1,0 +1,105 @@
+cellmap_flow.finetune.rank
+==========================
+
+.. py:module:: cellmap_flow.finetune.rank
+
+.. autoapi-nested-parse::
+
+   The rank score lives in cellmap_flow.portable.rank, the Python both modes
+   run; this module keeps the import path the finetune package had for it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.rank.CUTOFFS
+   cellmap_flow.finetune.rank.NARROW_WINDOW
+   cellmap_flow.finetune.rank.RANK_BLOCKS
+   cellmap_flow.finetune.rank.RANK_SMOOTHING
+   cellmap_flow.finetune.rank.WINDOW_MARGIN
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.rank.empty_tallies
+   cellmap_flow.finetune.rank.paint_edges
+   cellmap_flow.finetune.rank.rank_score
+   cellmap_flow.finetune.rank.spread
+   cellmap_flow.finetune.rank.tally
+   cellmap_flow.finetune.rank.windowed
+
+
+Module Contents
+---------------
+
+.. py:data:: CUTOFFS
+
+.. py:data:: NARROW_WINDOW
+   :value: 0.25
+
+
+.. py:data:: RANK_BLOCKS
+   :value: 32
+
+
+.. py:data:: RANK_SMOOTHING
+   :value: 0.1
+
+
+.. py:data:: WINDOW_MARGIN
+   :value: 0.03
+
+
+.. py:function:: empty_tallies(channels: int) -> List[dict]
+
+   One channel's agreement with the paint per channel: the targets
+   counted, their logits binned against CUTOFFS (bin b: above b of them),
+   and the loss summed, apart for object and background targets.
+
+
+.. py:function:: paint_edges(labels: numpy.ndarray) -> numpy.ndarray
+
+   The painted voxels of ``labels`` (z, y, x; 0 unpainted, 1 background,
+   2 and up objects) that touch a painted voxel of the other class along z,
+   y or x: the strokes' edges, which a binary model's score leaves out.
+
+
+.. py:function:: rank_score(tallies: List[dict], channels: Sequence[str], affinity: bool) -> Optional[dict]
+
+   The score of ``tallies``: an affinity model's over its channels
+   together (``channel`` and ``channel_index`` None), a binary model's best
+   channel's (by the score, then the lower loss), ``channel`` its name in
+   ``channels`` ("channel <i>" past them) and ``channel_index`` its index,
+   as select_channel takes it; with ``channel_matches``, every channel's
+   ``{channel, channel_index, matches}``, the best first, which says why
+   that one (organelle close behind mito, say). None when nothing was
+   counted.
+
+
+.. py:function:: spread(items: Sequence, count: int) -> list
+
+   ``count`` of ``items``, spread evenly over them in their order; all of them when there are no more.
+
+
+.. py:function:: tally(tallies: List[dict], target: numpy.ndarray, mask: numpy.ndarray, logits: numpy.ndarray, skip: Optional[numpy.ndarray] = None) -> None
+
+   Add one painted block to ``tallies``: ``target`` and ``mask`` (C, z, y, x)
+   as the finetune's target transform makes them, ``logits`` the model's on
+   the same voxels (NaN where it was not read), and ``skip`` (z, y, x) the
+   voxels not to count (paint_edges), or None.
+
+
+.. py:function:: windowed(norm: Sequence[dict], lo: float, hi: float) -> Optional[List[dict]]
+
+   ``norm`` (normalizer specs, ``{"name": ..., ...}``) with its
+   MinMaxNormalizer set to the raw's window [lo, hi], or None: no
+   MinMaxNormalizer, no window (lo = hi), or one not narrower than
+   NARROW_WINDOW of the normalizer's own range.
+
+

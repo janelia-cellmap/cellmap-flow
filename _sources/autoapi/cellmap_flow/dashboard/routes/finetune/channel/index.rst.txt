@@ -1,0 +1,59 @@
+cellmap_flow.dashboard.routes.finetune.channel
+==============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.channel
+
+.. autoapi-nested-parse::
+
+   The channel of a model of several that the viewer shows, in server mode:
+   the browser's route (web/src/backend/routes/), answered by the dashboard,
+   so the Finetune tab's pick (Use this model, the training form's Channel)
+   shows the same in both.
+
+   POST /api/finetune/channel {model_name, select_channel} records the channel
+   (an index into the model's output channels, as select_channel takes it, or
+   null to forget the pick) as the one to show of that model
+   (Session.shown_channels), and moves the model's layer to it, and its
+   running finetunes' that follow its pick, if the viewer has them: the paint
+   and the training are for that channel (fly_organelles' mito, not all_mem,
+   the first of its eight). Every layer built for the model after (a redraw,
+   a start, viewer.layers prediction_layer), and for a finetune of it unless
+   one was picked for that (Session.shown_channel), opens on it. A model with
+   no channel axis, or under a chain that changes the number of its channels,
+   shows no pick (viewer.layers display_channel refuses it). Forgetting the
+   pick leaves the layer where it is, where the user may have moved it since.
+   Answers ``{success, shown}``, ``shown`` whether a layer was moved.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.channel.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.channel.show_channel
+   cellmap_flow.dashboard.routes.finetune.channel.channel_refusal
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: show_channel()
+
+.. py:function:: channel_refusal(channel)
+
+   The 400 for a ``select_channel`` that is neither a channel's index (0
+   and up) nor None, or None for one that is: this route's, and Use this
+   model's (rank_routes), which records it before the model starts.
+
+

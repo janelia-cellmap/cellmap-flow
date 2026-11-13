@@ -1,0 +1,45 @@
+cellmap_flow.portable.targets_calls
+===================================
+
+.. py:module:: cellmap_flow.portable.targets_calls
+
+.. autoapi-nested-parse::
+
+   What the browser calls for training targets: the function
+   ``web/src/finetune/target-call.ts`` runs through chunkmirage's
+   ``Engine.call("cellmap_flow.portable.targets_calls:targets", args, arrays)``
+   (``calls.py`` says the shape). It decodes the chunk's labels, calls the maths
+   in ``targets.py`` and encodes the answer; the maths is not here.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.targets_calls.targets
+
+
+Module Contents
+---------------
+
+.. py:function:: targets(args, arrays)
+
+   A painted chunk's target and mask (``targets.binary``, or
+   ``targets.affinity`` for an affinity model). ``args``: ``shape``
+   (z, y, x), ``labels_dtype``, ``channels`` (the model's output channels),
+   and either ``offsets`` (null for a binary model, else one [dz, dy, dx]
+   or null per channel from the first, as a caller that knows them gives
+   them) or ``channel_names``, from which the server's rule decides
+   (``label_it.affinity_offsets``: a model with a ``*_aff*`` channel is an
+   affinity model, its first affinity channels along z, y and x), so the
+   browser, which has only its manifest's names, trains on what the server
+   would. ``select_channel`` (absent or null for every channel) is the one
+   channel of a binary model the paint is for: its target alone, one
+   channel, as the server's cli makes it for ``--select-channel`` (refused,
+   as there, for an affinity model, each of whose channels has a target of
+   its own). ``arrays``: the chunk's labels (z, y, x). Answers the channels
+   with the target and the mask, each float32 (channels, z, y, x).
+
+

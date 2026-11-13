@@ -1,0 +1,55 @@
+cellmap_flow.cli.add_cli
+========================
+
+.. py:module:: cellmap_flow.cli.add_cli
+
+.. autoapi-nested-parse::
+
+   ``cellmap_flow add REF``: the model entry for a path, URL, repo or model name.
+
+   ``models.resolve`` says what REF is; this prints its entry as YAML, ready to
+   paste under a config's ``models:``, with what it was taken to be, where it
+   runs and what it still needs as comments. ``--run -d DATA`` serves it right
+   away, as ``cellmap_flow yaml`` serves a config's models.
+
+   Everything past click is imported when the command runs, so ``--help`` is
+   as fast as the group's.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.add_cli.entry_yaml
+   cellmap_flow.cli.add_cli.add
+
+
+Module Contents
+---------------
+
+.. py:function:: entry_yaml(resolved) -> str
+
+   ``resolved``'s entry as a ``models:`` mapping, after comments saying what it is.
+
+   Its lines under ``models:`` are indented as they go in a config, so they
+   paste under an existing ``models:`` as they are.
+
+
+.. py:function:: add(ref, name, voxel_size, offline, run_now, data_path, queue, project, resample)
+
+   Print the model entry for REF, as YAML for a config's `models:`.
+
+   REF is what you have: a path (a .py script, a cellmap-models export
+   folder, a fly checkpoint, a bioimage.io rdf.yaml or zip, a LoRA
+   adapter), a Hugging Face repo (org/repo), a BioImage Model Zoo nickname,
+   a URL, or a Cellpose model name. A prefix says outright what it is:
+   hf:, bioimageio:, cellpose:, fly:, dacapo:RUN@ITERATION, script:.
+
+   
+     cellmap_flow add cellmap/fly_organelles_run07_432000
+     cellmap_flow add cpsam -v 16,8,8
+     cellmap_flow add /path/to/run/model_checkpoint_432000 --run -d /path/to/data.zarr
+
+

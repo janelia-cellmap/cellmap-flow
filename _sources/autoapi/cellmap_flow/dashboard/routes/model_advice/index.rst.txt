@@ -1,0 +1,102 @@
+cellmap_flow.dashboard.routes.model_advice
+==========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.model_advice
+
+.. autoapi-nested-parse::
+
+   Advice about a served model's normalization and postprocessing.
+
+   Nothing in cellmap-flow records what a model expects: metadata.json carries
+   geometry and provenance only, and the input/output handling is set by
+   convention plus whatever happens to be toggled in the UI. A wrong choice
+   degrades the result silently rather than erroring, which is a bad failure mode.
+
+   This endpoint combines two sources into a verdict the UI can show:
+
+   * the running server's model info (``/__control__/model_info``), which says
+     what activation the model's output already has: read off its network's
+     graph (the op that ends it), or else observed by its output probe on
+     noise, a guess, and
+   * the model's declared metadata (channel count, name, training framework).
+
+   It never changes anything -- callers decide whether to apply the suggestion.
+   Nor does it undo what the Finetune tab's ranking set: the input
+   normalization the ranking fitted to the paint for a model
+   (Session.rank_fits) counts as matching, not as one to suggest the
+   declared one back over, and an affinity model's chain into a segmentation
+   is offered cut at the threshold it fitted.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_advice.logger
+   cellmap_flow.dashboard.routes.model_advice.model_advice_bp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_advice.model_metadata
+   cellmap_flow.dashboard.routes.model_advice.raw_dtype_and_range
+   cellmap_flow.dashboard.routes.model_advice.input_norm_suggestion
+   cellmap_flow.dashboard.routes.model_advice.model_advice
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: model_advice_bp
+
+.. py:function:: model_metadata(model_config) -> dict
+
+   Best-effort metadata for a model config, from whatever source has it.
+
+
+.. py:function:: raw_dtype_and_range(dataset_path)
+
+   The dtype and value range of the raw data, for scaling it to the model.
+
+   Integer data has an exact range from its dtype. Float data does not -- the
+   dtype permits anything -- so sample percentiles instead, the same way the
+   raw layer's auto-contrast does, on the channel the chain picks. Returns
+   (dtype_name, (lo, hi)); either part may be None when it could not be
+   determined.
+
+
+.. py:function:: input_norm_suggestion(model_config, meta, raw_dtype, raw_range)
+
+   What ``model_config``'s input normalization should be on raw data of
+   ``raw_dtype`` spanning ``raw_range``: suggest_input_norm's suggestion,
+   and the declaration it holds the chain to (_declared_input_norm), or
+   None when the model declares none. ``meta`` is model_metadata's for it
+   ({} for a job whose model is not among the session's).
+
+   The page shows the suggestion, and a model's start sets it on a chain
+   with no input normalization when it is the model's declaration or the
+   convention for its kind of model (routes.pipeline.set_declared_input_norm).
+
+
+.. py:function:: model_advice()
+
+   Per-model verdicts on the currently configured input/output handling.
+
+   ``{"success": true, "models": [...], "starting", "digest"}``: an entry
+   per served model; ``starting``, whether a model's start is still on its
+   way (services/launch.py launching: its job may be listed already while
+   its start is still to set the chain's postprocessing,
+   routes.pipeline.set_needed_postprocess), and ``digest``, the chain's
+   (PipelineSpec.digest). The page asks again while ``starting``, and reads
+   the chain again when the digest moves: a model's start sets the
+   postprocessing its output needs once its server answers, after the
+   Submit that started it.
+
+

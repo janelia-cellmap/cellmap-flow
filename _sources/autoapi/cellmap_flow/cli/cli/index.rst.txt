@@ -1,0 +1,15 @@
+cellmap_flow.cli.cli
+====================
+
+.. py:module:: cellmap_flow.cli.cli
+
+.. autoapi-nested-parse::
+
+   Where the ``cellmap_flow`` console script pointed before 0.3.0.
+
+   An environment installed before then still runs ``cellmap_flow`` through
+   this name until it is reinstalled; since 0.3.0 the command is
+   ``cli/main.py``. Delete in the release after 0.3.0.
+
+
+

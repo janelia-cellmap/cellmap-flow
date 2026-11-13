@@ -1,0 +1,15 @@
+cellmap_flow.utils.bsub_utils
+=============================
+
+.. py:module:: cellmap_flow.utils.bsub_utils
+
+.. autoapi-nested-parse::
+
+   Deprecated: launching jobs is ``cellmap_flow.jobs.launch``.
+
+   Kept only for ``install_cleanup_handlers``, which the docs' script example
+   (docs/source/scripts.rst) imported from here; it warns, and goes in the
+   release after 0.3.0.
+
+
+

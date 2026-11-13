@@ -1,0 +1,161 @@
+cellmap_flow.models.entry
+=========================
+
+.. py:module:: cellmap_flow.models.entry
+
+.. autoapi-nested-parse::
+
+   A model entry, and how its values become constructor arguments.
+
+   A model entry is ``{"type": <type name>, "name": ..., "env": ...,
+   **arguments}``: the one shape every description of a model takes. A YAML's
+   ``models:`` holds them; ``cellmap_flow infer <type>`` makes one of its
+   options; the dashboard's model form posts one; the Models tab's catalog,
+   Hugging Face, zoo and Cellpose pickers build one; ``models.resolve`` returns
+   one for a pasted reference; ``ModelConfig.to_dict()`` writes one back; and
+   ``cellmap_flow serve --model`` takes one. ``registry.build_model`` builds the
+   config from it, and ``coerce`` here is how the entry's values become the
+   constructor's arguments.
+
+   The values arrive as whatever their source has: numbers and lists from a
+   YAML or JSON, strings from the command line and the form. ``coerce`` reads
+   each constructor argument's annotation and makes the value fit it, so the
+   same entry gives the same config wherever it came from:
+
+   - ``int``, ``float``, ``bool``, ``str``: that type. A string is parsed ("8"
+     is 8, "5.24" is 5.24, "true" is True); a whole float is an int.
+   - ``tuple`` or ``list``, with or without an element type (``tuple[int, ...]``,
+     ``list[str]``): a sequence. A string is a JSON list or comma-separated
+     values ("8,8,8", "(16, 8, 8)", "mito, er"), and one number is a one-item
+     sequence. Each item takes the element type when the annotation gives one;
+     without one, an item that reads as a number is a number and the rest stay
+     strings.
+   - ``dict``: a JSON object from a string. A string that is not JSON is left as
+     it is, for the constructor (a finetune's base64 ``base_model``, the form
+     launchers used before 0.3.0).
+   - no annotation: the value as given.
+
+   None, a blank string (an empty form field) and an empty list are left out,
+   so the constructor's default applies, and names the constructor does not take are
+   dropped: an entry ``to_dict()`` wrote may carry more than the constructor
+   takes (a finetuned model's channels, for display).
+
+   The helpers after ``coerce`` are what the constructors normalize their
+   arguments with, whichever way they were called: through ``build_model``, or
+   from Python with a number, a tuple or a Coordinate. They parse text through
+   the same ``split``, so a string reaches the same value by either route.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.entry.number
+   cellmap_flow.models.entry.split
+   cellmap_flow.models.entry.coerce_value
+   cellmap_flow.models.entry.blank
+   cellmap_flow.models.entry.coerce
+   cellmap_flow.models.entry.numbers
+   cellmap_flow.models.entry.voxel_size
+   cellmap_flow.models.entry.sizes
+   cellmap_flow.models.entry.per_axis
+   cellmap_flow.models.entry.as_given
+   cellmap_flow.models.entry.names
+
+
+Module Contents
+---------------
+
+.. py:function:: number(value)
+
+   ``value`` as an int when it is whole, else as a float.
+
+   ``int()`` truncated a 5.24 nm voxel size to 5, which put crops and
+   layers on the wrong grid.
+
+
+.. py:function:: split(text: str) -> list
+
+   The items of a sequence written as text.
+
+   A JSON list is read as JSON, so its items keep their types. Otherwise
+   the text, less brackets or parentheses around it, is split on commas
+   ("8,8,8", "(16, 8, 8)", "mito, er"), or on commas and spaces when every
+   piece is a number ("8 8 8", as a voxel size is typed), into strings.
+
+
+.. py:function:: coerce_value(value, annotation)
+
+   ``value`` as a constructor argument annotated ``annotation`` (see the module docstring).
+
+   :raises ValueError: ``value`` cannot be read as what the annotation asks for.
+
+
+.. py:function:: blank(value) -> bool
+
+   Whether ``value`` says nothing: None, a blank string (an empty form
+   field) or an empty list or tuple.
+
+
+.. py:function:: coerce(cls, params: dict) -> dict
+
+   ``params``, a model entry's arguments, as ``cls``'s constructor takes them.
+
+   Each value is coerced by its argument's annotation (``coerce_value``);
+   None and blank strings are left out, and names the constructor does not
+   take are dropped, unless it takes ``**kwargs``.
+
+   :raises ValueError: a value cannot be read as its annotation asks; the
+       message starts with the argument's name.
+
+
+.. py:function:: numbers(value, what: str = 'values') -> list
+
+   ``value`` as a list of numbers, ints kept ints and 5.24 kept 5.24: from
+   one number, a sequence of them, or text ("8", "16,8,8", "(16, 8, 8)").
+
+   :raises ValueError: something in it is not a number; the message names ``what``.
+
+
+.. py:function:: voxel_size(value, what: str = 'voxel_size')
+
+   A voxel size, nm per voxel along z, y and x, as a tuple of three
+   numbers: from one number (every axis's), a sequence of three, or text;
+   ints kept ints (``int()`` made a 5.24 nm voxel 5). None stays None.
+
+   :raises ValueError: not numbers, not one or three of them, or not positive;
+       the message names ``what``.
+
+
+.. py:function:: sizes(value, *, min=0, lengths=None, what: str = 'sizes')
+
+   None, or ``value`` (one number, "148", "20,256,256" or a sequence) as a tuple of whole numbers.
+
+   One number stays one (``per_axis`` widens it), so that ``as_given``
+   writes it back as it was given. Each must be at least ``min``, and when
+   ``lengths`` is given, their count must be one of them.
+
+   :raises ValueError: not numbers, too few or too many, or too small; the
+       message names ``what``.
+
+
+.. py:function:: per_axis(counts, n: int, what: str)
+
+   ``counts`` (``sizes``'s) for each of ``n`` axes: one number is every axis's; None stays None.
+
+   :raises ValueError: neither one number nor ``n``.
+
+
+.. py:function:: as_given(counts)
+
+   ``counts`` (``sizes``'s) as a model entry writes them: one number as itself, more as a list.
+
+
+.. py:function:: names(value)
+
+   None, or channel names as a list of strings, from a sequence or the
+   "mito, er" the command line and the model form send.
+
+

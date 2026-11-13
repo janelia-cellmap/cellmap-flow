@@ -1,0 +1,16 @@
+cellmap_flow.models.model_registry
+==================================
+
+.. py:module:: cellmap_flow.models.model_registry
+
+.. autoapi-nested-parse::
+
+   Deprecated: the Hugging Face listing is ``cellmap_flow.models.hf_catalog``.
+
+   Kept only for ``list_huggingface_models`` and ``refresh_huggingface_models``,
+   which docs/source/huggingface.rst imported from here; they warn, and go in
+   the release after 0.3.0. The model form's helpers are
+   ``cellmap_flow.models.registry``'s.
+
+
+

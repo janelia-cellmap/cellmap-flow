@@ -1,0 +1,114 @@
+cellmap_flow.logging_setup
+==========================
+
+.. py:module:: cellmap_flow.logging_setup
+
+.. autoapi-nested-parse::
+
+   One logging format, actually applied.
+
+   ``logging.basicConfig`` does nothing once the root logger has a handler, and
+   ``cellmap_flow.globals`` configures it at import time -- and nearly
+   everything used to import that early. So every later ``basicConfig`` call in
+   a CLI was a silent no-op: ``yaml_cli`` has been asking for a timestamped format for a
+   while, and the output has always come out as the bare default::
+
+       INFO:cellmap_flow.cli.yaml_cli:Loading configuration from: ...
+
+   with no time on it, which is no help at all when the question is which step
+   took four minutes. ``finetune_cli`` is the one place that passed
+   ``force=True``, which is why training logs have timestamps and nothing else
+   does.
+
+   Anything that wants to set the format has to pass ``force=True``, and should
+   use the same format while doing it.
+
+   On a terminal the same lines are colored (``ConsoleFormatter``): the time
+   and logger dimmed, the level by its severity, so the message is what the
+   eye lands on and a warning stands out from the forty lines around it. A
+   job's log file, a pipe or a test's capture gets the plain format: the
+   escape codes would only litter them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.logging_setup.LOG_FORMAT
+   cellmap_flow.logging_setup.LOG_DATEFMT
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.logging_setup.ConsoleFormatter
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.logging_setup.wants_color
+   cellmap_flow.logging_setup.configure_logging
+
+
+Module Contents
+---------------
+
+.. py:data:: LOG_FORMAT
+   :value: '%(asctime)s %(levelname)s %(name)s: %(message)s'
+
+
+.. py:data:: LOG_DATEFMT
+   :value: '%Y-%m-%d %H:%M:%S'
+
+
+.. py:function:: wants_color(stream) -> bool
+
+   Whether what goes to ``stream`` should be colored: it is a terminal,
+   and neither NO_COLOR (no-color.org) nor TERM=dumb says otherwise.
+
+
+.. py:class:: ConsoleFormatter(fmt=None, datefmt=None, style='%', validate=True, *, defaults=None)
+
+
+
+   LOG_FORMAT, colored for a terminal.
+
+   The time and the logger's name are dimmed, the level is colored by its
+   severity and padded so the messages line up, and a warning's or error's
+   message takes the level's color too. A URL in a message is bold,
+   underlined and cyan: the dashboard's address and the inference servers'
+   are what the startup log is read for. The ``cellmap_flow.`` prefix is
+   dropped from logger names: every line had it, so it said nothing.
+
+
+   .. py:method:: format(record)
+
+      Format the specified record as text.
+
+      The record's attribute dictionary is used as the operand to a
+      string formatting operation which yields the returned string.
+      Before formatting the dictionary, a couple of preparatory steps
+      are carried out. The message attribute of the record is computed
+      using LogRecord.getMessage(). If the formatting string uses the
+      time (as determined by a call to usesTime(), formatTime() is
+      called to format the event time. If there is exception information,
+      it is formatted using formatException() and appended to the message.
+
+
+
+.. py:function:: configure_logging(level=logging.INFO)
+
+   Install the shared timestamped format, replacing any earlier config;
+   colored when the handler writes to a terminal.
+
+   ``force=True`` is the point: without it this is a no-op in every process
+   that has already imported ``cellmap_flow.globals``.
+
+

@@ -1,0 +1,72 @@
+cellmap_flow.dashboard.routes.finetune
+======================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune
+
+.. autoapi-nested-parse::
+
+   The finetune tab's routes, and the viewer-layer routes scripts use.
+
+   Importing the package puts every route on ``finetune_bp``, which
+   dashboard.app registers. Each module has its own:
+
+   - ``training``: submit, restart, the job list, a job's status and log (and
+     its live stream), cancel and stop-early;
+   - ``annotation_core``: the models to annotate for, a new annotation volume,
+     and the user's saved settings;
+   - ``annotation_sessions``: listing earlier sessions and resuming one;
+   - ``yaml_crops``: importing crops from a YAML, and reading a YAML file;
+   - ``overlay``: an annotation volume's layer, the annotated-regions boxes,
+     and syncing the annotations from MinIO;
+   - ``good_regions``: marking the current view as a region the model gets right;
+   - ``rank_routes``: which model to start from: the models ranked by how well
+     each already matches the paint, and the paint carried to the one picked;
+   - ``channel``: the channel of a model of several that its layer shows;
+   - ``view_labels``: labelling the view from the model's prediction, or all
+     background;
+   - ``ai_annotate``: a hosted model's first guess at one plane, staged for
+     the user to accept or reject;
+   - ``instance_correction``: instance-correction volumes;
+   - ``layers``: adding, removing and renaming viewer layers;
+   - ``publish``: signing in to Hugging Face, and publishing a model a job
+     finetuned there, under the user's own account.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/dashboard/routes/finetune/ai_annotate/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_core/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_sessions/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/blueprint/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/channel/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/common/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/good_regions/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/instance_correction/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/layers/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/publish/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/rank_routes/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/restart_key/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/training/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/view_labels/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/yaml_crops/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.finetune_bp
+
+
+Package Contents
+----------------
+
+.. py:data:: finetune_bp
+

@@ -1,0 +1,51 @@
+cellmap_flow.dashboard.progress
+===============================
+
+.. py:module:: cellmap_flow.dashboard.progress
+
+.. autoapi-nested-parse::
+
+   How far a long request has got, for the page to poll while it waits.
+
+   Importing crops from a YAML and resuming a session each take one request
+   that can run for minutes. The page sends a ``load_id`` with it and polls a
+   progress route with the same id meanwhile; the request records each step
+   under that id as it goes.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.progress.Progress
+
+
+Module Contents
+---------------
+
+.. py:class:: Progress(ttl_seconds=300)
+
+   The latest progress of each request in flight, by its ``load_id``.
+
+   A request's entry is a dict of what it last reported (its ``phase``,
+   ``done`` and whatever counts it keeps), plus ``created_at`` and
+   ``updated_at`` in epoch seconds. An entry not updated for
+   ``ttl_seconds`` is dropped, so the entries of loads nobody polls any
+   more do not pile up. Request threads update and read it concurrently.
+
+
+   .. py:method:: update(load_id, **fields)
+
+      Merge ``fields`` into ``load_id``'s entry; without an id, nothing.
+
+
+
+   .. py:method:: response(load_id)
+
+      A progress route's answer: ``{"success": True, "progress": <entry>}``;
+      a 400 without a ``load_id``, and a 404 for one it has no entry for.
+
+
+

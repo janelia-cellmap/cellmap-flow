@@ -1,0 +1,67 @@
+cellmap_flow.utils.address
+==========================
+
+.. py:module:: cellmap_flow.utils.address
+
+.. autoapi-nested-parse::
+
+   This machine's address, as the links handed to browsers give it, and a
+   port a server here can bind.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.address.logger
+   cellmap_flow.utils.address.SELF_CONNECT_TIMEOUT
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.address.get_free_port
+   cellmap_flow.utils.address.this_machine_ip
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: SELF_CONNECT_TIMEOUT
+   :value: 1.0
+
+
+.. py:function:: get_free_port()
+
+   A TCP port free on this machine now, for a server to bind.
+
+   The port is free when this returns, not reserved: a caller that needs to
+   know the port before its server binds it (the finetune loop, which waits
+   on the port while the server starts in a thread) takes that small race.
+   A server that can report its port once bound should bind port 0 instead.
+
+
+.. py:function:: this_machine_ip()
+
+   This machine's address on its network (10.x.x.x, say): the interface a
+   connection out would use. 127.0.0.1 if there is none, or if this machine
+   cannot reach itself there.
+
+   The links a browser is given -- the dashboard's, its viewers', the
+   inference servers' and MinIO's -- name the machine by this address, not
+   by its hostname. A hostname can point somewhere else: a laptop off campus
+   keeps the name DNS registered for its campus address, and a link by name
+   then led to an address it no longer held.
+
+   Nor does the address always work from the machine itself. Off campus over
+   the VPN, a Mac could not connect to its own tunnel address, curl no more
+   than the browser, while localhost answered. Where there is no cluster the
+   browser is on this machine, so 127.0.0.1 is the address that works.
+
+

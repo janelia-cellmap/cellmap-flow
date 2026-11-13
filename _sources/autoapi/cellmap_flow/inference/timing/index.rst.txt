@@ -1,0 +1,52 @@
+cellmap_flow.inference.timing
+=============================
+
+.. py:module:: cellmap_flow.inference.timing
+
+.. autoapi-nested-parse::
+
+   Where a served chunk's time goes.
+
+   The server starts a record when a chunk request arrives (``start``), the
+   stages it passes through add their time to it (``stage``, ``add``), and the
+   server logs it when the chunk is sent (``finish``). The record is per thread,
+   and the server answers each request on its own thread, so concurrent chunks
+   keep separate records. Outside a request (blockwise, scripts, tests) no
+   record is started, and ``stage`` and ``add`` do nothing.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.inference.timing.start
+   cellmap_flow.inference.timing.add
+   cellmap_flow.inference.timing.stage
+   cellmap_flow.inference.timing.finish
+
+
+Module Contents
+---------------
+
+.. py:function:: start()
+
+   Begin a record for the chunk this thread is serving.
+
+
+.. py:function:: add(name, seconds)
+
+   Add ``seconds`` to stage ``name`` of this thread's record, if one is started.
+
+
+.. py:function:: stage(name)
+
+   Time the block as stage ``name`` of this thread's record.
+
+
+.. py:function:: finish()
+
+   This thread's record, ``{stage: seconds}`` in the order first timed; ends it.
+
+

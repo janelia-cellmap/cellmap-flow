@@ -1,0 +1,170 @@
+cellmap_flow.models.configs.finetune
+====================================
+
+.. py:module:: cellmap_flow.models.configs.finetune
+
+.. autoapi-nested-parse::
+
+   ``FinetuneModelConfig``: a base model with a finetune's weights on top.
+
+   The weights are a LoRA adapter or, from a full finetune, a whole state
+   dict. Either is loaded onto the module the trainer trained
+   (``finetune.model_loading.load_trainable_model``), and the served model
+   keeps the base model's geometry, at the voxel sizes the finetune was
+   trained at when those differ (``models.geometry.trained_at_geometry``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.finetune.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.finetune.FinetuneModelConfig
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None, input_voxel_size: tuple = None, output_voxel_size: tuple = None)
+
+
+
+   Configuration class for a finetuned model.
+
+   Wraps any base ModelConfig with the finetune's weights, which are
+   exactly one of: a LoRA adapter (``lora_adapter_path``), applied with
+   PEFT, or a full finetune's state dict (``weights_path``, from a run
+   with ``--lora-r 0``), loaded strictly. The base model is built by its
+   own ModelConfig, as the trainable module the trainer trained, and the
+   weights go on top of it.
+
+
+   .. py:attribute:: cli_name
+      :value: 'finetune'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: lora_adapter_path
+      :value: None
+
+
+
+   .. py:attribute:: weights_path
+      :value: None
+
+
+
+   .. py:attribute:: base_model_dict
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: input_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: output_voxel_size
+      :value: None
+
+
+
+   .. py:property:: env
+
+      the
+      weights go on the base model, so they need the base's packages.
+
+      :type: Its own ``env`` if it was given one, else its base model's
+
+
+   .. py:property:: default_env
+
+      The base model type's ``default_env``, as the weights need the base
+      model's packages. A type that decides per model decides for the base.
+
+
+   .. py:property:: base_model_config
+
+      Lazily build the base ModelConfig from the stored dict.
+
+
+   .. py:property:: display_channel
+
+      a finetune serves the same channels.
+
+      :type: Its base's
+
+
+   .. py:property:: normalizes_input
+
+      a finetune serves through the same preprocessing.
+
+      :type: Its base's
+
+
+   .. py:method:: finetune_modes()
+
+      Its base's: continuing a finetune trains the same network.
+
+
+
+   .. py:method:: declared_geometry()
+
+      Its base's, at the voxel sizes the finetune was trained at
+      (``trained_at_geometry``); None when the base declares none.
+
+
+
+   .. py:method:: output_graph()
+
+      Its base's: a finetune's weights (an adapter beside each layer, or
+      the whole network's) change what its layers compute, not the op that
+      ends it, and the module it serves (PEFT's, around the base's
+      trainable module) is not one a torch.fx trace reads.
+
+
+
+   .. py:method:: trainable_model()
+
+      The module it serves (its base's trainable module with the adapter
+      or weights on), to train on from where the finetune left off; not
+      ``config.model``, which a type serving through its own process_chunk
+      (cellpose) keeps as its own model object.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+      Surfaces key base model fields at the top level so the pipeline
+      builder UI can display them alongside the finetune-specific fields.
+
+
+

@@ -1,0 +1,317 @@
+cellmap_flow.finetune.session.volume
+====================================
+
+.. py:module:: cellmap_flow.finetune.session.volume
+
+.. autoapi-nested-parse::
+
+   Annotation volumes: planning, creating, reading and writing crops into them.
+
+   An annotation volume is a zarr v2 group ``<id>.zarr`` whose
+   ``annotation/s0`` holds the labels: 0 unannotated, 1 background, 2 and up
+   foreground (instance ids, for instance corrections). It covers the whole raw
+   dataset on the grid predictions are made on, with one chunk per model output,
+   so each chunk is one training sample. Only painted or imported chunks exist
+   on disk. MinIO and neuroglancer write chunks straight into it, so its layout
+   -- uint8 unless the labels are instance ids, "." separated chunk keys, Blosc
+   zstd level 3 (``ANNOTATION_CODEC``) -- and its root attrs are a format.
+   worldarray writes it and reads it back, as zarr v2; the root attrs are read
+   and set with ``read_root_attrs`` and ``update_root_attrs``.
+
+   The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
+   OME translation, since that is where Neuroglancer draws voxel 0 while it is
+   painted; ``volume_corner_nm`` gives the corner.
+
+   Where a new volume lies (``plan_volume``; ``plan_paint_volume`` for one
+   painted before any model, on the raw's grid) is planned by
+   ``cellmap_flow.portable.volume`` on the numbers read here, as the browser
+   plans one on its own reads; this module reads and writes the zarrs.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.logger
+   cellmap_flow.finetune.session.volume.ANNOTATION_CODEC
+   cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.NotAnAnnotationVolume
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.VolumeGeometry
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.new_volume_id
+   cellmap_flow.finetune.session.volume.raw_level
+   cellmap_flow.finetune.session.volume.plan_volume
+   cellmap_flow.finetune.session.volume.raw_voxel_sizes
+   cellmap_flow.finetune.session.volume.plan_paint_volume
+   cellmap_flow.finetune.session.volume.create_volume_zarr
+   cellmap_flow.finetune.session.volume.read_root_attrs
+   cellmap_flow.finetune.session.volume.open_labels
+   cellmap_flow.finetune.session.volume.update_root_attrs
+   cellmap_flow.finetune.session.volume.read_volume
+   cellmap_flow.finetune.session.volume.build_manifest
+   cellmap_flow.finetune.session.volume.majority_vote_downsample
+   cellmap_flow.finetune.session.volume.write_crop_into_volume
+   cellmap_flow.finetune.session.volume.carry_paint
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: ANNOTATION_CODEC
+
+.. py:data:: GEOMETRY_ATTRS
+
+.. py:exception:: NotAnAnnotationVolume
+
+
+
+   ``read_volume`` was given a zarr whose root ``type`` is not annotation_volume.
+
+
+.. py:class:: VolumeGeometry
+
+   Where a volume lies and what model it is for; see ``plan_volume``.
+
+   Sequences become tuples of the numbers given, ints kept ints, since the
+   root attrs are written from them as they are. ``resample``: the raw is
+   read resampled to the model's voxel sizes (see ``plan_volume``).
+
+
+   .. py:attribute:: output_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: input_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: claimed_output_voxel_size
+      :type:  Optional[tuple]
+
+
+   .. py:attribute:: claimed_input_voxel_size
+      :type:  Optional[tuple]
+
+
+   .. py:attribute:: chunk_size
+      :type:  tuple
+
+
+   .. py:attribute:: input_size
+      :type:  tuple
+
+
+   .. py:attribute:: dataset_offset_nm
+      :type:  tuple
+
+
+   .. py:attribute:: dataset_shape_voxels
+      :type:  tuple
+
+
+   .. py:attribute:: resample
+      :type:  bool
+      :value: False
+
+
+
+   .. py:method:: record(zarr_path, *, dataset_path, model_name, corrections_dir) -> dict
+
+      The registry record of a volume at ``zarr_path`` with this geometry.
+
+
+
+.. py:function:: new_volume_id() -> str
+
+   ``vol-<8 hex>-<YYYYmmdd-HHMMSS>``; the volume's zarr and bucket key are ``<id>.zarr``.
+
+
+.. py:function:: raw_level(raw_dataset_path: str, input_voxel_size, resample: bool = False) -> dict
+
+   The raw level a model at ``input_voxel_size`` reads, as the numbers
+   ``cellmap_flow.portable.volume.plan_volume`` plans on: ``voxel`` and
+   ``corner`` in nm and ``shape`` in voxels, z, y, x.
+
+   The level ``select_level``'s "floor" picks (``closest_raw_scale``), at its
+   own voxel size; with ``resample``, the raw resampled to
+   ``input_voxel_size``, as the trainer and a --resample server read it.
+
+
+.. py:function:: plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -> VolumeGeometry
+
+   Where a new volume over ``raw_dataset_path`` lies, for a model.
+
+   ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
+   and either ``input_shape``/``output_shape`` in voxels or
+   ``read_shape``/``write_shape`` in nm, which is what a server reports.
+   The planning is ``cellmap_flow.portable.volume.plan_volume``'s, which the
+   browser runs too: the volume lies on the grid the model's prediction is
+   served on, that of the raw level it reads (``raw_level``), one chunk per
+   model output, and covers the level padded to whole chunks; the model's
+   own voxel sizes are kept as the claimed ones.
+
+   With ``resample`` (the dashboard's Resample setting) the level is the raw
+   resampled to the model's input voxel size, so the volume is at the
+   model's own voxel sizes, and the trainer reads the raw resampled to them,
+   as a server started with --resample serves it.
+
+
+.. py:function:: raw_voxel_sizes(raw_dataset_path: str) -> list
+
+   The voxel sizes (nm, z, y, x) of the raw's levels, finest first: what
+   a volume painted before any model is offered to be painted at.
+
+   A group's levels (its multiscales, else its s0, s1, ...) or a
+   precomputed volume's scales, as worldarray's pyramid lists them: from
+   the group's document where it gives their scales, else by opening each.
+   The path of one array, or of one precomputed scale, is that one level,
+   as ``open_raw`` reads it. Unit conversion's float noise is snapped away
+   (0.009 um is 9 nm, not 8.999999999999998).
+
+
+.. py:function:: plan_paint_volume(raw_dataset_path: str, voxel_size, resample: bool = False) -> VolumeGeometry
+
+   Where a new volume over ``raw_dataset_path`` lies when it is painted
+   before any model: on the raw's grid at ``voxel_size`` (nm, z, y, x).
+
+   The planning is ``cellmap_flow.portable.volume.plan_paint_volume``'s,
+   which the browser runs too, over the raw level ``raw_level`` opens for
+   that voxel size, as a model reading it would read it (with ``resample``,
+   the raw resampled to it): the volume's voxels are that level's when the
+   size is a level's own, and it has no claimed sizes, as it has no model.
+
+
+.. py:function:: create_volume_zarr(zarr_path: str, geometry: VolumeGeometry, *, dataset_path: str, model_name: Optional[str], input_norm=None, postprocess=None, annotation_dtype='uint8', annotation_type='annotation_volume') -> str
+
+   Write an empty volume: its metadata only, no chunks. Returns ``zarr_path``.
+
+   ``model_name`` is None for a volume painted before any model
+   (``plan_paint_volume``), and its attr is then null.
+   ``input_norm`` and ``postprocess`` are the dashboard's chains when the
+   volume was made, as YAML-style lists: a resumed session inherits the
+   normalization, and a model finetuned on the volume is served with the
+   postprocessing. ``annotation_dtype`` is uint16 or uint32 when the labels
+   are instance ids.
+
+   worldarray creates ``annotation/s0`` and writes the ``annotation``
+   group's OME multiscales, which place it, and the root group; nothing at
+   ``zarr_path`` is overwritten (an existing volume there raises
+   FileExistsError).
+
+
+.. py:function:: read_root_attrs(zarr_path) -> dict
+
+   The root attrs of the volume at ``zarr_path`` (its root group's
+   ``.zattrs``): its record, as create_volume_zarr wrote it and imports and
+   seeding added to it; ``{}`` when there is no such file. ValueError when
+   it cannot be read or is not JSON.
+
+
+.. py:function:: open_labels(zarr_path, mode: str = 'r') -> worldarray.WorldArray
+
+   The labels of the volume at ``zarr_path`` (its ``annotation/s0``), in
+   voxels: read and written by index, ``mode="r+"`` to write. Its writes
+   store nothing for a chunk that ends up all 0, unannotated.
+
+
+.. py:function:: update_root_attrs(zarr_path, attrs: dict) -> None
+
+   Set ``attrs`` in the root attrs of the volume at ``zarr_path``, every
+   other key kept: a read, a merge and a write, unlocked, as zarr-python's
+   ``attrs.update`` was.
+
+
+.. py:function:: read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict
+
+   The registry record of the annotation volume at ``zarr_path``, from its attrs.
+
+   Nothing missing is guessed (it used to be 56^3 chunks, a 178^3 input and
+   16 nm voxels). Raises ValueError naming the geometry attrs the volume
+   lacks, unless ``require_geometry`` is False, when they are None in the
+   record: serving and syncing a volume need none of them. Raises
+   NotAnAnnotationVolume (a ValueError) if it is not an annotation volume
+   at all.
+
+
+.. py:function:: build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Optional[dict] = None) -> dict
+
+   The ``_virtual_sources.json`` that trains on the volume a record describes.
+
+   ``input_norm`` and ``postprocess`` travel in it because the trainer runs
+   on LSF, where the dashboard's chains are not: without the normalization
+   it would feed the model raw uint8 while inference feeds it [-1, 1].
+   ``overrides`` replaces any key, e.g. a crops manifest's
+   patches_per_epoch. Raises ValueError naming what the record lacks
+   (the geometry read_volume reads, the zarr path, the raw dataset).
+
+
+.. py:function:: majority_vote_downsample(labels: numpy.ndarray, factors) -> numpy.ndarray
+
+   Downsample integer labels by whole per-axis factors: the majority vote of each block.
+
+   Nearest-neighbour sampling always picks one fixed corner of each block
+   (scipy.ndimage.zoom with grid_mode=True picks the block's *last* voxel on
+   every axis). Here each output voxel is the value most common across its
+   whole footprint: no systematic corner bias, and fewer boundary voxels
+   flipped by an unrepresentative single sample.
+
+
+.. py:function:: write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) -> dict
+
+   Write a YAML crop's labels into the volume at the crop's physical place.
+
+   The labels are remapped to 1 background and 2+ foreground, resampled to
+   the volume's voxel size if it differs, and written into ``annotation/s0``
+   in parallel slabs, in the volume's dtype; ``progress_callback(done,
+   total)`` follows the slabs. The import is appended to the volume's
+   ``imported_crops`` attr (the trainer's dense pool and the overlay's
+   boxes), and returned.
+
+
+.. py:function:: carry_paint(from_meta: dict, to_meta: dict) -> dict
+
+   Copy the paint of the volume ``from_meta`` into ``to_meta``, an empty
+   volume over the same dataset on another model's grid: Which model to
+   start from's Use this model. The maths is ``cellmap_flow.portable.carry``,
+   which the browser runs too (web/src/backend/routes/rank.ts); here are
+   the reads and writes around it.
+
+   Each new voxel takes the paint of the old voxels whose centres lie
+   inside it (one for a grid as fine as the old, several for a coarser
+   one), or, where none does (a finer grid), the old voxel its own centre
+   lies in. A new voxel whose old voxels were painted different labels is
+   left unpainted, on a boundary the coarser grid cannot draw; unpainted old
+   voxels do not count against it, so a stroke thinner than the new voxel
+   still lands, a voxel wide. Only the boxes of the old volume's painted
+   chunks are visited. Both are local zarrs (``zarr_path``); the caller
+   mirrors the new one to MinIO.
+
+   Returns ``{"painted", "source", "conflicts", "chunks"}``: the new voxels
+   painted, the old painted voxels they came from, the new voxels left
+   unpainted where their old voxels disagreed, and the new chunks written.
+
+
