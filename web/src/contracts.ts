@@ -552,6 +552,12 @@ export interface DatasetInfo {
   /** What the metadata calls each channel (OME-Zarr's omero labels), when it
    * names every one; else null. */
   channelLabels: string[] | null;
+  /** The zarr axis the channels are on (Neuroglancer's local dimension c'),
+   * or null where they are the volume's own (a precomputed volume's
+   * num_channels, Neuroglancer's c^) or there is one (infer/channels.ts
+   * RawChannels.axis). Left out of one not made by the engine, whose URL's
+   * format then says (viewer/layers.ts rawChannelShown). */
+  channelAxis?: string | null;
   axes: { name: string; unit: string }[];
   /** Finest first; voxel sizes in nm. */
   levels: { shape: number[]; voxel: number[]; origin: number[] }[];
