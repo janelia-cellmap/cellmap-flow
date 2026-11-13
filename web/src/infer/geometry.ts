@@ -232,14 +232,16 @@ export const NM_PER_UNIT: Readonly<Record<string, number>> = { "": 1, ...PYTHON.
  * view: voxel sizes and origins converted by each axis's unit, and the axes
  * then declared in nanometers. An axis in a unit that is not a length (time,
  * degrees) is left as it is, with its unit. Its channels are `channels`'s
- * (channels.ts rawChannels: a zarr image's SourceInfo says one). */
-export function datasetInfoFrom(url: string, src: SourceInfo, channels: Pick<RawChannels, "count" | "labels">): DatasetInfo {
+ * (channels.ts rawChannels: a zarr image's SourceInfo says one), and the zarr
+ * axis they are on with them when `channels` gives it. */
+export function datasetInfoFrom(url: string, src: SourceInfo, channels: Pick<RawChannels, "count" | "labels"> & Partial<Pick<RawChannels, "axis">>): DatasetInfo {
   const factors = src.axes.map((a) => NM_PER_UNIT[a.unit.trim().toLowerCase()] ?? NM_PER_UNIT[a.unit] ?? null);
   return {
     url,
     dtype: src.dtype,
     channels: channels.count,
     channelLabels: channels.labels,
+    ...(channels.axis !== undefined ? { channelAxis: channels.axis } : {}),
     axes: src.axes.map((a, i) => ({ name: a.name, unit: factors[i] === null ? a.unit : "nanometer" })),
     levels: src.levels.map((l) => ({
       shape: [...l.shape],

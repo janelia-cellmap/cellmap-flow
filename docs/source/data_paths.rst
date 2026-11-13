@@ -47,11 +47,11 @@ without one, it is the nearest directory up from the path with a ``.zgroup``
 - A shell-escaped space (``my\ data.zarr``) is unescaped in a local path, never
   in a URL.
 
-**A gs:// path is a precomputed volume unless it has a .zarr or .n5
-component.** That is how cellmap-flow has always read ``gs://`` paths. A zarr
-whose names lack the suffix (such as CMIP6's ``gs://cmip6/CMIP6/…/tas``) is
-read through its public URL instead:
-``https://storage.googleapis.com/cmip6/CMIP6/…/tas``.
+**A gs:// path's format is found from what is there**, as at any other URL,
+whatever its names say: ``gs://flyem-male-cns/em/em-clahe-jpeg`` is a
+precomputed volume, ``gs://flyem_cns_z0720_07m_dvidcoords_n5`` an N5 whose
+names lack the suffix. The browser app gives such a path to Neuroglancer as
+it is, and Neuroglancer finds the format the same way.
 
 Remote data and credentials
 ---------------------------
