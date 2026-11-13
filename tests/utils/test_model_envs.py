@@ -89,7 +89,7 @@ def test_a_directory_env_serves_with_its_own_python_in_one_lsf_line(venv):
     ]
 
 
-def test_infer_takes_env(manifest, monkeypatch):
+def test_infer_takes_env(manifest, monkeypatch, tmp_path):
     from cellmap_flow.cli.main import cli
     from cellmap_flow.dashboard.services import startup
     from cellmap_flow.jobs.settings import LauncherSettings
@@ -98,7 +98,7 @@ def test_infer_takes_env(manifest, monkeypatch):
     monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *a, **k: commands.append(command))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
-    result = CliRunner().invoke(cli, ["infer", "script", "-s", "/s.py", "-d", "/d/raw.zarr", "--env", "cellpose4"])
+    result = CliRunner().invoke(cli, ["infer", "script", "-s", "/s.py", "-d", str(tmp_path), "--env", "cellpose4"])
     assert result.exit_code == 0, result.output
     (argv,) = [shlex.split(c) for c in commands]
     assert argv[:9] == ["/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4",

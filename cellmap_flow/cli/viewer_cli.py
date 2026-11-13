@@ -6,7 +6,7 @@ import os
 
 import click
 import logging
-from cellmap_flow.cli.common import log_level_option, resample_option
+from cellmap_flow.cli.common import dataset_path, log_level_option, resample_option
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +51,11 @@ def main(dataset, project, resample):
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
-    from cellmap_flow.portable.pasted import pasted_path
     from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 
-    # A path copied from Neuroglancer is read without the format it names.
-    dataset = pasted_path(dataset)
+    # A path copied from Neuroglancer is read without the format it names,
+    # and one that is not there stops here.
+    dataset = dataset_path(dataset)
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
     install_cleanup_handlers()
