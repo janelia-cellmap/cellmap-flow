@@ -181,11 +181,11 @@ you type (one number, or z, y, x); left blank, it uses the level the viewer
 shows when you click. The volume lies on the raw's grid at that size, in
 64-voxel chunks, with no model recorded, as on the server. *Seed from
 Prediction* and *Fit to Paint* work on it with the model picked under
-*Prediction from* (or the only one served). *Start Finetuning* refuses it,
-because it is on no model's grid. Rank the models on
-the paint under *Which model to start from* (below) and click *Use this
-model*: that copies the paint onto the chosen model's grid, and you train on
-the new volume.
+*Prediction from* (or the only one served). It is on no model's grid, so
+*Start Finetuning* first copies the paint onto the grid of the model it
+trains, and trains on that new volume; the old one is kept. Ranking first is
+not needed. To choose which model, rank them on the paint under *Which model
+to start from* (below); *Use this model* copies the paint the same way.
 
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate (1e-2 by default; type any number

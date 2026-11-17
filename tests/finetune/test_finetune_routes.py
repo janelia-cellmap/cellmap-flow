@@ -329,17 +329,22 @@ def test_submit_asks_which_channel_a_model_of_classes_trains(submit, monkeypatch
         assert job.sent["options"].select_channel == 2
 
 
+@pytest.mark.parametrize("painted_for", [pytest.param("a", id="another model's volume"),
+                                         pytest.param(None, id="painted before any model")])
 @pytest.mark.parametrize("answered", [pytest.param(True, id="carried onto its grid"),
                                       pytest.param(False, id="its grid not known: refused")])
-def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp_path, ome_zarr, monkeypatch, answered):
+def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp_path, ome_zarr, monkeypatch, answered,
+                                                                     painted_for):
     """mito_aff_resunet_setup_54_2d (1 x 556 x 556 at 16 nm) was trained on a
     volume made for a 3D model (178^3 at 8 nm): the job read 178^3 patches
     and torch.export refused them. Here a volume made for "a" (8^3 in, 4^3
-    out) and "m", whose server answers with a 2D model's blocks, or has not
-    answered yet."""
+    out), or one painted before any model was running (on the raw's grid,
+    which submit refused, so a running model had to be ranked and used
+    first), and "m", whose server answers with a 2D model's blocks, or has
+    not answered yet."""
     from cellmap_flow.dashboard.routes.finetune import annotation_core, common, training
     from cellmap_flow.finetune.session.manifest import read_manifest
-    from cellmap_flow.finetune.session.volume import create_volume_zarr, open_labels, plan_volume
+    from cellmap_flow.finetune.session.volume import create_volume_zarr, open_labels, plan_paint_volume, plan_volume
     from cellmap_flow.models import geometry_cache
     from cellmap_flow.pipeline_spec import PipelineSpec
     from cellmap_flow.serving.client import geometry_stand_in
@@ -349,13 +354,16 @@ def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp
     corrections = tmp_path / "base" / "20260101_120000" / "corrections"
     corrections.mkdir(parents=True)
     planned = plan_volume(session.dataset_path, SimpleNamespace(
-        input_voxel_size=[16] * 3, output_voxel_size=[16] * 3, input_shape=[8] * 3, output_shape=[4] * 3))
-    zarr_path = create_volume_zarr(str(corrections / "vol-a.zarr"), planned, dataset_path=session.dataset_path, model_name="a")
-    session.annotation_volumes["vol-a"] = planned.record(zarr_path, dataset_path=session.dataset_path, model_name="a",
-                                                         corrections_dir=str(corrections))
+        input_voxel_size=[16] * 3, output_voxel_size=[16] * 3, input_shape=[8] * 3, output_shape=[4] * 3)
+    ) if painted_for else plan_paint_volume(session.dataset_path, [16] * 3)
+    zarr_path = create_volume_zarr(str(corrections / "vol-a.zarr"), planned, dataset_path=session.dataset_path,
+                                   model_name=painted_for)
+    session.annotation_volumes["vol-a"] = planned.record(zarr_path, dataset_path=session.dataset_path,
+                                                         model_name=painted_for, corrections_dir=str(corrections))
     labels = open_labels(zarr_path, mode="r+")
-    labels.write_index([4, 4, 4], [8, 8, 8], np.full((4, 4, 4), 2, np.uint8))
-    labels.write_index([8, 8, 8], [12, 12, 12], np.ones((4, 4, 4), np.uint8))
+    # Within one chunk of the paint-first volume (32^3), so partial.
+    labels.write_index([4, 4, 4], [8, 8, 8], np.full((4, 4, 4), 2, np.uint8), partial=True)
+    labels.write_index([8, 8, 8], [12, 12, 12], np.ones((4, 4, 4), np.uint8), partial=True)
     chain = PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], [{"name": "SigmoidPostprocessor"}])
     session.set_pipeline(chain)
     common.write_volume_manifest(session.annotation_volumes["vol-a"])
@@ -378,12 +386,13 @@ def test_submit_with_a_model_on_another_grid_carries_the_paint_first(client, tmp
         # Nothing changed: the volume, the manifest and the job are as they were.
         assert response.status_code == 400 and not asked
         assert list(session.annotation_volumes) == ["vol-a"] and not (corrections / "superseded").exists()
-        assert manifest["volume_zarr_path"] == zarr_path
+        # A paint-first volume has no manifest (common.write_volume_manifest).
+        assert (manifest["volume_zarr_path"] == zarr_path) if painted_for else manifest is None
         return
     body = response.get_json()
     assert response.status_code == 200, body
     new_id = body["carried"]["volume_id"]
-    assert body["carried"]["from_volume"] == "vol-a" and body["note"]
+    assert body["carried"]["from_volume"] == "vol-a" and body["carried"]["from_model"] == painted_for and body["note"]
     # The paint on the 2D model's grid, the volume it trains on; the old one kept, out of the session.
     assert list(session.annotation_volumes) == [new_id] and session.annotation_volumes[new_id]["model_name"] == "m"
     assert (corrections / "superseded" / "vol-a.zarr").is_dir()

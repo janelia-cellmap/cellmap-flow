@@ -36,7 +36,6 @@ from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     carry_onto_model,
     channel_pick_refusal,
     grid_change,
-    paint_first_refusal,
     volume_grid,
 )
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
@@ -289,12 +288,6 @@ def submit_finetuning():
                     "error": f"Corrections path does not exist: {actual_corrections_path}. Please create annotation crops first.",
                 }
             ), 400
-        # A volume painted before any model is on no model's grid: Use this
-        # model carries its paint onto one (annotation_core).
-        paint_first = paint_first_refusal(actual_corrections_path)
-        if paint_first is not None:
-            return paint_first
-
         # What the model trains on, and so whether it trains one channel at a
         # time: a model of several channels that does is refused without the
         # channel the paint is for (annotation_core.channel_pick_refusal).
@@ -314,7 +307,8 @@ def submit_finetuning():
             )}), 400
 
         # A model whose grid is not the session volume's (another model's,
-        # a 3D one's 178^3 at 8 nm for a 2D one's 1 x 556 x 556 at 16) has
+        # a 3D one's 178^3 at 8 nm for a 2D one's 1 x 556 x 556 at 16, or
+        # the raw's, a volume painted before any model was chosen) has
         # the paint carried onto its grid first, as Use this model carries
         # it, and trains on that; the chain and the channel stay as the user
         # set them. Its job would read the volume's patches, which

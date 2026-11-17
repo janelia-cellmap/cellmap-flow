@@ -11,12 +11,12 @@ A volume is made for a model, on the grid its prediction is served on, or
 before any model (a "paint-first" volume, ``make_paint_volume``) on the
 raw's grid at a voxel size of the user's, the raw level the viewer shows by
 default: the models answer lists the raw's levels for New Volume to offer.
-A paint-first volume is not trained on (``paint_first_refusal``, which
-training's submit asks): Which model to start from's Use this model carries
-its paint onto a model's grid (rank_routes, through ``carry_onto_model``).
-So does training's submit for a model whose grid is not the session
-volume's (``grid_change`` says whether it is, and refuses a model whose
-grid is not known yet).
+A paint-first volume is on no model's grid, and a volume made for one model
+is not on another's: Which model to start from's Use this model carries the
+paint onto a model's grid (rank_routes, through ``carry_onto_model``), and so
+does training's submit for the model picked when its grid is not the session
+volume's (``grid_change`` says whether it is, and refuses a model whose grid
+is not known yet). Training a model that is running needs no ranking first.
 """
 
 import functools
@@ -110,7 +110,8 @@ def make_paint_volume(voxel_size, corrections_dir):
     ``voxel_size`` (nm, z, y, x; None: the level the viewer shows,
     ``shown_voxel_size``): written, served and registered as the session's,
     as make_volume's, and returned as it returns one. It gets no training
-    manifest, as it is not trained on (``paint_first_refusal``), and the
+    manifest, as no model trains on it as it is (training's submit carries
+    its paint onto the model's grid first, ``grid_change``), and the
     session's manifest is removed (common.write_volume_manifest), so that
     it, not a volume before it, is the session's."""
     session = get_session()
@@ -178,20 +179,6 @@ def shown_voxel_size():
     viewer = get_session().viewer
     view = view_of(viewer.state) if viewer is not None else None
     return list(sizes[portable_volume.shown_level(sizes, view.pixel_nm if view else None)])
-
-
-def paint_first_refusal(corrections_dir):
-    """Training's submit refused for a session whose volume
-    (session_store's session_volume of ``corrections_dir``) was painted
-    before any model: ``(response, 400)``, whose error is portable/volume.py
-    training_refusal's sentence (the browser's submit says the same) and
-    whose ``paint_first`` the tab can key on. None when the volume can be
-    trained on, or there is none (submit says so itself)."""
-    _, volume = session_store().session_volume(str(corrections_dir))
-    refusal = volume and portable_volume.training_refusal(volume)
-    if not refusal:
-        return None
-    return jsonify({"success": False, "error": refusal, "paint_first": True}), 400
 
 
 def _get_selected_model_config(model_name):
@@ -303,8 +290,9 @@ def grid_change(model_name, model_config, corrections_dir):
         return None, None
     geometry = known_geometry(model_name, model_config)
     if geometry is None:
+        painted_on = f"{volume['model_name']}'s grid" if volume.get("model_name") else "the raw's grid"
         return None, (jsonify({"success": False, "error": (
-            f"Your paint is on {volume.get('model_name')}'s grid, and {model_name}'s is not known yet: its server "
+            f"Your paint is on {painted_on}, and {model_name}'s is not known yet: its server "
             f"has not answered with its sizes. Wait until {model_name} is running (the Models tab), then press "
             "Train again, which carries the paint onto its grid."
         )}), 400)
