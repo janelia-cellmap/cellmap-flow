@@ -15,10 +15,12 @@ model's inference server, and its finetuning job, run instead::
 
 - the name of an environment in cellmap-flow's ``pixi.toml``. The program
   runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``.
-  A server's launcher refuses to submit the job if the environment is not
-  installed yet (``jobs.launch._install_env_first``), rather than install
-  it as part of submitting: install it explicitly first with
-  ``cellmap_flow envs install <name>``. The
+  An environment not installed yet is installed before the first job that
+  runs in it is submitted, once someone agrees to it: the Models tab's
+  Submit asks, and so do ``cellmap_flow yaml``, ``infer`` and ``add
+  --run`` at a terminal (``jobs.launch._install_env_first``,
+  ``to_install``). ``cellmap_flow envs install <name>`` installs one
+  ahead of time. The
   manifest is the one in the checkout cellmap-flow is installed from, or
   ``CELLMAP_FLOW_PIXI_MANIFEST``; pixi is ``PIXI_EXE`` (which ``pixi run``
   sets), else the ``pixi`` on PATH.
@@ -271,9 +273,8 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     without pixi (a conda-only cluster account), the model runs here, as
     it did before its type had a default, and the warning says how to
     provide one (an alias). A pixi environment that is declared but not
-    installed is named anyway: the warning says to install it first, and
-    the actual launch (``jobs.launch._install_env_first``) refuses until it
-    is, rather than installing it as a side effect of submitting. A path or
+    installed is named anyway: the launch installs it once someone agrees
+    to (``jobs.launch._install_env_first``), and refuses until then. A path or
     an alias is the user's own, so one that cannot be used is an error, as
     an explicit ``env`` is.
     """
@@ -289,8 +290,9 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     else:
         if not is_installed(env):
             _warn_once(env, (
-                f"Model '{model_name}' runs in env {env!r}, which is not installed yet. "
-                f"Install it before running this model: cellmap_flow envs install {env}"
+                f"Model '{model_name}' runs in env {env!r}, which is not installed yet: it is "
+                f"installed before the model's first job once you agree to it (or now with "
+                f"cellmap_flow envs install {env})"
             ))
         return env
     _warn_once(env, (
@@ -345,6 +347,26 @@ def install_argv(env: str) -> List[str]:
     """``pixi install`` of ``env`` from pixi.lock as it is (``--frozen``), as
     ``pixi run --frozen`` would install it, so the lock is never rewritten."""
     return [pixi_program(), "install", "--frozen", "--manifest-path", str(pixi_manifest()), "-e", env]
+
+
+def to_install(models) -> Dict[str, List[str]]:
+    """The pixi environments ``models`` (model configs) run in that are not
+    installed yet, each with the names of the models that need it:
+    ``{env: [name, ...]}``, empty when there are none.
+
+    What a launch would install before submitting their jobs, or refuse
+    (``jobs.launch._install_env_first``), found before anything starts, so
+    the person can be asked first: the Models tab's Submit
+    (``dashboard.services.launch.update_run_models``) and the commands that
+    serve models (``cli.common.agree_to_install``). A path or an alias is
+    the user's own environment, with nothing to install.
+    """
+    missing: Dict[str, List[str]] = {}
+    for model in models:
+        env = model_env(model)
+        if env and not is_path(env) and env not in aliases() and not is_installed(env):
+            missing.setdefault(env, []).append(getattr(model, "name", None) or type(model).__name__)
+    return missing
 
 
 def pixi_env_of(argv: List[str]) -> Optional[str]:

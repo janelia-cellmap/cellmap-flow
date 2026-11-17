@@ -119,6 +119,28 @@ def test_submit_serves_a_ticked_zoo_model_from_the_bioimageio_environment(submit
     assert [mc.name for mc in get_session().models_config] == ["kind_seashell"]
 
 
+def test_submit_asks_before_installing_a_zoo_models_environment(submit, models_tab, tmp_path, monkeypatch):
+    """The bioimageio environment not installed yet: the Submit starts
+    nothing and names it, for the Models tab to ask; sent again agreeing,
+    the model's launch installs it before its job (jobs.launch)."""
+    from cellmap_flow.jobs import launch as jobs_launch
+    from cellmap_flow.models import envs
+
+    pixi_manifest(tmp_path, monkeypatch, MANIFEST)
+    monkeypatch.setattr(envs, "is_installed", lambda env: False)
+    monkeypatch.setattr(jobs_launch, "_install_allowed", set())
+    shrimp = {"id": DOI, "voxel_size": "8"}
+
+    answer = submit(shrimp)
+    assert answer.status_code == 409
+    assert answer.get_json()["needs_install"] == [{"env": "bioimageio", "models": ["kind_seashell"]}]
+    assert submit.commands == [] and "kind_seashell" not in [mc.name for mc in get_session().models_config]
+
+    answer = models_tab(selected_bioimage_models=[shrimp], install_envs=["bioimageio"])
+    assert answer.status_code == 200 and answer.get_json()["installing"] == ["bioimageio"]
+    assert len(submit.commands) == 1 and jobs_launch.install_allowed("bioimageio")
+
+
 def test_a_blank_voxel_size_for_a_model_that_declares_none_refuses_the_submit(submit, monkeypatch):
     """Its server would refuse it after its job started, where the page showed
     nothing: Submit says so instead."""

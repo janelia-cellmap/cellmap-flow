@@ -115,11 +115,8 @@ def test_a_paint_first_volumes_default_is_the_level_the_viewer_shows(pixel_nm, i
     assert volume_calls.shown_level({"voxel_sizes": [[8.0] * 3, [16.0] * 3, [32.0] * 3], "pixel_nm": pixel_nm}, []) == {"index": index}
 
 
-def test_a_paint_first_volume_is_not_trained_on_and_says_where_its_paint_gets_a_grid():
+def test_a_paint_first_volume_is_for_no_model():
     planned = volume_calls.plan_paint_volume({"level": LEVEL_16, "voxel_size": [16.0] * 3}, [])
     assert planned["dtype"] == "uint8"
     assert set(volume_calls.plan_paint_volume({"level": LEVEL_16, "voxel_size": [0, 16, 16]}, [])) == {"error"}
-    assert volume.training_refusal({"model_name": None})
-    assert volume.training_refusal({"model_name": "mito"}) is None
-    assert set(volume_calls.training_refusal({"volume": {"model_name": None}}, [])) == {"error"}
-    assert volume_calls.training_refusal({"volume": {"model_name": "mito"}}, []) == {}
+    assert volume.is_paint_first({"model_name": None}) and not volume.is_paint_first({"model_name": "mito"})

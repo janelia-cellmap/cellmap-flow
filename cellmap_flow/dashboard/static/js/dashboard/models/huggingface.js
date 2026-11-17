@@ -9,6 +9,18 @@
 // voxel size to run it at, filled in with the one it is served at (its
 // listing's run_voxel_size). Submit sends the ticked repos as
 // selected_hf_models, and the voxel sizes typed as run_voxel_sizes.
+//
+// The browser's listing has more than its organizations': the models of the
+// repos added beside them (Add a model, or a link that named one, which the
+// browser remembers, so they are listed on later visits too) and those
+// finetuned in this tab, each with the `group` it comes from (web/src/models
+// catalogGroup, as the ranking groups them) and its `repo`. Those are listed
+// under sections of their own after the organizations' (OTHER_GROUPS): with
+// cellmap's, someone's own repo read as one of cellmap's models. An added
+// repo has a Forget (POST /api/huggingface-models/forget). Each
+// organization's section has its own search, sort and count; the others are
+// short and listed whole. A server's listing has no groups: every model is
+// its organization's.
 import { ApiError, getJSON, postJSON } from "../../lib/api.js";
 import { h } from "../../lib/dom.js";
 import { listen, MODEL_LIST_CHANGED_EVENT } from "../../lib/events.js";
@@ -26,8 +38,20 @@ let loaded = false;
 // Refresh (shown once there is a list), the line it shows until it is
 // loaded, and its rows. The first keeps the ids the page has always had
 // (hf, hfModelsContainer). One listing fills them all; a repo of an
-// organization not listed (one added in the browser) goes in the first.
+// organization not listed goes in the first.
 let groups = [];
+// The groups listed after the organizations', in their order: each
+// section's title, and the line under it saying where its models come from.
+const OTHER_GROUPS = {
+  Added: {
+    title: "Added",
+    note: "From other Hugging Face repos, added with Add a model or by a link. This browser remembers them, so they are listed on later visits too.",
+  },
+  Finetuned: { title: "Finetuned here", note: "Finetuned in this tab, or opened from an .onnx file." },
+};
+// Their sections, by group, each made when a model is first listed under
+// it: { section, list }.
+let others = new Map();
 
 function groupOf(modelId) {
   const org = modelId.split("/")[0];
@@ -61,13 +85,83 @@ function row(modelId, metadata) {
   });
 }
 
-// The answer of a listing in every group. One listed with no models hides
-// its search bar, Refresh and count again, as before its first list, while
-// another group has some (whose Refresh lists every group); when none has
-// any, or after an error, each keeps them as they were, a Refresh shown to
-// try again, its count cleared.
+// Whether a listing's model goes in a section after the organizations'.
+const otherGroup = (metadata) => (Object.hasOwn(OTHER_GROUPS, metadata.group) ? metadata.group : null);
+
+// The list of `group`'s section, made the first time a model is listed
+// under it, after the organizations' and in OTHER_GROUPS' order.
+function groupList(group) {
+  let made = others.get(group);
+  if (!made) {
+    const { title, note } = OTHER_GROUPS[group];
+    const groupSection = modelSection({ id: `hf_${group.toLowerCase()}`, title, open: true });
+    const rows = h("div");
+    groupSection.body.append(h("p", { class: "text-muted small mb-2" }, note), rows);
+    made = { section: groupSection, list: rows };
+    others.set(group, made);
+    const accordion = document.getElementById("hfModelAccordion");
+    for (const name of Object.keys(OTHER_GROUPS)) if (others.has(name)) accordion.append(others.get(name).section.item);
+  }
+  return made.list;
+}
+
+// A row of an added repo's model goes under its repo's line, which has the
+// repo's Forget; every other one at the end of its group's list.
+function place(modelId, metadata) {
+  const group = otherGroup(metadata);
+  const into = groupList(group);
+  if (group !== "Added" || !metadata.repo) {
+    into.append(row(modelId, metadata));
+    return;
+  }
+  let block = [...into.children].find((el) => el.dataset.repo === metadata.repo);
+  if (!block) {
+    block = repoBlock(metadata.repo, into);
+    into.append(block);
+  }
+  block.append(row(modelId, metadata));
+}
+
+// An added repo's block in the Added list `into`: its name and Forget, then
+// its rows. Forget takes the block away, and the section with the last; it
+// is refused, saying why under the name, while one of the repo's models runs.
+function repoBlock(repo, into) {
+  const forget = h("button", {
+    type: "button", class: "btn btn-sm btn-outline-secondary py-0",
+    title: `Stop listing ${repo}'s models in this browser. Add a model or a link that names it adds it again.`,
+  }, "Forget");
+  const refused = h("p", { class: "text-danger small mb-1", hidden: true });
+  const block = h("div", { class: "mb-2", dataset: { repo } },
+    h("div", { class: "d-flex align-items-center gap-2 mb-1" }, h("code", {}, repo), forget), refused);
+  forget.addEventListener("click", () => {
+    forget.disabled = true;
+    refused.hidden = true;
+    postJSON("/api/huggingface-models/forget", { repo })
+      .then(() => {
+        block.remove();
+        if (into.children.length) return;
+        others.get("Added").section.item.remove();
+        others.delete("Added");
+      })
+      .catch((err) => {
+        forget.disabled = false;
+        refused.textContent = err.message || String(err);
+        refused.hidden = false;
+      });
+  });
+  return block;
+}
+
+// The answer of a listing in every group. An organization listed with no
+// models hides its search bar, Refresh and count again, as before its first
+// list, while another organization has some (whose Refresh lists every
+// group); when none has any, or after an error, each keeps them as they
+// were, a Refresh shown to try again, its count cleared. The models of
+// OTHER_GROUPS go in their sections after them, made again.
 function render(data) {
   for (const group of groups) group.placeholder.remove();
+  for (const { section: s } of others.values()) s.item.remove();
+  others = new Map();
   if (data.error) {
     for (const group of groups) {
       group.list.replaceChildren(notice("Error: " + data.error, true));
@@ -76,13 +170,15 @@ function render(data) {
     return;
   }
   const modelIds = Object.keys(data);
+  const own = modelIds.filter((modelId) => !otherGroup(data[modelId]));
   for (const group of groups) {
-    const ids = modelIds.filter((modelId) => groupOf(modelId) === group);
+    const ids = own.filter((modelId) => groupOf(modelId) === group);
     if (ids.length) group.controls.element.hidden = false;
-    else if (modelIds.length) group.controls.element.hidden = true;
+    else if (own.length) group.controls.element.hidden = true;
     group.list.replaceChildren(...(ids.length ? ids.map((modelId) => row(modelId, data[modelId])) : [notice("No models found.")]));
     filter(group);
   }
+  for (const modelId of modelIds) if (otherGroup(data[modelId])) place(modelId, data[modelId]);
 }
 
 function loading(on) {
@@ -117,8 +213,12 @@ function load(url) {
 function addListed() {
   getJSON("/api/huggingface-models")
     .then((data) => {
-      const shown = new Set(groups.flatMap((group) => [...group.list.querySelectorAll(".hf-model-checkbox")].map((box) => box.value)));
+      const shown = new Set([...document.querySelectorAll("#hfModelAccordion .hf-model-checkbox")].map((box) => box.value));
       for (const modelId of Object.keys(data).filter((modelId) => !shown.has(modelId))) {
+        if (otherGroup(data[modelId])) {
+          place(modelId, data[modelId]);
+          continue;
+        }
         const group = groupOf(modelId);
         group.list.append(row(modelId, data[modelId]));
         group.controls.element.hidden = false;
@@ -183,7 +283,7 @@ export function init() {
   // error, or none found) is loaded again whole.
   listen(MODEL_LIST_CHANGED_EVENT, () => {
     if (!loaded) return;
-    if (groups.some((group) => group.list.querySelector(".hf-model-checkbox"))) addListed();
+    if (document.querySelector("#hfModelAccordion .hf-model-checkbox")) addListed();
     else load("/api/huggingface-models");
   });
 }

@@ -43,11 +43,18 @@ function holdNewVolume(model) {
 
 // The picked model's info, and the training form's fields that depend on
 // it: the Channel (a model of several channels that trains one at a time),
-// and the browser's Training field or the server's LoRA ranks.
+// and the browser's Training field or the server's LoRA ranks. With no
+// model (the last one removed, by its layer's trash button say) the info is
+// hidden: left up, it named a model that was gone beside New Volume's "No
+// model is loaded".
 function displayModelInfo(model) {
   holdNewVolume(model);
   setChannelChoice(model);
-  if (!model) return;
+  if (!model) {
+    document.getElementById("modelInfo").style.display = "none";
+    document.getElementById("modelInfoContent").replaceChildren();
+    return;
+  }
 
   if (model.status) {
     document.getElementById("modelInfoContent").innerHTML = `

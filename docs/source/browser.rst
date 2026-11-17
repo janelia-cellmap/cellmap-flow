@@ -41,8 +41,11 @@ public Hugging Face model repo laid out as cellmap/onnx-web-models is (a
 folder per model, holding its ``manifest.json`` and the ``.onnx`` files it
 names; a model published from the app is one) is added by its ref,
 ``<owner>/<repo>/<folder>``, or ``<owner>/<repo>`` when it holds one model,
-or its huggingface.co URL. Its models are then listed under Hugging Face
-after cellmap's, on later visits too. A model sent as a file is opened with
+or its huggingface.co URL, and so is the repo of a model a link names. Its
+models are then listed under Hugging Face in a section of their own,
+*Added*, after cellmap's, and the browser remembers the repo, so they are
+listed on later visits too; *Forget* beside the repo's name stops that
+(stop its model first if it is running). A model sent as a file is opened with
 *Open an .onnx file…*: an ``.onnx`` the app downloaded carries its manifest,
 any other is picked with its ``manifest.json``. It is kept in the browser
 like a finetuned model (below), and nothing is uploaded.
@@ -181,11 +184,11 @@ you type (one number, or z, y, x); left blank, it uses the level the viewer
 shows when you click. The volume lies on the raw's grid at that size, in
 64-voxel chunks, with no model recorded, as on the server. *Seed from
 Prediction* and *Fit to Paint* work on it with the model picked under
-*Prediction from* (or the only one served). *Start Finetuning* refuses it,
-because it is on no model's grid. Rank the models on
-the paint under *Which model to start from* (below) and click *Use this
-model*: that copies the paint onto the chosen model's grid, and you train on
-the new volume.
+*Prediction from* (or the only one served). It is on no model's grid, so
+*Start Finetuning* first copies the paint onto the grid of the model it
+trains, and trains on that new volume; the old one is kept. Ranking first is
+not needed. To choose which model, rank them on the paint under *Which model
+to start from* (below); *Use this model* copies the paint the same way.
 
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate (1e-2 by default; type any number

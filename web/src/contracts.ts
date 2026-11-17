@@ -422,6 +422,10 @@ export interface Catalog {
   finetuned(): Promise<FinetunedRecord[]>;
   /** Forget a finetuned model and its bytes. */
   removeFinetuned(id: string): Promise<void>;
+  /** Stop listing `repo`, a repo added beside the built-in catalog (by a
+   * ref resolve() was given), this visit and the next, until a ref of it
+   * adds it again. An Error for the built-in catalog's repo. */
+  forgetRepo(repo: string): Promise<void>;
 }
 
 /** The "repo" of the entries finetuned in this browser (ModelEntry.repo and
@@ -575,6 +579,12 @@ export interface DatasetInfo {
   /** What the metadata calls each channel (OME-Zarr's omero labels), when it
    * names every one; else null. */
   channelLabels: string[] | null;
+  /** The zarr axis the channels are on (Neuroglancer's local dimension c'),
+   * or null where they are the volume's own (a precomputed volume's
+   * num_channels, Neuroglancer's c^) or there is one (infer/channels.ts
+   * RawChannels.axis). Left out of one not made by the engine, whose URL's
+   * format then says (viewer/layers.ts rawChannelShown). */
+  channelAxis?: string | null;
   axes: { name: string; unit: string }[];
   /** Finest first; voxel sizes in nm. */
   levels: { shape: number[]; voxel: number[]; origin: number[] }[];

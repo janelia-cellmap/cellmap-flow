@@ -38,7 +38,8 @@ pixi environment of their own, chosen by the model's type; nobody picks one by
 hand. Each is installed from the lockfile the first time a model needs it,
 before that model's job is submitted (several minutes, once; the dashboard's
 Job Logs shows pixi's output meanwhile), so a new user, Fileglancer's
-included, needs nothing beforehand. ``pixi run cellmap_flow envs install
+included, needs nothing beforehand: the dashboard's Submit asks whether to
+install it, and the command line asks at a terminal. ``pixi run cellmap_flow envs install
 <name>`` installs one ahead of time, and ``cellmap_flow envs`` lists them and
 what is installed. See :ref:`model-env`.
 

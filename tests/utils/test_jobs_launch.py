@@ -189,20 +189,60 @@ def test_the_cleanup_handlers_cover_the_terminal_going_away(monkeypatch):
 # --- installing a server's environment before submitting it -----------------------
 
 
-def test_a_missing_pixi_env_refuses_the_job_rather_than_installing_it(monkeypatch, tmp_path):
-    """Installing it as part of submission outlasted the job's startup
-    timeout once (a new user's first model was killed while pixi installed
-    torch), and installing it here instead just moved that same multi-minute
-    block into the submission itself -- a surprise on a GPU queue a user is
-    actively waiting on. Refuse instead, and never touch pixi."""
+COMMAND = "/opt/pixi run --frozen --manifest-path /c/pixi.toml -e cellpose4 cellmap_flow serve --model {} -d /d"
+
+
+def test_a_missing_pixi_env_nobody_agreed_to_install_refuses_the_job(monkeypatch, tmp_path):
+    """The install takes minutes, so it is never started unasked: the
+    Models tab and the commands ask first (allow_install). Unasked, say from
+    the Finetune tab's ranking, the job is refused and pixi never run."""
     from cellmap_flow.models import envs
 
     monkeypatch.setattr(envs, "is_installed", lambda env: False)
     monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
-    command = "/opt/pixi run --frozen --manifest-path /c/pixi.toml -e cellpose4 cellmap_flow serve --model {} -d /d"
-    with pytest.raises(JobStartError, match="cellpose4.*not installed.*cellmap_flow envs install cellpose4"):
-        launch._install_env_first(command, "cells")
+    monkeypatch.setattr(launch, "_install_allowed", set())
+    monkeypatch.setattr(launch.subprocess, "run", lambda *a, **k: pytest.fail("pixi was run"))
+    with pytest.raises(JobStartError, match="cellpose4.*not installed.*Models tab.*cellmap_flow envs install cellpose4"):
+        launch._install_env_first(COMMAND, "cells")
     assert launch.starting_jobs() == [] and launch.failed_starts() == []
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+def test_an_agreed_env_installs_before_the_job_with_pixis_output_in_job_logs(stopped, monkeypatch, tmp_path):
+    """Installed before submitting, not in the job, whose time to report a
+    server ran out first once (a new user's first model was killed while
+    pixi installed torch). Meanwhile the model is a starting job whose log
+    is pixi's output; one stopped meanwhile gets no job after the install."""
+    from cellmap_flow.models import envs
+
+    installed = []
+    monkeypatch.setattr(envs, "is_installed", lambda env: env in installed)
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
+    monkeypatch.setattr(launch, "_install_allowed", set())
+    seen = {}
+
+    def pixi(argv, stdout, stderr):
+        stdout.write("Installing torch\n")
+        stdout.flush()
+        (job,) = launch.starting_jobs()
+        seen["argv"], seen["log"] = argv, job.peek()
+        if stopped:
+            job.kill()  # the model's ✕, or Ctrl+C
+        installed.append("cellpose4")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(launch.subprocess, "run", pixi)
+    launch.allow_install(["cellpose4"])
+    if stopped:
+        with pytest.raises(JobStartError, match="stopped while the pixi environment 'cellpose4' installed"):
+            launch._install_env_first(COMMAND, "cells")
+    else:
+        launch._install_env_first(COMMAND, "cells")
+    assert seen["argv"][:3] == ["/opt/pixi", "install", "--frozen"] and seen["argv"][-2:] == ["-e", "cellpose4"]
+    assert "Installing the pixi environment 'cellpose4'" in seen["log"] and "Installing torch" in seen["log"]
+    assert launch.starting_jobs() == [] and launch.failed_starts() == []
+    # Installed, the next model in it goes straight to its job.
+    launch._install_env_first(COMMAND, "more_cells")
 
 
 def test_an_installed_pixi_env_is_not_refused(monkeypatch):

@@ -18,7 +18,7 @@ import { compileExpression } from "../../infer/expression";
 import { modelVoxelSizes, parseVoxelSize, withRunVoxelSize } from "../../infer/geometry";
 import { withoutChannelPick } from "../../infer/norms";
 import { listedInTab } from "../../kept";
-import { HF_REPO, isFinetuned, listFacts } from "../../models";
+import { catalogGroup, HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
 import { declaredInputNorm, serveModels, setDeclaredInputNorm, setDeclaredPostprocess, setNeededPostprocess, stepNames, unserveModel } from "../serving";
@@ -39,7 +39,11 @@ import { serverParams } from "./config";
  * (nm) shows; the metadata's voxel sizes stay the model's own. A model
  * finetuned or opened from a file in this browser is listed only while it
  * is this tab's (src/kept listedInTab); the others are under Kept in this
- * browser, below the list. `refresh`
+ * browser, below the list. Each model says where it comes from, `group`
+ * (models catalogGroup: cellmap, Added or Finetuned) and `repo`, which the
+ * tab lists under sections of their own: with cellmap's, a repo added on an
+ * earlier visit (remembered) was read as one of cellmap's models. The
+ * server's listing, cellmap's alone, has neither. `refresh`
  * reads the repository again instead of the cached listing. A listing that
  * fails is {error} with a 500, as the Flask route answers; the tab shows the
  * message. */
@@ -50,7 +54,7 @@ async function listModels(ctx: AppContext, refresh: boolean) {
     return json(200, Object.fromEntries(entries.filter((e) => listedInTab(ctx.session.state, e)).map((e) => {
       const served = serving.get(e.id);
       const runAt = served?.runVoxelSize ? { run_voxel_size: served.runVoxelSize } : {};
-      return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(served ? { selected: true, ...runAt } : {}) }];
+      return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), group: catalogGroup(e), repo: e.repo, ...(served ? { selected: true, ...runAt } : {}) }];
     })));
   } catch (e) {
     return json(500, { error: message(e) });
@@ -193,6 +197,32 @@ const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first;
 export function modelRoutes(router: Router): void {
   router.get("/api/huggingface-models", (_req, _params, ctx) => listModels(ctx, false));
   router.post("/api/huggingface-models/refresh", (_req, _params, ctx) => listModels(ctx, true));
+
+  // POST /api/huggingface-models/forget {repo}: the Hugging Face list's
+  // Forget on a repo added beside cellmap's, which the catalog remembers
+  // (Catalog.forgetRepo): not listed any more, this visit or the next, until
+  // Add a model or a link names it again. Refused for cellmap's own repo, a
+  // repo that is not listed, and, with a 409, while one of its models is
+  // running: stop it first, so nothing served is missing from the list.
+  router.post("/api/huggingface-models/forget", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    const repo = body && typeof body.repo === "string" ? body.repo.trim() : "";
+    if (!repo) return badRequest("repo is required");
+    let entries: ModelEntry[];
+    try {
+      entries = (await ctx.catalog.list()).filter((e) => e.repo === repo && catalogGroup(e) === "Added");
+    } catch (e) {
+      return json(500, { error: message(e) });
+    }
+    if (!entries.length) return badRequest(`${repo} is not a repo added beside ${HF_REPO}`);
+    const running = ctx.session.state.models.filter((m) => entries.some((e) => e.id === m.id));
+    if (running.length) {
+      return json(409, { success: false, error: `Stop ${running.map((m) => m.name).join(", ")} first (Loaded models), then forget ${repo}.` });
+    }
+    await ctx.catalog.forgetRepo(repo);
+    ctx.log(`Forgot ${repo}: its ${entries.length === 1 ? "model is" : `${entries.length} models are`} no longer listed`);
+    return json(200, { success: true, repo, models: entries.map((e) => e.id) });
+  });
 
   // The zoo's weights are not web exports: an empty, never stale list, in
   // the shape bioimage_catalog.list_bioimage_models answers.

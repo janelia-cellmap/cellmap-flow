@@ -255,6 +255,8 @@ def test_submit_sets_what_a_mia_model_declares_and_the_advice_suggests_the_rest(
     monkeypatch.setattr(launch, "run_model",
                         lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    # The mia environment installed: one that is not makes the Submit ask first.
+    monkeypatch.setattr("cellmap_flow.models.envs.is_installed", lambda env: True)
     session = get_session()
     session.set_pipeline(PipelineSpec([], chain))
     session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []

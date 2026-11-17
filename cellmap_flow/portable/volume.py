@@ -20,9 +20,10 @@ A volume painted before any model (``plan_paint_volume``, a "paint-first"
 volume) lies on the raw's own grid instead, at a voxel size the user picks
 (``shown_level`` gives the default: the level the viewer shows), in chunks
 PAINT_FIRST_CHUNK voxels a side. It is for no model (its ``model_name`` is
-None), so it is not trained on (``training_refusal``): Which model to start
-from ranks the models on its paint, and Use this model carries the paint onto
-the chosen model's grid (``carry.py``), into a volume that is trained on.
+None, ``is_paint_first``), so no model's blocks are its chunks: its paint is
+carried onto a model's grid (``carry.py``), into a volume that is trained on,
+by Which model to start from's Use this model or by training's submit for the
+model picked (``carried_note`` says so), so a model running is all it needs.
 """
 
 import math
@@ -44,16 +45,6 @@ WHOLE_VOXEL_TOLERANCE = 1e-6
 # chunk Neuroglancer writes at every stroke without a pause. An axis the
 # volume is thinner along gets a chunk as thin as the volume.
 PAINT_FIRST_CHUNK = 64
-
-# Why a volume painted before any model is not trained on, said in both modes
-# (training_refusal); the Finetune tab's Which model to start from is where
-# the paint gets a model's grid.
-PAINT_FIRST_TRAINING = (
-    "This volume was painted before a model was chosen, so it is on no model's grid: "
-    "under Which model to start from, rank the models on your paint and click Use this model "
-    "on the one to finetune, which copies the paint onto its grid, then train."
-)
-
 
 def annotation_dtype(output_type) -> str:
     """The labels' dtype of a new volume for a model that trains on ``output_type``.
@@ -274,12 +265,12 @@ def plan_paint_volume(level, voxel_size) -> dict:
     }
 
 
-def training_refusal(volume):
-    """Why ``volume`` (its record or root attrs: a mapping, or an object
-    with ``model_name``) is not trained on, or None when it can be:
-    PAINT_FIRST_TRAINING for a paint-first volume, which names no model,
-    so no model's blocks are its chunks to train on."""
-    return PAINT_FIRST_TRAINING if not _field(volume, "model_name") else None
+def is_paint_first(volume) -> bool:
+    """Whether ``volume`` (its record or root attrs: a mapping, or an object
+    with ``model_name``) was painted before any model: it names none, so it
+    gets no training manifest, and training a model carries its paint onto
+    that model's grid first."""
+    return not _field(volume, "model_name")
 
 
 # What a model trains on of a volume, its grid: the model's input and output
@@ -328,12 +319,14 @@ def grid_text(grid) -> str:
 
 def carried_note(from_model, from_grid, to_model, to_grid, kept) -> str:
     """What training's submit says, in both modes, when the session volume
-    was on ``from_model``'s grid and the model to train, ``to_model``, is on
-    another: the paint carried onto that model's grid, as Use this model
-    carries it, both grids named (grid_text), and where the old volume is
-    kept (``kept``, the mode's words). The input normalization, the
+    was on ``from_model``'s grid (None: the raw's, a paint-first volume's)
+    and the model to train, ``to_model``, is on another: the paint carried
+    onto that model's grid, as Use this model carries it, both grids named
+    (grid_text), and where the old volume is kept (``kept``, the mode's
+    words). The input normalization, the
     postprocessing and the channel stay what the user set: only the volume
     changed."""
-    return (f"Your paint was on {from_model or 'another model'}'s grid ({grid_text(from_grid)}): it was carried onto "
+    was = f"{from_model}'s grid" if from_model else "the raw's grid, painted before any model"
+    return (f"Your paint was on {was} ({grid_text(from_grid)}): it was carried onto "
             f"{to_model}'s ({grid_text(to_grid)}), as Use this model does, and {to_model} trains on that. "
             f"The old volume is kept {kept}.")

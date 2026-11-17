@@ -394,6 +394,29 @@ describe("the model lists: GET /api/huggingface-models and /api/finetune/rank/ca
   });
 });
 
+describe("the Hugging Face list's sections: where each model comes from", () => {
+  it("tags cellmap's models and an added repo's apart, and forgets the repo unless one of its models runs", async () => {
+    // A repo added on an earlier visit, which the catalog remembers: it was
+    // listed in cellmap's section, as if it were one of cellmap's models.
+    const ctx = fakeContext();
+    const mine = { ...entry("setup_54"), id: "alice/models/setup_54", repo: "alice/models", name: "mine_setup54" };
+    ctx.catalog.entries = [...ctx.catalog.entries, mine];
+    const backend = createBackend(ctx);
+    const listing = body(await backend.handle(request("GET", "/api/huggingface-models")));
+    expect(listing[HF54]).toMatchObject({ group: "cellmap", repo: "cellmap/onnx-web-models" });
+    expect(listing[mine.id]).toMatchObject({ group: "Added", repo: "alice/models" });
+
+    const forget = (repo: string) => backend.handle(request("POST", "/api/huggingface-models/forget", { repo }));
+    expect((await forget("cellmap/onnx-web-models")).status).toBe(400);
+    await backend.handle(submit([mine.id]));
+    expect((await forget("alice/models")).status).toBe(409);
+    await backend.handle(submit([]));
+    expect(body(await forget("alice/models"))).toMatchObject({ success: true, models: [mine.id] });
+    expect(ctx.catalog.forgotten).toEqual(["alice/models"]);
+    expect(body(await backend.handle(request("GET", "/api/huggingface-models")))[mine.id]).toBeUndefined();
+  });
+});
+
 describe("PUT /api/pipeline", () => {
   const CHAIN = {
     input_norm: [

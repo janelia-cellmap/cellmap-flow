@@ -227,6 +227,41 @@ it("gives the browser's Hugging Face list, cellmap's repo, the search bar, and l
   expect(page.body.querySelector("#hfBrowser")).toBe(null);
 });
 
+it("lists the browser's added repos and finetuned models after cellmap's, each in a section of its own, an added repo with its Forget", async () => {
+  // A repo added on an earlier visit (a link that named it), which the
+  // browser remembers: listed with cellmap's, it read as one of cellmap's.
+  const hf = {
+    "cellmap/onnx-web-models/setup_53": { description: "mito", group: "cellmap", repo: "cellmap/onnx-web-models" },
+    "alice/mito-ft2/mito-ft2": { description: "alice's finetune", group: "Added", repo: "alice/mito-ft2" },
+    "finetuned/mito_ft1": { description: "finetuned here", group: "Finetuned", repo: "finetuned" },
+  };
+  setUp("browser", { success: true, volume: null, candidates: [] }, hf);
+  const { huggingface } = await bothTabs();
+  const accordion = page.getElementById("hfModelAccordion");
+  const titlesNow = () => accordion.children.map((item) => item.querySelector("button")!.childNodes[0].textContent);
+  expect(titlesNow()).toEqual(["cellmap", "Added", "Finetuned here"]);
+  expect(accordion.children.map((item) => item.querySelectorAll(".hf-model-item").map(nameOf))).toEqual([["setup_53"], ["mito-ft2"], ["mito_ft1"]]);
+  // cellmap's count is its own models'.
+  expect(page.getElementById("collapse_hf").textContent).toContain("1 / 1");
+
+  // Ticked in its own section, it is submitted as any other.
+  const box = accordion.children[1].querySelector("input")!;
+  box.checked = true;
+  expect(huggingface.payload().selected_hf_models).toEqual(["alice/mito-ft2/mito-ft2"]);
+
+  // Forget asks the route, then the repo's rows, and its section with them, go.
+  const asked: string[] = [];
+  vi.stubGlobal("fetch", async (url: string, init?: { body?: string }) => {
+    asked.push(`${url} ${init?.body ?? ""}`);
+    return { ok: true, status: 200, json: async () => ({ success: true }) };
+  });
+  accordion.children[1].querySelectorAll("button").find((b) => b.textContent === "Forget")!.dispatchEvent({ type: "click" });
+  await settled();
+  expect(asked).toEqual([`/api/huggingface-models/forget ${JSON.stringify({ repo: "alice/mito-ft2" })}`]);
+  expect(titlesNow()).toEqual(["cellmap", "Finetuned here"]);
+  expect(huggingface.payload().selected_hf_models).toEqual([]);
+});
+
 it("lists each organization's Hugging Face models in a group of its own", async () => {
   setUp("server", CANDIDATES, { ...HF, "ai-hhmi/lmd-vitl": { description: "organelles" } }, [], CATALOG, { hf_orgs: ["cellmap", "ai-hhmi"] });
   const huggingface = await import(/* @vite-ignore */ module("dashboard/models/huggingface.js"));

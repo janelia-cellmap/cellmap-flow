@@ -175,6 +175,17 @@ describe("another Hugging Face repo", () => {
     expect(next.hub.calls.filter((u) => u.includes(ALICE))).toEqual([]);
   });
 
+  it("forgets an added repo, this visit and the next, until a ref of it adds it again, and never the built-in one", async () => {
+    const storage = new MemoryKeyValueStore();
+    const { catalog } = catalogWith({ repos }, storage);
+    await catalog.resolve(`${ALICE}/${FT}`);
+    await catalog.forgetRepo(ALICE);
+    expect((await catalog.list()).map((e) => e.repo)).not.toContain(ALICE);
+    expect((await catalogWith({ repos }, storage).catalog.list()).map((e) => e.repo)).not.toContain(ALICE);
+    expect((await catalog.resolve(`${ALICE}/${FT}`))!.repo).toBe(ALICE);
+    await expect(catalog.forgetRepo("cellmap/onnx-web-models")).rejects.toThrow(/built-in/);
+  });
+
   it("names a published model by its published name, breaks a clash with _2 where the built-in and finetuned names stay, and lists the browser's own model for its published copy", async () => {
     const { catalog } = catalogWith({ repos });
     expect((await catalog.resolve("bob/models/copy_54"))!.name).toBe("mito_aff_setup54_16nm_2");
