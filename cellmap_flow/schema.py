@@ -94,6 +94,8 @@ AVAILABILITY: dict[str, Availability] = {
     "POST /api/set-data": "both",
     "GET /api/huggingface-models": "both",
     "POST /api/huggingface-models/refresh": "both",
+    # A repo added beside cellmap's is the browser's alone (its catalog remembers it).
+    "POST /api/huggingface-models/forget": "browser",
     "GET /api/bioimage-models": "stub",
     "POST /api/bioimage-models/refresh": "stub",
     "POST /api/models": "both",

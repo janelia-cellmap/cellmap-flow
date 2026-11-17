@@ -399,6 +399,10 @@ export interface Catalog {
   finetuned(): Promise<FinetunedRecord[]>;
   /** Forget a finetuned model and its bytes. */
   removeFinetuned(id: string): Promise<void>;
+  /** Stop listing `repo`, a repo added beside the built-in catalog (by a
+   * ref resolve() was given), this visit and the next, until a ref of it
+   * adds it again. An Error for the built-in catalog's repo. */
+  forgetRepo(repo: string): Promise<void>;
 }
 
 /** The "repo" of the entries finetuned in this browser (ModelEntry.repo and

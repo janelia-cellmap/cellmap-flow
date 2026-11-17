@@ -853,6 +853,7 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/set-data", availability: "both", request: "SetData" },
   { method: "GET", path: "/api/huggingface-models", availability: "both", request: null },
   { method: "POST", path: "/api/huggingface-models/refresh", availability: "both", request: null },
+  { method: "POST", path: "/api/huggingface-models/forget", availability: "browser", request: null },
   { method: "GET", path: "/api/bioimage-models", availability: "stub", request: null },
   { method: "POST", path: "/api/bioimage-models/refresh", availability: "stub", request: null },
   { method: "POST", path: "/api/models", availability: "both", request: "SubmitModels" },

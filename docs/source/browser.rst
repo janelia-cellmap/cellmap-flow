@@ -41,8 +41,11 @@ public Hugging Face model repo laid out as cellmap/onnx-web-models is (a
 folder per model, holding its ``manifest.json`` and the ``.onnx`` files it
 names; a model published from the app is one) is added by its ref,
 ``<owner>/<repo>/<folder>``, or ``<owner>/<repo>`` when it holds one model,
-or its huggingface.co URL. Its models are then listed under Hugging Face
-after cellmap's, on later visits too. A model sent as a file is opened with
+or its huggingface.co URL, and so is the repo of a model a link names. Its
+models are then listed under Hugging Face in a section of their own,
+*Added*, after cellmap's, and the browser remembers the repo, so they are
+listed on later visits too; *Forget* beside the repo's name stops that
+(stop its model first if it is running). A model sent as a file is opened with
 *Open an .onnx file…*: an ``.onnx`` the app downloaded carries its manifest,
 any other is picked with its ``manifest.json``. It is kept in the browser
 like a finetuned model (below), and nothing is uploaded.

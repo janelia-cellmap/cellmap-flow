@@ -26,8 +26,10 @@
 // models: the list reads as the models on Hugging Face, cellmap's first and
 // then the others in the order they were added, and then the ones that
 // exist only in this browser, the part addFinetuned and removeFinetuned
-// change. Every name in it is unique (withUniqueNames): a name is a layer's
-// and a served view's, and the dashboard and links name models by it.
+// change. The Models tab and the ranking list the three parts under their
+// own sections (catalogGroup), and forgetRepo() takes an added repo out.
+// Every name in it is unique (withUniqueNames): a name is a layer's and a
+// served view's, and the dashboard and links name models by it.
 //
 // modelBytes() downloads the chosen file with progress and keeps the bytes
 // in IndexedDB (byte-cache.ts) under the file's URL and ETag, so the next
@@ -583,7 +585,29 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     if (listed) listed = withFinetuned(listed, records ?? []);
   }
 
-  return { list, refresh, resolve, metadataFor: metadataOf, chooseVariant: chooseFor, modelBytes, addFinetuned, finetuned, removeFinetuned };
+  // `repo` no longer remembered or listed, and its cached listing dropped,
+  // so a ref that adds it again reads it afresh.
+  async function forgetRepo(repo: string): Promise<void> {
+    if (repo === HF_REPO) throw new Error(`${HF_REPO} is the built-in catalog, not a repo added beside it`);
+    added.remove(repo);
+    new ListingCache(storage, listingKey(repo)).clear();
+    await settled();
+    if (listed) listed = withFinetuned(listed.filter((e) => isFinetuned(e) || e.repo !== repo), records ?? []);
+  }
+
+  return { list, refresh, resolve, metadataFor: metadataOf, chooseVariant: chooseFor, modelBytes, addFinetuned, finetuned, removeFinetuned, forgetRepo };
+}
+
+/** Where the Models tab's Hugging Face list and the ranking list an entry,
+ * by where it comes from: cellmap's own repo (HF_REPO), a repo added beside
+ * it (Add a model, or a link that named it: remembered, so it is listed on
+ * later visits too), or this browser (finetuned here, or opened from a
+ * file). Listed with cellmap's, someone's own repo read as one of cellmap's
+ * models. */
+export type CatalogGroup = "cellmap" | "Added" | "Finetuned";
+
+export function catalogGroup(entry: ModelEntry): CatalogGroup {
+  return entry.repo === HF_REPO ? "cellmap" : isFinetuned(entry) ? "Finetuned" : "Added";
 }
 
 /** The list of `hub`, the Hub's entries in their order (the built-in

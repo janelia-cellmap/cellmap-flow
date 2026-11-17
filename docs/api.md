@@ -1,6 +1,6 @@
 # The dashboard's routes
 
-Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (55) the server dashboard and the browser app, **stub** (6) both, the browser with a fixed or empty answer in the server's shape, **server** (41) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (5) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
+Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m cellmap_flow.schema --docs docs/api.md`); do not edit. The method and path are the Flask app's; *answered by* says which mode answers the route: **both** (55) the server dashboard and the browser app, **stub** (6) both, the browser with a fixed or empty answer in the server's shape, **server** (41) the server dashboard only (the browser answers `{success: false, available: false, error}`), **browser** (6) the browser app only. *Body* names the pydantic model of `cellmap_flow/dashboard/requests.py` (or the route's file) the body is parsed with; the generated `web/src/generated/cellmap-flow.ts` has its type.
 
 | Method | Path | Answered by | Body |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Generated from `cellmap_flow/schema.py` by `npm run gen` in web/ (or `python -m 
 | POST | `/api/set-data` | both | `SetData` |
 | GET | `/api/huggingface-models` | both |  |
 | POST | `/api/huggingface-models/refresh` | both |  |
+| POST | `/api/huggingface-models/forget` | browser |  |
 | GET | `/api/bioimage-models` | stub |  |
 | POST | `/api/bioimage-models/refresh` | stub |  |
 | POST | `/api/models` | both | `SubmitModels` |

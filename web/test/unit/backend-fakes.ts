@@ -315,6 +315,14 @@ export class FakeCatalog implements Catalog {
     return this.finetunedRecords;
   }
 
+  /** The repos forgotten, in order. */
+  forgotten: string[] = [];
+
+  async forgetRepo(repo: string): Promise<void> {
+    this.forgotten.push(repo);
+    this.entries = this.entries.filter((e) => e.repo !== repo);
+  }
+
   async removeFinetuned(id: string): Promise<void> {
     const record = this.finetunedRecords.find((r) => r.id === id);
     this.finetunedRecords = this.finetunedRecords.filter((r) => r.id !== id);
