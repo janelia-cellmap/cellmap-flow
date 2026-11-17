@@ -180,13 +180,13 @@ def test_a_session_resumes_only_over_the_dataset_it_was_painted_on(world):
     assert not (world.tmp / "b").exists()
 
 
-def test_a_volume_painted_before_any_model_is_ranked_and_carried_but_not_trained(world, monkeypatch):
+def test_a_volume_painted_before_any_model_is_ranked_and_carried(world, monkeypatch):
     """No model loaded: New Volume offers the raw's levels and plans on the
     raw's grid at the one asked for, a volume for no model and without a
-    training manifest. A training job on it is refused (paint_first); the
-    rank lists it, the running model ticked and none its model, scores the
-    model on its paint, and Use this model carries the paint onto the
-    model's 16 nm grid."""
+    training manifest. The rank lists it, the running model ticked and none
+    its model, scores the model on its paint, and Use this model carries the
+    paint onto the model's 16 nm grid. (Training's submit carries it the same
+    way without a ranking: test_finetune_routes.py.)"""
     from cellmap_flow.dashboard.routes.finetune import rank_routes, view_labels
     from cellmap_flow.dashboard.state import get_session
 
@@ -208,12 +208,9 @@ def test_a_volume_painted_before_any_model_is_ranked_and_carried_but_not_trained
     labels[4:12, 4:12, 4:12] = 2
     labels[20:28, 20:28, 20:28] = 1
 
-    # A model now running: training it on this volume is refused, the error saying where to go.
-    # It declares no input normalization (ModelConfig.declared_input_norm), which ranking asks.
+    # A model now running. It declares no input normalization (ModelConfig.declared_input_norm), which ranking asks.
     monkeypatch.setattr(session, "models_config", [SimpleNamespace(name="m", declared_input_norm=lambda data_range=None: None)])
     monkeypatch.setattr(session, "jobs", [SimpleNamespace(model_name="m", host="http://gpu:8000")])
-    refused = post("/api/finetune/submit", model_name="m", corrections_path=str(zarr_path.parent))
-    assert refused.status_code == 400 and refused.get_json()["paint_first"] is True
 
     monkeypatch.setattr("cellmap_flow.models.hf_catalog.list_huggingface_models", lambda: {})
     monkeypatch.setattr(rank_routes, "fetch_model_info", lambda host: {"channels": ["nuc"], "output_voxel_size": [16] * 3})

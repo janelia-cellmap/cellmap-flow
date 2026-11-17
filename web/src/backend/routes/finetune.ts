@@ -69,7 +69,7 @@ import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import { channelChoice } from "../../finetune/target-call";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, plannedFor, planVolume, readPaintedChunk, readVolume, supersedeVolume, trainingRefusal, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
+import { CHUNK_DIR, chunkBoxes, chunkKey, createVolume, currentVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, plannedFor, planVolume, readPaintedChunk, readVolume, supersedeVolume, viewPixelNm, VOLUME_CALLS } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { parseVoxelSize } from "../../infer/geometry";
 import { inTab, volumeGroups } from "../../kept";
@@ -439,20 +439,20 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
   // offers New Volume), with nothing painted, for a model not served,
-  // without a dataset, on a volume painted before any model (paint_first:
-  // trainingRefusal's sentence, the server's, says to Use this model), with
-  // a loss that needs a server (the head's: the whole network has its own),
-  // a model of several channels trained one at a time without the channel
-  // picked, or a pick it cannot take (refuseChannel), and for a mode the
-  // model's manifest does not offer, a tile or block side its graph does not
-  // take, or a 3D model's batch of more than one block. A model whose grid
-  // is not the volume's (another model's volume, whose blocks and voxel
-  // sizes are not this one's: the portable Python's carry_note says) has the
-  // paint carried onto its grid first, as Use this model carries it
-  // (carryOnto), after every refusal, so a refused submit changes nothing;
-  // the chain and the channel stay as the user set them. The answer then
-  // says so: `carried` {from_model, from_volume, volume_id, chunks}, and the
-  // note names both grids.
+  // without a dataset, with a loss that needs a server (the head's: the
+  // whole network has its own), a model of several channels trained one at
+  // a time without the channel picked, or a pick it cannot take
+  // (refuseChannel), and for a mode the model's manifest does not offer, a
+  // tile or block side its graph does not take, or a 3D model's batch of
+  // more than one block. A model whose grid is not the volume's (another
+  // model's volume, whose blocks and voxel sizes are not this one's, or one
+  // painted before any model, on the raw's grid: the portable Python's
+  // carry_note says) has the paint carried onto its grid first, as Use this
+  // model carries it (carryOnto), after every refusal, so a refused submit
+  // changes nothing; the chain and the channel stay as the user set them.
+  // The answer then says so: `carried` {from_model, from_volume, volume_id,
+  // chunks}, and the note names both grids. So a running model trains on
+  // paint made before it without being ranked first.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -471,8 +471,6 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
     const dataset = ctx.infer.dataset();
     if (!dataset) return badRequest(NO_DATASET);
-    const paintFirst = await trainingRefusal(ctx.infer, volume);
-    if (paintFirst) return json(400, { success: false, error: paintFirst, paint_first: true });
     // The mode the form asks for; a body without one (an older tab) the
     // first the model offers.
     const mode = body.finetune_mode ?? finetuneModes(model.entry)[0] ?? "head";
@@ -481,9 +479,9 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
     // The volume the model trains on: the session's, or, for a model on
-    // another grid (another model's volume, or the model's own planned at
-    // another voxel size than it runs at now), a new one with the paint
-    // carried onto it.
+    // another grid (another model's volume, one painted before any model, or
+    // the model's own planned at another voxel size than it runs at now), a
+    // new one with the paint carried onto it.
     let trained = volume, chunks = painted, carried: Record<string, unknown> | null = null, carryNote: string | null = null;
     if (!plannedFor(volume, model.entry)) {
       let to: PaintVolume;
