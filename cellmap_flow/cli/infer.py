@@ -22,7 +22,7 @@ from cellmap_flow.models import registry
 from cellmap_flow.serving.launch import launch, remembered
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.config.yaml import ConfigError, resolve_data_path
-from cellmap_flow.cli.common import ModelTypeGroup, dataset_path, deprecation_notice, resample_option
+from cellmap_flow.cli.common import ModelTypeGroup, agree_to_install, dataset_path, deprecation_notice, resample_option
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             check_server(make_server(data_path, model_config, resample=resample))
             click.echo("Server check passed")
             return
+        agree_to_install([model_config])
         # Ctrl+C or SIGTERM from here on kills the job this starts.
         install_cleanup_handlers()
         try:

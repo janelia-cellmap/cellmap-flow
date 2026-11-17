@@ -3,7 +3,9 @@
 - ``update_run_models()``: stop and forget the models no longer picked,
   start the ones newly picked, each in its own thread. A finetune job's
   server is the Finetune tab's to stop, never this one's. A chain with no
-  input normalizers takes the ones the first model started declares.
+  input normalizers takes the ones the first model started declares. A
+  model whose pixi environment is not installed yet refuses the Submit
+  (``EnvsNotInstalled``) until the Submit agrees to install it.
 - ``run_model()``: start one model's inference server
   (``serving.launch.launch``, which records the job) and add its layer, the
   one Submit would give it. Every model the tab picks goes through it, as a
@@ -31,7 +33,7 @@
 from cellmap_flow.config.yaml import ConfigError
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.serving.launch import launch as launch_server
-from cellmap_flow.jobs.launch import starting_jobs
+from cellmap_flow.jobs.launch import allow_install, install_allowed, starting_jobs
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
@@ -499,8 +501,23 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
     return picked
 
 
+class EnvsNotInstalled(Exception):
+    """A Submit whose models run in pixi environments that are not installed
+    yet, and that did not agree to install them: nothing was stopped or
+    started. ``missing`` is ``{env: [model name, ...]}`` (envs.to_install),
+    for the Models tab to ask with."""
+
+    def __init__(self, missing: dict):
+        self.missing = missing
+        super().__init__("; ".join(
+            f"{', '.join(names)} {'runs' if len(names) == 1 else 'run'} in the pixi environment {env!r}, "
+            "which is not installed yet" for env, names in missing.items()
+        ))
+
+
 def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
-                      cellpose_models: List[dict] = None, run_voxel_sizes: dict = None):
+                      cellpose_models: List[dict] = None, run_voxel_sizes: dict = None,
+                      install_envs: List[str] = None) -> List[str]:
     """Run ``names`` (catalog models, and models ticked by name), ``hf_repos``,
     ``bioimage_models`` ({"id", "voxel_size"} each) and ``cellpose_models``
     ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
@@ -511,10 +528,18 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     Cellpose model's settings are missing or wrong, a catalog folder is not
     there, a model that reads its input itself is given a run voxel size.
 
+    A model to start whose pixi environment is not installed yet needs the
+    Submit to agree to install it, by naming it in ``install_envs``; one
+    agreed to before in this process needs nothing more. Otherwise
+    EnvsNotInstalled, before anything changes, which the Models tab asks
+    about. Returns the environments this Submit installs before their
+    models' jobs (jobs.launch._install_env_first), [] for none.
+
     When the chain has no input normalizers, the first model started that
     declares some (an onnx model's manifest) sets them, as part of its start
     (routes.pipeline.set_declared_input_norm); any other chain is left as it
     is, and only the page's Apply changes it."""
+    from cellmap_flow.models import envs
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
@@ -531,6 +556,13 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     names_running = running_names() - {j.model_name for j in to_be_killed}
     starting = [(name, config) for name, config in picked if name not in names_running]
 
+    to_install = envs.to_install([config for _, config in starting])
+    agreed = set(install_envs or ())
+    unagreed = {env: names for env, names in to_install.items() if env not in agreed and not install_allowed(env)}
+    if unagreed:
+        raise EnvsNotInstalled(unagreed)
+    allow_install(to_install)
+
     _stop_jobs(to_be_killed)
     # A chain with no input normalizers takes the first starting model's
     # declared ones, before the blob its layers are drawn with is taken, so
@@ -545,6 +577,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
         # launch_entry, not to_dict(): a Hugging Face model's to_dict() fetches its metadata.
         logger.info(f"To be submitted: {name} ({config.launch_entry})")
         _launch(name, run_model, config, st_data)
+    return sorted(to_install)
 
 
 def served_at_run_voxel_size() -> list:

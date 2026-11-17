@@ -8,10 +8,13 @@
   what replaces it and then runs it.
 - ``resample_option``: ``--resample``, of ``infer <type>`` and ``serve``.
 - ``dataset_path``: the dataset a person gave as ``-d``, checked.
+- ``agree_to_install``: whether to install the pixi environments the models
+  to serve need, asked at a terminal.
 """
 
 import logging
 import os
+import sys
 
 import click
 
@@ -136,3 +139,30 @@ def deprecated(command: click.Command, old_name: str, old: str, new: str) -> cli
         hidden=True,
         context_settings=command.context_settings,
     )
+
+
+def agree_to_install(models) -> None:
+    """Settle, before ``models`` (model configs) are launched, whether to
+    install the pixi environments they run in that are not installed yet
+    (``envs.to_install``), as the dashboard's Models tab asks before its
+    Submit: ``yaml``, ``infer <type>`` and ``add --run``.
+
+    At a terminal it asks, once for each; declined, that model's launch is
+    refused, saying how to install it. With no terminal to ask (a
+    Fileglancer app's run of a YAML), the environment is installed: the run
+    asked for these models, and nobody could answer. Either way it is
+    installed before the model's job is submitted, never in it
+    (``jobs.launch._install_env_first``).
+    """
+    from cellmap_flow.jobs.launch import allow_install
+    from cellmap_flow.models import envs
+
+    for env, names in envs.to_install(models).items():
+        what = (f"{', '.join(names)} {'runs' if len(names) == 1 else 'run'} in the pixi environment "
+                f"{env!r}, which is not installed yet")
+        if sys.stdin.isatty():
+            if not click.confirm(f"{what}. Install it now (several minutes, once)?", default=True, err=True):
+                continue
+        else:
+            click.echo(f"{what}: installing it before its job (several minutes, once)", err=True)
+        allow_install([env])

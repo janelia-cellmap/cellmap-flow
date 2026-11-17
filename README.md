@@ -71,7 +71,8 @@ That opens OpenOrganelle's mouse-liver volume, which needs no login; give
 
 Model families whose dependencies clash (Cellpose, the BioImage Model Zoo,
 fly_organelles) run in pixi environments of their own, installed the first time
-a model needs one. Or `pip install cellmap-flow`, with the extras `[dacapo]`,
+a model needs one: Submit asks first, as the install takes a few minutes. Or
+`pip install cellmap-flow`, with the extras `[dacapo]`,
 `[bioimageio]` and `[finetune]`. See
 [Installation](https://janelia-cellmap.github.io/cellmap-flow/install.html) for
 Macs, pip and installing from GitHub, and

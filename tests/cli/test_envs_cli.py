@@ -99,3 +99,24 @@ def test_check_imports_cellmap_flow_in_the_env(setup, name, python):
     assert setup.ran == [[*python, "-P", "-c", "import cellmap_flow; print(cellmap_flow.__file__)"]]
     assert ("not installed" in result.output) is (name == "cellpose4")
 
+
+
+@pytest.mark.parametrize("terminal, answer, agreed", [(True, True, True), (True, False, False), (False, None, True)])
+def test_the_commands_ask_at_a_terminal_before_installing_a_models_env(terminal, answer, agreed, monkeypatch):
+    """`yaml`, `infer` and `add --run` ask before their models' launches,
+    as the Models tab's Submit does; with no terminal to answer (a
+    Fileglancer app's run), they install it. Declined, the launch is refused."""
+    import click
+
+    from cellmap_flow.cli.common import agree_to_install
+    from cellmap_flow.jobs import launch
+    from cellmap_flow.models import envs
+
+    monkeypatch.setattr(launch, "_install_allowed", set())
+    monkeypatch.setattr(envs, "to_install", lambda models: {"bioimageio": ["kind_seashell"]})
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: terminal))
+    asked = []
+    monkeypatch.setattr(click, "confirm", lambda text, **kwargs: asked.append(text) or answer)
+    agree_to_install([object()])
+    assert launch.install_allowed("bioimageio") is agreed
+    assert [("kind_seashell runs in the pixi environment 'bioimageio'" in text) for text in asked] == ([True] if terminal else [])

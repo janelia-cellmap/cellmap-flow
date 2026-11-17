@@ -66,6 +66,10 @@ export interface SetData {
  * ``selected_models`` name or a ``selected_hf_models`` repo), as typed
  * beside it ("32", "32,16,16", 32 or [32, 16, 16]). A model left out, or
  * left blank, runs at its own (``ModelConfig.run_voxel_size``).
+ *
+ * ``install_envs``: the pixi environments, not installed yet, that the
+ * person agreed to install for the models ticked (the page's answer to a
+ * 409 ``needs_install``). The browser has none, and ignores it.
  */
 export interface SubmitModels {
   selected_models?: string[];
@@ -76,6 +80,7 @@ export interface SubmitModels {
   run_voxel_sizes?: {
     [k: string]: string | number | unknown[] | null;
   };
+  install_envs?: string[];
 }
 /**
  * A BioImage Model Zoo model ticked on the Models tab: its id or
