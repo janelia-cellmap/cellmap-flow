@@ -80,7 +80,7 @@ import { selectedChannel } from "../../infer/norms";
 import { listedInTab } from "../../kept";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
-import { HF_REPO, type ListFacts, listFacts } from "../../models";
+import { catalogGroup, type ListFacts, listFacts } from "../../models";
 import { withVariant } from "../../models/manifest";
 import { dtypeRange } from "../../viewer/display";
 import type { Router } from "../router";
@@ -632,7 +632,7 @@ function listingOf(ctx: AppContext, volume: PaintVolume | null): (entry: ModelEn
   const group = (e: ModelEntry): Group => {
     if (served.has(e.id)) return "Running";
     if (added.has(e.id)) return "Added";
-    return e.repo === HF_REPO ? "cellmap" : e.repo === FINETUNED_REPO ? "Finetuned" : "Added";
+    return catalogGroup(e);
   };
   return (e) => ({
     name: e.name, repo: e.repo, folder: e.folder, task: e.manifest.task, channels: e.manifest.channels,

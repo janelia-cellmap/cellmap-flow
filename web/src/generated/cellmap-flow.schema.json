@@ -67,6 +67,12 @@
       "request": null
     },
     {
+      "method": "POST",
+      "path": "/api/huggingface-models/forget",
+      "availability": "browser",
+      "request": null
+    },
+    {
       "method": "GET",
       "path": "/api/bioimage-models",
       "availability": "stub",
