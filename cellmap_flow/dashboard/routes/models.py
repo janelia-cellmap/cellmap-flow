@@ -5,7 +5,8 @@ from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import (
-    NotRemovable, configs_by_name, loaded_models, remove_model, served_at_run_voxel_size, update_run_models,
+    EnvsNotInstalled, NotRemovable, configs_by_name, loaded_models, remove_model, served_at_run_voxel_size,
+    update_run_models,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
@@ -140,19 +141,35 @@ def submit_models():
     one, or a run voxel size for a model that reads its input itself, is a
     400, and nothing changes. A chain with no input normalizers takes the
     ones the first model started declares, if any (get_loaded_models says
-    so to the page)."""
+    so to the page).
+
+    A model whose pixi environment is not installed yet is a 409 with
+    ``needs_install`` ([{"env", "models"}]), and nothing changes, unless
+    ``install_envs`` names that environment: the page asks, then sends the
+    same Submit again with it. The answer's ``installing`` lists the
+    environments installed before their models' jobs (Job Logs shows
+    pixi's output)."""
     body, error = parse(SubmitModels, request.get_json(silent=True))
     if error:
         return error
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
     selected_bioimage = [s.model_dump() for s in body.selected_bioimage_models]
     selected_cellpose = [s.model_dump() for s in body.selected_cellpose_models]
+    # The launches read the session's resample, so it is set first, and put
+    # back when the Submit is refused: a 409 or a 400 changes nothing.
+    session = get_session()
+    resample_before = session.resample
     if body.resample is not None:
-        get_session().resample = body.resample
+        session.resample = body.resample
     try:
-        update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose,
-                          body.run_voxel_sizes)
+        installing = update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose,
+                                       body.run_voxel_sizes, body.install_envs)
+    except EnvsNotInstalled as e:
+        session.resample = resample_before
+        needs = [{"env": env, "models": names} for env, names in e.missing.items()]
+        return jsonify({"success": False, "error": str(e), "needs_install": needs}), 409
     except ValueError as e:
+        session.resample = resample_before
         return jsonify({"success": False, "error": str(e)}), 400
     logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "
                 f"bioimage models: {selected_bioimage}, cellpose models: {selected_cellpose}")
@@ -163,6 +180,7 @@ def submit_models():
             "hf_models": selected_hf_models,
             "bioimage_models": selected_bioimage,
             "cellpose_models": selected_cellpose,
+            "installing": installing,
         }
     )
 

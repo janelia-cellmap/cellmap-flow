@@ -24,6 +24,7 @@ import logging
 import os
 import shlex
 import signal
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -39,7 +40,7 @@ from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.ready import READY_ENV, ready_path
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
+from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus, tail
 
 logger = logging.getLogger(__name__)
 
@@ -111,22 +112,81 @@ def _while_starting(job):
             _starting.discard(job)
 
 
-def _install_env_first(command: str, job_name: str) -> None:
-    """Refuse to submit ``command`` when the pixi environment it runs in is
-    not installed yet, rather than install it here.
+class _Installing:
+    """A job's stand-in while the pixi environment its server runs in is
+    installed, before it is submitted: listed among the starting jobs with
+    pixi's output as its log, so Job Logs says what the minutes go on. A
+    model waiting for another's install of the same environment has one
+    too, reading the same output."""
 
-    ``pixi run --frozen`` would install it in the job itself, but a job gets
-    STARTUP_TIMEOUT_SECONDS to report a server, and installing torch and its
-    company takes longer: a first model in an environment nobody had used
-    yet (a new Fileglancer user's) was killed while installing. Installing
-    it here instead, before submitting, traded that for a submission that
-    silently blocks for the same several minutes -- a surprise on a GPU
-    queue a user is actively waiting on. Refuse instead, and say how to
-    install it first: a deliberate, visible step rather than an implicit one.
+    job_id = host = None
+
+    def __init__(self, model_name, env, log_file):
+        self.model_name, self.env, self.log_file = model_name, env, log_file
+        self.killed = False
+
+    def get_status(self):
+        return None
+
+    def peek(self, max_chars: int = 4000):
+        text = tail(self.log_file, max_chars) or ""
+        return (f"Installing the pixi environment {self.env!r} its server runs in "
+                f"(once; several minutes)...\n{text}").rstrip()
+
+    def kill(self):
+        # pixi finishes the install, which the next model needs anyway; the
+        # job is just not submitted after it (_install_env_first).
+        self.killed = True
+
+
+# One install of each environment at a time; the other launches wait for it.
+_install_locks: dict = {}
+# The installs of each environment that failed: how many, and the last one's
+# error. A launch that waited for an install which then failed fails with
+# it too, rather than running the same install again (_install_env_first).
+_install_failures: dict = {}
+# The pixi environments someone agreed to install (allow_install): the
+# Models tab's dialog, or a command's question at a terminal.
+_install_allowed: set = set()
+
+
+def allow_install(env_names) -> None:
+    """Agree to install each of ``env_names`` when a launch needs it: the
+    first job that runs in one installs it before it is submitted
+    (``_install_env_first``). For the rest of this process: a later model
+    in the same environment does not ask again."""
+    with _starting_lock:
+        _install_allowed.update(env_names)
+
+
+def install_allowed(env: str) -> bool:
+    """Whether someone agreed to install ``env`` (``allow_install``)."""
+    with _starting_lock:
+        return env in _install_allowed
+
+
+def _install_env_first(command: str, job_name: str) -> None:
+    """Install the pixi environment ``command`` runs in before submitting
+    it, when it is not installed yet and someone agreed to that
+    (``allow_install``); refuse otherwise.
+
+    Not in the job: ``pixi run --frozen`` would install it there, but a job
+    gets STARTUP_TIMEOUT_SECONDS to report a server, and installing torch
+    and its company takes longer, so a first model in an environment
+    nobody had used yet (a new Fileglancer user's) was killed while
+    installing. Not without asking either: the install takes several
+    minutes, which a Submit spent with nothing on the page saying why. So
+    the Models tab asks before its Submit starts anything
+    (``envs.to_install``; services.launch.EnvsNotInstalled), and so do the
+    commands that serve models at a terminal (``cli.common.agree_to_install``).
+    Meanwhile the job's stand-in (``_Installing``) is among the starting
+    jobs with pixi's output as its log; a model removed meanwhile has no job
+    submitted for it once the install is done.
 
     Raises:
-        JobStartError: ``command`` runs in a pixi environment that is not
-            installed yet.
+        JobStartError: the environment is not installed and nobody agreed
+            to install it; its install failed (the message ends with pixi's
+            output); or the model was stopped while it installed.
     """
     from cellmap_flow.models import envs
 
@@ -137,10 +197,43 @@ def _install_env_first(command: str, job_name: str) -> None:
     env = envs.pixi_env_of(argv)
     if env is None or envs.is_installed(env):
         return
-    raise _logged(JobStartError(
-        f"The pixi environment {env!r} for {job_name} is not installed yet. "
-        f"Install it first: cellmap_flow envs install {env}"
-    ))
+    with _starting_lock:
+        allowed = env in _install_allowed
+        lock = _install_locks.setdefault(env, threading.Lock())
+        failed_before = _install_failures.get(env, (0, None))[0]
+    if not allowed:
+        raise _logged(JobStartError(
+            f"The pixi environment {env!r} for {job_name} is not installed yet. Submit the model from "
+            f"the dashboard's Models tab, which offers to install it, or install it first: "
+            f"cellmap_flow envs install {env}"
+        ))
+    log_file = SERVER_LOG_DIR / f"install_{env}.log"
+    installing = _Installing(job_name, env, log_file)
+    with _while_starting(installing), lock:
+        if not envs.is_installed(env):
+            # The install this launch waited for failed: the same one again
+            # would fail the same way minutes later, once for each model
+            # waiting, each run overwriting the log of the one before. A
+            # launch that starts after the failure (a new Submit) tries again.
+            with _starting_lock:
+                failed, why = _install_failures.get(env, (0, None))
+            if failed != failed_before:
+                raise _logged(JobStartError(f"Could not install the pixi environment {env!r} for {job_name} {why}"))
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Installing the pixi environment {env!r} for {job_name} before submitting it "
+                        f"(once; several minutes); pixi's output is in {log_file}")
+            with open(log_file, "w") as out:
+                result = subprocess.run([argv[0], *envs.install_argv(env)[1:]], stdout=out,
+                                        stderr=subprocess.STDOUT)
+            if result.returncode:
+                why = f"(pixi exited {result.returncode}): {tail(log_file, 2000)}"
+                with _starting_lock:
+                    _install_failures[env] = (failed + 1, why)
+                raise _logged(JobStartError(f"Could not install the pixi environment {env!r} for {job_name} {why}"))
+            envs.mark_installed(env)
+            logger.info(f"Installed the pixi environment {env!r}")
+    if installing.killed:
+        raise JobStartError(f"{job_name} was stopped while the pixi environment {env!r} installed")
 
 
 def starting_jobs() -> list:
