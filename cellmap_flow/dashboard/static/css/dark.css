@@ -66,7 +66,10 @@ small, .text-muted, .form-text {
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 12px 18px;
+  /* 14px a side, so Models, Processing and Finetune fit the dashboard
+     column's first row beside its scrollbar (287 of 309px); at 18px they
+     needed 311px, and Finetune went to the second row. */
+  padding: 12px 14px;
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.02em;
