@@ -183,7 +183,7 @@ def test_blockwise_refuses_a_mia_model_with_an_overlap_before_converting_it(adap
 # What the model advice suggests after each, from what its server says its
 # output is (the uint8 export's declared probabilities x 255; the sigmoid its
 # network ends in), for the user to Apply: Submit sets none of it.
-ARGMAX = [{"name": "ArgmaxPostprocessor", "threshold": 127.5}]
+ARGMAX = [{"name": "ArgmaxPostprocessor", "threshold": 127.5, "ids": "50,51"}]  # mito's and er's, as declared
 WATERSHED = [{"name": "DefaultPostprocessor", "clip_min": 0.0, "clip_max": 1.0, "bias": 0.0, "multiplier": 255.0},
              {"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": str(OFFSETS)}]
 SEMANTIC_SERVED = {"available": True, "output_class": "byte_unit", "output_class_from": "declared", "output_channels": 2}

@@ -15,7 +15,7 @@ then on that folder is served exactly as any export is
 (``CellMapModelConfig``), and finetuned as one.
 
 Nothing the dashboard or blockwise asks (declared_geometry,
-declared_input_norm, declared_affinity_offsets, declared_postprocess,
+declared_input_norm, declared_affinity_offsets, declared_class_ids, declared_postprocess,
 declared_overlap, finetune_modes, finetune_refusal, planned_metadata,
 to_dict) downloads the weights or converts anything: each
 reads the cached export once a server has made it (the cache is in the home
@@ -258,6 +258,8 @@ class MiaModelConfig(ModelConfig):
     # The range its config.json's intensity_range says it read in training.
     declared_input_norm = _as_declared("declared_input_norm")
     declared_affinity_offsets = _as_declared("declared_affinity_offsets")
+    # A semantic model's classes' ids in CellMap's annotations.
+    declared_class_ids = _as_declared("declared_class_ids")
 
     def declared_postprocess(self):
         """The export's, or the one it will be (_declared): the step its

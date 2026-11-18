@@ -248,6 +248,9 @@ def model_advice():
                 # them (never raises); None for a job whose model is not among
                 # the session's.
                 affinity_offsets=by_name[name].declared_affinity_offsets() if name in by_name else None,
+                # The ids its class channels have in CellMap's annotations,
+                # when it declares them: a suggested ArgmaxPostprocessor's.
+                class_ids=by_name[name].declared_class_ids() if name in by_name else None,
             )
 
         # Input side is a declared convention, not something we can observe.

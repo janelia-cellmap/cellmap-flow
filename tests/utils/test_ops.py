@@ -108,6 +108,13 @@ def test_the_model_advice_warns_of_a_default_postprocessor_on_a_uint8_models_out
     assert review["level"] == "warn" and "clips" in review["message"]
     assert [{"name": name, **review["params"].get(name, {})} for name in review["suggest"]] == suggested
 
+    # The ids the model declares its classes have are the argmax's, when
+    # there is one for each channel; else the channels are numbered from 1.
+    for declared, ids in (list(range(1, channels + 1)), True), ([50, 51], False):
+        params = probe.review_postprocess(probe.BYTE_UNIT, chain, out_channels=channels,
+                                          class_ids=declared)["params"].get("ArgmaxPostprocessor", {})
+        assert params.get("ids") == (",".join(map(str, declared)) if ids and channels > 1 else None)
+
 
 def test_a_2d_affinity_models_slice_gives_its_objects_at_the_cut_off_fitted_to_the_paint():
     """setup_53_2d and setup_54_2d have three channels (z, y, x), and the

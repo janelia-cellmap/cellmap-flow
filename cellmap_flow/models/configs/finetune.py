@@ -166,6 +166,10 @@ class FinetuneModelConfig(ModelConfig):
         them; not the three nearest neighbours its channel names give."""
         return self._base_declares(lambda base: base.declared_affinity_offsets(), None)
 
+    def declared_class_ids(self):
+        """Its base's: a finetune's channels are its base's classes."""
+        return self._base_declares(lambda base: base.declared_class_ids(), None)
+
     def declared_postprocess(self):
         """Its base's: a finetune's weights change what its layers compute,
         not the activation its base declares is applied after them (as

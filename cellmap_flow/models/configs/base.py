@@ -37,6 +37,8 @@ describes it. What the rest of cellmap-flow reads:
   the processes that serve or train it over a dataset.
 - ``declared_affinity_offsets()``: the offsets its affinity channels
   compare, when it declares them.
+- ``declared_class_ids()``: the id of each of its class channels in
+  CellMap's annotations, when it declares them.
 """
 
 import functools
@@ -382,6 +384,16 @@ class ModelConfig:
         (dashboard/routes/finetune/common.model_target). Cheap and never
         raises, as declared_input_norm: a cellmap-models export's
         metadata.json declares them."""
+        return None
+
+    def declared_class_ids(self):
+        """The id each of the model's class channels has in CellMap's
+        annotations, as it declares them (whole numbers, one per channel, in
+        channel order: mito 50, er 51), or None when it declares none. The
+        model advice's ArgmaxPostprocessor labels each voxel with its
+        likeliest class's (serving/probe.suggest_postprocess_params). Cheap
+        and never raises, as declared_input_norm: a cellmap-models export's
+        metadata.json declares them (``class_ids``)."""
         return None
 
     def declared_overlap(self):

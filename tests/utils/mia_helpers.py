@@ -18,14 +18,14 @@ PRETRAINING = {"model": {"name": "dinov3_vit3d"}, "algorithm": {"name": "simmim"
 # What mia_metadata says a semantic model's export will declare, from its
 # config.json: read in [0, 1] (its intensity_range), two classes as uint8
 # probabilities x 255 (its summed softmax, in the export), run at the data's
-# own voxel size.
+# own voxel size, each class's id in CellMap's annotations declared.
 DECLARED = {
     "model_name": "lmd", "framework": "torch", "spatial_dims": 3, "in_channels": 1, "out_channels": 2,
     "channels_names": ["mito", "er"], "input_voxel_size": [8] * 3, "output_voxel_size": [8] * 3,
     "input_shape": [8] * 3, "output_shape": [8] * 3, "inference_input_shape": [8] * 3,
     "inference_output_shape": [8] * 3, "input_normalization": {"method": "min_max", "min": 0.0, "max": 1.0},
     "inference_output_activation": {"name": "softmax", "apply_after_model": False, "dim": 1},
-    "output_dtype": "uint8", "native_voxel_size": True,
+    "output_dtype": "uint8", "native_voxel_size": True, "class_ids": [50, 51],
 }
 # And an affinity model's: six affinities, its sigmoid in the export, each
 # channel's offset declared.
@@ -33,7 +33,7 @@ OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [10, 0, 0], [0, 10, 0], [0, 0, 10]]
 AFFINITY_DECLARED = {
     **DECLARED, "out_channels": 6, "channels_names": [f"object_aff_{'_'.join(map(str, o))}" for o in OFFSETS],
     "inference_output_activation": {"name": "sigmoid", "apply_after_model": False}, "output_dtype": "float32",
-    "affinity_offsets": OFFSETS, "native_voxel_size": False,
+    "affinity_offsets": OFFSETS, "native_voxel_size": False, "class_ids": None,
 }
 
 

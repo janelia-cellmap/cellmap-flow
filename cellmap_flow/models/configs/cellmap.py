@@ -82,6 +82,20 @@ def declared_offsets(value):
     return offsets if offsets and whole and all(len(offset) == 3 for offset in offsets) else None
 
 
+def declared_ids(value):
+    """``class_ids`` as an export's metadata declares them: the id each class
+    channel has in CellMap's annotations, in channel order, as a list of
+    ints; None when ``value`` is not that (absent, empty, or not whole
+    numbers an ArgmaxPostprocessor takes as ``ids``, 0 to uint32's largest:
+    an OverflowError is a metadata.json's Infinity)."""
+    try:
+        ids = [int(v) for v in value]
+        whole = all(not isinstance(v, bool) and int(v) == v for v in value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return ids if ids and whole and all(0 <= v <= np.iinfo(np.uint32).max for v in ids) else None
+
+
 def _integer_dtype(dtype):
     """``dtype`` (an export's ``output_dtype``) as a numpy dtype when it is
     an integer one; None for a float, nothing, or no dtype (numpy refuses
@@ -280,7 +294,7 @@ class CellMapModelConfig(ModelConfig):
         be read. cellmap_models' parsed metadata leaves out the fields it does
         not know: input_normalization, and before its mia_model overlap,
         block_phase, blend, output_dtype, affinity_offsets and
-        native_voxel_size."""
+        native_voxel_size, and before its cellmap_classes class_ids."""
         if self._metadata_file is None:
             try:
                 with open(os.path.join(self.cellmap_model.folder_path, "metadata.json")) as f:
@@ -324,6 +338,12 @@ class CellMapModelConfig(ModelConfig):
         """The offsets its export's metadata declares (``affinity_offsets``,
         ``declared_offsets``), read without the model; None without them."""
         return declared_offsets(self._metadata_field("affinity_offsets"))
+
+    def declared_class_ids(self):
+        """The ids its export's metadata declares its class channels have
+        (``class_ids``, ``declared_ids``), read without the model; None
+        without them."""
+        return declared_ids(self._metadata_field("class_ids"))
 
     def declared_overlap(self):
         """The overlap its export's metadata.json declares, read without the

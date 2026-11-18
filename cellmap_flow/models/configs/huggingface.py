@@ -12,7 +12,8 @@ from types import SimpleNamespace
 
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.configs.cellmap import (
-    CellMapModelConfig, declared_offsets, export_finetune_modes, integer_output_refusal, metadata_geometry,
+    CellMapModelConfig, declared_ids, declared_offsets, export_finetune_modes, integer_output_refusal,
+    metadata_geometry,
 )
 from cellmap_flow.portable import rank
 from cellmap_flow.serving.probe import metadata_input_norm
@@ -153,6 +154,12 @@ class HuggingFaceModelConfig(ModelConfig):
         """The offsets the repo's metadata.json declares (``affinity_offsets``),
         downloaded as for declared_geometry; None without them."""
         return declared_offsets(self._declared("affinity_offsets"))
+
+    def declared_class_ids(self):
+        """The ids the repo's metadata.json declares its class channels have
+        (``class_ids``), downloaded as for declared_geometry; None without
+        them."""
+        return declared_ids(self._declared("class_ids"))
 
     def declared_postprocess(self):
         """The step the repo's metadata.json declares is applied after the

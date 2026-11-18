@@ -80,7 +80,12 @@ NEIGHBORHOOD_OFFSETS = [
 _CLASS_RANGE = {UNIT: (0.0, 1.0), BYTE_UNIT: (0.0, 255.0), SIGNED_UNIT: (-1.0, 1.0)}
 
 
-def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None, offsets=None) -> dict:
+# The steps that give every channel they are given, one for one.
+_KEEPS_CHANNELS = ("SigmoidPostprocessor", "DefaultPostprocessor", "ThresholdPostprocessor")
+
+
+def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None, offsets=None,
+                               class_ids=None) -> dict:
     """Parameter values for a suggested chain, from the range flowing into each step.
 
     The default parameters assume each step sees the range its most common
@@ -96,7 +101,12 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
     to the paint for the model (its row's threshold, a probability), or
     None for the midpoint, 0.5. ``offsets`` are its neighborhood when the
     model declares them (``ModelConfig.declared_affinity_offsets``), else
-    NEIGHBORHOOD_OFFSETS cut to its channels.
+    NEIGHBORHOOD_OFFSETS cut to its channels. ``class_ids`` are the
+    ArgmaxPostprocessor's ``ids``, the id each class channel has in CellMap's
+    annotations when the model declares them
+    (``ModelConfig.declared_class_ids``), given when the chain's
+    ArgmaxPostprocessor is reached by all ``out_channels`` of them, one id
+    each; else it numbers the channels from 1.
 
     Returns ``{postprocessor_name: {param: value}}``, containing only the steps
     whose defaults are wrong for this chain, and the AffinityPostprocessor's
@@ -104,6 +114,9 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
     """
     params = {}
     rng = _CLASS_RANGE.get(output_class)  # None while the range is unknown
+    # The channels reaching a step: the model's until a step picks some of
+    # them or makes another count of them, which is not known here.
+    channels = int(out_channels) if out_channels else None
 
     for name in chain:
         if name == "SigmoidPostprocessor":
@@ -142,9 +155,17 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
             # probability of 0.5, in the output's units (127.5 of a
             # probability x 255); its best class's everywhere while the range
             # is not known.
-            if rng is not None:
-                params[name] = {"threshold": (rng[0] + rng[1]) / 2.0}
+            argmax = {} if rng is None else {"threshold": (rng[0] + rng[1]) / 2.0}
+            # Each class's id as its model declares it, as the form writes
+            # ids ("50,51,37"), when there is one for each channel it is
+            # given: an ArgmaxPostprocessor refuses any other count.
+            if class_ids and len(class_ids) == channels:
+                argmax["ids"] = ",".join(str(int(label)) for label in class_ids)
+            if argmax:
+                params[name] = argmax
             rng = None  # labels from here on
+        if name not in _KEEPS_CHANNELS:
+            channels = None
 
     return params
 
@@ -232,6 +253,7 @@ def review_postprocess(
     evidence="",
     threshold=None,
     affinity_offsets=None,
+    class_ids=None,
 ) -> dict:
     """Compare a model's output class against the configured postprocessors.
 
@@ -272,6 +294,10 @@ def review_postprocess(
     ``affinity_offsets``, the ones the model declares
     (``ModelConfig.declared_affinity_offsets``), make it an affinity model
     whatever its channels are named, and are the watershed's neighborhood.
+
+    ``class_ids``, the ones the model declares
+    (``ModelConfig.declared_class_ids``), are the ids a suggested
+    ArgmaxPostprocessor gives its classes (suggest_postprocess_params).
     """
     names = list(postprocess_names or [])
     said = f" ({evidence})" if evidence else ""
@@ -287,7 +313,8 @@ def review_postprocess(
             "level": level,
             "message": message,
             "suggest": suggest,
-            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold, affinity_offsets),
+            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold, affinity_offsets,
+                                                 class_ids),
         }
 
     if output_class is None:
