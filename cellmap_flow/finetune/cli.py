@@ -359,8 +359,11 @@ def build_target_transform(options: TrainingOptions, model_config, output_voxel_
         if options.offsets:
             offsets = json.loads(options.offsets)
 
-        # Else from the model script (a model with an env comes as
-        # --model-entry, its script path in the config)
+        # Else the ones the model declares (its export's metadata.json), or
+        # from the model script (a model with an env comes as --model-entry,
+        # its script path in the config)
+        if offsets is None:
+            offsets = model_config.declared_affinity_offsets()
         script = script or getattr(model_config, "script_path", None)
         if offsets is None and script:
             offsets = read_offsets_from_script(script)

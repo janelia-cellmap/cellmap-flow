@@ -347,9 +347,9 @@ function renderModelAdvice(models) {
 }
 
 // The chain's digest the last answer of the server's gave (the browser's
-// backend answers none): a model's start sets the postprocessing its output
-// needs once its server answers (routes/pipeline.py
-// set_needed_postprocess), after the Submit that started it, so when the
+// backend answers none): the models' starts set the postprocessing they call
+// for once their servers answer (routes/pipeline.py set_start_postprocess),
+// after the Submit that started them, so when the
 // digest moves the Processing tab reads the chain again (main.js, on
 // CHAIN_CHANGED_EVENT).
 let adviceDigest;

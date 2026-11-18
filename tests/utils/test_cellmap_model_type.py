@@ -6,6 +6,7 @@ saying which: jrc_mus-livers_16nm_to_8nm_mito runs only at its inference 288³
 (it fails at 216³), mito_aff_unet_setup_16 only at its training 178³ (fed
 378³ it still answers 56³). The type asks the model.
 """
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -116,5 +117,27 @@ def test_lora_is_offered_for_a_hugging_face_export_only_when_it_has_a_model_pt2(
     from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
 
     monkeypatch.setattr(resolve, "_hf_files", lambda repo, revision: files)
+    # finetune_modes asks finetune_refusal first, which reads metadata.json:
+    # a float output, without asking the Hub.
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {"output_dtype": "float32"})
 
     assert HuggingFaceModelConfig("cellmap/jrc_mus-livers_16nm_to_8nm_mito").finetune_modes() == modes
+
+
+def test_metadata_cellmap_models_cannot_parse_raises_nothing_the_dashboard_asks(tmp_path):
+    """ModelMetadata refuses an input_normalization that is a list with a
+    TypeError, which pydantic does not wrap: finetune_modes (which asks
+    finetune_refusal first) raised it, and the model advice's offsets made
+    /api/model_advice a 500 for every model. What the file says as written
+    is still read. The file is rewritten after the model is added (a
+    re-export), as cellmap_models refuses it when the model is made."""
+    pytest.importorskip("cellmap_models.model_export.cellmap_model")
+    (tmp_path / "model.ts").write_bytes(b"")
+    (tmp_path / "metadata.json").write_text("{}")
+    model = CellMapModelConfig(folder_path=str(tmp_path))
+    (tmp_path / "metadata.json").write_text(json.dumps({"input_normalization": [0, 1],
+                                                        "affinity_offsets": [[1, 0, 0], [0, 0, 10]]}))
+
+    assert model.declared_affinity_offsets() == [[1, 0, 0], [0, 0, 10]]
+    assert model.finetune_refusal() is None and model.finetune_modes() == ("full",)
+    assert model.declared_geometry() is None

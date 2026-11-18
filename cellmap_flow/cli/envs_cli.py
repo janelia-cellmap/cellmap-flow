@@ -139,8 +139,10 @@ def install_cmd(name):
     _checked(name)
     if not envs.has_pixi():
         raise click.ClickException("pixi is not installed: see https://pixi.sh, or set PIXI_EXE")
-    sys.exit(_run([envs.pixi_program(), "install", "--frozen", "--manifest-path", str(envs.pixi_manifest()),
-                   "-e", name]))
+    returncode = _run(envs.install_argv(name))
+    if returncode == 0:
+        envs.mark_installed(name)
+    sys.exit(returncode)
 
 
 @envs_group.command(name="check")

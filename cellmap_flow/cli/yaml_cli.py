@@ -19,7 +19,7 @@ from cellmap_flow.serving.launch import launch
 from cellmap_flow.config.yaml import ConfigError, load_config
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.settings import launcher_settings
-from cellmap_flow.cli.common import log_level_option
+from cellmap_flow.cli.common import agree_to_install, log_level_option
 
 if TYPE_CHECKING:  # ModelConfig is only needed for the annotation below
     from cellmap_flow.models.models_config import ModelConfig
@@ -125,12 +125,21 @@ def run_multiple(
         queue: The GPU queues each job may run on (a list)
         resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
     """
+    # Imported here so --help and config errors do not pay for the dashboard.
+    from cellmap_flow.dashboard.services.launch import at_native_voxel_size
+
     def _submit_model(model):
         model_name = getattr(model, "name", None) or type(model).__name__
         logger.info(f"Submitting job for model: {model_name}")
+        # As the dashboard's own starts do (services.launch.run_model): the
+        # config the dashboard keeps says the voxel size the model runs at.
+        at_native_voxel_size(model, dataset_path)
         launch(model, dataset_path, queue=queue, charge_group=charge_group, resample=resample)
         return model_name
 
+    # Asked here, before the launches' threads: a question from one of them
+    # would interleave with the others' logging.
+    agree_to_install(models)
     failed = []
     if models:
         with ThreadPoolExecutor(max_workers=len(models)) as executor:

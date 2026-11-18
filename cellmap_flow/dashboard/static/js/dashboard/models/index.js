@@ -60,26 +60,64 @@ export function initModelsTab() {
   poll(() => Promise.all([loadedModels.refresh(), logs.watching() && logs.look()]),
        { intervalMs: jobLogs.POLL_MS, immediate: false, pauseWhenHidden: true });
 
-  document.getElementById("submitModelsBtn").addEventListener("click", () => {
+  const submit = (body) => postJSON("/api/models", body)
+    .then((data) => {
+      console.log("Server response:", data);
+      const started = [...(data.models || []), ...(data.hf_models || []),
+                       ...(data.bioimage_models || []).map((m) => m.id),
+                       ...(data.cellpose_models || []).map((m) => m.model + " (" + m.output + ")")];
+      const installing = (data.installing || []).map((env) => `"${env}"`);
+      log(!started.length
+        ? "Submitted: no model selected; any running ones are stopped"
+        : installing.length
+          ? `Submitted ${started.join(", ")}: installing the pixi environment ${installing.join(", ")} first ` +
+            "(once; several minutes), then starting (see Job Logs)"
+          : `Submitted ${started.join(", ")}: starting (see Job Logs)`);
+      if (started.length) logs.watchStartingJobs();
+      announce(MODELS_CHANGED_EVENT);
+    })
+    .catch((err) => {
+      console.error("Error:", err);
+      const message = err instanceof ApiError ? err.message : String(err);
+      // A model whose pixi environment is not installed yet: nothing was
+      // started, and the same Submit, sent again agreeing to install it,
+      // installs it before that model's job.
+      const needs = err instanceof ApiError && err.status === 409 ? err.body?.needs_install : null;
+      if (needs?.length && confirm(installQuestion(needs))) return submit({ ...body, install_envs: needs.map((n) => n.env) });
+      log(`Not submitted: ${message}`);
+      if (!needs?.length) alert("Could not submit: " + message);
+    });
+
+  // One Submit at a time: the button is greyed out and says so until the
+  // dashboard has answered (the question about installing an environment,
+  // and the Submit sent again after it, included). A second press while the
+  // first was unanswered (its answer slow to come back over a VPN) started
+  // each model twice.
+  const submitButton = document.getElementById("submitModelsBtn");
+  const submitLabel = submitButton.textContent;
+  submitButton.addEventListener("click", () => {
+    if (submitButton.disabled) return;
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting…";
     const body = submitBody(LISTS.map((list) => list.payload()), resampleCheckbox.checked);
     console.log("Selected models:", body);
-    postJSON("/api/models", body)
-      .then((data) => {
-        console.log("Server response:", data);
-        const started = [...(data.models || []), ...(data.hf_models || []),
-                         ...(data.bioimage_models || []).map((m) => m.id),
-                         ...(data.cellpose_models || []).map((m) => m.model + " (" + m.output + ")")];
-        log(started.length
-          ? `Submitted ${started.join(", ")}: starting (see Job Logs)`
-          : "Submitted: no model selected; any running ones are stopped");
-        if (started.length) logs.watchStartingJobs();
-        announce(MODELS_CHANGED_EVENT);
-      })
-      .catch((err) => {
-        console.error("Error:", err);
-        const message = err instanceof ApiError ? err.message : String(err);
-        log(`Not submitted: ${message}`);
-        alert("Could not submit: " + message);
-      });
+    submit(body).finally(() => {
+      submitButton.disabled = false;
+      submitButton.textContent = submitLabel;
+    });
   });
+}
+
+// The question a Submit asks before installing the pixi environments its
+// models need: `needs` is the 409's needs_install, [{env, models}].
+function installQuestion(needs) {
+  const lines = needs.map(({ env, models }) =>
+    `${models.join(", ")} ${models.length === 1 ? "runs" : "run"} in the pixi environment "${env}", ` +
+    "which is not installed yet.");
+  const it = needs.length === 1 ? "it" : "them";
+  return [...lines, "",
+    `Install ${it} now? It takes several minutes, and only once: ${it === "it" ? "it is" : "they are"} ` +
+    "installed beside this cellmap-flow, for everyone who runs it. Job Logs shows the progress, and the " +
+    "model starts when it is done."]
+    .join("\n");
 }

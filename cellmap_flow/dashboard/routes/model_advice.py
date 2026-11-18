@@ -165,11 +165,11 @@ def model_advice():
     per served model; ``starting``, whether a model's start is still on its
     way (services/launch.py launching: its job may be listed already while
     its start is still to set the chain's postprocessing,
-    routes.pipeline.set_needed_postprocess), and ``digest``, the chain's
+    routes.pipeline.set_start_postprocess), and ``digest``, the chain's
     (PipelineSpec.digest). The page asks again while ``starting``, and reads
-    the chain again when the digest moves: a model's start sets the
-    postprocessing its output needs once its server answers, after the
-    Submit that started it.
+    the chain again when the digest moves: the models' starts set the
+    postprocessing they call for once their servers answer, after the
+    Submit that started them.
     """
     from cellmap_flow.dashboard.services.launch import launching
 
@@ -244,6 +244,13 @@ def model_advice():
                 # The threshold the ranking fitted to the paint for it, which
                 # an affinity chain's watershed joins neighbours above.
                 threshold=(session.rank_fits.get(name) or {}).get("threshold"),
+                # The offsets its affinity channels compare, when it declares
+                # them (never raises); None for a job whose model is not among
+                # the session's.
+                affinity_offsets=by_name[name].declared_affinity_offsets() if name in by_name else None,
+                # The ids its class channels have in CellMap's annotations,
+                # when it declares them: a suggested ArgmaxPostprocessor's.
+                class_ids=by_name[name].declared_class_ids() if name in by_name else None,
             )
 
         # Input side is a declared convention, not something we can observe.

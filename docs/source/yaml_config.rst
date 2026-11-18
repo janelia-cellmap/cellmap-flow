@@ -801,7 +801,10 @@ had a default, with a warning that says how to give it one. A default that
 is in ``pixi.toml`` but not installed yet is used: it is installed before the
 model's first job is submitted (several minutes, once; Job Logs shows pixi's
 output meanwhile), not in the job, whose time to start a server would run
-out first. An ``env`` the entry names
+out first. It is installed once someone agrees: the Models tab's Submit asks
+in a dialog, and ``cellmap_flow yaml``, ``infer <type>`` and ``add --run``
+ask at a terminal (with no terminal, as in a Fileglancer app's run, they
+install it). Declined, the model is not started. An ``env`` the entry names
 itself is an error when it cannot be used.
 
 Aliases

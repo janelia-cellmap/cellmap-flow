@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.models.configs.base import ModelConfig
 from cellmap_flow.jobs.settings import launcher_settings
 
 OFFSETS = "offsets = [[1, 0, 0], [0, 1, 0]]\nmodel = None\n"
@@ -22,6 +23,10 @@ class _Script:
     """A script model, as the job manager tells a model's type (by its class's cli_name)."""
 
     cli_name = "script"
+    # What a model that declares nothing answers (a ModelConfig's), which the
+    # models list and submit ask: its script's offsets are read instead.
+    finetune_refusal = ModelConfig.finetune_refusal
+    declared_affinity_offsets = ModelConfig.declared_affinity_offsets
 
     def __init__(self, name, script_path):
         self.name, self.script_path = name, script_path
@@ -263,6 +268,9 @@ def test_a_session_is_listed_as_the_volume_it_trains_on_alone(client, tmp_path):
 
 class _Declares:
     """A model that says ``declared`` of its geometry, and that is never to be built."""
+
+    finetune_refusal = ModelConfig.finetune_refusal
+    declared_affinity_offsets = ModelConfig.declared_affinity_offsets
 
     def __init__(self, name, declared=None):
         self.name, self.declared = name, declared

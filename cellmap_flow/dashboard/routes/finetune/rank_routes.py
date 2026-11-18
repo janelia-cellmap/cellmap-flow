@@ -205,10 +205,10 @@ def _refused(message, status=400, **extra):
 
 @finetune_bp.route("/api/finetune/rank/candidates", methods=["GET"])
 def rank_candidates():
-    from cellmap_flow.dashboard.services.launch import _sanitize_job_name, bioimage_model_entry
+    from cellmap_flow.dashboard.services.launch import bioimage_model_entry, huggingface_job_name
     from cellmap_flow.models.bioimage_catalog import cached_bioimage_models
     from cellmap_flow.models.configs.finetune import FinetuneModelConfig
-    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts
+    from cellmap_flow.models.hf_catalog import cached_huggingface_models, facts_of, folder_facts, listed_entry
 
     session = get_session()
     volume_id, volume = session_store().session_volume()
@@ -249,12 +249,15 @@ def rank_candidates():
         for name, folder in models.items():
             add(name, group, task=group, source=folder, dims=_dims(_folder_input_shape(folder)),
                 entry={"type": "cellmap", "folder_path": folder, "name": name}, **folder_facts(folder))
+    hf_names = set()
     for repo, meta in (hf or {}).items():
-        # Named as the Models tab's Submit names it (run_hf_model).
-        name = _sanitize_job_name(repo.split("/")[-1])
+        # Named as the Models tab's Submit names it, a second organization's
+        # repo of the same name with its organization (huggingface_job_name).
+        name = huggingface_job_name(repo, hf_names)
+        hf_names.add(name)
         add(name, HUGGING_FACE, task="huggingface", source=repo, channels=list(meta.get("channels_names") or []),
             voxel_size_nm=list(meta.get("output_voxel_size") or []), dims=_dims(meta.get("input_shape")),
-            entry={"type": "huggingface", "repo": repo, "name": name}, **facts_of(meta))
+            entry=listed_entry(repo, meta, name), **facts_of(meta))
     zoo = cached_bioimage_models()
     for model in (zoo or {}).get("models", []):
         # Built as the Models tab's Submit builds it with its voxel size

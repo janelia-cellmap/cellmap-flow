@@ -91,6 +91,31 @@ def test_the_model_advice_agrees_with_what_affinities_accept(output_class, chain
     assert probe.review_postprocess(output_class, chain, out_channels=3, **names)["level"] == level
 
 
+@pytest.mark.parametrize("chain, channels, suggested", [
+    pytest.param(["DefaultPostprocessor", "AffinityPostprocessor"], 12, [{"name": "ArgmaxPostprocessor", "threshold": 127.5}],
+                 id="class channels: their argmax instead"),
+    pytest.param(["DefaultPostprocessor"], 1, [], id="one channel: the chain without it"),
+])
+def test_the_model_advice_warns_of_a_default_postprocessor_on_a_uint8_models_output(chain, channels, suggested):
+    """A semantic model's uint8 output, a probability x 255, shown through
+    the chain left from an affinity model: DefaultPostprocessor clipped the
+    0-255 to 0-1 and the picture was noise, while the advice said "no
+    activation needed" and offered nothing. It warns of the step, and
+    suggests the chain without it, or the argmax of several classes."""
+    from cellmap_flow.serving import probe
+
+    review = probe.review_postprocess(probe.BYTE_UNIT, chain, out_channels=channels, model_name="lmd-vitl-p8-cellmap-lvd")
+    assert review["level"] == "warn" and "clips" in review["message"]
+    assert [{"name": name, **review["params"].get(name, {})} for name in review["suggest"]] == suggested
+
+    # The ids the model declares its classes have are the argmax's, when
+    # there is one for each channel; else the channels are numbered from 1.
+    for declared, ids in (list(range(1, channels + 1)), True), ([50, 51], False):
+        params = probe.review_postprocess(probe.BYTE_UNIT, chain, out_channels=channels,
+                                          class_ids=declared)["params"].get("ArgmaxPostprocessor", {})
+        assert params.get("ids") == (",".join(map(str, declared)) if ids and channels > 1 else None)
+
+
 def test_a_2d_affinity_models_slice_gives_its_objects_at_the_cut_off_fitted_to_the_paint():
     """setup_53_2d and setup_54_2d have three channels (z, y, x), and the
     browser serves them a slice a block, which has no neighbour along z:

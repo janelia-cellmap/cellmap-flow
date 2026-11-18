@@ -37,7 +37,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, deletedInViewer: [], tabKept: { finetuned: [], volumes: [] } };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, appliedOver: [], deletedInViewer: [], tabKept: { finetuned: [], volumes: [] } };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -60,6 +60,7 @@ export function completeState(stored: unknown): SessionState {
     rankAdded: Array.isArray(s.rankAdded) ? s.rankAdded.filter((id): id is string => typeof id === "string") : [],
     rankFits: rankFitsOf(s.rankFits),
     startPostprocess: startPostprocessOf(s.startPostprocess),
+    appliedOver: Array.isArray(s.appliedOver) ? s.appliedOver.filter((name): name is string => typeof name === "string") : [],
     deletedInViewer: deletedInViewerOf(s.deletedInViewer),
     tabKept: tabKeptOf(s.tabKept),
   };
@@ -79,9 +80,9 @@ function rankFitsOf(stored: unknown): Record<string, RankFit> {
 
 /** A stored `startPostprocess` made whole, or null when it is not one. */
 function startPostprocessOf(stored: unknown): SessionState["startPostprocess"] {
-  const s = stored as { model?: unknown; postprocess?: unknown } | null;
+  const s = stored as { model?: unknown; postprocess?: unknown; declared?: unknown } | null;
   return s && typeof s === "object" && typeof s.model === "string" && Array.isArray(s.postprocess)
-    ? { model: s.model, postprocess: s.postprocess as Step[] } : null;
+    ? { model: s.model, postprocess: s.postprocess as Step[], declared: s.declared === true } : null;
 }
 
 /** A stored `deletedInViewer` made whole: its entries that are one; none for
