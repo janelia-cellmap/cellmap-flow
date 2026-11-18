@@ -254,6 +254,10 @@ def review_postprocess(
     AffinityPostprocessor it is a "warn": the watershed then has no
     affinities to join objects by.
 
+    A DefaultPostprocessor on a probability x 255 (a uint8 export's) is a
+    "warn" too: it clips the 0-255 to 0-1. The chain is suggested back
+    without it, or as the argmax of several class channels.
+
     ``evidence`` (``activation_evidence``'s) is what says the class, which
     each message gives. ``output_class`` None, when neither the network nor
     its output on noise says what the output is, is "unknown", with what
@@ -364,13 +368,35 @@ def review_postprocess(
                 ),
                 [n for n in names if n != "SigmoidPostprocessor"],
             )
+        several = bool(out_channels) and int(out_channels) > 1
+        # DefaultPostprocessor clips to [-1, 1], or to the [0, 1] an affinity
+        # chain's is set to, and scales that onto 0-255: a probability x 255
+        # is 0-255 already, and comes out of it 0 or the top value nearly
+        # everywhere. The review is given the steps' names alone, so any
+        # DefaultPostprocessor here is taken for one; an affinity model's,
+        # set to clip 0-255 ahead of its watershed, was answered above. The
+        # chain is suggested back without it, or as the argmax of several
+        # class channels when the chain has none.
+        if output_class == BYTE_UNIT and has_default:
+            rest = [n for n in names if n != "DefaultPostprocessor"]
+            classes = several and "ArgmaxPostprocessor" not in names
+            return verdict(
+                "warn",
+                (
+                    f"This model's output is already {what}{said}. DefaultPostprocessor clips it "
+                    "to 0-1, so nearly every voxel shows the same: take it out"
+                    + (f", and ArgmaxPostprocessor labels each voxel with the likeliest of its {out_channels} "
+                       "classes, background where none reaches 0.5." if classes else ".")
+                ),
+                ["ArgmaxPostprocessor"] if classes else rest,
+            )
         # A uint8 export's channels, when there are several, are classes,
         # each a probability x 255 (cellmap_models writes a semantic model's
         # so: a class's summed softmax, model_export.mia_model), which
         # exclude each other: their segmentation is each voxel's likeliest
         # class, background where none reaches 0.5. Offered as the affinity
         # chain is: the probabilities show right without it.
-        if output_class == BYTE_UNIT and not names and out_channels and int(out_channels) > 1:
+        if output_class == BYTE_UNIT and not names and several:
             return verdict(
                 "optional",
                 (

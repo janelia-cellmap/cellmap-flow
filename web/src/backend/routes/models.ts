@@ -253,7 +253,10 @@ export function modelRoutes(router: Router): void {
     // model's manifest declares follows it, else what the first model's
     // output needs, when it shows every model served right, before they are
     // served (serving.ts setDeclaredInputNorm, setStartPostprocess).
+    // Before that, postprocessing set for models none of which stays is
+    // cleared (resetPostprocessOfModelsGone).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
+    if (starting.length) await resetPostprocessOfModelsGone(ctx, ctx.session.state.models.filter((m) => resolved.entries.some((e) => e.id === m.id)));
     await setDeclaredInputNorm(ctx, starting);
     await setStartPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
@@ -351,6 +354,7 @@ export function modelRoutes(router: Router): void {
     // declares follows it, else what a model's output needs, when it shows
     // every model served right.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
+      await resetPostprocessOfModelsGone(ctx, ctx.session.state.models);
       await setDeclaredInputNorm(ctx, [model]);
       await setStartPostprocess(ctx, [model], entries);
     }
@@ -639,6 +643,27 @@ function postprocessSetBy(state: SessionState): { model: string; fitted: boolean
   const started = state.startPostprocess;
   return started && names.includes(started.model) && sameSteps(started.postprocess, live)
     ? { model: started.model, fitted: false, declared: started.declared } : null;
+}
+
+/** Clear the session chain's postprocessing, as part of starting models,
+ * when it was set for models none of which is served any more: `staying`,
+ * the models served before this start that it keeps, is empty
+ * (routes/pipeline.py's reset_postprocess_of_models_gone). Submit and Add
+ * call this before setStartPostprocess, so the start sets what the new
+ * models declare or need and the advice suggests the rest: a chain Applied
+ * over an affinity model otherwise stayed for the model submitted after
+ * that one was stopped. Only a chain that came from the dashboard is
+ * cleared: one the user Applied over models (the session's appliedOver),
+ * or one a model's start set that still stands (startPostprocess). A chain
+ * Applied before any model was served is left alone, as is any chain while
+ * a model it was served over stays. The models it was for are stopped by
+ * this start or already, so nothing is drawn again. */
+async function resetPostprocessOfModelsGone(ctx: AppContext, staying: readonly ModelEntry[]): Promise<void> {
+  const { chain, appliedOver, startPostprocess } = ctx.session.state;
+  if (staying.length || !chain.postprocess.length) return;
+  if (!appliedOver.length && !(startPostprocess && sameSteps(startPostprocess.postprocess, chain.postprocess))) return;
+  await ctx.session.update({ chain: { input_norm: chain.input_norm, postprocess: [] }, appliedOver: [], startPostprocess: null });
+  ctx.log(`Postprocessing reset: the models it was set for are no longer running (it was ${stepNames(chain.postprocess).join(" → ")})`);
 }
 
 /** The name of the first of `entries` whose declared input normalization is

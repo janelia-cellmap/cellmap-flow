@@ -359,6 +359,38 @@ def test_a_later_start_leaves_the_chain_the_user_applied_over_the_models_running
     assert session.pipeline_spec.postprocess == ()
 
 
+@pytest.mark.parametrize("how, reset", [
+    pytest.param("removed", True, id="its model was removed first"),
+    pytest.param("unticked", True, id="its model is stopped by this Submit"),
+    pytest.param("kept", False, id="its model keeps running"),
+])
+def test_a_submit_resets_the_postprocessing_applied_over_models_that_are_all_gone(dashboard, monkeypatch, hf_starts,
+                                                                                 how, reset):
+    """The chain Applied over an affinity model, its DefaultPostprocessor
+    clipping to [0, 1], stayed when that model was stopped and a semantic
+    model submitted, whose 0-255 output it clipped to 0-1. A Submit that
+    leaves none of the models running before it clears the postprocessing
+    the dashboard set for them, so the start sets what the new model
+    declares or needs; while one of them keeps running, the chain stays."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", _up)
+    # The second model's server does not say what its output is: its start sets nothing.
+    monkeypatch.setattr(pipeline, "fetch_model_info",
+                        lambda host: {"output_class": "unbounded"} if "setup_53" in host else {})
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = hf_starts
+    applied = [{"name": "DefaultPostprocessor", "clip_min": 0.0, "clip_max": 1.0, "bias": 0.0, "multiplier": 255.0}]
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]}).status_code == 200
+    assert dashboard.put("/api/pipeline", json={"input_norm": SIGNED, "postprocess": applied}).status_code == 200
+    if how == "removed":
+        launch.remove_model("mito_aff_unetiso_setup_53")
+    submitted = [DECLARING, "cellmap/aff"] if how == "kept" else ["cellmap/aff"]
+    assert dashboard.post("/api/models", json={"selected_hf_models": submitted}).status_code == 200
+    assert session.pipeline_spec == PipelineSpec(SIGNED, [] if reset else applied)
+
+
 def test_two_organizations_repos_of_one_name_are_both_started(dashboard, monkeypatch, hf_starts):
     """cellmap/setup-53 and ai-hhmi/setup-53 ticked together were both named
     setup_53, and the second silently dropped. The second is named with its

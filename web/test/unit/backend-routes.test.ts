@@ -187,6 +187,32 @@ describe("POST /api/models", () => {
     expect(ctx.session.state.chain.postprocess).toEqual([]);
   }, 120_000);
 
+  it("resets the postprocessing Applied over a model once it is gone and another is submitted, and keeps a chain that was never Applied over a model", async (t) => {
+    // The chain Applied over an affinity model stayed for the model submitted
+    // after that one was stopped, whose output it showed wrong.
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const theirs = [{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: 0.3 }];
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    // The second model's manifest does not say what its output is: its start sets nothing.
+    ctx.catalog.entries[1].manifest.output = "";
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: theirs }));
+    // While the model it was Applied over stays, so does the chain.
+    await backend.handle(submit([HF54, HF56]));
+    expect(ctx.session.state.chain.postprocess).toEqual(theirs);
+    await backend.handle(request("POST", "/api/models/remove", { name: NAME_54 }));
+    await backend.handle(request("POST", "/api/models/remove", { name: NAME_56 }));
+    expect((await backend.handle(submit([HF56]))).status).toBe(200);
+    expect(ctx.session.state.chain.postprocess).toEqual([]);
+    expect(ctx.infer.served().map((s) => decodeArgs(s.view.split(ARGS_KEY)[1]).chain.postprocess)).toEqual([[]]);
+    // A chain there before any model, never Applied over one, is not the dashboard's to clear.
+    const kept = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: theirs } } });
+    await createBackend(kept).handle(submit([HF54]));
+    expect(kept.session.state.chain.postprocess).toEqual(theirs);
+  }, 120_000);
+
   it("sets the sigmoid a model's manifest declares is applied after it, saying it came from the model's metadata", async (t) => {
     // The rule is the portable Python's (rank.declared_postprocess), the server's Submit's too.
     if (!(await portablePython())) t.skip();

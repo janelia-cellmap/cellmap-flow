@@ -7,6 +7,8 @@
 - ``set_declared_input_norm()``: a model's start sets the input normalization
   it declares, or its kind of model's convention, when the chain has none
   (services.launch.update_run_models).
+- ``reset_postprocess_of_models_gone()``: a start with none of the models
+  that were running left clears the postprocessing set for those.
 - ``set_start_postprocess()``: the models' starts set the step a model's
   metadata declares is applied after it (a sigmoid), else the sigmoid a
   model's logits need, when the chain has none, once every model started
@@ -428,6 +430,45 @@ def input_norm_set_by(model_configs):
         if rank.same_steps(steps, live):
             return getattr(model_config, "name", None), declared
     return None, None
+
+
+def reset_postprocess_of_models_gone(staying) -> bool:
+    """Clear the chain's postprocessing, as part of starting models, when it
+    was set for models none of which runs any more: ``staying``, the names
+    of the models that were running before this start and still are after
+    it, is empty. Returns whether it cleared any.
+
+    The Models tab's Submit (services.launch.update_run_models) and Add a
+    model call this after their stops and before their starts, so the
+    starts set what the new models declare or need (set_start_postprocess)
+    and the model advice suggests the rest. A chain Applied over an
+    affinity model, its DefaultPostprocessor clipping to [0, 1] ahead of the
+    watershed, otherwise stayed for the model submitted once that one was
+    stopped, a semantic model whose uint8 output it clipped to 0-1.
+
+    Only a chain that came from the dashboard is cleared: one the user
+    Applied over models (Session.applied_over, PUT /api/pipeline's), or one
+    a model's start set and that still stands (Session.start_postprocess).
+    A YAML's or the command line's chain, never Applied, is left alone, as
+    is one Applied before any model ran, and any chain while a model it
+    was running over keeps running. The input normalization stays: a start
+    sets the declared one only on a chain with none.
+
+    The browser's twin is web/src/backend/routes/models.ts
+    resetPostprocessOfModelsGone.
+    """
+    session = get_session()
+    live = [dict(step) for step in session.pipeline_spec.postprocess]
+    if staying or not live:
+        return False
+    started = session.start_postprocess
+    if not session.applied_over and not (started and rank.same_steps(started["postprocess"], live)):
+        return False
+    _set_chain_and_redraw(PipelineSpec(session.pipeline_spec.input_norm, []), None)
+    session.applied_over, session.start_postprocess = set(), None
+    logger.info("Postprocessing reset: the models it was set for are no longer running "
+                f"(it was {' → '.join(step['name'] for step in live)})")
+    return True
 
 
 # The models' starts run in launch threads of their own: one at a time

@@ -640,7 +640,11 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     postprocessing, the step a model's metadata declares is applied after
     it (a sigmoid), or else the sigmoid a model's logits need, is set once
     the servers are up and say what each output is (run_model). Any other
-    chain is left as it is, and only the page's Apply changes it."""
+    chain is left as it is, and only the page's Apply changes it; but for
+    postprocessing the dashboard set (an Apply over models, a start) when
+    none of the models running before this Submit is left after it, which
+    is cleared before the starts
+    (routes.pipeline.reset_postprocess_of_models_gone)."""
     from cellmap_flow.models import envs
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
@@ -665,13 +669,20 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
         raise EnvsNotInstalled(unagreed)
     allow_install(to_install)
 
+    # The models that were running and still are once this Submit's stops and
+    # starts are done, one started again with other settings among them.
+    staying = running_names() & (names_running | {name for name, _ in starting})
     _stop_jobs(to_be_killed)
     # A chain with no input normalizers takes the first starting model's
     # declared ones, before the blob its layers are drawn with is taken, so
     # they are drawn through them (routes.pipeline.set_declared_input_norm).
     # After the stop, so the layers of the models stopped are not redrawn.
-    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
+    from cellmap_flow.dashboard.routes.pipeline import reset_postprocess_of_models_gone, set_declared_input_norm
 
+    # Postprocessing the dashboard set for models none of which is left is
+    # cleared first, so the starts set what these models declare or need.
+    if starting:
+        reset_postprocess_of_models_gone(staying)
     set_declared_input_norm([config for _, config in starting])
     st_data = session.layer_blob()
     for name, config in starting:
