@@ -155,15 +155,21 @@ def submit_models():
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
     selected_bioimage = [s.model_dump() for s in body.selected_bioimage_models]
     selected_cellpose = [s.model_dump() for s in body.selected_cellpose_models]
+    # The launches read the session's resample, so it is set first, and put
+    # back when the Submit is refused: a 409 or a 400 changes nothing.
+    session = get_session()
+    resample_before = session.resample
     if body.resample is not None:
-        get_session().resample = body.resample
+        session.resample = body.resample
     try:
         installing = update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose,
                                        body.run_voxel_sizes, body.install_envs)
     except EnvsNotInstalled as e:
+        session.resample = resample_before
         needs = [{"env": env, "models": names} for env, names in e.missing.items()]
         return jsonify({"success": False, "error": str(e), "needs_install": needs}), 409
     except ValueError as e:
+        session.resample = resample_before
         return jsonify({"success": False, "error": str(e)}), 400
     logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "
                 f"bioimage models: {selected_bioimage}, cellpose models: {selected_cellpose}")

@@ -34,6 +34,9 @@ def setup(tmp_path, monkeypatch):
     manifest.write_text(textwrap.dedent(MANIFEST))
     (tmp_path / ".pixi" / "envs" / "dacapo" / "bin").mkdir(parents=True)
     (tmp_path / ".pixi" / "envs" / "dacapo" / "bin" / "python").write_text("")
+    # What pixi writes once the whole environment is in.
+    (tmp_path / ".pixi" / "envs" / "dacapo" / "conda-meta").mkdir()
+    (tmp_path / ".pixi" / "envs" / "dacapo" / "conda-meta" / "pixi").write_text("{}")
     (tmp_path / "conda" / "bin").mkdir(parents=True)
     (tmp_path / "conda" / "bin" / "python").write_text("")
     aliases = tmp_path / "envs.yaml"
@@ -101,11 +104,41 @@ def test_check_imports_cellmap_flow_in_the_env(setup, name, python):
 
 
 
-@pytest.mark.parametrize("terminal, answer, agreed", [(True, True, True), (True, False, False), (False, None, True)])
-def test_the_commands_ask_at_a_terminal_before_installing_a_models_env(terminal, answer, agreed, monkeypatch):
+def test_a_pixi_env_whose_install_stopped_part_way_is_not_installed(setup):
+    """pixi puts the conda packages in first, python with them, then the PyPI
+    ones. An install that failed or was killed in between left a python, which
+    alone counted as installed: the model was submitted, later Submits stopped
+    asking, and the job finished the install itself, past its time to report a
+    server. pixi's own file, written when all of it is in, is what counts; an
+    alias's directory is the user's and needs only its python."""
+    from cellmap_flow.models import envs
+
+    half = setup.root / ".pixi" / "envs" / "cellpose4"
+    (half / "bin").mkdir(parents=True)
+    (half / "bin" / "python").write_text("")
+    (half / "conda-meta").mkdir()
+    (half / "conda-meta" / "pixi_env_prefix").write_text(str(half))  # there once the conda packages are
+
+    assert not envs.is_installed("cellpose4")
+    assert envs.is_installed("dacapo") and envs.is_installed("mine")
+    # An install that exits with 0 counts even from a pixi that writes no
+    # file of its own (the fixture's writes nothing).
+    assert _invoke("install", "cellpose4").exit_code == 0
+    assert envs.is_installed("cellpose4")
+
+
+@pytest.mark.parametrize("terminal, foreground, answer, agreed", [
+    (True, True, True, True), (True, True, False, False), (False, False, None, True), (True, False, None, True)])
+def test_the_commands_ask_at_a_terminal_before_installing_a_models_env(terminal, foreground, answer, agreed,
+                                                                       monkeypatch):
     """`yaml`, `infer` and `add --run` ask before their models' launches,
     as the Models tab's Submit does; with no terminal to answer (a
-    Fileglancer app's run), they install it. Declined, the launch is refused."""
+    Fileglancer app's run), they install it. Declined, the launch is refused.
+    A command in the background of a shell (`cellmap_flow yaml cfg.yaml &`)
+    has the terminal as its stdin and cannot read it: it was asked, and
+    stopped at the question (SIGTTIN); it installs without asking too."""
+    import os
+
     import click
 
     from cellmap_flow.cli.common import agree_to_install
@@ -114,9 +147,10 @@ def test_the_commands_ask_at_a_terminal_before_installing_a_models_env(terminal,
 
     monkeypatch.setattr(launch, "_install_allowed", set())
     monkeypatch.setattr(envs, "to_install", lambda models: {"bioimageio": ["kind_seashell"]})
-    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: terminal))
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: terminal, fileno=lambda: 0))
+    monkeypatch.setattr(os, "tcgetpgrp", lambda fd: os.getpgrp() + (0 if foreground else 1))
     asked = []
     monkeypatch.setattr(click, "confirm", lambda text, **kwargs: asked.append(text) or answer)
     agree_to_install([object()])
     assert launch.install_allowed("bioimageio") is agreed
-    assert [("kind_seashell runs in the pixi environment 'bioimageio'" in text) for text in asked] == ([True] if terminal else [])
+    assert [("kind_seashell runs in the pixi environment 'bioimageio'" in text) for text in asked] == ([True] if foreground else [])

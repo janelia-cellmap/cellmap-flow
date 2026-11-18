@@ -244,9 +244,51 @@ def prefix(env: str) -> str:
     return str(pixi_manifest().parent / ".pixi" / "envs" / env)
 
 
+# What says a pixi environment's install finished, in its conda-meta: the
+# file pixi writes there once all of it is in, its PyPI packages included
+# (its pixi_env_prefix and the python are there as soon as the conda
+# packages are), or the one mark_installed leaves where pixi wrote none.
+_PIXI_INSTALLED = "pixi"
+_MARKED_INSTALLED = "cellmap_flow_installed"
+
+
 def is_installed(env: str) -> bool:
-    """Whether ``env`` has a python yet (a pixi one must be installed explicitly first)."""
-    return os.path.exists(os.path.join(prefix(env), "bin", "python"))
+    """Whether ``env`` is installed: a directory (a path or an alias) has a
+    python; a pixi environment has one and its install finished.
+
+    A python alone does not say a pixi environment is installed: pixi puts
+    the conda packages in first, python among them, then the PyPI ones, so
+    an install that failed or was killed in between left a python and no
+    cellmap-flow. Taken as installed, its model was submitted, and ``pixi
+    run --frozen`` finished the install in the job, whose time to report a
+    server runs out first (``jobs.launch._install_env_first``). pixi writes
+    ``conda-meta/pixi`` only once the whole environment is in, whoever ran
+    it (``pixi install``, ``pixi run``, a launch here), so that file is what
+    is looked for, else ``mark_installed``'s.
+    """
+    directory = prefix(env)
+    if not os.path.exists(os.path.join(directory, "bin", "python")):
+        return False
+    if _directory(env) is not None:
+        return True
+    return any(os.path.exists(os.path.join(directory, "conda-meta", name))
+               for name in (_PIXI_INSTALLED, _MARKED_INSTALLED))
+
+
+def mark_installed(env: str) -> None:
+    """Record that ``pixi install`` of ``env`` just exited with 0, for a pixi
+    that leaves no ``conda-meta/pixi`` of its own (an old one): without it
+    ``is_installed`` would say no after every install, and each Submit ask
+    again. Nothing is written where pixi's file is, or where there is no
+    environment (a pixi with detached environments installs elsewhere)."""
+    directory = prefix(env)
+    if is_installed(env) or not os.path.exists(os.path.join(directory, "bin", "python")):
+        return
+    try:
+        Path(directory, "conda-meta").mkdir(exist_ok=True)
+        Path(directory, "conda-meta", _MARKED_INSTALLED).write_text("pixi install exited with 0\n")
+    except OSError as e:
+        logger.warning(f"Could not record that the pixi environment {env!r} is installed: {e}")
 
 
 def is_running_in(env: str) -> bool:

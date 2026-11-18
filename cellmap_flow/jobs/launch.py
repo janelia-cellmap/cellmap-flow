@@ -141,6 +141,10 @@ class _Installing:
 
 # One install of each environment at a time; the other launches wait for it.
 _install_locks: dict = {}
+# The installs of each environment that failed: how many, and the last one's
+# error. A launch that waited for an install which then failed fails with
+# it too, rather than running the same install again (_install_env_first).
+_install_failures: dict = {}
 # The pixi environments someone agreed to install (allow_install): the
 # Models tab's dialog, or a command's question at a terminal.
 _install_allowed: set = set()
@@ -196,6 +200,7 @@ def _install_env_first(command: str, job_name: str) -> None:
     with _starting_lock:
         allowed = env in _install_allowed
         lock = _install_locks.setdefault(env, threading.Lock())
+        failed_before = _install_failures.get(env, (0, None))[0]
     if not allowed:
         raise _logged(JobStartError(
             f"The pixi environment {env!r} for {job_name} is not installed yet. Submit the model from "
@@ -206,6 +211,14 @@ def _install_env_first(command: str, job_name: str) -> None:
     installing = _Installing(job_name, env, log_file)
     with _while_starting(installing), lock:
         if not envs.is_installed(env):
+            # The install this launch waited for failed: the same one again
+            # would fail the same way minutes later, once for each model
+            # waiting, each run overwriting the log of the one before. A
+            # launch that starts after the failure (a new Submit) tries again.
+            with _starting_lock:
+                failed, why = _install_failures.get(env, (0, None))
+            if failed != failed_before:
+                raise _logged(JobStartError(f"Could not install the pixi environment {env!r} for {job_name} {why}"))
             log_file.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"Installing the pixi environment {env!r} for {job_name} before submitting it "
                         f"(once; several minutes); pixi's output is in {log_file}")
@@ -213,10 +226,11 @@ def _install_env_first(command: str, job_name: str) -> None:
                 result = subprocess.run([argv[0], *envs.install_argv(env)[1:]], stdout=out,
                                         stderr=subprocess.STDOUT)
             if result.returncode:
-                raise _logged(JobStartError(
-                    f"Could not install the pixi environment {env!r} for {job_name} "
-                    f"(pixi exited {result.returncode}): {tail(log_file, 2000)}"
-                ))
+                why = f"(pixi exited {result.returncode}): {tail(log_file, 2000)}"
+                with _starting_lock:
+                    _install_failures[env] = (failed + 1, why)
+                raise _logged(JobStartError(f"Could not install the pixi environment {env!r} for {job_name} {why}"))
+            envs.mark_installed(env)
             logger.info(f"Installed the pixi environment {env!r}")
     if installing.killed:
         raise JobStartError(f"{job_name} was stopped while the pixi environment {env!r} installed")
