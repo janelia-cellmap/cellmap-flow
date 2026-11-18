@@ -11,6 +11,7 @@ import logging
 import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import NamedTuple
 
@@ -243,6 +244,51 @@ def test_an_agreed_env_installs_before_the_job_with_pixis_output_in_job_logs(sto
     assert launch.starting_jobs() == [] and launch.failed_starts() == []
     # Installed, the next model in it goes straight to its job.
     launch._install_env_first(COMMAND, "more_cells")
+
+
+def test_models_waiting_for_an_install_that_fails_fail_with_it_without_installing_again(monkeypatch, tmp_path):
+    """Each model waiting for the environment ran the whole failing install
+    again when its turn came, minutes each, and each run overwrote the log of
+    the one before. They fail with the first one's error; a launch after the
+    failure (a new Submit) installs again."""
+    from cellmap_flow.models import envs
+
+    monkeypatch.setattr(envs, "is_installed", lambda env: False)
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
+    monkeypatch.setattr(launch, "_install_allowed", {"cellpose4"})
+    monkeypatch.setattr(launch, "_install_locks", {})
+    monkeypatch.setattr(launch, "_install_failures", {})
+    runs, errors = [], {}
+
+    def pixi(argv, stdout, stderr):
+        runs.append(argv)
+        stdout.write(f"no wheel for torch (run {len(runs)})\n")
+        stdout.flush()
+        # Fails once the other two models wait for it.
+        deadline = time.time() + 10
+        while len(launch.starting_jobs()) < 3 and len(runs) == 1 and time.time() < deadline:
+            time.sleep(0.01)
+        return subprocess.CompletedProcess(argv, 1)
+
+    def start(name):
+        try:
+            launch._install_env_first(COMMAND, name)
+        except JobStartError as e:
+            errors[name] = str(e)
+
+    monkeypatch.setattr(launch.subprocess, "run", pixi)
+    threads = [threading.Thread(target=start, args=(name,)) for name in ("cells", "nuclei", "mito")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(runs) == 1
+    assert set(errors) == {"cells", "nuclei", "mito"}
+    assert all("pixi exited 1" in error and "(run 1)" in error for error in errors.values())
+    assert "(run 1)" in (tmp_path / "install_cellpose4.log").read_text()
+    start("later")
+    assert len(runs) == 2 and "(run 2)" in errors["later"]
 
 
 def test_an_installed_pixi_env_is_not_refused(monkeypatch):

@@ -122,7 +122,9 @@ def test_submit_serves_a_ticked_zoo_model_from_the_bioimageio_environment(submit
 def test_submit_asks_before_installing_a_zoo_models_environment(submit, models_tab, tmp_path, monkeypatch):
     """The bioimageio environment not installed yet: the Submit starts
     nothing and names it, for the Models tab to ask; sent again agreeing,
-    the model's launch installs it before its job (jobs.launch)."""
+    the model's launch installs it before its job (jobs.launch). The refused
+    Submit changes nothing: its ``resample`` was kept by the session, so
+    cancelling the dialog left the next launches reading differently."""
     from cellmap_flow.jobs import launch as jobs_launch
     from cellmap_flow.models import envs
 
@@ -131,13 +133,15 @@ def test_submit_asks_before_installing_a_zoo_models_environment(submit, models_t
     monkeypatch.setattr(jobs_launch, "_install_allowed", set())
     shrimp = {"id": DOI, "voxel_size": "8"}
 
-    answer = submit(shrimp)
-    assert answer.status_code == 409
+    get_session().resample = True
+    answer = models_tab(selected_bioimage_models=[shrimp], resample=False)
+    assert answer.status_code == 409 and get_session().resample is True
     assert answer.get_json()["needs_install"] == [{"env": "bioimageio", "models": ["kind_seashell"]}]
     assert submit.commands == [] and "kind_seashell" not in [mc.name for mc in get_session().models_config]
 
-    answer = models_tab(selected_bioimage_models=[shrimp], install_envs=["bioimageio"])
+    answer = models_tab(selected_bioimage_models=[shrimp], install_envs=["bioimageio"], resample=False)
     assert answer.status_code == 200 and answer.get_json()["installing"] == ["bioimageio"]
+    assert get_session().resample is False
     assert len(submit.commands) == 1 and jobs_launch.install_allowed("bioimageio")
 
 

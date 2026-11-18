@@ -167,6 +167,29 @@ def test_an_overlap_models_cache_is_held_to_half_the_memory_the_job_may_use(monk
     assert chunkmirage_server.prediction_cache_bytes(geometry, np.uint8) == 512 * 12 * 256**3
 
 
+def test_a_server_on_a_chunkmirage_without_block_phase_refuses_a_model_declaring_one(tmp_path, monkeypatch):
+    """An environment not installed again since cellmap-flow took chunkmirage
+    0.1.0a7 still has an older one, which ignores an op's block_phase and
+    blend: the model's blocks were laid centred and weighted by the tent,
+    silently. A model declaring neither is still served there."""
+    from cellmap_flow.serving import chunkmirage_server
+
+    class OldOp:  # an Op with an overlap and no block_phase or blend, as 0.1.0a5's
+        overlap = 0
+
+    monkeypatch.setattr(chunkmirage_server, "Op", OldOp)
+    raw = write_raw(tmp_path, np.zeros((24, 24, 48), dtype=np.uint8))
+    for phase, blend in [("corner", "tent"), ("centred", "ramp")]:
+        script = WINDOW_MEAN_MODEL.replace("$phase", phase).replace("$blend", blend)
+        with pytest.raises(ValueError, match="chunkmirage"):
+            _server(raw, write_script(tmp_path, script))
+    # The op itself is the installed chunkmirage's, so only the refusal is
+    # tried on the old one: the defaults pass it.
+    default = WINDOW_MEAN_MODEL.replace("$phase", "centred").replace("$blend", "tent")
+    server, _ = _server(raw, write_script(tmp_path, default))
+    assert server.served.block == (8, 8, 8)
+
+
 def test_the_served_array_covers_the_data_rounded_up_and_its_chunks_start_at_the_raw_corner(tmp_path, ome_pyramid):
     """11 voxels of 8 nm from -4 nm (Janelia's corner, which OME metadata
     carries; a legacy offset is snapped onto the voxel grid) end at 84 nm:
