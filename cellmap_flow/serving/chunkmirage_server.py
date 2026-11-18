@@ -224,14 +224,19 @@ class ChunkmirageServer:
         input_voxel_size = np.asarray(Coordinate(self.geometry.input_voxel_size), dtype=float)
         output_voxel_size = Coordinate(self.geometry.output_voxel_size)
         block = tuple(int(v) for v in self.geometry.served_block()[: len(self.axes)])
-        # chunkmirage ignores an op's block_phase and blend before 0.1.0a7,
-        # which has them: serving a model declaring others on an older one
-        # would quietly lay and weight its blocks otherwise.
-        if (self.geometry.block_phase, self.geometry.blend) != ("centred", "tent") and not hasattr(Op, "block_phase"):
+        # cellmap-flow requires chunkmirage 0.1.0a7, the first whose ops have a
+        # block_phase and a blend, but an environment made before that and not
+        # installed again still has an older one, which ignores both: it would
+        # quietly lay the model's blocks centred and weight them by the tent.
+        if (self.geometry.block_phase, self.geometry.blend) != ("centred", "tent") and not (
+            hasattr(Op, "block_phase") and hasattr(Op, "blend")
+        ):
             raise ValueError(
                 f"{getattr(model_config, 'name', None) or 'The model'} declares block_phase "
                 f"{self.geometry.block_phase!r} and blend {self.geometry.blend!r}, which need chunkmirage 0.1.0a7 "
-                f"or later; this one ({_chunkmirage_version()}) lays every model's blocks centred, with the tent"
+                f"or later; the one installed here ({_chunkmirage_version()}) lays every model's blocks centred, "
+                f"with the tent. Update this environment's chunkmirage (pixi install -e <its environment>, or "
+                f"pip install -U chunkmirage)."
             )
         declared = self.geometry.output_dtype
         stage_dtype = np.dtype(declared) if np.dtype(declared).kind in "iub" else np.dtype(np.float32)
