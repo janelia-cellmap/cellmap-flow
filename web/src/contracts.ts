@@ -140,6 +140,11 @@ export interface SessionState {
    * is still that; null until a start sets any. The server's
    * `start_postprocess`. */
   startPostprocess: { model: string; postprocess: Step[]; declared?: boolean } | null;
+  /** The names of the models served when the user last Applied a chain (PUT
+   * /api/pipeline): that chain is the last word on how they are shown, so a
+   * later start sets no postprocessing on their account (serving.ts
+   * startedSince). The server's `applied_over`. */
+  appliedOver: string[];
   /** The models stopped because the person deleted their layer in the
    * viewer (backend/index.ts layerDeleted), the latest of each name, each
    * numbered from 1 up in the order they went, which GET /api/models/loaded

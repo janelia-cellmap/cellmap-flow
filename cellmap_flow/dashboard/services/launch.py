@@ -144,11 +144,24 @@ def run_model(config, st_data, queue=None):
     it, else the sigmoid a model's logits need, once every model started
     has its server (routes.pipeline.set_start_postprocess); the redraw that
     sets it draws this model's layer too. A start that ended without a
-    server is told too: the others may have waited on it."""
+    server is told too, also one that raised: the others may have waited
+    on it."""
     from cellmap_flow.dashboard.routes.pipeline import set_start_postprocess
 
+    # Started anew: a chain the user Applied over an earlier run of it no
+    # longer speaks for it (Session.applied_over).
+    get_session().applied_over.discard(config.name)
     at_native_voxel_size(config)
-    job = _start(config, queue)
+    try:
+        job = _start(config, queue)
+    except BaseException:
+        # The others may have waited on this start, and no later one decides
+        # for them. What it raised is still reported (_reported).
+        try:
+            set_start_postprocess()
+        except Exception as e:
+            logger.warning(f"Could not set the postprocessing the models started need: {e}")
+        raise
     if not set_start_postprocess() and job is not None:
         _show(job, st_data)
 
@@ -508,6 +521,26 @@ def _catalog_groups() -> dict:
     return {name: group for group, models in get_session().model_catalog.items() for name in models}
 
 
+def huggingface_job_name(repo: str, taken=()) -> str:
+    """The job, layer and config name of the Hugging Face model ``repo``:
+    its repo's last part (``_sanitize_job_name``), "setup_53" for
+    cellmap/setup-53, as it has always been. When that name is another
+    repo's, one of ``taken`` (the names of the repos picked ahead of it in
+    this Submit) or a model of the session's from another repo (ai-hhmi/setup-53, running
+    as setup_53), it is named with its organization, cellmap_setup_53, so
+    both run, each with its own job and layer, and the first keeps its name.
+    A repo the session has a model of keeps that model's name, whatever is
+    ticked beside it."""
+    base = _sanitize_job_name(repo.split("/")[-1])
+    configs = configs_by_name()
+    for name, config in configs.items():
+        if listed_repo(config) == repo and name not in taken:
+            return name
+    if base in taken or listed_repo(configs.get(base)) not in (None, repo):
+        return _sanitize_job_name(repo.replace("/", "_"))
+    return base
+
+
 def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) -> list:
     """``[(name, config)]`` for everything ticked, in the order the tab lists
     them: the catalog's models, Hugging Face's, the zoo's, the Cellpose
@@ -525,7 +558,10 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
 
     Each config is built here, before anything is stopped or started, so a
     bad entry refuses the whole Submit (ValueError) rather than half of it.
-    A name picked twice keeps its first config: the Cellpose panel's row
+    Two Hugging Face repos of one name under two organizations (cellmap/X
+    and ai-hhmi/X) are both started, each under a name of its own
+    (``huggingface_job_name``). Any other name picked twice keeps its first
+    config: the Cellpose panel's row
     wins over a YAML's model of the same name (a YAML's "cellpose_sam"
     serving probability, and the panel's cpsam with flows), the panel's
     settings being the ones asked for.
@@ -548,8 +584,10 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
 
         # As the list has each: a mia-train model's repo is type mia.
         listed = cached_huggingface_models() or {}
+    hf_names = set()
     for repo in hf_repos:
-        name = _sanitize_job_name(repo.split("/")[-1])
+        name = huggingface_job_name(repo, hf_names)
+        hf_names.add(name)
         add(name, _built({**listed_entry(repo, listed.get(repo), name),
                           "run_voxel_size": run_voxel_sizes.get(repo)}, repo))
     for config in _bioimage_configs(bioimage_models) + _cellpose_configs(cellpose_models):

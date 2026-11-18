@@ -155,17 +155,29 @@ def test_a_plan_that_could_not_be_read_is_read_again_a_minute_on_and_never_guess
     assert model.finetune_modes() == ("lora", "full") and model.finetune_refusal() is None
 
 
-def test_a_conversion_removes_killed_conversions_folders_and_other_converters_exports(monkeypatch, tmp_path):
-    """A conversion killed outright left its work folder; an older converter
-    left its export for this device. Converting removes both, and keeps a
-    conversion under way and the other device's export."""
-    from cellmap_flow.models.configs import mia
+def _placeholder_export(folder, days_old=0):
+    """A folder ``is_export`` takes for an export, last opened ``days_old`` days ago."""
+    folder.mkdir(parents=True)
+    for name in ("metadata.json", "model.ts"):
+        (folder / name).write_text("{}")
+    opened = time.time() - days_old * 24 * 3600
+    os.utime(folder, (opened, opened))
+    return folder
 
-    def export(folder):
-        folder.mkdir(parents=True)
-        for name in ("metadata.json", "model.ts"):
-            (folder / name).write_text("{}")
-        return folder
+
+def test_a_conversion_removes_killed_conversions_folders_and_only_the_unused_exports_of_other_converters(
+        monkeypatch, tmp_path):
+    """A conversion killed outright left its work folder, and converters no
+    install runs any more left their exports for this device, one of them
+    right in the commit's folder, where exports were cached before they were
+    kept by converter (it was taken for a converter's folder and never
+    removed). Converting removes those. It keeps the export of another
+    install in use, which every conversion used to delete, so that two
+    checkouts sharing a home each reconverted what the other had just
+    removed; a conversion under way; and the other device's export. What a
+    removal cut short left under the export's own name is replaced, where
+    the conversion raised."""
+    from cellmap_flow.models.configs import mia
 
     monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path))
     model = tmp_path / "ai-hhmi--lmd-vitl" / COMMIT
@@ -175,12 +187,54 @@ def test_a_conversion_removes_killed_conversions_folders_and_other_converters_ex
     hours_ago = time.time() - 2 * mia.STALE_WORK_SECONDS
     for path in (killed / "export", killed):
         os.utime(path, (hours_ago, hours_ago))
-    old_cuda, old_cpu = export(model / "old" / "cuda"), export(model / "old" / "cpu")
-    monkeypatch.setattr(mia, "export_in_subprocess", lambda source, out: export(Path(out)))
+    unused = mia.UNUSED_EXPORT_DAYS + 1
+    old_cuda, old_cpu = _placeholder_export(model / "old" / "cuda", unused), _placeholder_export(model / "old" / "cpu", unused)
+    before_converters = _placeholder_export(model / "cuda", unused)
+    in_use = _placeholder_export(model / "other" / "cuda", days_old=3)
+    half = model / "new" / "cuda"
+    half.mkdir(parents=True)
+    (half / "model.ts").write_text("{}")
+    monkeypatch.setattr(mia, "export_in_subprocess", lambda source, out: _placeholder_export(Path(out)))
 
     mia.convert_once(tmp_path / "source", model / "new" / "cuda")
     assert mia.is_export(model / "new" / "cuda") and not killed.exists() and running.exists()
-    assert not old_cuda.exists() and mia.is_export(old_cpu)
+    assert not old_cuda.exists() and not before_converters.exists()
+    assert mia.is_export(old_cpu) and mia.is_export(in_use)
+
+
+def test_a_repo_whose_weights_are_not_cached_is_refused_by_name_when_the_hub_is_out_of_reach(
+        adapter, monkeypatch, tmp_path):
+    """The model lists had downloaded the repo's config.json alone; with the
+    Hub out of reach at the server's start, Hugging Face answered that
+    snapshot, and the conversion failed on it with "conversion failed"."""
+    import huggingface_hub
+
+    from cellmap_flow.models.configs import mia
+
+    monkeypatch.setenv(mia.MIA_CACHE_ENV, str(tmp_path / "cache"))
+    snapshot = write_mia_folder(tmp_path / "hub" / "snapshots" / COMMIT)
+    (snapshot / "model.safetensors").unlink()
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda repo, revision=None, allow_patterns=None: str(snapshot))
+    monkeypatch.setattr(mia, "export_in_subprocess", lambda source, out: pytest.fail("converted without its weights"))
+
+    with pytest.raises(RuntimeError, match="ai-hhmi/lmd-vitl.*model.safetensors could not be downloaded.*offline"):
+        mia.MiaModelConfig(repo="ai-hhmi/lmd-vitl").export_folder()
+
+
+def test_an_updated_converter_is_seen_by_a_process_that_was_running(adapter, tmp_path):
+    """The fingerprint was read once per process: a dashboard left running
+    across an update of cellmap-models went on looking for exports under the
+    old converter's. A module with no file (the tests' stand-in) is
+    "unknown", and is not remembered as what a later one is."""
+    from cellmap_flow.models.configs import mia
+
+    assert mia.converter_version() == "unknown"
+    source = tmp_path / "mia_model.py"
+    source.write_text("VERSION = 1\n")
+    adapter.__file__ = str(source)
+    first = mia.converter_version()
+    source.write_text("VERSION = 22\n")
+    assert len(first) == 12 and mia.converter_version() not in (first, "unknown")
 
 
 def test_blockwise_refuses_a_mia_model_with_an_overlap_before_converting_it(adapter, monkeypatch, tmp_path, raw_zarr):

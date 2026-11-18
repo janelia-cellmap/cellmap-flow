@@ -32,6 +32,10 @@ import { listControls, modelRow, modelSection, notice, runAtField, runVoxelSizes
 // removed from the Loaded models list is taken out.
 let running = new Set();
 let loaded = false;
+// Whether a listing is on its way: a second organization's section opened
+// before it answers waits for it, as one listing fills every section, rather
+// than starting another (two listed the Hub side by side on a cold cache).
+let listing = false;
 // One group for each organization listed (pageData().hf_orgs: a server's
 // hf_catalog.HUGGING_FACE_ORGS, cellmap and ai-hhmi; the browser's page,
 // cellmap), in that order: its organization, its section, its search bar and
@@ -186,8 +190,12 @@ function loading(on) {
 }
 
 function load(url) {
+  listing = true;
   loading(true);
   (url.includes("refresh") ? postJSON(url) : getJSON(url))
+    .finally(() => {
+      listing = false;
+    })
     .then((data) => {
       loading(false);
       render(data);
@@ -259,7 +267,7 @@ function addGroup(org, index) {
   group.section = modelSection({
     id, title: org, bodyId: index === 0 ? "hfModelsContainer" : `${id}ModelsContainer`,
     onOpen: () => {
-      if (!loaded) load("/api/huggingface-models");
+      if (!loaded && !listing) load("/api/huggingface-models");
     },
   });
   group.controls = listControls({

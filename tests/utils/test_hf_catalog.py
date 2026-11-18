@@ -202,3 +202,34 @@ def test_an_organization_that_cannot_be_listed_leaves_the_others_listed_and_is_l
     assert dashboard.post("/api/huggingface-models/refresh").get_json() == models
     with open(older) as f:
         assert json.load(f) == {"cellmap/mito-aff-resunet-setup-54": {"formats": []}}
+
+
+def test_a_cache_file_that_is_not_an_object_is_listed_anew_and_a_made_export_says_how_it_is_finetuned(
+        dashboard, hub, tmp_path, monkeypatch):
+    """A models cache holding valid JSON that is no object (``[]``, ``null``:
+    a write cut short, another tool's file) raised AttributeError on every
+    listing. And an affinity model's row said LoRA and full, as planned
+    before its export exists, though the export a server had made has no
+    model.pt2 (torch.export could not write one) and takes full only."""
+    import huggingface_hub
+
+    from cellmap_flow.models.configs import mia
+    from tests.utils.mia_helpers import AFFINITY_DECLARED
+
+    os.makedirs(hf_catalog.HF_CACHE_DIR)
+    with open(hf_catalog.HF_CACHE_FILE, "w") as f:
+        f.write("[]")
+    assert hf_catalog.cached_huggingface_models() is None
+
+    repo = "ai-hhmi/lmd-vitl-p8-cellmap-lvd"
+    hub.adapter.declared = AFFINITY_DECLARED
+    snapshot = tmp_path / "snapshots" / "c0ffee"
+    monkeypatch.setattr(huggingface_hub, "try_to_load_from_cache",
+                        lambda repo, filename, revision=None: str(snapshot / filename))
+    assert dashboard.get("/api/huggingface-models").get_json()[repo]["finetune_modes"] == ["lora", "full"]
+
+    export = mia.export_dir(repo, "c0ffee", device="cuda")
+    export.mkdir(parents=True)
+    (export / "metadata.json").write_text(json.dumps(AFFINITY_DECLARED))
+    (export / "model.ts").write_bytes(b"")
+    assert dashboard.post("/api/huggingface-models/refresh").get_json()[repo]["finetune_modes"] == ["full"]

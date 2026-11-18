@@ -172,7 +172,11 @@ class CellMapModelConfig(ModelConfig):
         self = cls.__new__(cls)
         ModelConfig.__init__(self)
         # The metadata and no folder: finetune_modes says both then, as for a
-        # folder that cannot be listed, unless finetune_refusal refuses.
+        # folder that cannot be listed, unless finetune_refusal refuses. That
+        # is taken, not known: an export torch.export could not write a
+        # model.pt2 for takes full only, which its folder says once it is
+        # made (MiaModelConfig asks the export first; so does the model
+        # lists' hf_catalog._mia_plan).
         self.cellmap_model = SimpleNamespace(metadata=metadata, folder_path=None)
         self.name, self.scale = name, scale
         # Its metadata.json as cellmap_models' write_metadata will write it (_written_metadata).

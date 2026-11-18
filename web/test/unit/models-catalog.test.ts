@@ -208,7 +208,7 @@ describe("another Hugging Face repo", () => {
 });
 
 describe("fetchTree", () => {
-  it("reads every page of the expanded listing, the next named by the Link header, with each entry's last commit date", async () => {
+  it("reads every page of the expanded listing, the next named by the Link header, with each entry's last commit date, and expands only when asked for the dates", async () => {
     const first = "https://huggingface.co/api/models/bob/big/tree/main?expand=true";
     const second = `${first}&cursor=abc`;
     const pages: Record<string, { rows: unknown[]; next?: string }> = {
@@ -221,9 +221,12 @@ describe("fetchTree", () => {
       if (page.next) answer.headers.set("link", `<${page.next}>; rel="next"`);
       return answer;
     };
-    expect(await fetchTree(fetch, "bob/big")).toEqual([
+    expect(await fetchTree(fetch, "bob/big", { dates: true })).toEqual([
       { type: "file", path: "README.md", size: 900 },
       { type: "directory", path: "model", lastModified: "2026-11-01T08:00:00.000Z" },
     ]);
+    // Without the dates the listing is not expanded: one page of up to 1000 entries.
+    pages["https://huggingface.co/api/models/bob/big/tree/main"] = { rows: [{ type: "directory", path: "model" }] };
+    expect(await fetchTree(fetch, "bob/big")).toEqual([{ type: "directory", path: "model" }]);
   });
 });

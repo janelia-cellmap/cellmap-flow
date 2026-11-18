@@ -142,7 +142,8 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
  * server's rule; a manifest that declares none (Marwan's say "raw logits"
  * in their `output` text alone) is left to setNeededPostprocess. What else
  * an output wants (an affinity model's watershed) is the model advice's
- * suggestion, for the user to Apply. The first of `serving` that declares a
+ * suggestion, for the user to Apply. The first of `serving` started since
+ * the user last Applied a chain (startedSince) that declares a
  * step gives it, when it shows every one of `serving` right, its own model
  * among them (rank.needed_postprocess has nothing to change, by each
  * one's output class, servedOutputClass: a sigmoid is not put on an output
@@ -154,7 +155,7 @@ export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly M
  * called, nothing is set, saying why. */
 export async function setDeclaredPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
   if (!starting.length || ctx.session.state.chain.postprocess.length) return null;
-  for (const entry of serving) {
+  for (const entry of startedSince(ctx, starting, serving)) {
     const activation = entry.manifest.inference_output_activation;
     if (activation === undefined) continue;
     let steps: Step[];
@@ -199,7 +200,8 @@ export async function setDeclaredPostprocess(ctx: AppContext, starting: readonly
  * is cellmap_flow/portable/rank.py's needed_postprocess on an empty chain
  * with no threshold, the rule the ranking's rows follow too: a sigmoid for
  * logits, affinities' included, nothing for an output that has its
- * activation. The first of `serving` that needs steps gives them, when they
+ * activation. The first of `serving` started since the user last Applied a
+ * chain (startedSince) that needs steps gives them, when they
  * show every one of `serving` right (a sigmoid on an output that has one:
  * the rule would take it away again), set through setChain so the models
  * served already are drawn through them too, and remembered as the start's
@@ -210,7 +212,7 @@ export async function setDeclaredPostprocess(ctx: AppContext, starting: readonly
  * saying why. */
 export async function setNeededPostprocess(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): Promise<string | null> {
   if (!starting.length || ctx.session.state.chain.postprocess.length) return null;
-  for (const entry of serving) {
+  for (const entry of startedSince(ctx, starting, serving)) {
     let steps: Step[] | null;
     let wrong: string[];
     try {
@@ -231,6 +233,17 @@ export async function setNeededPostprocess(ctx: AppContext, starting: readonly M
     return entry.name;
   }
   return null;
+}
+
+/** The models of `serving` whose needs a start may set postprocessing for:
+ * those of `starting`, and those started since the user last Applied a
+ * chain. The chain Applied is the last word on the models served then (the
+ * session's appliedOver, which PUT /api/pipeline sets): one Applied empty,
+ * to look at a model's logits, does not get that model's sigmoid back when
+ * another starts (routes/pipeline.py's _start_choice). */
+function startedSince(ctx: AppContext, starting: readonly ModelEntry[], serving: readonly ModelEntry[]): ModelEntry[] {
+  const settled = ctx.session.state.appliedOver;
+  return serving.filter((entry) => starting.some((s) => s.id === entry.id) || !settled.includes(entry.name));
 }
 
 /** What `entry`'s layer needs instead of `postprocess` to show a good

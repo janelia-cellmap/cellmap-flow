@@ -300,8 +300,12 @@ def _mia_plan(repo: str, folder: str) -> Tuple[Optional[List[str]], Optional[str
     is all cellmap_models' mia_metadata needs, as such a folder says its repo
     and commit. Built of the repo id, it would list the repo's snapshot and
     download its licence besides, for every mia-train repo at every build of
-    the list, which the list does not keep. (Nor does it look for an export a
-    server has made already, which declares what mia_metadata says it will.)"""
+    the list, which the list does not keep.
+
+    How it can be finetuned is the export's own answer when a server has
+    made one already (in the mia cache, found without the network): the plan
+    takes it that the export will have a model.pt2 (LoRA and full), and one
+    torch.export could not write has none (full only)."""
     from cellmap_flow.models.configs.mia import MiaModelConfig
 
     config = MiaModelConfig(path=folder, name=repo.split("/")[-1])
@@ -316,7 +320,8 @@ def _mia_plan(repo: str, folder: str) -> Tuple[Optional[List[str]], Optional[str
         served = f"Served here as {len(names)} affinities, offsets {', '.join(str(list(o)) for o in offsets)}."
     else:
         served = f"Served here as {len(names)} channels: {', '.join(names)}." if names else None
-    return list(config.finetune_modes()), served
+    export = MiaModelConfig(repo=repo, name=config.name)._cached()
+    return list((export or config).finetune_modes()), served
 
 
 def _of(orgs: Iterable[str], models: Dict[str, Any]) -> Dict[str, Any]:
@@ -331,12 +336,15 @@ def _as_orgs(orgs) -> Tuple[str, ...]:
 
 def _read_cache() -> Tuple[Optional[Dict[str, Any]], List[str]]:
     """The models cached, by repo id (None when nothing is cached, or the
-    cache cannot be read), and the organizations whose listing the cache
-    holds (``LISTED_ORGS``; none when it does not say)."""
+    cache cannot be read or is not a JSON object), and the organizations
+    whose listing the cache holds (``LISTED_ORGS``; none when it does not
+    say)."""
     try:
         with open(HF_CACHE_FILE) as f:
             cache = json.load(f)
     except (OSError, ValueError):
+        return None, []
+    if not isinstance(cache, dict):
         return None, []
     return cache, cache.pop(LISTED_ORGS, [])
 

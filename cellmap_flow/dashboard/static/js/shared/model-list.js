@@ -140,10 +140,16 @@ export function modelRow({
     h("label", { class: "form-check-label", for: id, title },
       name, note ? [" ", h("small", { style: { color: "#aaa" } }, "- " + note)] : null),
     tags, facts && factTags(facts), link,
-    description ? h("div", {
-      class: "zoo-desc", title: description, onClick: (e) => e.currentTarget.classList.toggle("expanded"),
-    }, description) : null,
+    description ? descriptionLine(description) : null,
     below);
+}
+
+// A row's description: one line, cut short with its whole text as its
+// tooltip, and shown whole on a click (a second click, one line again).
+export function descriptionLine(description) {
+  return h("div", {
+    class: "zoo-desc", title: description, onClick: (e) => e.currentTarget.classList.toggle("expanded"),
+  }, description);
 }
 
 // The voxel size a zoo model was trained at, from cellmap-flow's own table

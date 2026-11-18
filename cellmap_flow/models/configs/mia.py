@@ -26,8 +26,10 @@ rename wins and the other copy is dropped, so no server reads a
 half-written export. A conversion killed outright (bkill, SIGKILL) leaves its
 folder behind, which the next conversion removes once it has not changed for
 an hour; and a conversion done removes the same model's exports for the same
-device that other converters made (``converter_version``), which would only
-take room (an install with another converter converts again, in a minute).
+device that other converters made (``converter_version``) once none has been
+opened for UNUSED_EXPORT_DAYS (``remove_other_converters``): those of an
+install nobody runs any more only take room, while two installs with
+different converters that share a home each keep their own.
 
 Nothing the dashboard or blockwise asks (declared_geometry,
 declared_input_norm, declared_affinity_offsets, declared_postprocess,
@@ -96,7 +98,6 @@ def device_kind() -> str:
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-@functools.lru_cache(maxsize=None)
 def converter_version() -> str:
     """A fingerprint of the converter installed: the first 12 hex digits of
     the SHA-1 of cellmap_models' mia_model source file, or "unknown" when it
@@ -104,13 +105,25 @@ def converter_version() -> str:
     cellmap-models whose converter changed (what an export declares, how it
     wraps the network) converts again rather than serving an export the old
     one made; cellmap-models' version number stays the same across its
-    commits, so it cannot say this."""
+    commits, so it cannot say this.
+
+    The file is read again whenever its time or size changed
+    (``_source_fingerprint``), so a dashboard left running across an update
+    of cellmap-models looks for the exports its new servers make."""
     source = getattr(mia_model(), "__file__", None)
     try:
-        with open(source, "rb") as f:
-            return hashlib.sha1(f.read()).hexdigest()[:12]
-    except (OSError, TypeError):
+        stat = os.stat(source)
+        return _source_fingerprint(source, stat.st_mtime_ns, stat.st_size)
+    except (OSError, TypeError):  # TypeError: no file
         return "unknown"
+
+
+@functools.lru_cache(maxsize=8)
+def _source_fingerprint(source: str, mtime_ns: int, size: int) -> str:
+    """The first 12 hex digits of the SHA-1 of the file ``source``, read once
+    for each time and size it has had."""
+    with open(source, "rb") as f:
+        return hashlib.sha1(f.read()).hexdigest()[:12]
 
 
 def model_dir(repo: Optional[str] = None, commit: Optional[str] = None, path: Optional[str] = None) -> Path:
@@ -207,24 +220,78 @@ def remove_stale_work(root) -> None:
             shutil.rmtree(work, ignore_errors=True)
 
 
+# How long another converter's export may go unopened before a conversion
+# removes it (remove_other_converters): long enough that an install in use,
+# whose servers open its exports (mark_used), never loses one.
+UNUSED_EXPORT_DAYS = 14
+# An export opened is marked used (its folder's time set to now) when its
+# mark is older than this, not at every opening.
+MARK_USED_SECONDS = 24 * 3600
+
+
+def mark_used(folder) -> None:
+    """Note that the export in ``folder`` was opened now, by setting the
+    folder's modification time, which remove_other_converters reads; at most
+    once every MARK_USED_SECONDS. A folder that cannot be marked (not this
+    user's, a read-only cache) is left as it is."""
+    try:
+        if time.time() - os.stat(folder).st_mtime > MARK_USED_SECONDS:
+            os.utime(folder)
+    except OSError:
+        pass
+
+
+def _remove_folder(folder) -> None:
+    """Remove ``folder`` from the cache: renamed first to a work folder's
+    name beside it, which is atomic, so that no process finds half of it
+    under its own name, then deleted. Nothing is raised: what could not be
+    renamed stays, and what could not be deleted is a work folder, which
+    remove_stale_work removes later."""
+    folder = Path(folder)
+    aside = folder.parent / f".{folder.name}{WORK_SUFFIX}removed-{os.getpid()}-{time.time_ns()}"
+    try:
+        os.rename(folder, aside)
+    except OSError:
+        return
+    shutil.rmtree(aside, ignore_errors=True)
+
+
 def remove_other_converters(target) -> None:
     """Remove the exports for ``target``'s device of the same model made by
-    other converters than ``target``'s (``model_dir``'s
-    ``<converter>/<device>``, beside ``<converter>`` in the model's folder).
-    An install with another converter converts again rather than serve one
-    (``converter_version``), so they only take room; a server that loaded one
-    already keeps serving it, from memory."""
+    other converters than ``target``'s, once they have not been opened
+    (``mark_used``) for UNUSED_EXPORT_DAYS: ``<converter>/<device>`` beside
+    ``target``'s ``<converter>`` in the model's folder (``model_dir``), and
+    ``<device>`` right in the model's folder, where exports were cached
+    before they were kept by converter.
+
+    One opened since is another install's in use (a checkout or deployment
+    with another cellmap-models that shares this home): removing it would
+    make that install convert again, and remove this one's in turn, and
+    could take the files from under a server of it that is loading them."""
     target = Path(target)
-    for converter in target.parent.parent.iterdir():
-        old = converter / target.name
-        if converter == target.parent or not is_export(old):
+    unused_since = time.time() - UNUSED_EXPORT_DAYS * 24 * 3600
+    try:
+        children = list(target.parent.parent.iterdir())
+    except OSError:
+        return
+    for child in children:
+        if child == target.parent:
             continue
-        logger.info(f"Removing {old}, an export of the same model by another converter")
-        shutil.rmtree(old, ignore_errors=True)
+        # The export itself, as cached before converters were told apart; else a converter's folder.
+        old = child if child.name == target.name else child / target.name
         try:
-            converter.rmdir()  # when that was its last export
-        except OSError:
-            pass
+            if not is_export(old) or os.stat(old).st_mtime > unused_since:
+                continue
+        except OSError:  # removed meanwhile
+            continue
+        logger.info(f"Removing {old}, an export of the same model by another converter, "
+                    f"not opened for {UNUSED_EXPORT_DAYS} days")
+        _remove_folder(old)
+        if old != child:
+            try:
+                child.rmdir()  # when that was its last export
+            except OSError:
+                pass
 
 
 def convert_once(source, target) -> None:
@@ -235,9 +302,11 @@ def convert_once(source, target) -> None:
     It is exported into a new folder beside ``target`` and renamed into
     place, which is atomic: a process that finds ``target`` finds the whole
     export. When another rename got there first, that export is kept and
-    this one dropped. Before, the cache is rid of killed conversions' work
-    folders (``remove_stale_work``); after, of the same model's exports by
-    other converters (``remove_other_converters``).
+    this one dropped; a ``target`` that is no whole export (what a removal
+    cut short left of one) is replaced. Before, the cache is rid of killed
+    conversions' work folders (``remove_stale_work``); after, of the same
+    model's exports by other converters that are no longer used
+    (``remove_other_converters``).
     """
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -253,9 +322,15 @@ def convert_once(source, target) -> None:
         try:
             os.rename(out, target)
         except OSError:
-            if not is_export(target):
+            if is_export(target):
+                logger.info(f"{target} was converted by another process meanwhile; serving that one")
+            elif os.path.lexists(target):
+                # Part of an export, which no conversion leaves (each renames a whole one into place).
+                logger.info(f"Replacing {target}, which is not a whole export")
+                _remove_folder(target)
+                os.rename(out, target)
+            else:
                 raise
-            logger.info(f"{target} was converted by another process meanwhile; serving that one")
     finally:
         shutil.rmtree(work, ignore_errors=True)
     remove_other_converters(target)
@@ -307,8 +382,17 @@ class MiaModelConfig(ModelConfig):
         """The cellmap-models export the model is served from, converted now
         when it is not cached yet. A repo's snapshot is downloaded first (its
         MIA_FILES and CARD_FILES only), which also says the commit its export
-        is cached under; with the Hub out of reach, the snapshot cached for
-        ``revision`` is used."""
+        is cached under. With the Hub out of reach, Hugging Face answers the
+        snapshot its cache has for ``revision``, whatever files that holds:
+        enough to find an export made already, but not to convert one unless
+        the weights are among them (the model lists download a repo's
+        config.json and card alone), which is refused, saying so.
+
+        Raises:
+            RuntimeError: the model must be converted and its files are not
+                all there (the weights could not be downloaded), or the
+                conversion failed.
+        """
         if self.path:
             source, target = self.path, export_dir(path=self.path)
         else:
@@ -319,7 +403,18 @@ class MiaModelConfig(ModelConfig):
             # The snapshot's folder is its commit's SHA.
             target = export_dir(self.repo, os.path.basename(os.path.normpath(source)))
         if not is_export(target):
+            missing = [name for name in mia_model().MIA_FILES if not os.path.isfile(os.path.join(source, name))]
+            if missing:
+                raise RuntimeError(
+                    f"The mia-train model {self.repo or self.path} cannot be converted: {', '.join(missing)} could "
+                    f"not be downloaded from Hugging Face (only part of the repository is in the local cache, "
+                    f"{source}). Is this machine offline, or the Hub out of reach? Start the model again once it "
+                    "can be reached."
+                    if self.repo else
+                    f"The mia-train model in {self.path} cannot be converted: it has no {', '.join(missing)}"
+                )
             convert_once(source, target)
+        mark_used(target)
         return str(target)
 
     def _served(self) -> CellMapModelConfig:
@@ -363,6 +458,7 @@ class MiaModelConfig(ModelConfig):
             except Exception as e:  # an export that cannot be read says so when it is served
                 logger.debug(f"Could not read the cached export {folder}: {e}")
                 return None
+            mark_used(folder)  # a dashboard's or a trainer's install uses it too
         return self._peeked
 
     def _planned(self) -> Optional[CellMapModelConfig]:

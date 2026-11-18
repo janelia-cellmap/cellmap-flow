@@ -37,7 +37,7 @@ export function defaultChain(): Chain {
 }
 
 export function defaultState(): SessionState {
-  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, deletedInViewer: [], tabKept: { finetuned: [], volumes: [] } };
+  return { datasetUrl: null, chain: defaultChain(), models: [], resample: false, prefs: {}, paintVolume: null, shownChannels: {}, rankAdded: [], rankFits: {}, startPostprocess: null, appliedOver: [], deletedInViewer: [], tabKept: { finetuned: [], volumes: [] } };
 }
 
 /** A stored state made whole: a session written by an older build may lack
@@ -60,6 +60,7 @@ export function completeState(stored: unknown): SessionState {
     rankAdded: Array.isArray(s.rankAdded) ? s.rankAdded.filter((id): id is string => typeof id === "string") : [],
     rankFits: rankFitsOf(s.rankFits),
     startPostprocess: startPostprocessOf(s.startPostprocess),
+    appliedOver: Array.isArray(s.appliedOver) ? s.appliedOver.filter((name): name is string => typeof name === "string") : [],
     deletedInViewer: deletedInViewerOf(s.deletedInViewer),
     tabKept: tabKeptOf(s.tabKept),
   };

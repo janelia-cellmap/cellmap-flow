@@ -478,12 +478,18 @@ def _start_choice(jobs, facts):
     server says): a sigmoid is not put on an output that has one, as a
     second one flattens its contrast. Steps that name an op the registry does not have, or a value
     its class refuses, are skipped with a warning.
+
+    Only the models started since the user last Applied a chain give steps:
+    the chain Applied is the last word on those that were running then
+    (Session.applied_over), so one Applied empty, to look at a model's
+    logits, does not get that model's sigmoid back when another starts.
     """
     session = get_session()
     order = {getattr(mc, "name", None): i for i, mc in enumerate(session.models_config or [])}
     jobs = sorted(jobs, key=lambda job: order.get(job.model_name, len(order)))
-    candidates = ([(job.model_name, facts[job.host][1], True) for job in jobs]
-                  + [(job.model_name, rank.needed_postprocess(facts[job.host][0], []), False) for job in jobs])
+    started = [job for job in jobs if job.model_name not in session.applied_over]
+    candidates = ([(job.model_name, facts[job.host][1], True) for job in started]
+                  + [(job.model_name, rank.needed_postprocess(facts[job.host][0], []), False) for job in started])
     for name, steps, declared in candidates:
         if not steps:
             continue
@@ -534,7 +540,8 @@ def set_start_postprocess() -> bool:
     semantic model's argmax) is the model advice's suggestion, for the user
     to Apply. A chain with postprocessing (a YAML's, the user's Apply, the
     ranking's) is left alone, and after a start set it only Apply changes
-    it.
+    it; a chain the user Applied with none stays so for the models running
+    then (_start_choice).
 
     The browser's twin is web/src/backend/serving.ts setDeclaredPostprocess
     and setNeededPostprocess, which know every model's output before they
@@ -662,6 +669,8 @@ def put_pipeline():
         return jsonify({"success": False, "error": "; ".join(problems)}), 400
     builder = body.builder.model_dump() if body.builder is not None else None
     layers = _set_chain_and_redraw(spec, request.host_url, built=built, builder=builder)
+    # The user's chain is the last word for the models it was Applied over (_start_choice).
+    get_session().applied_over = {job.model_name for job in _running_jobs()}
     return jsonify({"success": True, "pipeline": spec.to_json_data(), "digest": spec.digest(), "layers": layers})
 
 

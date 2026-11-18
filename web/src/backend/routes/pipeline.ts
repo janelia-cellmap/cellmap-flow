@@ -61,6 +61,9 @@ export function pipelineRoutes(router: Router): void {
     const missing = dataset && missingChannel(selectedChannel(chain.input_norm), dataset.channels);
     if (missing) return badRequest(missing);
     const [served, { digest }] = await Promise.all([setChain(ctx, chain), blobFor(chain)]);
+    // The user's chain is the last word for the models it was Applied over
+    // (serving.ts startedSince; pipeline.py's put_pipeline).
+    await ctx.session.update({ appliedOver: [...new Set(ctx.infer.served().map((s) => s.entry.name))] });
     return json(200, { success: true, pipeline: { input_norm: chain.input_norm, postprocess: chain.postprocess }, digest, layers: (served ?? []).map((s) => s.entry.name) });
   });
 }

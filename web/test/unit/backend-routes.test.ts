@@ -171,6 +171,22 @@ describe("POST /api/models", () => {
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: null, postprocess_fitted: null });
   }, 120_000);  // Pyodide and numpy load the first time, a few seconds
 
+  it("leaves a chain the user Applied with no postprocessing as it is when another model starts", async (t) => {
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    // The second model's manifest does not say what its output is.
+    ctx.catalog.entries[1].manifest.output = "";
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    expect(ctx.session.state.chain.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    // The user looks at setup_54's logits: its sigmoid does not come back with the next start.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: [] }));
+    expect((await backend.handle(submit([HF54, HF56]))).status).toBe(200);
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54, NAME_56]);
+    expect(ctx.session.state.chain.postprocess).toEqual([]);
+  }, 120_000);
+
   it("sets the sigmoid a model's manifest declares is applied after it, saying it came from the model's metadata", async (t) => {
     // The rule is the portable Python's (rank.declared_postprocess), the server's Submit's too.
     if (!(await portablePython())) t.skip();
