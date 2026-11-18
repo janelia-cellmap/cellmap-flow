@@ -1,0 +1,216 @@
+cellmap_flow.dashboard.routes.review_routes
+===========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.review_routes
+
+.. autoapi-nested-parse::
+
+   HTTP routes for the instance-review workflow (the dashboard's Review tab).
+
+   Thin Flask wrappers over cellmap_flow.review helpers. The index opened by
+   /api/review/open, and the last instance picked in the viewer, live in the
+   dashboard session's ``review`` (a ReviewSession; dashboard.state). Each
+   request opens its own SQLite connection, read-only except for verdict and
+   undo (no pooling — write rate is one row per user click, read rate is one
+   row per GET /review/next).
+
+   Navigation on /review/next is server-side: a viewer.txn() propagates to the
+   browser via neuroglancer's WebSocket. It is best-effort — if there is no
+   viewer yet, navigation is silently skipped and the instance record is still
+   returned.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.review_routes.logger
+   cellmap_flow.dashboard.routes.review_routes.review_bp
+   cellmap_flow.dashboard.routes.review_routes.PICK_STREAM_HEARTBEAT_S
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.review_routes.PickBoard
+   cellmap_flow.dashboard.routes.review_routes.ReviewSession
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.review_routes.review_open
+   cellmap_flow.dashboard.routes.review_routes.review_next
+   cellmap_flow.dashboard.routes.review_routes.review_verdict
+   cellmap_flow.dashboard.routes.review_routes.review_undo
+   cellmap_flow.dashboard.routes.review_routes.review_progress
+   cellmap_flow.dashboard.routes.review_routes.review_show
+   cellmap_flow.dashboard.routes.review_routes.review_pick_stream
+   cellmap_flow.dashboard.routes.review_routes.review_status
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: review_bp
+
+.. py:data:: PICK_STREAM_HEARTBEAT_S
+   :value: 25.0
+
+
+.. py:class:: PickBoard
+
+   The last instance picked with the t key, numbered by ``seq``.
+
+   The neuroglancer action posts to it. Each pick stream remembers the last
+   ``seq`` it sent and waits for a different one. Nothing is ever cleared,
+   so one stream waking up cannot hide a pick from another, as a shared
+   Event that each woken stream cleared did.
+
+
+   .. py:attribute:: seq
+      :value: 0
+
+
+
+   .. py:attribute:: label_id
+      :type:  Optional[int]
+      :value: None
+
+
+
+   .. py:attribute:: closed
+      :value: False
+
+
+
+   .. py:method:: post(label_id: int) -> int
+
+
+   .. py:method:: latest()
+
+      ``(seq, label_id)`` of the last pick.
+
+
+
+   .. py:method:: wait_past(seq: int, timeout: float)
+
+      ``(seq, label_id)`` once there is a pick after ``seq``, or as they
+      are after ``timeout`` seconds or a close().
+
+
+
+   .. py:method:: close() -> None
+
+      Wake every stream waiting here so it ends: another index was opened.
+
+
+
+.. py:class:: ReviewSession
+
+   The index /api/review/open selected, kept as the dashboard session's ``review``.
+
+
+   .. py:attribute:: db_path
+      :type:  str
+
+
+   .. py:attribute:: reviewer
+      :type:  str
+
+
+   .. py:attribute:: segmentation_layer
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: picks
+      :type:  PickBoard
+
+
+.. py:function:: review_open()
+
+   Select the active review index for this dashboard session.
+
+   Body: {"db_path": "....sqlite",
+          "reviewer": "davi",             # optional
+          "segmentation_layer": "labels"  # optional; enables the t-key pick
+         }
+
+   Only a ``.sqlite`` or ``.db`` file (after resolving symlinks) is
+   opened, and the name is checked before existence.
+
+
+.. py:function:: review_next()
+
+   Return the next unreviewed instance in the chosen queue.
+
+   Query: ?order=<queue>&min_vox=100&skip_rank=12, where the queues are
+   the index's rank_<queue> columns; the first one when order is absent or
+   empty (the tab sends it empty until its queue list is filled).
+
+   Side effect: navigates the viewer to the instance's centroid (if
+   viewer exists).
+
+
+.. py:function:: review_verdict()
+
+   Record a verdict for an instance.
+
+   Body: {"id": 123,
+          "verdict": "blessed" | "edited" | "erased",
+          "edit_details": {...},        # optional, only for edited
+          "entry_method": "next" | "show" | "pick",  # optional
+         }
+
+
+.. py:function:: review_undo()
+
+   Clear the ledger row for an instance (un-bless / un-edit).
+
+   Body: {"id": 123}
+
+
+.. py:function:: review_progress()
+
+   Aggregate review progress.
+
+
+.. py:function:: review_show(instance_id: int)
+
+   Full instance record + ledger state for a specific id.
+
+   Side effect: navigates the viewer to the instance's centroid (if a
+   viewer is attached), the reliable way to go to a known ID.
+
+
+.. py:function:: review_pick_stream()
+
+   Server-Sent Events stream of pick updates.
+
+   Single long-lived HTTP/1.1 connection — much cheaper than polling,
+   and it does not compete with NG chunk fetches for fresh connection
+   slots. The action handler (Tornado side) posts to the session's
+   PickBoard; this generator (Werkzeug worker thread) waits on it and
+   emits one SSE event per new pick. Every stream tracks its own last
+   sequence number, so each open tab sees every pick.
+
+   Heartbeats every PICK_STREAM_HEARTBEAT_S keep proxies from
+   idle-closing the connection. The stream ends when another index is
+   opened; the browser's EventSource then reconnects to the new one.
+
+
+.. py:function:: review_status()
+
+   Current review-session state (is an index open? which reviewer?).
+
+

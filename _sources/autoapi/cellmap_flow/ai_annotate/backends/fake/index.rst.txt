@@ -1,0 +1,37 @@
+cellmap_flow.ai_annotate.backends.fake
+======================================
+
+.. py:module:: cellmap_flow.ai_annotate.backends.fake
+
+.. autoapi-nested-parse::
+
+   A provider that runs locally and calls nothing, for tests and demos.
+
+   It stands in for a hosted model wherever the dashboard's own behaviour is
+   what is being checked: the review panel, Accept and Reject, the undo. Its
+   mask is deterministic and plausible on EM: the pixels darker than the
+   plane's median within a disk around the click, which on most EM picks out
+   membranes and dense organelles near where the user pointed.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.fake.FakeBackend
+
+
+Module Contents
+---------------
+
+.. py:class:: FakeBackend
+
+   .. py:method:: segment(request: cellmap_flow.ai_annotate.backends.base.SegmentRequest, model: str) -> cellmap_flow.ai_annotate.backends.base.SegmentResult
+
+      Dark pixels within ``min(H, W) / 4`` of the click (or the centre),
+      and the input with them painted ``target_rgb`` as the "model's" image.
+
+
+

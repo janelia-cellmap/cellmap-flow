@@ -1,0 +1,161 @@
+cellmap_flow.dashboard.routes.finetune.publish
+==============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.publish
+
+.. autoapi-nested-parse::
+
+   Publishing a model finetuned on this server to Hugging Face, under the user's own account.
+
+   The Training Status card's Publish to Hugging Face panel
+   (static/js/dashboard/finetune/publish.js) is the browser mode's too, and so
+   are the routes and their answers: web/src/backend/routes/publish.ts answers
+   them in the page, and this module answers them here, refusing what that
+   refuses.
+
+   - GET ``/api/huggingface/credentials``: who is signed in to Hugging Face and
+     how, and the sign-in with a code that is waiting for the user, if any;
+   - POST ``/api/huggingface/credentials``: ``{token, remember?}``, a pasted
+     access token, saved on this server too with ``remember``; ``{device:
+     true}``, Sign in with Hugging Face; ``{forget: true}``, signing out;
+   - POST ``/api/finetune/model/<name>/publish``: ``{repo?, private?,
+     include_dataset?}``, a publish started;
+   - GET ``/api/finetune/model/<name>/publish``: how it is going, or where the
+     model went.
+
+   ``<name>`` is a model a finetune job serves: the job's
+   ``finetuned_model_name``, its latest iteration's, which the job's status
+   answer names and the panel is shown for (job-monitor.js). Its serving YAML
+   says what the model is (the base model, and the finetune's weights on it: a
+   LoRA adapter, or the whole network's) and the dataset it was trained on;
+   the job says how long it trained and to what loss.
+
+   A publish is a job in a thread of the dashboard, its steps as the answers
+   name them: "exporting", the finetune folded into the base network and
+   exported at the served block size, by a cluster job of its own
+   (finetune.export_web); "creating", the repository made unless it is there
+   already; "hashing" each file, "uploading" each and "committing" them, in one
+   commit; and "checking", the repository read back, so that done means
+   Hugging Face shows each file at the size sent. While it exports, and on a
+   failed export, the answer's ``job`` says which cluster job, whether it
+   still waits in the queue, and its log (export_web.export_status's); the
+   smaller copy's ``small_job`` says the same of its training, with the epoch
+   it is on, each followed every EXPORT_POLL_SECONDS. The model card and the
+   manifest are portable.publish's, which the browser's publish writes too;
+   the upload is huggingface_hub's, each model file read from its disk as it
+   is sent (by LFS or Xet, whichever the Hub takes), never whole into memory.
+
+   What is published is the export's two forms: at the repository's root the
+   network as cellmap-models exports one, which a server opens as
+   ``<owner>/<repo>`` (the answer's ``server_ref``), always; and in the
+   model's folder its ONNX web export, which both modes open as
+   ``<owner>/<repo>/<folder>`` (``ref``, and the app's links), unless the
+   export could not make one (a network over the 2 GB an .onnx file holds, a
+   2D model), when ``ref`` and the links are null and ``no_browser`` says why.
+
+   Who publishes is one of three tokens, the answers' ``via``:
+
+   - "saved": huggingface_hub's own (``get_token``: HF_TOKEN, or the file ``hf
+     auth login`` writes), used when no other is signed in here. ``hf auth
+     logout`` on the server signs it out, not the panel;
+   - "token": one pasted in the panel, kept in this process's memory only, and
+     with Remember on this server saved to huggingface_hub's file
+     (``huggingface_hub.login``), after which it is "saved";
+   - "oauth": Sign in with Hugging Face, by its device flow (RFC 8628): Hugging
+     Face gives a code, the user enters it at huggingface.co in any browser,
+     and the dashboard asks for the token until it is given. The page of a
+     dashboard on a cluster node is opened through a tunnel or a proxy, at an
+     address the app's client metadata cannot list as a redirect, so the
+     browser mode's popup, which returns to the page, cannot work here. A
+     sign-in's token expires, so it is kept in memory only and never saved.
+
+   Every token, and a sign-in's device code, is registered with
+   ai_annotate.secrets before anything can log it, since the log panel streams
+   the log to the page; no answer carries one.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.publish.logger
+   cellmap_flow.dashboard.routes.finetune.publish.UNREACHABLE
+   cellmap_flow.dashboard.routes.finetune.publish.EXPIRED
+   cellmap_flow.dashboard.routes.finetune.publish.DEVICE_URL
+   cellmap_flow.dashboard.routes.finetune.publish.TOKEN_URL
+   cellmap_flow.dashboard.routes.finetune.publish.DEVICE_GRANT
+   cellmap_flow.dashboard.routes.finetune.publish.SLOW_DOWN_SECONDS
+   cellmap_flow.dashboard.routes.finetune.publish.EXPORT_POLL_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.publish.huggingface_account
+   cellmap_flow.dashboard.routes.finetune.publish.huggingface_sign_in
+   cellmap_flow.dashboard.routes.finetune.publish.start_publish
+   cellmap_flow.dashboard.routes.finetune.publish.publish_status
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: UNREACHABLE
+   :value: 'Hugging Face could not be reached from this server: check its connection to huggingface.co (a...
+
+
+.. py:data:: EXPIRED
+   :value: 'The sign-in code expired before it was entered at huggingface.co: sign in again.'
+
+
+.. py:data:: DEVICE_URL
+   :value: 'https://huggingface.co/oauth/device'
+
+
+.. py:data:: TOKEN_URL
+   :value: 'https://huggingface.co/oauth/token'
+
+
+.. py:data:: DEVICE_GRANT
+   :value: 'urn:ietf:params:oauth:grant-type:device_code'
+
+
+.. py:data:: SLOW_DOWN_SECONDS
+   :value: 5
+
+
+.. py:data:: EXPORT_POLL_SECONDS
+   :value: 5
+
+
+.. py:function:: huggingface_account()
+
+.. py:function:: huggingface_sign_in()
+
+   A pasted token ({token, remember?}), checked with whoami and kept in
+   place of any (refused when it can only read); Sign in with Hugging Face
+   ({device: true}); or signing out ({forget: true}), which forgets the token
+   signed in here and leaves a saved one. Any of them ends a sign-in that
+   waits for its code.
+
+
+.. py:function:: start_publish(name)
+
+   The model ``name`` published to ``repo`` (``owner/name``; blank: the
+   user's own, named after the model). What can be refused at once is: no
+   such model, no token, a repository name Hugging Face would refuse, an
+   owner that is neither the user nor one of their organizations, a publish
+   of it under way.
+
+
+.. py:function:: publish_status(name)
+
+   This dashboard's publish of the model ``name`` (running, done or failed), else status "none".
+
+

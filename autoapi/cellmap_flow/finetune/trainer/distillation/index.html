@@ -1,0 +1,343 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.trainer.distillation &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.trainer.loop" href="../loop/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.trainer.diagnostics" href="../diagnostics/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.trainer</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.trainer.distillation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/trainer/distillation/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.trainer.distillation">
+<span id="cellmap-flow-finetune-trainer-distillation"></span><h1>cellmap_flow.finetune.trainer.distillation<a class="headerlink" href="#module-cellmap_flow.finetune.trainer.distillation" title="Link to this heading"></a></h1>
+<p>The distillation term: its weight, where it applies, and the teacher; and
+the hold on the channels a run does not train.</p>
+<p>Distillation holds the model to the one it started from where the paint
+says nothing: on the unlabeled voxels, on every voxel, or on the good
+regions’ anchor patches when the session has any (<code class="docutils literal notranslate"><span class="pre">losses.distillation_loss</span></code>).
+The teacher is the model as it was before this run changed it: with LoRA
+the same module with its adapter switched off, for a full finetune a frozen
+copy of the starting weights (<code class="docutils literal notranslate"><span class="pre">adaptation</span></code>’s strategies). The browser’s
+twin is web/src/finetune/distillation.ts.</p>
+<p>A run that trains one channel of a multi-channel model (<code class="docutils literal notranslate"><span class="pre">select_channel</span></code>)
+holds every other channel to the teacher’s prediction too, on every voxel
+(<code class="docutils literal notranslate"><span class="pre">Distillation.others_term</span></code>, at <code class="docutils literal notranslate"><span class="pre">OTHER_CHANNELS_WEIGHT</span></code>): the channels
+share the network, so training one moves the rest, and with the paint about
+one of them nothing else would keep them where they were.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.distillation.logger" title="cellmap_flow.finetune.trainer.distillation.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.distillation.OTHER_CHANNELS_WEIGHT" title="cellmap_flow.finetune.trainer.distillation.OTHER_CHANNELS_WEIGHT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OTHER_CHANNELS_WEIGHT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.distillation.Distillation" title="cellmap_flow.finetune.trainer.distillation.Distillation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Distillation</span></code></a></p></td>
+<td><p>The distillation term of a run, and the hold on the channels it does not</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.distillation.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.OTHER_CHANNELS_WEIGHT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.distillation.</span></span><span class="sig-name descname"><span class="pre">OTHER_CHANNELS_WEIGHT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.OTHER_CHANNELS_WEIGHT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.distillation.</span></span><span class="sig-name descname"><span class="pre">Distillation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">anchors_available</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strategy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">precision</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation" title="Link to this definition"></a></dt>
+<dd><p>The distillation term of a run, and the hold on the channels it does not
+train, from its TrainingOptions.</p>
+<p>The weight: <code class="docutils literal notranslate"><span class="pre">distillation_lambda</span></code>, or when that is None (unset) 1.0 if
+the dataset emits anchors (good regions, or random points of the volume)
+and 0 otherwise. Good regions are useless without a teacher term to apply
+in them: the supervised loss never touches an unannotated voxel, so with
+lambda at 0 every rehearsal patch would contribute exactly nothing and
+the regions the user marked would silently do nothing at all. Marking
+them is an explicit request to be held there. An explicit 0 is honoured:
+it used to be indistinguishable from “unset” and was raised to 1.0 as
+well, so choosing “0 (Disabled)” in the dashboard with good regions
+marked gave 100x the default weight.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">select_channel</span></code> set the term is the selected channel’s, and
+<code class="docutils literal notranslate"><span class="pre">holds_others</span></code> is on: every other channel is held to the teacher
+(<code class="docutils literal notranslate"><span class="pre">others_term</span></code>), whatever the weight. So the teacher is made whenever
+either is on (<code class="docutils literal notranslate"><span class="pre">teacher_needed</span></code>), with lambda at 0 too.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.all_voxels">
+<span class="sig-name descname"><span class="pre">all_voxels</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.all_voxels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.anchors_available">
+<span class="sig-name descname"><span class="pre">anchors_available</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.anchors_available" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.select_channel">
+<span class="sig-name descname"><span class="pre">select_channel</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.select_channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.holds_others">
+<span class="sig-name descname"><span class="pre">holds_others</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.holds_others" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.strategy">
+<span class="sig-name descname"><span class="pre">strategy</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.strategy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.precision">
+<span class="sig-name descname"><span class="pre">precision</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.precision" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.weight">
+<span class="sig-name descname"><span class="pre">weight</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.on">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">on</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.on" title="Link to this definition"></a></dt>
+<dd><p>Whether the distillation term is in the loss (its weight is above 0).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.teacher_needed">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">teacher_needed</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.teacher_needed" title="Link to this definition"></a></dt>
+<dd><p>for the term, or for the hold.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether a batch needs the teacher’s prediction</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.teacher_model">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">teacher_model</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.teacher_model" title="Link to this definition"></a></dt>
+<dd><p>A full finetune’s frozen teacher, the copy of its starting weights; else None.</p>
+<p>The CLI hands it to the next iteration’s trainer. Setting it to None
+frees it (<code class="docutils literal notranslate"><span class="pre">drop</span></code> does, with the term).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.drop">
+<span class="sig-name descname"><span class="pre">drop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.drop" title="Link to this definition"></a></dt>
+<dd><p>Switch the term and the hold off for good: the OOM handler’s last
+resort. A full finetune’s frozen teacher is a whole second copy of the
+weights, freed with the terms it served.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.teacher_prediction">
+<span class="sig-name descname"><span class="pre">teacher_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.teacher_prediction" title="Link to this definition"></a></dt>
+<dd><p>The starting model’s prediction on <code class="docutils literal notranslate"><span class="pre">raw</span></code>, every channel of it.</p>
+<p>LoRA: the model itself with its adapters switched off, in eval mode.
+Full finetune: the frozen copy taken before training. Only called
+while <code class="docutils literal notranslate"><span class="pre">teacher_needed</span></code>, and the teacher is made whenever it is (only
+<code class="docutils literal notranslate"><span class="pre">drop</span></code> takes it away). Making one here instead would be wrong for a
+full finetune: it would copy the student as it is now, not as it
+started. Every channel, as the hold compares the ones the term does
+not (<code class="docutils literal notranslate"><span class="pre">term</span></code> takes the selected one itself).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.term">
+<span class="sig-name descname"><span class="pre">term</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">teacher_pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">anchor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.term" title="Link to this definition"></a></dt>
+<dd><p>The mean squared distance of <code class="docutils literal notranslate"><span class="pre">pred</span></code> from <code class="docutils literal notranslate"><span class="pre">teacher_pred</span></code> over the term’s scope.</p>
+<p><code class="docutils literal notranslate"><span class="pre">pred</span></code> is what the supervised term compares, the selected channel
+with <code class="docutils literal notranslate"><span class="pre">select_channel</span></code>; <code class="docutils literal notranslate"><span class="pre">teacher_pred</span></code> is every channel, and the
+same one is taken from it.</p>
+<p>Good regions decide where the teacher is worth copying. Distilling on
+every unlabeled voxel instead anchors hardest right beside the
+scribbles, which is the one place the teacher is known to be wrong,
+so it partly fights the correction being made; with anchors the term
+is restricted to the regions the user actually vouched for.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.distillation.Distillation.others_term">
+<span class="sig-name descname"><span class="pre">others_term</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">teacher_pred</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.distillation.Distillation.others_term" title="Link to this definition"></a></dt>
+<dd><p>The hold: the mean squared distance of every channel but the selected
+one from the teacher’s, over every voxel of the patch.</p>
+<p><code class="docutils literal notranslate"><span class="pre">prediction</span></code> and <code class="docutils literal notranslate"><span class="pre">teacher_pred</span></code> are every channel, as the model
+emits them (logits, or probabilities for a model that ends in a
+sigmoid). Every voxel, not the term’s scope: the paint is about the
+selected channel only, so no voxel of it says another channel should
+change. A model of one channel has no other: the hold goes off at its
+first batch (0 for that one), and the teacher with it unless the
+term needs it.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../diagnostics/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.trainer.diagnostics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../loop/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.trainer.loop" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

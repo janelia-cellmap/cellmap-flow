@@ -1,0 +1,116 @@
+cellmap_flow.finetune.trainer.diagnostics
+=========================================
+
+.. py:module:: cellmap_flow.finetune.trainer.diagnostics
+
+.. autoapi-nested-parse::
+
+   What the log says about a run's health, apart from its loss: whether both
+   classes are annotated at all, what the first batch supervises, and whether
+   backward reaches the trainable parameters. None of it ever stops training.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.diagnostics.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.diagnostics.GradientFlow
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.diagnostics.describe_first_batch
+   cellmap_flow.finetune.trainer.diagnostics.warn_if_single_class
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: describe_first_batch(target, mask)
+
+   Say how many voxels the first batch supervises, and how many are positive.
+
+   One batch is a few patches of the epoch's draw, so it may well hold one
+   class only; whether the annotations do is warn_if_single_class's.
+
+
+.. py:function:: warn_if_single_class(background, foreground)
+
+   Say so when every annotated voxel carries the same label.
+
+   ``background`` and ``foreground`` count the voxels annotated as each in
+   the whole volume (the dataset's ``class_voxels``), not in a batch: a
+   session painted with both can draw a first batch of one class
+   (describe_first_batch), and would be told to paint the other in every
+   iteration.
+
+   Gradient descent can only do one thing with a target that is all 1:
+   raise the prediction everywhere. The model duly does that, globally,
+   and the result is worse than the model you started from -- with a
+   loss curve that looks unremarkable, because a one-class problem is
+   genuinely easy to reduce.
+
+   The usual cause is painting only foreground. An affinity target needs
+   both: foreground says "these voxels are one object", background says
+   "this is not object, and these two are not joined". Without the
+   second, nothing anywhere says 0. (Flow targets are not 0/1 classes: an
+   instance patch with no background painted still teaches each object's
+   flows, so the flow loss skips this check.)
+
+
+.. py:class:: GradientFlow(model)
+
+   Whether backward reaches the adapter, over one epoch.
+
+   One LoRA-B parameter is watched across the epoch (its mean |grad| per
+   batch, and how far it moved), and at the end of the epoch the trainable
+   parameters that received no gradient at all are counted. Together they
+   answer: is backward reaching LoRA at all, and if only for some, which?
+
+
+   .. py:attribute:: model
+
+
+   .. py:attribute:: initial
+
+
+   .. py:attribute:: grad_abs_sum
+      :value: 0.0
+
+
+
+   .. py:attribute:: grad_count
+      :value: 0
+
+
+
+   .. py:attribute:: seen_nonzero
+
+
+   .. py:method:: after_backward()
+
+      Read the gradients, before the optimizer step clears them.
+
+
+
+   .. py:method:: report(log)
+
+      The epoch's summary, through ``log``.
+
+
+

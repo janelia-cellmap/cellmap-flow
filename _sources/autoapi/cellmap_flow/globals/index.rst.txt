@@ -1,0 +1,69 @@
+cellmap_flow.globals
+====================
+
+.. py:module:: cellmap_flow.globals
+
+.. autoapi-nested-parse::
+
+   Deprecated: ``g`` stands in for state that now lives with its owners.
+
+   ``cellmap_flow.globals.g`` used to hold everything a process shared. Each
+   part now has an owner, and ``g`` forwards every name it had to that owner,
+   warning with a DeprecationWarning that names the replacement:
+
+   - the launcher settings (``queue``, ``charge_group``, ``walltime``, ...,
+     ``save_server_config()``): ``cellmap_flow.jobs.settings.launcher_settings()``;
+   - the chain (``input_norms``, ``postprocess``, their ``*_config``,
+     ``pipeline_spec``, ``set_pipeline()``, ``get_output_dtype()``):
+     ``cellmap_flow.process_chain.process_chain()``;
+   - the servers this process started (``jobs``):
+     ``cellmap_flow.jobs.launch.started_jobs()``;
+   - the rest, the dashboard's state: ``cellmap_flow.dashboard.state.get_session()``.
+
+   ``g`` and ``Flow`` go in the release after 0.3.0. Until then importing this
+   module still configures logging, as it always has, so the scripts that
+   import it keep their log lines. The owners are imported only when a name is
+   used, so importing this module pulls in neither the dashboard nor jobs.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.globals.g
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.globals.Flow
+
+
+Module Contents
+---------------
+
+.. py:class:: Flow
+
+   Deprecated: the type of ``g``; see the module docstring.
+
+   Every attribute is forwarded to its owner on each use, never copied, so
+   ``g`` and the owners cannot disagree. It stores nothing itself: a name g
+   never had raises, as a misspelt one does on the dashboard's Session,
+   rather than being kept where nothing reads it.
+
+
+   .. py:method:: save_server_config()
+
+
+   .. py:method:: set_pipeline(spec, built=None)
+
+
+   .. py:method:: get_output_dtype(model_output_dtype, postprocess=None)
+
+
+.. py:data:: g
+

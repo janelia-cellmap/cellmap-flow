@@ -1,0 +1,50 @@
+cellmap_flow.cli.viewer_cli
+===========================
+
+.. py:module:: cellmap_flow.cli.viewer_cli
+
+.. autoapi-nested-parse::
+
+   Simple CLI for viewing datasets with CellMap Flow without requiring model configs.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.viewer_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.viewer_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: main(dataset, project, resample)
+
+   Start CellMap Flow viewer with a dataset.
+
+   Opens neuroglancer on the raw data and starts the dashboard, where models
+   can be picked and submitted interactively. Use `cellmap_flow yaml` instead
+   to launch models from a config file.
+
+   The dashboard's Resample box starts ticked, so the models launched from
+   it read the data resampled to their voxel size when it has no level at
+   it; ``--no-resample`` starts it unticked.
+
+   Example:
+
+   
+     cellmap_flow view -d /path/to/dataset.zarr
+
+

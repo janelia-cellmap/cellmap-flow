@@ -1,0 +1,476 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.configs.mia &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.configs.onnx" href="../onnx/index.html" />
+    <link rel="prev" title="cellmap_flow.models.configs.huggingface" href="../huggingface/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.models</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models.configs</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.configs.mia</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/models/configs/mia/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.configs.mia">
+<span id="cellmap-flow-models-configs-mia"></span><h1>cellmap_flow.models.configs.mia<a class="headerlink" href="#module-cellmap_flow.models.configs.mia" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">MiaModelConfig</span></code>: a model trained with mia-train, the training framework
+of HHMI’s MIA team (the <code class="docutils literal notranslate"><span class="pre">ai-hhmi</span></code> organization on Hugging Face), served as
+the cellmap-models export it is converted into.</p>
+<p>Its source is a Hugging Face repo (<code class="docutils literal notranslate"><span class="pre">repo</span></code>, at <code class="docutils literal notranslate"><span class="pre">revision</span></code>) or a folder
+(<code class="docutils literal notranslate"><span class="pre">path</span></code>) holding the model’s <code class="docutils literal notranslate"><span class="pre">config.json</span></code> and <code class="docutils literal notranslate"><span class="pre">model.safetensors</span></code>.
+What the network is, which of its kinds cellmap-flow can serve, how it is
+exported, and how its exports are cached are cellmap_models’ to know
+(<code class="docutils literal notranslate"><span class="pre">model_export.mia_model</span></code> and <code class="docutils literal notranslate"><span class="pre">model_export.mia_cache</span></code>), not this
+module’s. On its first build the model is converted once into a
+cellmap-models export in cellmap-flow’s cache folder (<code class="docutils literal notranslate"><span class="pre">cache_root</span></code>), by
+<code class="docutils literal notranslate"><span class="pre">mia_cache.cached_export</span></code>, in a Python process of its own in the <code class="docutils literal notranslate"><span class="pre">mia</span></code>
+pixi environment, which has mia-train (the type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>); from
+then on that folder is served exactly as any export is
+(<code class="docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code>), and finetuned as one.</p>
+<p>Nothing the dashboard or blockwise asks (declared_geometry,
+declared_input_norm, declared_affinity_offsets, declared_class_ids, declared_postprocess,
+declared_overlap, finetune_modes, finetune_refusal, planned_metadata,
+to_dict) downloads the weights or converts anything: each
+reads the cached export once a server has made it (the cache is in the home
+folder the dashboard and its jobs share). Before that, all but to_dict answer
+from the metadata the export will have, which cellmap_models’
+<code class="docutils literal notranslate"><span class="pre">mia_metadata</span></code> makes from the repo’s config.json and model card alone
+(small files, which resolving the model has fetched already), so that Submit
+sets the input normalization the model was trained on before its server
+has converted it. While that cannot be read either (the Hub out of reach,
+with nothing cached), they say nothing is declared and that the model cannot
+be finetuned yet, and it is read again a minute on (<code class="docutils literal notranslate"><span class="pre">PLAN_RETRY_SECONDS</span></code>).</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.logger" title="cellmap_flow.models.configs.mia.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.MIA_ENV" title="cellmap_flow.models.configs.mia.MIA_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MIA_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.MIA_CACHE_ENV" title="cellmap_flow.models.configs.mia.MIA_CACHE_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MIA_CACHE_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.MiaModelConfig" title="cellmap_flow.models.configs.mia.MiaModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MiaModelConfig</span></code></a></p></td>
+<td><p>A model trained with mia-train: a Hugging Face <code class="docutils literal notranslate"><span class="pre">repo</span></code> (at</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.cache_root" title="cellmap_flow.models.configs.mia.cache_root"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_root</span></code></a>() → pathlib.Path</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_MIA_CACHE</span></code>, else <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/mia_exports</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.mia.mia_cache" title="cellmap_flow.models.configs.mia.mia_cache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mia_cache</span></code></a>()</p></td>
+<td><p>cellmap_models' <code class="docutils literal notranslate"><span class="pre">model_export.mia_cache</span></code>, which converts a model once</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MIA_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">MIA_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'mia'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MIA_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MIA_CACHE_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">MIA_CACHE_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_MIA_CACHE'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MIA_CACHE_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.cache_root">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">cache_root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.cache_root" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_MIA_CACHE</span></code>, else <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/mia_exports</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.mia_cache">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">mia_cache</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.mia_cache" title="Link to this definition"></a></dt>
+<dd><p>cellmap_models’ <code class="docutils literal notranslate"><span class="pre">model_export.mia_cache</span></code>, which converts a model once
+into the cache and finds its export again; imported now.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ImportError</strong> – the cellmap_models installed has none.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.mia.</span></span><span class="sig-name descname"><span class="pre">MiaModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">repo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">revision</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig" title="Link to this definition"></a></dt>
+<dd><p>A model trained with mia-train: a Hugging Face <code class="docutils literal notranslate"><span class="pre">repo</span></code> (at
+<code class="docutils literal notranslate"><span class="pre">revision</span></code>) or a local <code class="docutils literal notranslate"><span class="pre">path</span></code>, one of the two.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'mia'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.default_env">
+<span class="sig-name descname"><span class="pre">default_env</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'mia'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.default_env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.config_relative_paths">
+<span class="sig-name descname"><span class="pre">config_relative_paths</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('path',)</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.config_relative_paths" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.PLAN_RETRY_SECONDS">
+<span class="sig-name descname"><span class="pre">PLAN_RETRY_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">60</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.PLAN_RETRY_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.repo">
+<span class="sig-name descname"><span class="pre">repo</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.repo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.path">
+<span class="sig-name descname"><span class="pre">path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">b'.'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.revision">
+<span class="sig-name descname"><span class="pre">revision</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.revision" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.export_folder">
+<span class="sig-name descname"><span class="pre">export_folder</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.export_folder" title="Link to this definition"></a></dt>
+<dd><p>The cellmap-models export the model is served from, in the cache
+(<code class="docutils literal notranslate"><span class="pre">cache_root</span></code>), converted now when it is not there yet
+(<code class="docutils literal notranslate"><span class="pre">mia_cache.cached_export</span></code>, which downloads a repo’s files first).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – the model must be converted and its weights could
+not be downloaded, or the conversion failed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.planned_metadata">
+<span class="sig-name descname"><span class="pre">planned_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.planned_metadata" title="Link to this definition"></a></dt>
+<dd><p>What the export will declare: cellmap_models’ ModelMetadata that
+<code class="docutils literal notranslate"><span class="pre">mia_metadata</span></code> made (_planned), read as _planned reads it; None
+while it cannot be read. Until a server has converted the model, what
+this config answers is answered from it, so while it is None those
+answers are no answers (finetune_modes none, declared_input_norm
+None), and a list of models (hf_catalog) keeps none of them.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.cellmap_model">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">cellmap_model</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.cellmap_model" title="Link to this definition"></a></dt>
+<dd><p>The export’s CellmapModel (the trainer’s, finetune.model_loading,
+once the config is built), or None while there is none.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.runs_at_native_voxel_size">
+<span class="sig-name descname"><span class="pre">runs_at_native_voxel_size</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.runs_at_native_voxel_size" title="Link to this definition"></a></dt>
+<dd><p>The export’s (<code class="docutils literal notranslate"><span class="pre">CellMapModelConfig.runs_at_native_voxel_size</span></code>), or
+the one it will be (_declared); converted first when neither is
+known, as the server asks right before it builds the model.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.finetune_refusal">
+<span class="sig-name descname"><span class="pre">finetune_refusal</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.finetune_refusal" title="Link to this definition"></a></dt>
+<dd><p>The export’s, or the one it will be (_declared). While neither is
+known, that the model cannot be finetuned until it is: its output may
+be a whole number (a semantic model’s uint8 probabilities x 255),
+which no gradient goes through, so a guess would offer a training
+that fails on the GPU.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>(“lora”, “full”), (“full”,)
+or (). For the dashboard, so it must not build the network: a type
+whose networks differ (a compiled one takes no LoRA adapter) reads
+it from what describes the model. The trainer checks the module it
+gets the same way (<code class="docutils literal notranslate"><span class="pre">finetune.trainable.finetune_modes</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>What this model can be finetuned with</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_overlap">
+<span class="sig-name descname"><span class="pre">declared_overlap</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_overlap" title="Link to this definition"></a></dt>
+<dd><p>The overlap the model declares, read without building it (one
+number of output voxels, or one per axis, as its metadata gives it),
+or None when it declares none. Blockwise refuses a model with an
+overlap from this before it builds anything (blockwise_processor), as
+it does not blend blocks yet, and building some models is costly (a
+mia model’s first build converts it). Cheap and never raises, as
+declared_input_norm: a cellmap-models export’s metadata.json declares
+it.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_geometry">
+<span class="sig-name descname"><span class="pre">declared_geometry</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_geometry" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">{&quot;write_shape&quot;</span>
+<span class="pre">(nm,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x),</span> <span class="pre">&quot;input_voxel_size&quot;</span> <span class="pre">and</span> <span class="pre">&quot;output_voxel_size&quot;</span> <span class="pre">(nm),</span>
+<span class="pre">&quot;output_channels&quot;,</span> <span class="pre">&quot;channels&quot;</span> <span class="pre">(their</span> <span class="pre">names,</span> <span class="pre">None</span> <span class="pre">when</span> <span class="pre">it</span> <span class="pre">names</span>
+<span class="pre">none)}</span></code>, as its server reports them; None when it says none, or not
+for certain. At <code class="docutils literal notranslate"><span class="pre">run_voxel_size</span></code>, when it has one: every type’s is
+scaled to it (<code class="docutils literal notranslate"><span class="pre">__init_subclass__</span></code>), so a type declares its own sizes.</p>
+<p>For the finetune tab’s model list, which asks on every poll while
+the model’s server is not up: building the model there loaded its
+weights and ran a forward on the dashboard’s CPU (25 s for a 3 GB
+TorchScript). So it must be cheap and must not raise, as
+declared_input_norm. A type declares it from what describes the model
+(a metadata.json, a manifest, its entry).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>What the model says of its output without being built</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_input_norm">
+<span class="sig-name descname"><span class="pre">declared_input_norm</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_input_norm" title="Link to this definition"></a></dt>
+<dd><p>The input normalization the model declares itself, as cellmap-flow
+steps (<code class="docutils literal notranslate"><span class="pre">[{&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">**params}]</span></code>), or None when it declares none.</p>
+<p>Asked on every dashboard poll, so it must be cheap and must not
+raise. An onnx model’s manifest declares its steps, and so does the
+metadata.json of a model a server published to Hugging Face; a
+cellmap-models export’s metadata.json declares the range the model
+reads (<code class="docutils literal notranslate"><span class="pre">probe.metadata_input_norm</span></code>), which needs <code class="docutils literal notranslate"><span class="pre">data_range</span></code>, the
+raw data’s (lo, hi), to say what to scale from.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_affinity_offsets">
+<span class="sig-name descname"><span class="pre">declared_affinity_offsets</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_affinity_offsets" title="Link to this definition"></a></dt>
+<dd><p>The offsets the model’s affinity channels compare, as it declares
+them (<code class="docutils literal notranslate"><span class="pre">[[dz,</span> <span class="pre">dy,</span> <span class="pre">dx],</span> <span class="pre">...]</span></code>, one per affinity channel, in channel
+order), or None when it declares none. Declared offsets win over the
+ones a model’s <code class="docutils literal notranslate"><span class="pre">*_aff*</span></code> channel names are taken to mean
+(dashboard/routes/finetune/common.model_target). Cheap and never
+raises, as declared_input_norm: a cellmap-models export’s
+metadata.json declares them.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_class_ids">
+<span class="sig-name descname"><span class="pre">declared_class_ids</span></span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_class_ids" title="Link to this definition"></a></dt>
+<dd><p>The id each of the model’s class channels has in CellMap’s
+annotations, as it declares them (whole numbers, one per channel, in
+channel order: mito 50, er 51), or None when it declares none. The
+model advice’s ArgmaxPostprocessor labels each voxel with its
+likeliest class’s (serving/probe.suggest_postprocess_params). Cheap
+and never raises, as declared_input_norm: a cellmap-models export’s
+metadata.json declares them (<code class="docutils literal notranslate"><span class="pre">class_ids</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.declared_postprocess">
+<span class="sig-name descname"><span class="pre">declared_postprocess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.declared_postprocess" title="Link to this definition"></a></dt>
+<dd><p>The export’s, or the one it will be (_declared): the step its
+metadata declares is applied after the model. cellmap_models declares
+a mia-train export’s activation in the export, so none; [] when
+neither is known.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.mia.MiaModelConfig.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.mia.MiaModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code>
+rebuilds; with the cached export’s metadata, for the pipeline builder
+to show, as a Hugging Face model’s has its repo’s.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../huggingface/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.configs.huggingface" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../onnx/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.configs.onnx" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

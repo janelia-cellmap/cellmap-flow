@@ -1,0 +1,288 @@
+cellmap_flow.models.configs.mia
+===============================
+
+.. py:module:: cellmap_flow.models.configs.mia
+
+.. autoapi-nested-parse::
+
+   ``MiaModelConfig``: a model trained with mia-train, the training framework
+   of HHMI's MIA team (the ``ai-hhmi`` organization on Hugging Face), served as
+   the cellmap-models export it is converted into.
+
+   Its source is a Hugging Face repo (``repo``, at ``revision``) or a folder
+   (``path``) holding the model's ``config.json`` and ``model.safetensors``.
+   What the network is, which of its kinds cellmap-flow can serve, how it is
+   exported, and how its exports are cached are cellmap_models' to know
+   (``model_export.mia_model`` and ``model_export.mia_cache``), not this
+   module's. On its first build the model is converted once into a
+   cellmap-models export in cellmap-flow's cache folder (``cache_root``), by
+   ``mia_cache.cached_export``, in a Python process of its own in the ``mia``
+   pixi environment, which has mia-train (the type's ``default_env``); from
+   then on that folder is served exactly as any export is
+   (``CellMapModelConfig``), and finetuned as one.
+
+   Nothing the dashboard or blockwise asks (declared_geometry,
+   declared_input_norm, declared_affinity_offsets, declared_class_ids, declared_postprocess,
+   declared_overlap, finetune_modes, finetune_refusal, planned_metadata,
+   to_dict) downloads the weights or converts anything: each
+   reads the cached export once a server has made it (the cache is in the home
+   folder the dashboard and its jobs share). Before that, all but to_dict answer
+   from the metadata the export will have, which cellmap_models'
+   ``mia_metadata`` makes from the repo's config.json and model card alone
+   (small files, which resolving the model has fetched already), so that Submit
+   sets the input normalization the model was trained on before its server
+   has converted it. While that cannot be read either (the Hub out of reach,
+   with nothing cached), they say nothing is declared and that the model cannot
+   be finetuned yet, and it is read again a minute on (``PLAN_RETRY_SECONDS``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.mia.logger
+   cellmap_flow.models.configs.mia.MIA_ENV
+   cellmap_flow.models.configs.mia.MIA_CACHE_ENV
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.mia.MiaModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.mia.cache_root
+   cellmap_flow.models.configs.mia.mia_cache
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: MIA_ENV
+   :value: 'mia'
+
+
+.. py:data:: MIA_CACHE_ENV
+   :value: 'CELLMAP_FLOW_MIA_CACHE'
+
+
+.. py:function:: cache_root() -> pathlib.Path
+
+   ``CELLMAP_FLOW_MIA_CACHE``, else ``~/.cellmap_flow/mia_exports``.
+
+
+.. py:function:: mia_cache()
+
+   cellmap_models' ``model_export.mia_cache``, which converts a model once
+   into the cache and finds its export again; imported now.
+
+   :raises ImportError: the cellmap_models installed has none.
+
+
+.. py:class:: MiaModelConfig(repo: str = None, path: str = None, revision: str = None, name: str = None, scale=None)
+
+
+
+   A model trained with mia-train: a Hugging Face ``repo`` (at
+   ``revision``) or a local ``path``, one of the two.
+
+
+   .. py:attribute:: cli_name
+      :value: 'mia'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: default_env
+      :value: 'mia'
+
+
+
+   .. py:attribute:: config_relative_paths
+      :value: ('path',)
+
+
+
+   .. py:attribute:: PLAN_RETRY_SECONDS
+      :value: 60
+
+
+
+   .. py:attribute:: repo
+      :value: None
+
+
+
+   .. py:attribute:: path
+      :value: b'.'
+
+
+
+   .. py:attribute:: revision
+      :value: None
+
+
+
+   .. py:attribute:: name
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: export_folder() -> str
+
+      The cellmap-models export the model is served from, in the cache
+      (``cache_root``), converted now when it is not there yet
+      (``mia_cache.cached_export``, which downloads a repo's files first).
+
+      :raises RuntimeError: the model must be converted and its weights could
+          not be downloaded, or the conversion failed.
+
+
+
+   .. py:method:: planned_metadata()
+
+      What the export will declare: cellmap_models' ModelMetadata that
+      ``mia_metadata`` made (_planned), read as _planned reads it; None
+      while it cannot be read. Until a server has converted the model, what
+      this config answers is answered from it, so while it is None those
+      answers are no answers (finetune_modes none, declared_input_norm
+      None), and a list of models (hf_catalog) keeps none of them.
+
+
+
+   .. py:property:: cellmap_model
+
+      The export's CellmapModel (the trainer's, finetune.model_loading,
+      once the config is built), or None while there is none.
+
+
+   .. py:method:: runs_at_native_voxel_size() -> bool
+
+      The export's (``CellMapModelConfig.runs_at_native_voxel_size``), or
+      the one it will be (_declared); converted first when neither is
+      known, as the server asks right before it builds the model.
+
+
+
+   .. py:method:: finetune_refusal()
+
+      The export's, or the one it will be (_declared). While neither is
+      known, that the model cannot be finetuned until it is: its output may
+      be a whole number (a semantic model's uint8 probabilities x 255),
+      which no gradient goes through, so a guess would offer a training
+      that fails on the GPU.
+
+
+
+   .. py:attribute:: finetune_modes
+
+      ("lora", "full"), ("full",)
+      or (). For the dashboard, so it must not build the network: a type
+      whose networks differ (a compiled one takes no LoRA adapter) reads
+      it from what describes the model. The trainer checks the module it
+      gets the same way (``finetune.trainable.finetune_modes``).
+
+      :type: What this model can be finetuned with
+
+
+   .. py:attribute:: declared_overlap
+
+      The overlap the model declares, read without building it (one
+      number of output voxels, or one per axis, as its metadata gives it),
+      or None when it declares none. Blockwise refuses a model with an
+      overlap from this before it builds anything (blockwise_processor), as
+      it does not blend blocks yet, and building some models is costly (a
+      mia model's first build converts it). Cheap and never raises, as
+      declared_input_norm: a cellmap-models export's metadata.json declares
+      it.
+
+
+   .. py:attribute:: declared_geometry
+
+      ``{"write_shape"
+      (nm, z, y, x), "input_voxel_size" and "output_voxel_size" (nm),
+      "output_channels", "channels" (their names, None when it names
+      none)}``, as its server reports them; None when it says none, or not
+      for certain. At ``run_voxel_size``, when it has one: every type's is
+      scaled to it (``__init_subclass__``), so a type declares its own sizes.
+
+      For the finetune tab's model list, which asks on every poll while
+      the model's server is not up: building the model there loaded its
+      weights and ran a forward on the dashboard's CPU (25 s for a 3 GB
+      TorchScript). So it must be cheap and must not raise, as
+      declared_input_norm. A type declares it from what describes the model
+      (a metadata.json, a manifest, its entry).
+
+      :type: What the model says of its output without being built
+
+
+   .. py:attribute:: declared_input_norm
+
+      The input normalization the model declares itself, as cellmap-flow
+      steps (``[{"name": ..., **params}]``), or None when it declares none.
+
+      Asked on every dashboard poll, so it must be cheap and must not
+      raise. An onnx model's manifest declares its steps, and so does the
+      metadata.json of a model a server published to Hugging Face; a
+      cellmap-models export's metadata.json declares the range the model
+      reads (``probe.metadata_input_norm``), which needs ``data_range``, the
+      raw data's (lo, hi), to say what to scale from.
+
+
+   .. py:attribute:: declared_affinity_offsets
+
+      The offsets the model's affinity channels compare, as it declares
+      them (``[[dz, dy, dx], ...]``, one per affinity channel, in channel
+      order), or None when it declares none. Declared offsets win over the
+      ones a model's ``*_aff*`` channel names are taken to mean
+      (dashboard/routes/finetune/common.model_target). Cheap and never
+      raises, as declared_input_norm: a cellmap-models export's
+      metadata.json declares them.
+
+
+   .. py:attribute:: declared_class_ids
+
+      The id each of the model's class channels has in CellMap's
+      annotations, as it declares them (whole numbers, one per channel, in
+      channel order: mito 50, er 51), or None when it declares none. The
+      model advice's ArgmaxPostprocessor labels each voxel with its
+      likeliest class's (serving/probe.suggest_postprocess_params). Cheap
+      and never raises, as declared_input_norm: a cellmap-models export's
+      metadata.json declares them (``class_ids``).
+
+
+   .. py:method:: declared_postprocess()
+
+      The export's, or the one it will be (_declared): the step its
+      metadata declares is applied after the model. cellmap_models declares
+      a mia-train export's activation in the export, so none; [] when
+      neither is known.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model``
+      rebuilds; with the cached export's metadata, for the pipeline builder
+      to show, as a Hugging Face model's has its repo's.
+
+
+

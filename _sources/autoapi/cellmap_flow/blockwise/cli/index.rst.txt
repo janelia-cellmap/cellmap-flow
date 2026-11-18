@@ -1,0 +1,42 @@
+cellmap_flow.blockwise.cli
+==========================
+
+.. py:module:: cellmap_flow.blockwise.cli
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.cli.cli
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: cli(yaml_configs, client)
+
+   Run the model a blockwise YAML describes over the whole volume, or
+   only its bounding_boxes, block by block, writing its predictions to disk.
+
+   Several YAMLs run one after the other. One that leaves blocks
+   unprocessed does not stop the rest; the command fails at the end,
+   naming them. --client runs one of a run's workers (the run starts them
+   itself), so it takes one YAML.
+
+   
+     cellmap_flow blockwise config.yaml
+     cellmap_flow blockwise mito.yaml er.yaml
+
+

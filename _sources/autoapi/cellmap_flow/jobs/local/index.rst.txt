@@ -1,0 +1,106 @@
+cellmap_flow.jobs.local
+=======================
+
+.. py:module:: cellmap_flow.jobs.local
+
+.. autoapi-nested-parse::
+
+   Running a job as a process on this machine, for when there is no LSF.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.local.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.local.LocalJob
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.local.run
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: LocalJob(process: subprocess.Popen, model_name: Optional[str] = None, log_file: Optional[pathlib.Path] = None)
+
+
+
+   Job running as a local subprocess.
+
+   The process leads its own session (see run), so kill() can take down
+   everything under it -- a ``bash -c`` wrapper, the python it runs, a
+   ``tee`` -- rather than only the direct child. Its output goes to
+   ``log_file``, which is where the host marker is read from.
+
+
+   .. py:attribute:: process
+
+
+   .. py:attribute:: log_file
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the local process and everything it started.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.jobs.spec.JobStatus
+
+      Get current status by checking process state.
+
+
+
+   .. py:method:: peek(max_chars: int = 4000) -> Optional[str]
+
+      The tail of the job's log file.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 180) -> Optional[str]
+
+      Watch the process's log file for host information.
+
+      :param timeout: Maximum time to wait in seconds (default 180s for model loading)
+
+      :returns: Host URL if found, None otherwise
+
+
+
+.. py:function:: run(command, name: str, log_file=None, env: Optional[Mapping[str, str]] = None) -> LocalJob
+
+   Run command locally as a subprocess (fallback when bsub unavailable).
+
+   The child writes stdout and stderr to ``log_file`` -- by default a new
+   file under the log directory (spec.default_log_dir) -- rather than to
+   pipes. Nothing reads a pipe once the host is known, so a child on pipes
+   blocks for good as soon as it has logged a pipe buffer's worth (about
+   64 KB). It also starts in its own session, so LocalJob.kill() can signal
+   everything under it.
+
+   :param command: Shell-free command, as a string (split with shlex) or argv list
+   :param name: Job name for tracking
+   :param log_file: Where the output goes; pass os.devnull when the command
+                    already writes its own log
+   :param env: Added to this process's environment for the child
+
+   :returns: LocalJob object with process information
+
+

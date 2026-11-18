@@ -1,0 +1,172 @@
+cellmap_flow.finetune.trainer.distillation
+==========================================
+
+.. py:module:: cellmap_flow.finetune.trainer.distillation
+
+.. autoapi-nested-parse::
+
+   The distillation term: its weight, where it applies, and the teacher; and
+   the hold on the channels a run does not train.
+
+   Distillation holds the model to the one it started from where the paint
+   says nothing: on the unlabeled voxels, on every voxel, or on the good
+   regions' anchor patches when the session has any (``losses.distillation_loss``).
+   The teacher is the model as it was before this run changed it: with LoRA
+   the same module with its adapter switched off, for a full finetune a frozen
+   copy of the starting weights (``adaptation``'s strategies). The browser's
+   twin is web/src/finetune/distillation.ts.
+
+   A run that trains one channel of a multi-channel model (``select_channel``)
+   holds every other channel to the teacher's prediction too, on every voxel
+   (``Distillation.others_term``, at ``OTHER_CHANNELS_WEIGHT``): the channels
+   share the network, so training one moves the rest, and with the paint about
+   one of them nothing else would keep them where they were.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.distillation.logger
+   cellmap_flow.finetune.trainer.distillation.OTHER_CHANNELS_WEIGHT
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.distillation.Distillation
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: OTHER_CHANNELS_WEIGHT
+   :value: 1.0
+
+
+.. py:class:: Distillation(options, *, anchors_available, model, strategy, device, precision)
+
+   The distillation term of a run, and the hold on the channels it does not
+   train, from its TrainingOptions.
+
+   The weight: ``distillation_lambda``, or when that is None (unset) 1.0 if
+   the dataset emits anchors (good regions, or random points of the volume)
+   and 0 otherwise. Good regions are useless without a teacher term to apply
+   in them: the supervised loss never touches an unannotated voxel, so with
+   lambda at 0 every rehearsal patch would contribute exactly nothing and
+   the regions the user marked would silently do nothing at all. Marking
+   them is an explicit request to be held there. An explicit 0 is honoured:
+   it used to be indistinguishable from "unset" and was raised to 1.0 as
+   well, so choosing "0 (Disabled)" in the dashboard with good regions
+   marked gave 100x the default weight.
+
+   With ``select_channel`` set the term is the selected channel's, and
+   ``holds_others`` is on: every other channel is held to the teacher
+   (``others_term``), whatever the weight. So the teacher is made whenever
+   either is on (``teacher_needed``), with lambda at 0 too.
+
+
+   .. py:attribute:: all_voxels
+
+
+   .. py:attribute:: anchors_available
+
+
+   .. py:attribute:: select_channel
+
+
+   .. py:attribute:: holds_others
+
+
+   .. py:attribute:: strategy
+
+
+   .. py:attribute:: precision
+
+
+   .. py:attribute:: weight
+
+
+   .. py:property:: on
+      :type: bool
+
+
+      Whether the distillation term is in the loss (its weight is above 0).
+
+
+   .. py:property:: teacher_needed
+      :type: bool
+
+
+      for the term, or for the hold.
+
+      :type: Whether a batch needs the teacher's prediction
+
+
+   .. py:property:: teacher_model
+
+      A full finetune's frozen teacher, the copy of its starting weights; else None.
+
+      The CLI hands it to the next iteration's trainer. Setting it to None
+      frees it (``drop`` does, with the term).
+
+
+   .. py:method:: drop()
+
+      Switch the term and the hold off for good: the OOM handler's last
+      resort. A full finetune's frozen teacher is a whole second copy of the
+      weights, freed with the terms it served.
+
+
+
+   .. py:method:: teacher_prediction(raw)
+
+      The starting model's prediction on ``raw``, every channel of it.
+
+      LoRA: the model itself with its adapters switched off, in eval mode.
+      Full finetune: the frozen copy taken before training. Only called
+      while ``teacher_needed``, and the teacher is made whenever it is (only
+      ``drop`` takes it away). Making one here instead would be wrong for a
+      full finetune: it would copy the student as it is now, not as it
+      started. Every channel, as the hold compares the ones the term does
+      not (``term`` takes the selected one itself).
+
+
+
+   .. py:method:: term(pred, teacher_pred, mask, anchor)
+
+      The mean squared distance of ``pred`` from ``teacher_pred`` over the term's scope.
+
+      ``pred`` is what the supervised term compares, the selected channel
+      with ``select_channel``; ``teacher_pred`` is every channel, and the
+      same one is taken from it.
+
+      Good regions decide where the teacher is worth copying. Distilling on
+      every unlabeled voxel instead anchors hardest right beside the
+      scribbles, which is the one place the teacher is known to be wrong,
+      so it partly fights the correction being made; with anchors the term
+      is restricted to the regions the user actually vouched for.
+
+
+
+   .. py:method:: others_term(prediction, teacher_pred)
+
+      The hold: the mean squared distance of every channel but the selected
+      one from the teacher's, over every voxel of the patch.
+
+      ``prediction`` and ``teacher_pred`` are every channel, as the model
+      emits them (logits, or probabilities for a model that ends in a
+      sigmoid). Every voxel, not the term's scope: the paint is about the
+      selected channel only, so no voxel of it says another channel should
+      change. A model of one channel has no other: the hold goes off at its
+      first batch (0 for that one), and the teacher with it unless the
+      term needs it.
+
+
+

@@ -1,0 +1,66 @@
+cellmap_flow.dashboard.app
+==========================
+
+.. py:module:: cellmap_flow.dashboard.app
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.app.logger
+   cellmap_flow.dashboard.app.template_dir
+   cellmap_flow.dashboard.app.static_dir
+   cellmap_flow.dashboard.app.app
+   cellmap_flow.dashboard.app.package_logger
+   cellmap_flow.dashboard.app.log_handler
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.app.bind_dashboard
+   cellmap_flow.dashboard.app.create_and_run_app
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: template_dir
+
+.. py:data:: static_dir
+
+.. py:data:: app
+
+.. py:data:: package_logger
+
+.. py:data:: log_handler
+
+.. py:function:: bind_dashboard()
+
+   Bind the dashboard to a free port, and record its address as the
+   session's ``dashboard_url``. Returns the server, for create_and_run_app.
+
+   Apart so the address is known before the dashboard serves: the CLIs'
+   startup (services.startup) builds the viewer's prediction layers first,
+   and each layer's URL carries the address (Session.layer_blob).
+
+
+.. py:function:: create_and_run_app(neuroglancer_url=None, server=None)
+
+   Serve the dashboard on a free port (or on ``server``, bind_dashboard's),
+   until the process is stopped.
+
+   It prints its URL, and writes it where SERVICE_URL_PATH says. Its
+   terminal lines (the URL, the models it launches) are INFO: a
+   cellmap_flow command has configured logging by now, and a script that
+   calls this without doing so gets the shared format at INFO. It loads
+   the plugins, whose normalizers, postprocessors and model types its
+   pages offer, if nothing has yet.
+
+

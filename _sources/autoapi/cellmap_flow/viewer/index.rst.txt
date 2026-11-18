@@ -1,0 +1,64 @@
+cellmap_flow.viewer
+===================
+
+.. py:module:: cellmap_flow.viewer
+
+.. autoapi-nested-parse::
+
+   The neuroglancer viewer: making one, the layers it shows and the keys bound in it.
+
+   - ``bootstrap``: ``new_viewer()``, the one place a viewer is made.
+   - ``layers``: a model's prediction layer and the raw data's layer, built the
+     same way by every path that shows one.
+   - ``keys``: binding a key once per viewer, and its status-bar message.
+   - ``VIEWER_AXES`` and ``display_dimensions_for_view``: the order of a
+     viewer's dimensions, and which it displays. Here, so that importing them
+     imports nothing else.
+
+   Nothing here reads the dashboard's state or starts the dashboard; callers
+   pass in what a layer needs.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/viewer/bootstrap/index
+   /autoapi/cellmap_flow/viewer/keys/index
+   /autoapi/cellmap_flow/viewer/layers/index
+   /autoapi/cellmap_flow/viewer/raw/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.VIEWER_AXES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.display_dimensions_for_view
+
+
+Package Contents
+----------------
+
+.. py:data:: VIEWER_AXES
+   :value: ('x', 'y', 'z')
+
+
+.. py:function:: display_dimensions_for_view(viewer_state) -> tuple
+
+   The display dimensions of a neuroglancer ``ViewerState``: those it
+   sets, else the first three of its coordinate space, as neuroglancer
+   takes them; empty when it has neither.
+
+
