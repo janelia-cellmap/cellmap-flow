@@ -104,6 +104,10 @@
       height: 100%;
       overflow-y: auto;
       overflow-x: hidden;
+      /* The scrollbar's room kept whether or not this tab's content
+         scrolls: dark.css's 6px scrollbar takes layout width, and the tab
+         bar wrapped 3 + 1 on a short tab and 2 + 2 on a long one. */
+      scrollbar-gutter: stable;
       border-left: 1px solid var(--border);
       background: var(--bg-base);
     }
