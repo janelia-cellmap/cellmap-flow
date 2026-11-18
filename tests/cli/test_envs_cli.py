@@ -4,6 +4,7 @@ pixi and the environments' pythons are never run: subprocess.run is
 replaced, and what it was asked to run is checked.
 """
 
+import collections
 import gc
 import sys
 import textwrap
@@ -145,7 +146,7 @@ def test_the_commands_ask_at_a_terminal_before_installing_a_models_env(terminal,
     from cellmap_flow.jobs import launch
     from cellmap_flow.models import envs
 
-    monkeypatch.setattr(launch, "_install_allowed", set())
+    monkeypatch.setattr(launch, "_installs", collections.defaultdict(launch._EnvInstall))
     monkeypatch.setattr(envs, "to_install", lambda models: {"bioimageio": ["kind_seashell"]})
     monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: terminal, fileno=lambda: 0))
     monkeypatch.setattr(os, "tcgetpgrp", lambda fd: os.getpgrp() + (0 if foreground else 1))

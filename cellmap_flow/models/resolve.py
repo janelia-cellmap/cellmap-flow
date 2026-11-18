@@ -855,8 +855,6 @@ def servable_mia_config(config) -> bool:
     not a pretraining checkpoint). False for any other config.json, and with
     a cellmap_models that has no mia_model. What makes a repo or a folder a
     mia model, here and in the Hugging Face listing (hf_catalog)."""
-    if not isinstance(config, dict):
-        return False
     try:
         return bool(mia_model().is_mia_config(config))
     except ImportError:

@@ -336,6 +336,22 @@ def convert_once(source, target) -> None:
     remove_other_converters(target)
 
 
+def _as_declared(name, unknown=None):
+    """A MiaModelConfig method that answers ``name`` as the export does
+    (``CellMapModelConfig``'s method of that name, with the same arguments),
+    or as the export it will be does (``MiaModelConfig._declared``);
+    ``unknown`` when neither is known."""
+
+    def ask(self, *args, **kwargs):
+        declared = self._declared()
+        return getattr(declared, name)(*args, **kwargs) if declared is not None else unknown
+
+    ask.__name__ = name
+    ask.__doc__ = (f"The export's (``CellMapModelConfig.{name}``), or the one it will be (_declared); "
+                   f"{unknown!r} when neither is known.")
+    return ask
+
+
 class MiaModelConfig(ModelConfig):
     """A model trained with mia-train: a Hugging Face ``repo`` (at
     ``revision``) or a local ``path``, one of the two."""
@@ -519,13 +535,6 @@ class MiaModelConfig(ModelConfig):
         declared = self._declared()
         return (declared if declared is not None else self._served()).runs_at_native_voxel_size()
 
-    def finetune_modes(self):
-        """The export's, or the one it will be (_declared): both, unless its
-        output cannot be trained through; none while neither is known, as
-        finetune_refusal says."""
-        declared = self._declared()
-        return declared.finetune_modes() if declared is not None else ()
-
     def finetune_refusal(self):
         """The export's, or the one it will be (_declared). While neither is
         known, that the model cannot be finetuned until it is: its output may
@@ -541,31 +550,19 @@ class MiaModelConfig(ModelConfig):
             f"server converts it; else it is read again in {self.PLAN_RETRY_SECONDS} s."
         )
 
-    def declared_overlap(self):
-        """The overlap the export declares, or the one it will be
-        (_declared): one number of output voxels, or one per axis, as its
-        metadata gives it; None when neither is known. Never converts, so
-        that blockwise refuses a model with an overlap before anything
-        builds it (a first build converts it: minutes on a CPU)."""
-        declared = self._declared()
-        return declared._metadata_field("overlap") if declared is not None else None
-
-    def declared_geometry(self):
-        """The export's, or the one it will be (_declared); None when neither is known."""
-        declared = self._declared()
-        return declared.declared_geometry() if declared is not None else None
-
-    def declared_input_norm(self, data_range=None):
-        """The export's, or the one it will be (_declared): the range its
-        config.json's intensity_range says it read in training; None when
-        neither is known."""
-        declared = self._declared()
-        return declared.declared_input_norm(data_range) if declared is not None else None
-
-    def declared_affinity_offsets(self):
-        """The export's, or the one it will be (_declared); None when neither is known."""
-        declared = self._declared()
-        return declared.declared_affinity_offsets() if declared is not None else None
+    # What the model declares is the export's answer, or that of the export
+    # it will be (_as_declared); never converting, so that blockwise refuses
+    # a model with an overlap before anything builds it (a first build
+    # converts it: minutes on a CPU).
+    # Both modes, unless its output cannot be trained through; none while
+    # neither is known, as finetune_refusal says.
+    finetune_modes = _as_declared("finetune_modes", unknown=())
+    # One number of output voxels, or one per axis, as its metadata gives it.
+    declared_overlap = _as_declared("declared_overlap")
+    declared_geometry = _as_declared("declared_geometry")
+    # The range its config.json's intensity_range says it read in training.
+    declared_input_norm = _as_declared("declared_input_norm")
+    declared_affinity_offsets = _as_declared("declared_affinity_offsets")
 
     def declared_postprocess(self):
         """The export's, or the one it will be (_declared): the step its

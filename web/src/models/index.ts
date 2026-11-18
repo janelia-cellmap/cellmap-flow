@@ -241,7 +241,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     let folders: string[];
     let lastModified: Record<string, string> = {};
     try {
-      const tree = await fetchTree(fetchImpl, HF_REPO, { dates: true });
+      const tree = await fetchTree(fetchImpl, HF_REPO);
       folders = modelFolders(tree);
       if (folders.length === 0) throw new Error("the listing names no model folder");
       lastModified = folderDates(tree, folders);
@@ -352,7 +352,7 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   // a model trained with mia-train (MIA_FORM, with a config.json that
   // isMiaConfig), is a NoBrowserCopyError.
   async function fetchRepo(repo: string): Promise<RepoListing> {
-    const tree = await fetchTree(fetchImpl, repo, { dates: true });
+    const tree = await fetchTree(fetchImpl, repo);
     const folders = modelFolders(tree);
     const results = await Promise.allSettled(folders.map((folder) => fetchManifest(fetchImpl, repo, folder)));
     const manifests: Record<string, unknown> = {};

@@ -329,11 +329,6 @@ def _of(orgs: Iterable[str], models: Dict[str, Any]) -> Dict[str, Any]:
     return {repo: metadata for repo, metadata in models.items() if repo.split("/")[0] in orgs}
 
 
-def _as_orgs(orgs) -> Tuple[str, ...]:
-    """``orgs``, one organization's name or several, as a tuple."""
-    return (orgs,) if isinstance(orgs, str) else tuple(orgs)
-
-
 def _read_cache() -> Tuple[Optional[Dict[str, Any]], List[str]]:
     """The models cached, by repo id (None when nothing is cached, or the
     cache cannot be read or is not a JSON object), and the organizations
@@ -350,9 +345,9 @@ def _read_cache() -> Tuple[Optional[Dict[str, Any]], List[str]]:
 
 
 def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
-    """Fetch the models of ``orgs`` (one organization's name, or several)
-    from the Hugging Face Hub, and cache them beside what the cache has of
-    any other organization; answers every model cached.
+    """Fetch the models of ``orgs`` (organizations' names) from the Hugging
+    Face Hub, and cache them beside what the cache has of any other
+    organization; answers every model cached.
 
     Each organization is listed on its own: one that cannot be (a rate
     limit, one renamed or made private, the Hub failing for a moment) is
@@ -361,7 +356,6 @@ def _fetch_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     group, but the cache no longer says it holds its listing, so the next
     listing asks for it again rather than serving a cache that lacks it as
     whole."""
-    orgs = _as_orgs(orgs)
     listed, models = [], []
     for org in orgs:
         try:
@@ -423,7 +417,6 @@ def list_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     Returns:
         A dict mapping model IDs to their metadata
     """
-    orgs = _as_orgs(orgs)
     cached, listed = _read_cache()
     missing = [org for org in orgs if org not in listed]
     if missing:
@@ -441,5 +434,4 @@ def cached_huggingface_models() -> Optional[Dict[str, Any]]:
 
 def refresh_huggingface_models(orgs=HUGGING_FACE_ORGS) -> Dict[str, Any]:
     """Force refresh the Hugging Face models cache."""
-    orgs = _as_orgs(orgs)
     return _of(orgs, _fetch_huggingface_models(orgs))

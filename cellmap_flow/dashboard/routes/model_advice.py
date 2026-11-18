@@ -152,14 +152,6 @@ def input_norm_suggestion(model_config, meta, raw_dtype, raw_range):
     return suggestion, declared
 
 
-def _declared_affinity_offsets(model_config):
-    """``ModelConfig.declared_affinity_offsets`` of ``model_config``; None
-    for a job whose model is not among the session's. Not caught, as
-    declared_input_norm is not: both never raise, a metadata.json that
-    cannot be parsed included (CellMapModelConfig._parsed_metadata)."""
-    return model_config.declared_affinity_offsets() if model_config is not None else None
-
-
 def _fetch_probe(host: str) -> dict:
     """Ask a running inference server what its output activation looks like."""
     return fetch_model_info(host)
@@ -252,8 +244,10 @@ def model_advice():
                 # The threshold the ranking fitted to the paint for it, which
                 # an affinity chain's watershed joins neighbours above.
                 threshold=(session.rank_fits.get(name) or {}).get("threshold"),
-                # The offsets its affinity channels compare, when it declares them.
-                affinity_offsets=_declared_affinity_offsets(by_name.get(name)),
+                # The offsets its affinity channels compare, when it declares
+                # them (never raises); None for a job whose model is not among
+                # the session's.
+                affinity_offsets=by_name[name].declared_affinity_offsets() if name in by_name else None,
             )
 
         # Input side is a declared convention, not something we can observe.

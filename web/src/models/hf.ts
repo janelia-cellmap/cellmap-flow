@@ -190,19 +190,18 @@ export async function fetchJson(fetchImpl: FetchLike, url: string, what: string)
  * dates. A folder with more entries is listed that far, as it was then. */
 const MAX_TREE_PAGES = 20;
 
-/** The folders and files at `path` in `repo`; with `dates`, each with the
- * date of its last commit (TreeEntry.lastModified), what the catalog's Sort
- * by newest orders models by. Only a caller that reads those dates asks for
- * them: the listing is then asked for with expand=true, and the Hub answers
- * 50 entries a page instead of 1000, with
+/** The folders and files at the top of `repo`, each with the date of its
+ * last commit (TreeEntry.lastModified), what the catalog's Sort by newest
+ * orders models by. The listing is asked for with expand=true for those
+ * dates, and the Hub then answers 50 entries a page instead of 1000, with
  * a Link header naming the next page (checked 2026-11-12: bigscience/bloom's
  * 153 root files come as 50 and a rel="next"; the header is exposed to the
  * page by CORS), so the pages are followed, up to MAX_TREE_PAGES; a model
  * repo's top level is one page either way. A repo the Hub does not let this page read
  * (HTTP 401 or 404) is a HubStatusError that says so. */
-export async function fetchTree(fetchImpl: FetchLike, repo: string, { path = "", dates = false }: { path?: string; dates?: boolean } = {}): Promise<TreeEntry[]> {
+export async function fetchTree(fetchImpl: FetchLike, repo: string): Promise<TreeEntry[]> {
   const entries: TreeEntry[] = [];
-  let url: string | null = treeUrl(path, repo) + (dates ? "?expand=true" : "");
+  let url: string | null = `${treeUrl("", repo)}?expand=true`;
   for (let page = 0; url !== null && page < MAX_TREE_PAGES; page++) {
     const response = await fetchImpl(url, { headers: { Accept: "application/json" } });
     try {

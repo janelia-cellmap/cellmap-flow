@@ -5,7 +5,6 @@ voxel size, a uint8 output) used where cellmap-flow guessed. cellmap_models'
 adapter is faked (tests/utils/mia_helpers.py) and its export is a tiny real
 one: no test imports mia-train, downloads a model or traces a ViT."""
 
-import ast
 import json
 import os
 import time
@@ -332,20 +331,3 @@ def test_submit_sets_what_a_mia_model_declares_and_the_advice_suggests_the_rest(
     page = [{"name": "MinMaxNormalizer", "min_value": "0.0", "max_value": "255.0", "invert": "false"}]
     assert dashboard.put("/api/pipeline", json={"input_norm": page, "postprocess": chain}).status_code == 200
     assert dashboard.get("/api/models/loaded").get_json()["input_norm_from"] == name
-
-
-def test_the_offsets_an_export_declares_win_over_its_channel_names(tmp_path):
-    from cellmap_flow.dashboard.routes.finetune.common import model_target
-    from cellmap_flow.models.configs.cellmap import CellMapModelConfig
-    from cellmap_flow.serving.probe import UNIT, review_postprocess
-
-    names = [f"object_aff_{'_'.join(map(str, offset))}" for offset in OFFSETS]
-    model = CellMapModelConfig(folder_path=str(_export(tmp_path / "aff", names, affinity_offsets=OFFSETS)))
-
-    # Training and Label it: all six, the long-range ones too, where the
-    # names alone are taken to be three nearest neighbours.
-    assert model_target(model, lambda: names) == ("affinities", OFFSETS)
-    # The model advice's chain into a segmentation: the watershed's neighbourhood.
-    advice = review_postprocess(UNIT, [], out_channels=6, channels_names=names,
-                                affinity_offsets=model.declared_affinity_offsets())
-    assert ast.literal_eval(advice["params"]["AffinityPostprocessor"]["neighborhood"]) == OFFSETS

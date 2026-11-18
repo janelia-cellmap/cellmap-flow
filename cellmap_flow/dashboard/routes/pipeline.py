@@ -543,8 +543,8 @@ def set_start_postprocess() -> bool:
     it; a chain the user Applied with none stays so for the models running
     then (_start_choice).
 
-    The browser's twin is web/src/backend/serving.ts setDeclaredPostprocess
-    and setNeededPostprocess, which know every model's output before they
+    The browser's twin is web/src/backend/serving.ts setStartPostprocess,
+    which knows every model's output before they
     serve it, from its network.
     """
     from cellmap_flow.dashboard.services.launch import others_starting

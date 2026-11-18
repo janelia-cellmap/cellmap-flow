@@ -243,11 +243,29 @@ def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one
 
 # What cellmap/mito-aff-unetiso-setup-53's metadata.json says follows the
 # model (as 54's, 56's, 61's and 67's do): a sigmoid, not in the export.
+DECLARING = "cellmap/mito-aff-unetiso-setup-53"
 SIGMOID_AFTER = {"framework": "torch", "input_normalization": MIN_MAX,
                  "inference_output_activation": {"name": "sigmoid", "apply_after_model": True, "dim": None}}
 
 
 SIGMOID = [{"name": "SigmoidPostprocessor"}]
+
+
+@pytest.fixture
+def hf_starts(dashboard, monkeypatch):
+    """A session with no models and Hugging Face repos to start, none
+    downloaded: DECLARING's metadata declares its sigmoid after it, any
+    other repo's says nothing. Gives the session."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata",
+                        lambda self: SIGMOID_AFTER if self.repo == DECLARING else {})
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+    return session
 
 
 @pytest.mark.parametrize("chain, served, expected, declared", [
@@ -256,8 +274,8 @@ SIGMOID = [{"name": "SigmoidPostprocessor"}]
     pytest.param([], "unit", [], False, id="its network ends in the sigmoid"),
 ])
 def test_a_cellmap_export_that_declares_its_sigmoid_after_it_gets_it_once_its_server_is_up(dashboard, monkeypatch,
-                                                                                          chain, served, expected,
-                                                                                          declared):
+                                                                                          hf_starts, chain, served,
+                                                                                          expected, declared):
     """A step a cellmap-models export's metadata.json declares is applied
     after the model (inference_output_activation, apply_after_model true) is
     set without asking on a chain with no postprocessing, once its server
@@ -265,20 +283,15 @@ def test_a_cellmap_export_that_declares_its_sigmoid_after_it_gets_it_once_its_se
     metadata. A chain with steps is left alone, and so is an export whose
     network ends in the sigmoid already, whatever its metadata says: a
     second one would flatten it."""
-    from cellmap_flow.dashboard.routes import model_advice, pipeline
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+    from cellmap_flow.dashboard.routes import pipeline
 
-    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: SIGMOID_AFTER)
-    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
     monkeypatch.setattr(jobs_launch, "start_hosts", _up)
     monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_class": served})
-    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
-    session = get_session()
+    session = hf_starts
     session.set_pipeline(PipelineSpec([], chain))
-    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
 
-    answer = dashboard.post("/api/models", json={"selected_hf_models": ["cellmap/mito-aff-unetiso-setup-53"]})
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]})
     assert answer.status_code == 200
     expected = chain if expected is None else expected
     assert session.pipeline_spec == PipelineSpec(SIGNED, expected)
@@ -290,31 +303,32 @@ def test_a_cellmap_export_that_declares_its_sigmoid_after_it_gets_it_once_its_se
 @pytest.mark.parametrize("other, expected", [
     pytest.param("unit", [], id="the other's network ends in a sigmoid"),
     pytest.param("unbounded", SIGMOID, id="the other's output is logits too"),
+    pytest.param(None, SIGMOID, id="the other's start raises"),
 ])
-def test_a_declared_sigmoid_waits_for_the_models_submitted_with_it(dashboard, monkeypatch, other, expected):
+def test_a_declared_sigmoid_waits_for_the_models_submitted_with_it(dashboard, monkeypatch, hf_starts, other, expected):
     """setup 53's declared sigmoid, submitted with a model whose network ends
     in one (the MIA team's affinity model), would show that one through a
     second, which the chain then kept. What the starts set waits until
     every model started has its server, and is set only when it shows each
-    of them right."""
-    from cellmap_flow.dashboard.routes import model_advice, pipeline
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+    of them right. A start that raises (not a JobStartError) still decides
+    for the models that waited on it, or 53 stayed raw logits."""
+    from cellmap_flow.dashboard.routes import pipeline
 
-    declaring = "cellmap/mito-aff-unetiso-setup-53"
-    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata",
-                        lambda self: SIGMOID_AFTER if self.repo == declaring else {})
-    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
     served = {"http://mito_aff_unetiso_setup_53:1": "unbounded", "http://aff:1": other}
     monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_class": served[host]})
-    # Each server comes up when the test says, the declaring model's first.
+    # Each start ends when the test says, the declaring model's first.
     up = {"mito_aff_unetiso_setup_53": threading.Event(), "aff": threading.Event()}
-    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, job_name, **kwargs:
-                        up[job_name].wait(10) and _up(command, job_name))
-    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
-    session = get_session()
-    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
 
-    assert dashboard.post("/api/models", json={"selected_hf_models": [declaring, "cellmap/aff"]}).status_code == 200
+    def start_hosts(command, job_name, **kwargs):
+        up[job_name].wait(10)
+        if job_name == "aff" and other is None:
+            raise RuntimeError("no such file")
+        return _up(command, job_name)
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", start_hosts)
+    session = hf_starts
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING, "cellmap/aff"]}).status_code == 200
     up["mito_aff_unetiso_setup_53"].set()
     _wait_until(lambda: not launch.launching("mito_aff_unetiso_setup_53"))
     assert session.pipeline_spec.postprocess == ()
@@ -323,84 +337,36 @@ def test_a_declared_sigmoid_waits_for_the_models_submitted_with_it(dashboard, mo
     assert list(session.pipeline_spec.postprocess) == expected
 
 
-def test_a_start_that_raises_still_decides_for_the_models_that_waited_on_it(dashboard, monkeypatch):
-    """setup 53, submitted with a model whose start raises (not a
-    JobStartError), waited for it: the failed start decides in its place,
-    or 53 stayed raw logits."""
-    from cellmap_flow.dashboard.routes import model_advice, pipeline
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
-
-    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata",
-                        lambda self: SIGMOID_AFTER if "setup-53" in self.repo else {})
-    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
-    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_class": "unbounded"})
-    up, fail = threading.Event(), threading.Event()
-
-    def start_hosts(command, job_name, **kwargs):
-        if job_name == "aff":
-            fail.wait(10)
-            raise RuntimeError("no such file")
-        up.wait(10)
-        return _up(command, job_name)
-
-    monkeypatch.setattr(jobs_launch, "start_hosts", start_hosts)
-    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
-    session = get_session()
-    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
-
-    submitted = {"selected_hf_models": ["cellmap/mito-aff-unetiso-setup-53", "cellmap/aff"]}
-    assert dashboard.post("/api/models", json=submitted).status_code == 200
-    up.set()
-    _wait_until(lambda: not launch.launching("mito_aff_unetiso_setup_53"))
-    assert session.pipeline_spec.postprocess == ()
-    fail.set()
-    _wait_until(lambda: not launch.launching())
-    assert list(session.pipeline_spec.postprocess) == SIGMOID
-
-
-def test_a_later_start_leaves_the_chain_the_user_applied_over_the_models_running(dashboard, monkeypatch):
+def test_a_later_start_leaves_the_chain_the_user_applied_over_the_models_running(dashboard, monkeypatch, hf_starts):
     """setup 53 runs through its declared sigmoid; the user Applies a chain
     with no postprocessing, to look at its logits. A model started after
     that does not bring 53's sigmoid back: the chain Applied is the last
     word on the models that were running."""
-    from cellmap_flow.dashboard.routes import model_advice, pipeline
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+    from cellmap_flow.dashboard.routes import pipeline
 
-    declaring = "cellmap/mito-aff-unetiso-setup-53"
-    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata",
-                        lambda self: SIGMOID_AFTER if self.repo == declaring else {})
-    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
     monkeypatch.setattr(jobs_launch, "start_hosts", _up)
     # The second model's server does not say what its output is.
     monkeypatch.setattr(pipeline, "fetch_model_info",
                         lambda host: {"output_class": "unbounded"} if "setup_53" in host else {})
-    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
-    session = get_session()
-    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+    session = hf_starts
 
-    assert dashboard.post("/api/models", json={"selected_hf_models": [declaring]}).status_code == 200
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]}).status_code == 200
     assert list(session.pipeline_spec.postprocess) == SIGMOID
     assert dashboard.put("/api/pipeline", json={"input_norm": SIGNED, "postprocess": []}).status_code == 200
-    assert dashboard.post("/api/models", json={"selected_hf_models": [declaring, "cellmap/aff"]}).status_code == 200
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING, "cellmap/aff"]}).status_code == 200
     assert {job.model_name for job in session.jobs} == {"mito_aff_unetiso_setup_53", "aff"}
     assert session.pipeline_spec.postprocess == ()
 
 
-def test_two_organizations_repos_of_one_name_are_both_started(dashboard, monkeypatch):
+def test_two_organizations_repos_of_one_name_are_both_started(dashboard, monkeypatch, hf_starts):
     """cellmap/setup-53 and ai-hhmi/setup-53 ticked together were both named
     setup_53, and the second silently dropped. The second is named with its
     organization, and the first keeps the name it always had."""
-    from cellmap_flow.dashboard.routes import model_advice
-    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
-
-    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {})
-    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
     started = []
     monkeypatch.setattr(launch, "run_model", lambda config, st_data: started.append((config.name, config.repo)))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
-    session = get_session()
-    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+    session = hf_starts
 
     repos = ["cellmap/setup-53", "ai-hhmi/setup-53"]
     assert dashboard.post("/api/models", json={"selected_hf_models": repos}).status_code == 200

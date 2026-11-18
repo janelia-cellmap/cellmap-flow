@@ -199,20 +199,13 @@ describe("POST /api/models", () => {
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: NAME_54, postprocess_fitted: false, postprocess_declared: true });
   }, 120_000);
 
-  it("leaves out a declared sigmoid that the model's own network has already", async (t) => {
+  it("leaves an affinity model's chain into a segmentation to the advice to suggest, setting nothing for its probabilities, a declared sigmoid its network has already included", async (t) => {
     if (!(await portablePython())) t.skip();
     const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
+    // setup_54's manifest says its sigmoid is in it, and its bytes do not say
+    // otherwise; the sigmoid it declares applied after it would be a second one.
+    ctx.catalog.entries[0].manifest.output = "probabilities (sigmoid applied)";
     ctx.catalog.entries[0].manifest.inference_output_activation = { name: "sigmoid", apply_after_model: true };
-    ctx.catalog.entries[0].manifest.output = "probabilities (sigmoid applied)";
-    expect((await createBackend(ctx).handle(submit([HF54]))).status).toBe(200);
-    expect(ctx.session.state.chain.postprocess).toEqual([]);
-  }, 120_000);
-
-  it("leaves an affinity model's chain into a segmentation to the advice to suggest, setting nothing for its probabilities", async (t) => {
-    if (!(await portablePython())) t.skip();
-    const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
-    // setup_54's manifest says its sigmoid is in it, and its bytes do not say otherwise.
-    ctx.catalog.entries[0].manifest.output = "probabilities (sigmoid applied)";
     const backend = createBackend(ctx);
     expect((await backend.handle(submit([HF54]))).status).toBe(200);
     expect(ctx.session.state.chain.postprocess).toEqual([]);

@@ -139,29 +139,31 @@ class HuggingFaceModelConfig(ModelConfig):
             return None
         return metadata.get("input_norm") or metadata_input_norm(metadata.get("input_normalization"), data_range)
 
+    def _declared(self, key):
+        """``key`` of the repo's metadata.json, downloaded as for
+        declared_geometry; None when it has none or cannot be had."""
+        metadata = self._load_metadata()
+        return metadata.get(key) if isinstance(metadata, dict) else None
+
     def finetune_refusal(self):
         """``integer_output_refusal`` of the repo's metadata.json's ``output_dtype``."""
-        metadata = self._load_metadata()
-        return integer_output_refusal(self.name, metadata.get("output_dtype")) if isinstance(metadata, dict) else None
+        return integer_output_refusal(self.name, self._declared("output_dtype"))
 
     def declared_affinity_offsets(self):
-        """The offsets the repo's metadata.json declares (``affinity_offsets``,
+        """The offsets the repo's metadata.json declares (``affinity_offsets``),
         downloaded as for declared_geometry; None without them."""
-        metadata = self._load_metadata()
-        return declared_offsets(metadata.get("affinity_offsets")) if isinstance(metadata, dict) else None
+        return declared_offsets(self._declared("affinity_offsets"))
 
     def declared_postprocess(self):
         """The step the repo's metadata.json declares is applied after the
         model (its ``inference_output_activation``: portable/rank.py
         declared_postprocess), downloaded as for declared_geometry; [] for
         none."""
-        metadata = self._load_metadata()
-        return rank.declared_postprocess(metadata.get("inference_output_activation")) if isinstance(metadata, dict) else []
+        return rank.declared_postprocess(self._declared("inference_output_activation"))
 
     def runs_at_native_voxel_size(self) -> bool:
         """Whether the repo's metadata.json says ``native_voxel_size``."""
-        metadata = self._load_metadata()
-        return isinstance(metadata, dict) and bool(metadata.get("native_voxel_size"))
+        return bool(self._declared("native_voxel_size"))
 
     def _launch_params(self) -> dict:
         # Not to_dict(): that downloads metadata.json for the pipeline builder,

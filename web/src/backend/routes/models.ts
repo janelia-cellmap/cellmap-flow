@@ -21,7 +21,7 @@ import { listedInTab } from "../../kept";
 import { catalogGroup, HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { declaredInputNorm, serveModels, setDeclaredInputNorm, setDeclaredPostprocess, setNeededPostprocess, stepNames, unserveModel } from "../serving";
+import { declaredInputNorm, serveModels, setDeclaredInputNorm, setStartPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
@@ -252,12 +252,10 @@ export function modelRoutes(router: Router): void {
     // started declares, and one with no postprocessing the step the first
     // model's manifest declares follows it, else what the first model's
     // output needs, when it shows every model served right, before they are
-    // served (serving.ts setDeclaredInputNorm, setDeclaredPostprocess,
-    // setNeededPostprocess).
+    // served (serving.ts setDeclaredInputNorm, setStartPostprocess).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
     await setDeclaredInputNorm(ctx, starting);
-    await setDeclaredPostprocess(ctx, starting, resolved.entries);
-    await setNeededPostprocess(ctx, starting, resolved.entries);
+    await setStartPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
     return json(200, {
@@ -281,7 +279,7 @@ export function modelRoutes(router: Router): void {
   // sigmoid for logits); all null when no loaded model's:
   // postprocessSetBy. The page reads them after every model change, since a
   // model's start can set either part (serving.ts setDeclaredInputNorm,
-  // setDeclaredPostprocess, setNeededPostprocess). And the models stopped
+  // setStartPostprocess). And the models stopped
   // because their layer was deleted in the viewer, numbered (the session's
   // deletedInViewer: backend/index.ts layerDeleted), for the list to untick
   // the rows of those newer than it has seen, as their ✕ would.
@@ -354,8 +352,7 @@ export function modelRoutes(router: Router): void {
     // every model served right.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
       await setDeclaredInputNorm(ctx, [model]);
-      await setDeclaredPostprocess(ctx, [model], entries);
-      await setNeededPostprocess(ctx, [model], entries);
+      await setStartPostprocess(ctx, [model], entries);
     }
     await serveModels(ctx, entries, ctx.session.state.chain);
     await ctx.session.update({ models: entries });
@@ -625,8 +622,8 @@ function sameSteps(a: readonly Step[], b: readonly Step[]): boolean {
  * model's rankFits, what Use this model, Fit to Paint and Use these
  * settings set, the sigmoid and the threshold the paint is fitted best
  * at), else a model's start's (startPostprocess, serving.ts
- * setDeclaredPostprocess: what its manifest declares follows it, or
- * setNeededPostprocess: the sigmoid its logits need), with whether its
+ * setStartPostprocess: what its manifest declares follows it, or the
+ * sigmoid its logits need), with whether its
  * manifest declared them; null when it is no loaded model's, or the chain
  * has none. An Apply of other steps since is the user's, and nothing has to
  * forget it. */
@@ -641,7 +638,7 @@ function postprocessSetBy(state: SessionState): { model: string; fitted: boolean
   if (ranked) return { model: ranked, fitted: true, declared: false };
   const started = state.startPostprocess;
   return started && names.includes(started.model) && sameSteps(started.postprocess, live)
-    ? { model: started.model, fitted: false, declared: started.declared === true } : null;
+    ? { model: started.model, fitted: false, declared: started.declared } : null;
 }
 
 /** The name of the first of `entries` whose declared input normalization is

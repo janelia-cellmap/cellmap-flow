@@ -135,11 +135,10 @@ export interface SessionState {
   rankFits: Record<string, RankFit>;
   /** The postprocessing a model's start set on a chain with none, the
    * model, and whether its manifest declared it (serving.ts
-   * setDeclaredPostprocess; else setNeededPostprocess, what its output
-   * needs), which GET /api/models/loaded says the chain's came from while it
+   * setStartPostprocess; false: what its output needs), which GET /api/models/loaded says the chain's came from while it
    * is still that; null until a start sets any. The server's
    * `start_postprocess`. */
-  startPostprocess: { model: string; postprocess: Step[]; declared?: boolean } | null;
+  startPostprocess: { model: string; postprocess: Step[]; declared: boolean } | null;
   /** The names of the models served when the user last Applied a chain (PUT
    * /api/pipeline): that chain is the last word on how they are shown, so a
    * later start sets no postprocessing on their account (serving.ts
@@ -240,7 +239,7 @@ export interface ModelManifest {
    * apply_after_model}` (a sigmoid with apply_after_model true is set as its
    * SigmoidPostprocessor when the model starts, unless it would show a model
    * served wrong, its own network ending in a sigmoid among them: serving.ts
-   * setDeclaredPostprocess), or cellmap-models' string form. Absent from
+   * setStartPostprocess), or cellmap-models' string form. Absent from
    * Marwan's manifests, whose `output` text says "raw logits". */
   inference_output_activation?: OutputActivationDeclared;
   io: { input: string; output: string; [k: string]: unknown };
@@ -266,7 +265,7 @@ export interface ModelManifest {
 
 /** A manifest's declared inference_output_activation, as cellmap-models
  * writes one in an export's metadata.json. */
-export type OutputActivationDeclared = string | { name: string; apply_after_model?: boolean; dim?: number | null };
+export type OutputActivationDeclared = string | { name: string; apply_after_model?: boolean };
 
 /** A published model's manifest's "published" block. */
 export interface PublishedBlock {

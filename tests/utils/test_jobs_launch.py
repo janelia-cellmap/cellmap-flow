@@ -6,6 +6,7 @@ run_locally, the queue list), and each fake job says what bjobs would have
 reported; LSF itself is never called.
 """
 
+import collections
 import json
 import logging
 import signal
@@ -201,7 +202,7 @@ def test_a_missing_pixi_env_nobody_agreed_to_install_refuses_the_job(monkeypatch
 
     monkeypatch.setattr(envs, "is_installed", lambda env: False)
     monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
-    monkeypatch.setattr(launch, "_install_allowed", set())
+    monkeypatch.setattr(launch, "_installs", collections.defaultdict(launch._EnvInstall))
     monkeypatch.setattr(launch.subprocess, "run", lambda *a, **k: pytest.fail("pixi was run"))
     with pytest.raises(JobStartError, match="cellpose4.*not installed.*Models tab.*cellmap_flow envs install cellpose4"):
         launch._install_env_first(COMMAND, "cells")
@@ -219,7 +220,7 @@ def test_an_agreed_env_installs_before_the_job_with_pixis_output_in_job_logs(sto
     installed = []
     monkeypatch.setattr(envs, "is_installed", lambda env: env in installed)
     monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
-    monkeypatch.setattr(launch, "_install_allowed", set())
+    monkeypatch.setattr(launch, "_installs", collections.defaultdict(launch._EnvInstall))
     seen = {}
 
     def pixi(argv, stdout, stderr):
@@ -255,9 +256,8 @@ def test_models_waiting_for_an_install_that_fails_fail_with_it_without_installin
 
     monkeypatch.setattr(envs, "is_installed", lambda env: False)
     monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
-    monkeypatch.setattr(launch, "_install_allowed", {"cellpose4"})
-    monkeypatch.setattr(launch, "_install_locks", {})
-    monkeypatch.setattr(launch, "_install_failures", {})
+    monkeypatch.setattr(launch, "_installs", collections.defaultdict(launch._EnvInstall))
+    launch.allow_install(["cellpose4"])
     runs, errors = [], {}
 
     def pixi(argv, stdout, stderr):

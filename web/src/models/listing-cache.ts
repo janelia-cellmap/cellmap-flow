@@ -78,7 +78,7 @@ export class ListingCache {
     try {
       const stored = JSON.parse(text) as Partial<Stored>;
       if (stored.v !== 1 || typeof stored.fetchedAt !== "number" || !stored.manifests || typeof stored.manifests !== "object") return null;
-      return { fetchedAt: stored.fetchedAt, manifests: stored.manifests, lastModified: datesOf(stored.lastModified) };
+      return { fetchedAt: stored.fetchedAt, manifests: stored.manifests, lastModified: stored.lastModified ?? {} };
     } catch {
       return null;
     }
@@ -107,13 +107,6 @@ export class ListingCache {
       // nothing to clear, or storage blocked
     }
   }
-}
-
-/** A cached listing's dates by folder, the ones that are strings: none
- * from a listing cached before they were kept, which has no such field. */
-function datesOf(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object") return {};
-  return Object.fromEntries(Object.entries(value).filter((pair): pair is [string, string] => typeof pair[1] === "string"));
 }
 
 /** The Hugging Face repos added to the catalog beside the built-in one (a

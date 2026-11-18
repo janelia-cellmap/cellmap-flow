@@ -406,7 +406,7 @@ def to_install(models) -> Dict[str, List[str]]:
     missing: Dict[str, List[str]] = {}
     for model in models:
         env = model_env(model)
-        if env and not is_path(env) and env not in aliases() and not is_installed(env):
+        if env and _directory(env) is None and not is_installed(env):
             missing.setdefault(env, []).append(getattr(model, "name", None) or type(model).__name__)
     return missing
 

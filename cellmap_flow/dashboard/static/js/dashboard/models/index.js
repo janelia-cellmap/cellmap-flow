@@ -83,13 +83,9 @@ export function initModelsTab() {
       // started, and the same Submit, sent again agreeing to install it,
       // installs it before that model's job.
       const needs = err instanceof ApiError && err.status === 409 ? err.body?.needs_install : null;
-      if (needs?.length) {
-        if (confirm(installQuestion(needs))) return submit({ ...body, install_envs: needs.map((n) => n.env) });
-        log(`Not submitted: ${message}`);
-        return;
-      }
+      if (needs?.length && confirm(installQuestion(needs))) return submit({ ...body, install_envs: needs.map((n) => n.env) });
       log(`Not submitted: ${message}`);
-      alert("Could not submit: " + message);
+      if (!needs?.length) alert("Could not submit: " + message);
     });
 
   document.getElementById("submitModelsBtn").addEventListener("click", () => {
@@ -101,7 +97,7 @@ export function initModelsTab() {
 
 // The question a Submit asks before installing the pixi environments its
 // models need: `needs` is the 409's needs_install, [{env, models}].
-export function installQuestion(needs) {
+function installQuestion(needs) {
   const lines = needs.map(({ env, models }) =>
     `${models.join(", ")} ${models.length === 1 ? "runs" : "run"} in the pixi environment "${env}", ` +
     "which is not installed yet.");

@@ -3,6 +3,7 @@ server or its legacy index (models.bioimage_catalog), the routes that serve
 it, and Submit launching what is ticked as a ``bioimage`` model. The server
 and the index are faked: no test touches the network."""
 
+import collections
 from types import SimpleNamespace
 
 import pytest
@@ -130,7 +131,7 @@ def test_submit_asks_before_installing_a_zoo_models_environment(submit, models_t
 
     pixi_manifest(tmp_path, monkeypatch, MANIFEST)
     monkeypatch.setattr(envs, "is_installed", lambda env: False)
-    monkeypatch.setattr(jobs_launch, "_install_allowed", set())
+    monkeypatch.setattr(jobs_launch, "_installs", collections.defaultdict(jobs_launch._EnvInstall))
     shrimp = {"id": DOI, "voxel_size": "8"}
 
     get_session().resample = True

@@ -84,8 +84,8 @@ function say(notice, text) {
 // its metadata declares is applied after it (a sigmoid), or else the sigmoid
 // its logits need (routes/pipeline.py set_start_postprocess, once the servers
 // answer, which the model advice's poll sees as the chain's digest moving, and
-// says with CHAIN_CHANGED_EVENT; serving.ts setDeclaredPostprocess,
-// setNeededPostprocess); and Use this model sets what
+// says with CHAIN_CHANGED_EVENT; serving.ts setStartPostprocess); and Use
+// this model sets what
 // the ranking fitted. So after every model change (MODELS_CHANGED_EVENT) the
 // chain is read again, from GET /api/models/loaded's `pipeline`, and a list
 // whose chain the backend changed shows the new one, as applied, with a

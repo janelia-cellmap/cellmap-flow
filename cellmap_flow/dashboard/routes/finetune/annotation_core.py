@@ -367,13 +367,6 @@ def _finetune_modes(model_config):
         return None
 
 
-def _finetune_refusal(model_config):
-    """Why the model cannot be finetuned (``ModelConfig.finetune_refusal``,
-    which never raises), for the training form to say; None when it can, or
-    there is no config to ask (then its entry has no ``finetune_refusal``)."""
-    return model_config.finetune_refusal() if model_config is not None else None
-
-
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     """The models to finetune, and the raw's levels: ``{"models",
@@ -425,7 +418,9 @@ def get_finetune_models():
                 geometry["channel_choice"] = channel_choice(config, geometry["output_channels"], geometry["channels"])
             seen.add(name)
             entry = {"name": name, **geometry, "finetune_modes": _finetune_modes(config)}
-            refusal = _finetune_refusal(config)
+            # Why it cannot be finetuned, for the training form to say
+            # (ModelConfig.finetune_refusal, which never raises).
+            refusal = config.finetune_refusal() if config is not None else None
             if refusal:
                 entry["finetune_refusal"] = refusal
             models.append(entry)
