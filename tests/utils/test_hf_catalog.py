@@ -228,7 +228,8 @@ def test_a_cache_file_that_is_not_an_object_is_listed_anew_and_a_made_export_say
                         lambda repo, filename, revision=None: str(snapshot / filename))
     assert dashboard.get("/api/huggingface-models").get_json()[repo]["finetune_modes"] == ["lora", "full"]
 
-    export = mia.export_dir(repo, "c0ffee", device="cuda")
+    mia_cache = pytest.importorskip("cellmap_models.model_export.mia_cache")
+    export = mia_cache.export_dir(mia.cache_root(), repo, "c0ffee", device="cuda")
     export.mkdir(parents=True)
     (export / "metadata.json").write_text(json.dumps(AFFINITY_DECLARED))
     (export / "model.ts").write_bytes(b"")

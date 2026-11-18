@@ -210,7 +210,7 @@ mia-train; install it first with ``cellmap_flow envs install mia``). The
 export is kept under ``~/.cellmap_flow/mia_exports`` (or
 ``CELLMAP_FLOW_MIA_CACHE``), one per commit of the repo and version of the
 converter (a cellmap-models whose converter changed converts again, and the
-older converter's export of that commit is then removed), so every later start,
+older converter's export of that commit is removed once it has gone unused for two weeks), so every later start,
 and a finetune of the model, serves it at once. The dashboard knows what the
 export will declare before then, from the repo's ``config.json`` and model
 card alone, so Submit sets the input normalization the model was trained on

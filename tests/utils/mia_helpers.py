@@ -55,7 +55,7 @@ def install_fake_adapter(monkeypatch):
     """The fake ``cellmap_models.model_export.mia_model``, in sys.modules for
     the test: its MIA_FILES, is_mia_config, and mia_metadata, which answers
     its ``declared`` (DECLARED, unless a test says otherwise) of any model.
-    Its export is ``configs/mia.export_in_subprocess``'s
+    Its export is cellmap_models' ``mia_cache.export_in_subprocess``'s
     to fake, which runs it in a process of its own."""
     # Its package first (for model_metadata), whose __init__ imports the real
     # module's names when the cellmap_models installed has one.
