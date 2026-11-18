@@ -9,7 +9,11 @@
 //
 // The manifests are kept as fetched, not parsed: a fix to parseManifest then
 // applies to cached data too, and a cached manifest the parser rejects is
-// skipped the same way a fresh one is.
+// skipped the same way a fresh one is. Beside them is the date each folder
+// last changed on the Hub, so a list from the cache sorts by newest as a
+// fresh one does; a listing cached before the dates were kept (2026-11-12)
+// is read with none, and its models sort as of no date until it is
+// fetched again, within the day.
 
 /** What the cache needs of localStorage, so a test can hand in a Map. */
 export interface KeyValueStore {
@@ -20,11 +24,19 @@ export interface KeyValueStore {
 
 export const LISTING_TTL_MS = 24 * 60 * 60 * 1000;
 
-export interface CachedListing {
-  /** Date.now() when the manifests were fetched. */
-  fetchedAt: number;
+/** A repo's model folders as the catalog lists them. */
+export interface RepoListing {
   /** The raw manifest.json per folder. */
   manifests: Record<string, unknown>;
+  /** When each folder last changed on the Hub, by folder: its last
+   * commit's date, ISO 8601 UTC (hf.ts TreeEntry.lastModified). A folder
+   * the Hub's listing gave no date for has none here. */
+  lastModified: Record<string, string>;
+}
+
+export interface CachedListing extends RepoListing {
+  /** Date.now() when the manifests were fetched. */
+  fetchedAt: number;
 }
 
 interface Stored extends CachedListing {
@@ -66,7 +78,7 @@ export class ListingCache {
     try {
       const stored = JSON.parse(text) as Partial<Stored>;
       if (stored.v !== 1 || typeof stored.fetchedAt !== "number" || !stored.manifests || typeof stored.manifests !== "object") return null;
-      return { fetchedAt: stored.fetchedAt, manifests: stored.manifests };
+      return { fetchedAt: stored.fetchedAt, manifests: stored.manifests, lastModified: datesOf(stored.lastModified) };
     } catch {
       return null;
     }
@@ -95,6 +107,13 @@ export class ListingCache {
       // nothing to clear, or storage blocked
     }
   }
+}
+
+/** A cached listing's dates by folder, the ones that are strings: none
+ * from a listing cached before they were kept, which has no such field. */
+function datesOf(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value).filter((pair): pair is [string, string] => typeof pair[1] === "string"));
 }
 
 /** The Hugging Face repos added to the catalog beside the built-in one (a

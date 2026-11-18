@@ -91,12 +91,15 @@ cxx-compiler = "*"
 neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", rev = "fae54db8c667176a602a34f0d9d1028956009836" }
 # cellmap-models with model_export.onnx_web, which the web export of a model
 # finetuned here runs (finetune/export_web.py), and model_export.student,
-# which makes the small copy finetune/distill.py trains, and its export
-# extra: onnx, and onnxruntime for the export's checks. From the branch of
-# its pull request #15 (onto Marwan's onnx-web-export-and-pruning) until a
-# release has them, so here and not in pyproject, as the fork above; pinned
-# to the commit the two were written against.
-cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "4b0be0d170df1491f737f2405c79c0381348f69d", extras = ["export"] }
+# which makes the small copy finetune/distill.py trains, and
+# model_export.mia_model, which converts a model trained with mia-train
+# and says, without its weights, what the export will declare (mia_metadata;
+# configs/mia.py), and its export extra: onnx, and onnxruntime for the
+# export's checks. From the branch of its pull request #16 (onto #15, onto
+# Marwan's onnx-web-export-and-pruning) until a release has them, so here and
+# not in pyproject, as the fork above; pinned to the commit these were
+# written against.
+cellmap-models = { git = "https://github.com/janelia-cellmap/cellmap-models.git", rev = "103b0621a80827a497137234b64109c844b3c35b", extras = ["export"] }
 
 # Cellpose (Cellpose-SAM, Cellpose 4) lives in an environment of its own,
 # solved separately, where the `cellpose` model type runs and finetunes by
@@ -171,6 +174,17 @@ onnxruntime-gpu = ">=1.27"
 [feature.onnx.target.osx-arm64.pypi-dependencies]
 onnxruntime = ">=1.20"
 
+# For the `mia` model type, which defaults to this environment: mia-train,
+# the MIA team's training framework, which cellmap-models' mia_model imports
+# to rebuild one of its networks and convert it, once, into a cellmap-models
+# export (configs/mia.py). Only the conversion needs it: the model.ts it
+# writes runs in any environment. A git package (not on PyPI) whose
+# top-level modules are named models, layers, components, predict and
+# train, so it lives in an environment of its own; pinned to a commit, so
+# that a push to its main branch does not change what installs.
+[feature.mia.pypi-dependencies]
+mia-train = { git = "https://github.com/AI-HHMI/mia-train.git", rev = "4e719562dcafc4761c3a30359899467af2ba38cb" }
+
 [feature.test.dependencies]
 pytest = "*"
 pytest-cov = "*"
@@ -216,3 +230,8 @@ cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }
 # moving them to the workspace re-solved the default env (torch 2.14.0 ->
 # 2.14.1 among others).
 fly = { features = ["finetune", "fly"], solve-group = "fly" }
+# The `mia` model type's (MiaModelConfig.default_env): its server converts
+# the model and serves it, and its finetuning job trains it, so it has the
+# finetune feature, which brings cellmap-models. In the default solve group,
+# so its torch and everything else it shares are the deployed environment's.
+mia = { features = ["finetune", "mia"], solve-group = "default" }

@@ -102,7 +102,8 @@ def add_model():
     session.models_config.append(model_config)
     # As Submit's start does: a chain with no input normalizers takes the ones
     # this model declares, before the blob its layer is drawn with is taken
-    # (routes.pipeline.set_declared_input_norm).
+    # (routes.pipeline.set_declared_input_norm); its postprocessing is set,
+    # when the chain has none, once its server is up (run_model).
     from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
 
     set_declared_input_norm([model_config])

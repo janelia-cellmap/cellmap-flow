@@ -81,9 +81,11 @@ function say(notice, text) {
 // normalization the model declares, or its kind of model's convention, when
 // the chain had none (routes/pipeline.py set_declared_input_norm,
 // web/src/backend/serving.ts setDeclaredInputNorm), and the postprocessing
-// its output needs, a sigmoid for logits (set_needed_postprocess: once its
-// server answers, which the model advice's poll sees as the chain's digest
-// moving, and says with CHAIN_CHANGED_EVENT); and Use this model sets what
+// its metadata declares is applied after it (a sigmoid), or else the sigmoid
+// its logits need (routes/pipeline.py set_start_postprocess, once the servers
+// answer, which the model advice's poll sees as the chain's digest moving, and
+// says with CHAIN_CHANGED_EVENT; serving.ts setDeclaredPostprocess,
+// setNeededPostprocess); and Use this model sets what
 // the ranking fitted. So after every model change (MODELS_CHANGED_EVENT) the
 // chain is read again, from GET /api/models/loaded's `pipeline`, and a list
 // whose chain the backend changed shows the new one, as applied, with a
@@ -166,11 +168,13 @@ function initApply(inputChain, postChain) {
   // whether that model declares it (false: the convention for its kind of
   // model, which the Flask dashboard sets for a CellMap model that declares
   // none); `postBy` the model whose settings its postprocessing is (or
-  // null), and `fitted` whether the ranking fitted them to the paint (false:
-  // the model's start set the sigmoid its logits need). A list whose chain
+  // null), `fitted` whether the ranking fitted them to the paint (false:
+  // the model's start set them), and `postDeclared` whether that start set
+  // what the model's metadata declares follows it (false: the sigmoid its
+  // logits need). A list whose chain
   // changed shows the new one, as applied, and its notice says why; an edit
   // in it not applied yet is replaced, while the other list keeps its edits.
-  function showLive(pipeline, setBy, declared, postBy, fitted) {
+  function showLive(pipeline, setBy, declared, postBy, fitted, postDeclared) {
     if (!pipeline) return;
     const before = live;
     live = pipeline;
@@ -190,7 +194,9 @@ function initApply(inputChain, postChain) {
       if (part.key === "postprocess" && postBy) {
         why = fitted
           ? `Postprocessing fitted to your paint by the ranking for ${postBy}: ${postText(steps)}.`
-          : `Postprocessing set when ${postBy} started: its output is logits, so ${postText(steps)} turns it into probabilities.`;
+          : postDeclared
+            ? `Postprocessing set from ${postBy}'s metadata when it started: it declares ${postText(steps)} is applied after the model.`
+            : `Postprocessing set when ${postBy} started: its output is logits, so ${postText(steps)} turns it into probabilities.`;
       }
       say(part.notice, why);
     });
@@ -200,7 +206,7 @@ function initApply(inputChain, postChain) {
     return inOrder(() => getJSON("/api/models/loaded"))
       // The browser's backend answers no input_norm_declared: its models all declare theirs.
       .then((data) => showLive(data.pipeline, data.input_norm_from, data.input_norm_declared !== false,
-        data.postprocess_from, data.postprocess_fitted === true))
+        data.postprocess_from, data.postprocess_fitted === true, data.postprocess_declared === true))
       .catch((err) => console.warn("Could not read the chain the models run through:", err));
   }
 

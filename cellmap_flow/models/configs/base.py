@@ -32,6 +32,11 @@ describes it. What the rest of cellmap-flow reads:
   (``reads_input_itself``).
 - ``default_env``: the environment a type's models run in when their
   entry names none; ``effective_env``: the one a model runs in, of the two.
+- ``runs_at_native_voxel_size()``: whether the model runs at the data's own
+  voxel size, which ``adopt_native_voxel_size`` makes its run voxel size in
+  the processes that serve or train it over a dataset.
+- ``declared_affinity_offsets()``: the offsets its affinity channels
+  compare, when it declares them.
 """
 
 import functools
@@ -331,6 +336,14 @@ class ModelConfig:
         gets the same way (``finetune.trainable.finetune_modes``)."""
         return ("lora", "full") if type(self).finetunable else ()
 
+    def finetune_refusal(self):
+        """Why this model cannot be finetuned, in a sentence, when what
+        describes it says so (an export whose output is a whole number, no
+        gradient goes through); None otherwise. Cheap and never raises, as
+        finetune_modes, which is then (): the training form shows it, and
+        submitting a job is refused with it (finetune.job_manager.submit)."""
+        return None
+
     def declared_input_norm(self, data_range=None):
         """The input normalization the model declares itself, as cellmap-flow
         steps (``[{"name": ..., **params}]``), or None when it declares none.
@@ -360,6 +373,80 @@ class ModelConfig:
         (a metadata.json, a manifest, its entry).
         """
         return None
+
+    def declared_affinity_offsets(self):
+        """The offsets the model's affinity channels compare, as it declares
+        them (``[[dz, dy, dx], ...]``, one per affinity channel, in channel
+        order), or None when it declares none. Declared offsets win over the
+        ones a model's ``*_aff*`` channel names are taken to mean
+        (dashboard/routes/finetune/common.model_target). Cheap and never
+        raises, as declared_input_norm: a cellmap-models export's
+        metadata.json declares them."""
+        return None
+
+    def declared_overlap(self):
+        """The overlap the model declares, read without building it (one
+        number of output voxels, or one per axis, as its metadata gives it),
+        or None when it declares none. Blockwise refuses a model with an
+        overlap from this before it builds anything (blockwise_processor), as
+        it does not blend blocks yet, and building some models is costly (a
+        mia model's first build converts it). Cheap and never raises, as
+        declared_input_norm: a cellmap-models export's metadata.json declares
+        it."""
+        return None
+
+    def declared_postprocess(self) -> list:
+        """The postprocessing the model's description declares is to be
+        applied after it, as cellmap-flow steps (``[{"name": ...}]``); [] when
+        it declares none: a cellmap-models export's metadata.json does with an
+        inference_output_activation applied after the model (a sigmoid:
+        portable/rank.py declared_postprocess). A start sets it on a chain
+        with none without asking, once the servers say it shows every model
+        running right (dashboard/routes/pipeline.py set_start_postprocess);
+        anything else the output wants is the model advice's suggestion.
+        Cheap and never raises, as declared_input_norm."""
+        return []
+
+    def runs_at_native_voxel_size(self) -> bool:
+        """Whether the model runs at the raw data's own voxel size, its
+        declared input voxel size being a default only (a network trained on
+        each dataset at that dataset's own: a cellmap-models export whose
+        metadata.json says ``native_voxel_size``). False by default.
+
+        Asked by ``adopt_native_voxel_size``, in a process that is about to
+        serve or train the model, so a type may prepare the model to answer
+        (a mia model whose metadata cannot be read is converted then). The
+        dashboard asks it only once what the model declares is known (its
+        declared_geometry answers: dashboard/services/launch.py
+        at_native_voxel_size), so it never converts a model."""
+        return False
+
+    def adopt_native_voxel_size(self, data_path) -> None:
+        """Run the model at the finest voxel size of the raw at ``data_path``
+        (``finetune.session.volume.raw_voxel_sizes``: a group's finest
+        level, or the one level a level's path names) when it runs at the
+        data's own (``runs_at_native_voxel_size``) and its entry gives no
+        ``run_voxel_size``, which wins.
+
+        Called where a model is about to be built over a dataset: the
+        inference server (``serving.engine.make_server``), the trainer before
+        it builds the model it trains and then serves, and blockwise. A
+        config built already is left as it is, with a warning: setting a run
+        voxel size drops it, and with it whatever it serves (a trained
+        module)."""
+        if self.run_voxel_size is not None or not self.runs_at_native_voxel_size():
+            return
+        label = getattr(self, "name", None) or type(self).__name__
+        if getattr(self, "_config", None) is not None:
+            logger.warning(f"{label} runs at the data's own voxel size, but it is built already at "
+                           f"{list(self._config.input_voxel_size)} nm; it is served at that")
+            return
+        # Lazily: it opens the data with worldarray, which only these processes need.
+        from cellmap_flow.finetune.session.volume import raw_voxel_sizes
+
+        finest = raw_voxel_sizes(data_path)[0]
+        logger.info(f"{label} runs at the data's own voxel size: {finest} nm, the finest level of {data_path}")
+        self.run_voxel_size = finest
 
     def output_graph(self):
         """The graph of what this model serves, for its output activation:

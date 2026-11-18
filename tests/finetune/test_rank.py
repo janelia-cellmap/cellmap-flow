@@ -158,8 +158,10 @@ def test_paint_is_carried_onto_another_models_grid(tmp_path, finer):
 
 
 def _model(name):
-    """A model config that declares no input normalization (ModelConfig.declared_input_norm), which ranking asks."""
-    return SimpleNamespace(name=name, declared_input_norm=lambda data_range=None: None)
+    """A model config that declares no input normalization (ModelConfig.declared_input_norm), which ranking asks,
+    and no affinity offsets (ModelConfig.declared_affinity_offsets), which the model advice asks."""
+    return SimpleNamespace(name=name, declared_input_norm=lambda data_range=None: None,
+                           declared_affinity_offsets=lambda: None)
 
 
 def _serve_model(config=None):

@@ -30,7 +30,8 @@ rather than being stored beside the real one:
   ``layer_blob()``, the chain as every prediction layer's URL carries it,
   and ``shown_channel()``, the channel a model's layer opens on.
 - The models: ``models_config``, ``model_catalog``,
-  ``start_postprocess``, the postprocessing a model's start set, and
+  ``start_postprocess``, the postprocessing a model's start set,
+  ``applied_over``, the models running when the user last Applied a chain, and
   ``deleted_in_viewer``, the models stopped because their layer was deleted
   in the viewer.
 - The pipeline builder's last apply: ``builder_state``,
@@ -78,7 +79,7 @@ class Session:
     # name cannot coexist.
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
                  "shader_controls", "extra_layers", "shown_channels",
-                 "models_config", "model_catalog", "start_postprocess", "deleted_in_viewer", "_builder_state",
+                 "models_config", "model_catalog", "start_postprocess", "applied_over", "deleted_in_viewer", "_builder_state",
                  "builder_model_configs",
                  "tmp_dir", "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "rank_added",
                  "rank_fits", "review", "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate",
@@ -125,12 +126,18 @@ class Session:
         self.models_config = []
         # {group: {model name: path}}, the Models tab's catalog.
         self.model_catalog = yaml.safe_load(files("cellmap_flow.models").joinpath("models.yaml").read_text()) or {}
-        # {"model", "postprocess"}: the postprocessing a model's start set on
-        # a chain with none, and the model (routes/pipeline.py
-        # set_needed_postprocess), which GET /api/models/loaded says the
-        # chain's came from while it is still that; None until a start sets
-        # any.
+        # {"model", "postprocess", "declared"}: the postprocessing the models'
+        # starts set on a chain with none, the model it is for and whether its
+        # metadata declares it (routes/pipeline.py set_start_postprocess),
+        # which GET /api/models/loaded says the chain's came from while it is
+        # still that; None until a start sets any.
         self.start_postprocess = None
+        # The names of the models running when the user last Applied a chain
+        # (PUT /api/pipeline): that chain is the last word on how they are
+        # shown, so a later start sets no postprocessing on their account
+        # (routes/pipeline.py _start_choice). A model started again is taken
+        # out (services/launch.py run_model).
+        self.applied_over = set()
         # [{"number", "name", "hf_id", "zoo_id", "cellpose"}]: the models
         # stopped because the person deleted their layer in the viewer
         # (services/launch.py _layers_deleted), the latest of each name, each

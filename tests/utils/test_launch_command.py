@@ -70,6 +70,8 @@ def launched(monkeypatch, tmp_path):
     monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow serve")
     monkeypatch.setattr(jobs_launch, "start_hosts", started)
     monkeypatch.setattr(dashboard_launch, "_show", lambda job, st_data: None)
+    # What the dashboard's start reads of a Hugging Face model's metadata.json: nothing here.
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {})
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     get_session().dataset_path = data

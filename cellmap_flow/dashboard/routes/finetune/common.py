@@ -225,7 +225,9 @@ def model_target(model_config, channel_names):
     when nothing says.
 
     In turn: the target its type declares (``declared_output_type``:
-    Cellpose's flows); the offsets its script assigns, read by parsing it
+    Cellpose's flows); the affinity offsets it declares
+    (``ModelConfig.declared_affinity_offsets``: a cellmap-models export's
+    metadata.json can); the offsets its script assigns, read by parsing it
     (an affinity model's); the affinity offsets its output channel names
     give (portable/label_it.affinity_offsets: the browser's Python applies
     the same rule to its manifest's names, for training and seeding, so
@@ -243,6 +245,9 @@ def model_target(model_config, channel_names):
     declared = declared_output_type(model_config)
     if declared is not None:
         return declared, None
+    offsets = model_config.declared_affinity_offsets() if model_config is not None else None
+    if offsets:
+        return "affinities", offsets
     if hasattr(model_config, "script_path"):
         script_offsets = read_offsets_from_script(model_config.script_path)
         if script_offsets is not None:
