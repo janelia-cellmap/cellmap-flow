@@ -294,6 +294,11 @@ class ModelConfig:
     # one (``run_voxel_size``); None: its own. Behind the ``run_voxel_size``
     # property, which registry.build_model sets after construction, as env.
     _run_voxel_size = None
+    # The run voxel size ``adopt_native_voxel_size`` gave it, the finest of
+    # the raw it was about to run on; None when it adopted none. While it is
+    # still the run voxel size, the model follows its data
+    # (``follows_native_voxel_size``).
+    adopted_native_voxel_size = None
     # The input tile (voxels per axis) the network is known to answer right
     # at, when the type knows one (a fly model's training tile). Served at a
     # bigger tile, ModelRunner's warmup holds that tile's answer against this
@@ -459,6 +464,17 @@ class ModelConfig:
         finest = raw_voxel_sizes(data_path)[0]
         logger.info(f"{label} runs at the data's own voxel size: {finest} nm, the finest level of {data_path}")
         self.run_voxel_size = finest
+        self.adopted_native_voxel_size = list(finest)
+
+    def follows_native_voxel_size(self) -> bool:
+        """Whether the voxel size the model runs at is the raw's own, taken
+        from the raw it was started on (``adopt_native_voxel_size``) rather
+        than given by its entry. On a dataset whose finest voxel size is
+        another it is started again rather than switched to it
+        (dashboard/services/datasets.py), and a new start asks the raw
+        again (dashboard/services/launch.py at_native_voxel_size)."""
+        adopted = self.adopted_native_voxel_size
+        return adopted is not None and self.run_voxel_size is not None and list(self.run_voxel_size) == list(adopted)
 
     def output_graph(self):
         """The graph of what this model serves, for its output activation:

@@ -60,6 +60,7 @@ from cellmap_flow.portable import label_it
 from cellmap_flow.portable.label_it import SEED_METHODS, probability
 from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
+from cellmap_flow.serving.protocol import DATA_KEY
 from cellmap_flow.viewer.layers import prediction_url, prediction_voxel_override
 from cellmap_flow.viewer.raw import view_of
 
@@ -247,17 +248,22 @@ def _refresh_layer(volume_id) -> bool:
 # ---------------------------------------------------------------------------
 
 def _prediction_sources():
-    """``[(model_name, host)]``: every running server, oldest first.
+    """``[(model_name, host)]``: every running server on the open dataset,
+    oldest first.
 
     Any of them can seed: a prediction is read where the annotation voxels
     lie, whatever the server's voxel size. Only listing the volume's model
     and its finetunes left the picker empty before a volume existed, and
-    whenever a job's name differed from the one the volume recorded.
+    whenever a job's name differed from the one the volume recorded. Not
+    one serving another dataset (Session.on_current_dataset: its switch
+    failed, or is under way), which would seed this one with that one's
+    prediction.
     """
+    session = get_session()
     return [
         (job.model_name, job.host)
-        for job in get_session().jobs
-        if getattr(job, "model_name", None) and getattr(job, "host", None)
+        for job in session.jobs
+        if getattr(job, "model_name", None) and getattr(job, "host", None) and session.on_current_dataset(job)
     ]
 
 
@@ -337,9 +343,13 @@ def methods_for(output_type, serves_integers):
 def _served_base(host, model_name, postprocess=(), input_norm=None):
     """The URL of the model's served array, with the dashboard's input
     normalization (or ``input_norm``, step dicts) and ``postprocess`` (none by
-    default)."""
-    spec = PipelineSpec.from_steps(get_session().input_norms, postprocess)
-    blob = (spec if input_norm is None else PipelineSpec(input_norm, spec.postprocess)).to_url_blob()
+    default), over the open dataset, as the model's layer names it
+    (Session.layer_blob): a server that has not opened it refuses, rather
+    than answer with another dataset's prediction."""
+    session = get_session()
+    spec = PipelineSpec.from_steps(session.input_norms, postprocess)
+    data = {DATA_KEY: session.dataset_path} if session.dataset_path else {}
+    blob = (spec if input_norm is None else PipelineSpec(input_norm, spec.postprocess)).to_url_blob(**data)
     url = prediction_url(host.rstrip("/"), model_name, blob)
     return url[len("zarr://"):]
 

@@ -16,6 +16,7 @@ inference job runs on.
 import click
 import json
 import logging
+import os
 import sys
 from typing import Type
 
@@ -32,10 +33,22 @@ logger = logging.getLogger(__name__)
 def run_server(model_config, data_path, port=0, certfile=None, keyfile=None, resample=True):
     """Run the inference server (serving.engine.make_server) for
     ``model_config`` over ``data_path``; ``resample`` as ChunkmirageServer
-    takes it."""
-    from cellmap_flow.serving.engine import make_server
+    takes it.
 
-    server = make_server(data_path, model_config, resample=resample)
+    Its control token is the one in the file the environment's
+    CONTROL_TOKEN_FILE_ENV names, which the launcher wrote
+    (``serving.restart_token``); without one the server cannot be asked to
+    switch datasets.
+    """
+    from cellmap_flow.serving.engine import make_server
+    from cellmap_flow.serving.restart_token import CONTROL_TOKEN_FILE_ENV, read_token_file
+
+    token_file = os.environ.get(CONTROL_TOKEN_FILE_ENV)
+    control_token = read_token_file(token_file) if token_file else None
+    if token_file and not control_token:
+        logger.warning(f"{CONTROL_TOKEN_FILE_ENV} names {token_file}, which holds no token: this server cannot "
+                       "be asked to switch datasets")
+    server = make_server(data_path, model_config, resample=resample, control_token=control_token)
     server.run(port=port, certfile=certfile, keyfile=keyfile)
 
 

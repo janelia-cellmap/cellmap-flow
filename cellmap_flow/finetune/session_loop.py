@@ -180,7 +180,7 @@ def _start_inference_server_background(
         model_config,
         restart_callback=control.request_restart if control is not None else None,
         stop_callback=control.request_stop if control is not None else None,
-        restart_token=restart_token,
+        control_token=restart_token,
         resample=resample,
     )
     if on_server is not None:

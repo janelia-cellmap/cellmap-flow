@@ -253,6 +253,22 @@ class Job(ABC):
     - kill(): Terminate the job
     - get_status(): Get current job status
     - wait_for_host(): Wait for and extract host information
+
+    An inference server's job may also carry these, set by whoever started
+    or switched it and read with ``getattr(job, name, None)``, as a job
+    from before them, or a test's stand-in, has none:
+
+    - ``control_token``: the token its server's control routes take
+      (``jobs.launch.start_hosts`` writes one for every server it starts;
+      a finetune job's is its restart token).
+    - ``control_url``: the address the dashboard reaches the server by,
+      when not ``host`` (a finetune job's server, whose ``host`` is the
+      viewers' address).
+    - ``dataset_path``: the dataset it serves, as the dashboard names it
+      (before a model's ``scale``); None when not known.
+    - ``switching_to``: the dataset a switch under way is opening there.
+    - ``switch_error``: why its last dataset switch failed, None once one
+      succeeds (``dashboard.services.datasets``).
     """
 
     def __init__(self, model_name: Optional[str] = None):

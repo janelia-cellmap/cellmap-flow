@@ -45,8 +45,10 @@ Commands
        -d DATA`` serves it right away (:ref:`resolving-models`).
    * - ``view -d DATA``
      - Open a dataset in the viewer and serve the dashboard, where models are
-       picked and submitted. ``-P`` bills them to a project; by default it is
-       the launching job's own (``LSB_PROJECT_NAME``).
+       picked and submitted. *Open Dataset* in its header opens another one,
+       the running models carrying over to it, with no new job. ``-P`` bills
+       them to a project; by default it is the launching job's own
+       (``LSB_PROJECT_NAME``).
    * - ``dashboard``
      - Serve the dashboard on its own, for a viewer already running
        (``-n`` names the viewer the page embeds).

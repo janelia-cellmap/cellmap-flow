@@ -4,9 +4,10 @@ A prediction layer's source is
 ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/<FORMAT>``. The part
 before ``/<FORMAT>`` is the layer's name, which the server resolves into a
 pipeline; the blob in it is the layer's chain, ``{INPUT_NORM_KEY: [...],
-POSTPROCESS_KEY: [...]}`` followed by extras such as ``dashboard_url`` and
-``digest``, as minified JSON in URL-safe base64 without padding
-(``encode_to_str``). Every request the viewer makes carries it, and
+POSTPROCESS_KEY: [...]}`` followed by extras such as ``dashboard_url``,
+``digest`` and ``DATA_KEY`` (the dataset the layer shows), as minified
+JSON in URL-safe base64 without padding (``encode_to_str``). Every request
+the viewer makes carries it, and
 ``split_dataset_url`` finds it in the name. ``pipeline_spec.PipelineSpec``
 reads and writes the chain; this module is only the codec, so a server and a
 dashboard of different versions still understand each other.
@@ -34,6 +35,20 @@ FORMAT = "zarr"
 ARGS_KEY = "__CFLOW_ARGS__"
 INPUT_NORM_KEY = "input_norm"
 POSTPROCESS_KEY = "postprocess"
+# The blob extra naming the dataset a layer shows, as the dashboard has it
+# (its dataset_path, before a model's ``scale`` is applied). A server serves
+# it only once the dashboard has opened it there (POST
+# DATASET_CONTROL_PATH); without it a layer shows the server's current
+# dataset, as every layer did before servers could hold more than one.
+DATA_KEY = "data"
+# Where the dashboard asks a server to open a dataset and make it the one
+# it serves: POST {"path": <the dataset path, as DATA_KEY carries it>} with
+# the server's token in serving.restart_token.TOKEN_HEADER. Answers 200
+# {"success": true, "path", "model_info"} (model_info as GET
+# /__control__/model_info then gives it), 400 {"success": false, "error"}
+# when the server cannot read the dataset, 401 without the token, 501 on a
+# server started without one.
+DATASET_CONTROL_PATH = "/__control__/dataset"
 
 
 def encode_to_str(data):

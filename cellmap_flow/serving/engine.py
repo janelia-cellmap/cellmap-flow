@@ -13,7 +13,7 @@ so instead of serving.
 
 def make_server(dataset_name, model_config, **kwargs):
     """The server for ``model_config`` over ``dataset_name``; ``kwargs`` are
-    ChunkmirageServer's (restart_callback, stop_callback, restart_token, resample).
+    ChunkmirageServer's (restart_callback, stop_callback, control_token, resample).
 
     A model that runs at the data's own voxel size is set to the finest of
     ``dataset_name`` first, unless its entry gives a run_voxel_size

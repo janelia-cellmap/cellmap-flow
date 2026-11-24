@@ -13,6 +13,7 @@ submitted to. Ask it instead.
 
 import logging
 from types import SimpleNamespace
+from typing import Optional
 
 import requests
 
@@ -56,6 +57,48 @@ def fetch_model_info(host: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> dic
         except Exception as e:
             return {"available": False, "reason": f"unreadable response ({e})"}
     return {"available": False, "reason": last_reason}
+
+
+SWITCH_TIMEOUT_SECONDS = 120
+
+
+def switch_dataset(url: str, path: str, token: Optional[str], timeout: float = SWITCH_TIMEOUT_SECONDS) -> dict:
+    """Ask the server at ``url`` to open ``path`` and serve it from now on
+    (serving.protocol.DATASET_CONTROL_PATH), with its ``token``.
+
+    Returns ``{"success": True, "path", "model_info"}``, or ``{"success":
+    False, "error"}`` saying why not: the server cannot read the dataset, has
+    no such route (one from before it, or one started by hand, without a
+    token), refused the token, or could not be reached. Never raises, as
+    fetch_model_info does not: a dashboard switching many servers at once
+    reports each one's answer beside its model.
+
+    The timeout is long: opening a dataset reads its metadata, over NFS or
+    the network, and a resampled one sets up its resampling.
+    """
+    from cellmap_flow.serving.protocol import DATASET_CONTROL_PATH
+    from cellmap_flow.serving.restart_token import TOKEN_HEADER
+
+    if not url:
+        return {"success": False, "error": "the job has no server address yet"}
+    if not token:
+        return {"success": False, "error": "this server was started without a control token, so it cannot "
+                                           "switch datasets"}
+    try:
+        r = requests.post(f"{url.rstrip('/')}{DATASET_CONTROL_PATH}", json={"path": path},
+                          headers={TOKEN_HEADER: token}, timeout=timeout)
+    except Exception as e:
+        return {"success": False, "error": f"could not reach the server ({e})"}
+    if r.status_code in (404, 405, 501):
+        return {"success": False, "error": "this server cannot switch datasets (it predates that, or was started "
+                                           "without a control token)"}
+    try:
+        body = r.json()
+    except ValueError:
+        body = {}
+    if r.status_code != 200 or not body.get("success"):
+        return {"success": False, "error": body.get("error") or f"the server answered HTTP {r.status_code}"}
+    return body
 
 
 def model_geometry(info: dict):

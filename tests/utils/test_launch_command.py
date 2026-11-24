@@ -14,6 +14,7 @@ import json
 import shlex
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 import zarr
@@ -65,7 +66,7 @@ def launched(monkeypatch, tmp_path):
 
     def started(command, *args, **kwargs):
         commands.append(command)
-        return object()
+        return SimpleNamespace()
 
     monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow serve")
     monkeypatch.setattr(jobs_launch, "start_hosts", started)
