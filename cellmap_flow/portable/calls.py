@@ -68,6 +68,13 @@ def needed_postprocess(args, arrays):
     return rank.needed_postprocess(args.get("output_class"), args["postprocess"], args.get("threshold"))
 
 
+def declared_postprocess(args, arrays):
+    """``rank.declared_postprocess``: the step a model's ``activation`` (its
+    declared inference_output_activation) says is applied after it, as
+    steps; [] for none."""
+    return rank.declared_postprocess(args.get("activation"))
+
+
 def output_activation(args, arrays):
     """``activation.output_activation``: the output activation of a served
     model's graph, ``nodes`` (each ``{"op", "inputs", "outputs"}``, a clip's

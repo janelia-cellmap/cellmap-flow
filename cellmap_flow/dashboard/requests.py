@@ -251,7 +251,11 @@ class SubmitModels(BaseModel):
     catalog or Hugging Face model at, by its row's value (a
     ``selected_models`` name or a ``selected_hf_models`` repo), as typed
     beside it ("32", "32,16,16", 32 or [32, 16, 16]). A model left out, or
-    left blank, runs at its own (``ModelConfig.run_voxel_size``)."""
+    left blank, runs at its own (``ModelConfig.run_voxel_size``).
+
+    ``install_envs``: the pixi environments, not installed yet, that the
+    person agreed to install for the models ticked (the page's answer to a
+    409 ``needs_install``). The browser has none, and ignores it."""
 
     selected_models: list[str] = []
     selected_hf_models: list[str] = []
@@ -259,6 +263,7 @@ class SubmitModels(BaseModel):
     selected_cellpose_models: list[CellposeSelection] = []
     resample: Optional[bool] = None
     run_voxel_sizes: Annotated[dict[str, Union[str, float, list, None]], BeforeValidator(_run_voxel_sizes)] = {}
+    install_envs: list[str] = []
 
 
 class RemoveModel(BaseModel):

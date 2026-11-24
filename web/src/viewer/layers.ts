@@ -92,21 +92,23 @@ const SOURCE_FORMAT = /^(zarr|zarr2|zarr3|n5|precomputed):\/\//;
  * (raw.py's neuroglancer_source): the format in front of the location where
  * the path names it, `zarr://` for a .zarr container (v2 or v3, an OME-Zarr
  * multiscale group or one array; Neuroglancer tells them apart and reads a
- * group's levels itself), `n5://` for a .n5 one, `precomputed://` for a
- * gs:// path that names neither (Neuroglancer's cloud volumes are
- * precomputed, as cellmap-flow reads a gs:// path: docs/source/data_paths.rst).
- * A url that already names its format is kept. Any other url is given bare,
- * and Neuroglancer finds its format from the metadata it finds there, as
+ * group's levels itself), `n5://` for a .n5 one. A url that already names
+ * its format is kept. Any other url, at gs:// too, is given bare, and
+ * Neuroglancer finds its format from the metadata it finds there, as
  * worldarray finds it for raw.py: an N5 whose names lack the suffix
  * (https://host/volume/em) was named zarr:// here, and Neuroglancer then
- * refused it, finding no zarr metadata. */
+ * refused it, finding no zarr metadata; one at gs://
+ * (gs://bucket-of-an-n5) was named precomputed://, which Neuroglancer
+ * refused too, and a page reloaded on that layer took precomputed://gs://...
+ * for its dataset (state.ts datasetUrlFromState), which the engine could
+ * not open, so the tab had none: what the person types comes back
+ * unchanged through pastedPath, as the dataset it names. */
 export function rawSource(url: string): string {
   if (SOURCE_FORMAT.test(url)) return url;
   const container = /\.(zarr|n5)(?=\/|$)/g;
   let format: string | null = null;
   for (let match = container.exec(url); match; match = container.exec(url)) format = match[1];
-  if (format !== null) return `${format}://${url}`;
-  return url.startsWith("gs://") ? `precomputed://${url}` : url;
+  return format !== null ? `${format}://${url}` : url;
 }
 
 /** The raw data's layer (layers.py's raw_layer over raw.py's get_raw_layer
@@ -133,10 +135,14 @@ export function rawLayer(url: string, info: DatasetInfo, channel: number, keep?:
  * it, and is told which to show: an OME-Zarr's channel axis is a local
  * dimension (c') whose position is the channel shown (channelPosition), a
  * precomputed volume's channels are its image's own (c^), of which the raw
- * shader's invlerp control `normalized` shows the one its `channel` names. */
+ * shader's invlerp control `normalized` shows the one its `channel` names.
+ * Which of the two the volume is, the engine says (info.channelAxis: the
+ * zarr axis, or null for channels of the volume's own); a DatasetInfo made
+ * without it is told by its URL's format. */
 export function rawChannelShown(layer: LayerSpec, info: DatasetInfo, channel: number): LayerSpec {
   if (info.channels === 1 || channel >= info.channels) return layer;
-  if (!rawSource(info.url).startsWith("precomputed://")) return { ...layer, localPosition: channelPosition(channel) };
+  const ownChannels = info.channelAxis !== undefined ? info.channelAxis === null : rawSource(info.url).startsWith("precomputed://");
+  if (!ownChannels) return { ...layer, localPosition: channelPosition(channel) };
   const controls = (layer.shaderControls ?? {}) as Record<string, unknown>;
   const normalized = controls.normalized && typeof controls.normalized === "object" ? controls.normalized : {};
   return { ...layer, shaderControls: { ...controls, normalized: { ...normalized, channel: [channel] } } };

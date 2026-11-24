@@ -17,6 +17,9 @@
 - ``onnx``: ``OnnxModelConfig``, an ONNX export as the browser mode runs it
   (a local file, or a folder of cellmap/onnx-web-models), with ONNX Runtime,
   in its own environment by default.
+- ``mia``: ``MiaModelConfig``, a model trained with mia-train (the MIA
+  team's), converted once into a cellmap_models export and served as one,
+  converted in its own environment by default.
 
 Import the classes from ``cellmap_flow.models.models_config``, their public
 path: the docs name it, and plugins subclass the classes by it.
@@ -42,4 +45,5 @@ from cellmap_flow.models.configs import (  # noqa: F401
     huggingface,
     cellpose,
     onnx,
+    mia,
 )

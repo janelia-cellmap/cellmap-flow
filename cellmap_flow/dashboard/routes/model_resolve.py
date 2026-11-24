@@ -98,13 +98,18 @@ def add_model():
         model_config = build_model(entry, name)
     except (ConfigError, ValueError, TypeError) as e:
         return jsonify({"success": False, "error": str(e)}), 400
+    staying = running_names()
     drop_config(name)
     session.models_config.append(model_config)
     # As Submit's start does: a chain with no input normalizers takes the ones
     # this model declares, before the blob its layer is drawn with is taken
-    # (routes.pipeline.set_declared_input_norm).
-    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
+    # (routes.pipeline.set_declared_input_norm); its postprocessing is set,
+    # when the chain has none, once its server is up (run_model).
+    # And postprocessing the dashboard set for models none of which is left
+    # is cleared first (routes.pipeline.reset_postprocess_of_models_gone).
+    from cellmap_flow.dashboard.routes.pipeline import reset_postprocess_of_models_gone, set_declared_input_norm
 
+    reset_postprocess_of_models_gone(staying)
     set_declared_input_norm([model_config])
     _launch(name, run_model, model_config, session.layer_blob(), daemon=True)
     logger.info(f"Adding model {name} ({entry.get('type')})")

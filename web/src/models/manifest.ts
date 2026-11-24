@@ -87,7 +87,21 @@ export function parseManifest(raw: unknown, where = "manifest.json"): ModelManif
     ...provenance(m),
     ...finetuneOf(m),
     ...publishedOf(m),
+    ...activationOf(m),
   };
+}
+
+// The activation the manifest declares comes after the model, when it
+// declares one as cellmap-models does (a string, or a block with a name).
+function activationOf(m: Record<string, unknown>): Pick<ModelManifest, "inference_output_activation"> {
+  const value = m.inference_output_activation;
+  if (isString(value)) return { inference_output_activation: value };
+  const block = record(value);
+  if (!block || !isString(block.name)) return {};
+  return { inference_output_activation: {
+    name: block.name,
+    ...(typeof block.apply_after_model === "boolean" ? { apply_after_model: block.apply_after_model } : {}),
+  } };
 }
 
 function finetuneOf(m: Record<string, unknown>): Pick<ModelManifest, "finetune"> {
@@ -312,9 +326,15 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
  * serving.ts), and a finetuned manifest has one variant, so a finetuned
  * entry comes through unchanged. The voxel size it is run at stays too
  * (ModelEntry.runVoxelSize): the variant is how it runs on this GPU, not
- * at what scale. */
+ * at what scale; and so does the date its folder last changed on the Hub
+ * (ModelEntry.lastModified), which is the folder's, not the variant's. */
 export function withVariant(entry: ModelEntry, variant: ModelVariant): ModelEntry {
-  return { ...entryFor(entry.folder, entry.manifest, variant, entry.repo), name: entry.name, ...(entry.runVoxelSize ? { runVoxelSize: entry.runVoxelSize } : {}) };
+  return {
+    ...entryFor(entry.folder, entry.manifest, variant, entry.repo),
+    name: entry.name,
+    ...(entry.runVoxelSize ? { runVoxelSize: entry.runVoxelSize } : {}),
+    ...(entry.lastModified ? { lastModified: entry.lastModified } : {}),
+  };
 }
 
 /** The byte-cache key a finetuned entry's bytes are kept under, and so its

@@ -55,6 +55,9 @@ def models_tab(dashboard, viewer, monkeypatch, tmp_path):
     monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     monkeypatch.setenv("CELLMAP_FLOW_ENVS_FILE", str(tmp_path / "no-aliases.yaml"))
+    # Every pixi environment installed, as on a deployment: one that is not
+    # makes the Submit ask first (test_bioimage_zoo has that case).
+    monkeypatch.setattr("cellmap_flow.models.envs.is_installed", lambda env: True)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
     session.dataset_path, session.jobs = "/data/raw.zarr", []

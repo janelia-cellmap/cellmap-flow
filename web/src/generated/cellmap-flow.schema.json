@@ -67,6 +67,12 @@
       "request": null
     },
     {
+      "method": "POST",
+      "path": "/api/huggingface-models/forget",
+      "availability": "browser",
+      "request": null
+    },
+    {
       "method": "GET",
       "path": "/api/bioimage-models",
       "availability": "stub",
@@ -2628,7 +2634,7 @@
       "type": "object"
     },
     "SubmitModels": {
-      "description": "The Models tab's Submit: the catalog models, Hugging Face repos,\nBioImage Model Zoo and Cellpose models to run. Every other running model\nis stopped (services.launch). ``resample``, when given, becomes the\nsession's (``Session.resample``) before the models are started.\n\n``run_voxel_sizes``: the voxel size (nm, z, y, x) to run a ticked\ncatalog or Hugging Face model at, by its row's value (a\n``selected_models`` name or a ``selected_hf_models`` repo), as typed\nbeside it (\"32\", \"32,16,16\", 32 or [32, 16, 16]). A model left out, or\nleft blank, runs at its own (``ModelConfig.run_voxel_size``).",
+      "description": "The Models tab's Submit: the catalog models, Hugging Face repos,\nBioImage Model Zoo and Cellpose models to run. Every other running model\nis stopped (services.launch). ``resample``, when given, becomes the\nsession's (``Session.resample``) before the models are started.\n\n``run_voxel_sizes``: the voxel size (nm, z, y, x) to run a ticked\ncatalog or Hugging Face model at, by its row's value (a\n``selected_models`` name or a ``selected_hf_models`` repo), as typed\nbeside it (\"32\", \"32,16,16\", 32 or [32, 16, 16]). A model left out, or\nleft blank, runs at its own (``ModelConfig.run_voxel_size``).\n\n``install_envs``: the pixi environments, not installed yet, that the\nperson agreed to install for the models ticked (the page's answer to a\n409 ``needs_install``). The browser has none, and ignores it.",
       "properties": {
         "selected_models": {
           "default": [],
@@ -2689,6 +2695,13 @@
           },
           "default": {},
           "type": "object"
+        },
+        "install_envs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "title": "SubmitModels",

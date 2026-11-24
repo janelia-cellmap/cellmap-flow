@@ -18,17 +18,18 @@ import { compileExpression } from "../../infer/expression";
 import { modelVoxelSizes, parseVoxelSize, withRunVoxelSize } from "../../infer/geometry";
 import { withoutChannelPick } from "../../infer/norms";
 import { listedInTab } from "../../kept";
-import { HF_REPO, isFinetuned, listFacts } from "../../models";
+import { catalogGroup, HF_REPO, isFinetuned, listFacts } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, setNeededPostprocess, stepNames, unserveModel } from "../serving";
+import { declaredInputNorm, serveModels, setDeclaredInputNorm, setStartPostprocess, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
  * the id "cellmap/onnx-web-models/setup_54" (huggingface.js shows its last
  * segment and the metadata's description), with what its row tags it with
  * and sorts it by (models/metadata.ts listFacts: its format, its ways to
- * finetune, its size and precisions), as the ranking's candidates have
+ * finetune, its size and precisions, when its folder last changed on the
+ * Hub), as the ranking's candidates have
  * them and the server's listing names them. A model the session is serving
  * (after a reload, or from a link that named it) has `selected: true`, and
  * the tab ticks it, so the ticks say what is running; the Flask listing
@@ -38,7 +39,11 @@ import { serverParams } from "./config";
  * (nm) shows; the metadata's voxel sizes stay the model's own. A model
  * finetuned or opened from a file in this browser is listed only while it
  * is this tab's (src/kept listedInTab); the others are under Kept in this
- * browser, below the list. `refresh`
+ * browser, below the list. Each model says where it comes from, `group`
+ * (models catalogGroup: cellmap, Added or Finetuned) and `repo`, which the
+ * tab lists under sections of their own: with cellmap's, a repo added on an
+ * earlier visit (remembered) was read as one of cellmap's models. The
+ * server's listing, cellmap's alone, has neither. `refresh`
  * reads the repository again instead of the cached listing. A listing that
  * fails is {error} with a 500, as the Flask route answers; the tab shows the
  * message. */
@@ -49,7 +54,7 @@ async function listModels(ctx: AppContext, refresh: boolean) {
     return json(200, Object.fromEntries(entries.filter((e) => listedInTab(ctx.session.state, e)).map((e) => {
       const served = serving.get(e.id);
       const runAt = served?.runVoxelSize ? { run_voxel_size: served.runVoxelSize } : {};
-      return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), ...(served ? { selected: true, ...runAt } : {}) }];
+      return [e.id, { ...ctx.catalog.metadataFor(e), ...listFacts(e), group: catalogGroup(e), repo: e.repo, ...(served ? { selected: true, ...runAt } : {}) }];
     })));
   } catch (e) {
     return json(500, { error: message(e) });
@@ -193,6 +198,32 @@ export function modelRoutes(router: Router): void {
   router.get("/api/huggingface-models", (_req, _params, ctx) => listModels(ctx, false));
   router.post("/api/huggingface-models/refresh", (_req, _params, ctx) => listModels(ctx, true));
 
+  // POST /api/huggingface-models/forget {repo}: the Hugging Face list's
+  // Forget on a repo added beside cellmap's, which the catalog remembers
+  // (Catalog.forgetRepo): not listed any more, this visit or the next, until
+  // Add a model or a link names it again. Refused for cellmap's own repo, a
+  // repo that is not listed, and, with a 409, while one of its models is
+  // running: stop it first, so nothing served is missing from the list.
+  router.post("/api/huggingface-models/forget", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    const repo = body && typeof body.repo === "string" ? body.repo.trim() : "";
+    if (!repo) return badRequest("repo is required");
+    let entries: ModelEntry[];
+    try {
+      entries = (await ctx.catalog.list()).filter((e) => e.repo === repo && catalogGroup(e) === "Added");
+    } catch (e) {
+      return json(500, { error: message(e) });
+    }
+    if (!entries.length) return badRequest(`${repo} is not a repo added beside ${HF_REPO}`);
+    const running = ctx.session.state.models.filter((m) => entries.some((e) => e.id === m.id));
+    if (running.length) {
+      return json(409, { success: false, error: `Stop ${running.map((m) => m.name).join(", ")} first (Loaded models), then forget ${repo}.` });
+    }
+    await ctx.catalog.forgetRepo(repo);
+    ctx.log(`Forgot ${repo}: its ${entries.length === 1 ? "model is" : `${entries.length} models are`} no longer listed`);
+    return json(200, { success: true, repo, models: entries.map((e) => e.id) });
+  });
+
   // The zoo's weights are not web exports: an empty, never stale list, in
   // the shape bioimage_catalog.list_bioimage_models answers.
   const zoo = () => json(200, { models: [], fetched: null, stale: false });
@@ -218,12 +249,16 @@ export function modelRoutes(router: Router): void {
     if ("error" in resolved) return badRequest(resolved.error);
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
     // A chain with no input normalizers takes the ones the first model
-    // started declares, and one with no postprocessing what the first
-    // model's output needs, before it is served (serving.ts
-    // setDeclaredInputNorm, setNeededPostprocess).
+    // started declares, and one with no postprocessing the step the first
+    // model's manifest declares follows it, else what the first model's
+    // output needs, when it shows every model served right, before they are
+    // served (serving.ts setDeclaredInputNorm, setStartPostprocess).
+    // Before that, postprocessing set for models none of which stays is
+    // cleared (resetPostprocessOfModelsGone).
     const starting = resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id));
+    if (starting.length) await resetPostprocessOfModelsGone(ctx, ctx.session.state.models.filter((m) => resolved.entries.some((e) => e.id === m.id)));
     await setDeclaredInputNorm(ctx, starting);
-    await setNeededPostprocess(ctx, starting, resolved.entries);
+    await setStartPostprocess(ctx, starting, resolved.entries);
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
     return json(200, {
@@ -242,10 +277,12 @@ export function modelRoutes(router: Router): void {
   // input normalization its input part is, and the model whose settings its
   // postprocessing is (postprocess_from) with whether the ranking fitted
   // them to the paint (postprocess_fitted; false: the model's start set
-  // what its output needs, a sigmoid for logits; both null when no loaded
-  // model's: postprocessSetBy). The page reads them after every model
-  // change, since a model's start can set either part (serving.ts
-  // setDeclaredInputNorm, setNeededPostprocess). And the models stopped
+  // them) and whether that start set what the model's manifest declares
+  // follows it (postprocess_declared; false: what its output needs, a
+  // sigmoid for logits); all null when no loaded model's:
+  // postprocessSetBy. The page reads them after every model change, since a
+  // model's start can set either part (serving.ts setDeclaredInputNorm,
+  // setStartPostprocess). And the models stopped
   // because their layer was deleted in the viewer, numbered (the session's
   // deletedInViewer: backend/index.ts layerDeleted), for the list to untick
   // the rows of those newer than it has seen, as their ✕ would.
@@ -254,7 +291,8 @@ export function modelRoutes(router: Router): void {
     const post = postprocessSetBy(ctx.session.state);
     return json(200, {
       success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models),
-      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null, deleted_in_viewer: deletedInViewer,
+      postprocess_from: post?.model ?? null, postprocess_fitted: post?.fitted ?? null,
+      postprocess_declared: post?.declared ?? null, deleted_in_viewer: deletedInViewer,
     });
   });
 
@@ -312,10 +350,13 @@ export function modelRoutes(router: Router): void {
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
     // As Submit: a chain with no input normalizers takes the ones it
-    // declares, one with no postprocessing what its output needs.
+    // declares, one with no postprocessing the step a model's manifest
+    // declares follows it, else what a model's output needs, when it shows
+    // every model served right.
     if (!ctx.session.state.models.some((m) => m.id === model.id)) {
+      await resetPostprocessOfModelsGone(ctx, ctx.session.state.models);
       await setDeclaredInputNorm(ctx, [model]);
-      await setNeededPostprocess(ctx, [model], entries);
+      await setStartPostprocess(ctx, [model], entries);
     }
     await serveModels(ctx, entries, ctx.session.state.chain);
     await ctx.session.update({ models: entries });
@@ -585,10 +626,12 @@ function sameSteps(a: readonly Step[], b: readonly Step[]): boolean {
  * model's rankFits, what Use this model, Fit to Paint and Use these
  * settings set, the sigmoid and the threshold the paint is fitted best
  * at), else a model's start's (startPostprocess, serving.ts
- * setNeededPostprocess: the sigmoid its logits need); null when it is no
- * loaded model's, or the chain has none. An Apply of other steps since is
- * the user's, and nothing has to forget it. */
-function postprocessSetBy(state: SessionState): { model: string; fitted: boolean } | null {
+ * setStartPostprocess: what its manifest declares follows it, or the
+ * sigmoid its logits need), with whether its
+ * manifest declared them; null when it is no loaded model's, or the chain
+ * has none. An Apply of other steps since is the user's, and nothing has to
+ * forget it. */
+function postprocessSetBy(state: SessionState): { model: string; fitted: boolean; declared: boolean } | null {
   const live = state.chain.postprocess;
   if (!live.length) return null;
   const names = state.models.map((m) => m.name);
@@ -596,7 +639,45 @@ function postprocessSetBy(state: SessionState): { model: string; fitted: boolean
     const fitted = state.rankFits[name]?.postprocess;
     return fitted && sameSteps(fitted, live);
   });
-  if (ranked) return { model: ranked, fitted: true };
+  if (ranked) return { model: ranked, fitted: true, declared: false };
   const started = state.startPostprocess;
-  return started && names.includes(started.model) && sameSteps(started.postprocess, live) ? { model: started.model, fitted: false } : null;
+  return started && names.includes(started.model) && sameSteps(started.postprocess, live)
+    ? { model: started.model, fitted: false, declared: started.declared } : null;
+}
+
+/** Clear the session chain's postprocessing, as part of starting models,
+ * when it was set for models none of which is served any more: `staying`,
+ * the models served before this start that it keeps, is empty
+ * (routes/pipeline.py's reset_postprocess_of_models_gone). Submit and Add
+ * call this before setStartPostprocess, so the start sets what the new
+ * models declare or need and the advice suggests the rest: a chain Applied
+ * over an affinity model otherwise stayed for the model submitted after
+ * that one was stopped. Only a chain that came from the dashboard is
+ * cleared: one the user Applied over models (the session's appliedOver),
+ * or one a model's start set that still stands (startPostprocess). A chain
+ * Applied before any model was served is left alone, as is any chain while
+ * a model it was served over stays. The models it was for are stopped by
+ * this start or already, so nothing is drawn again. */
+async function resetPostprocessOfModelsGone(ctx: AppContext, staying: readonly ModelEntry[]): Promise<void> {
+  const { chain, appliedOver, startPostprocess } = ctx.session.state;
+  if (staying.length || !chain.postprocess.length) return;
+  if (!appliedOver.length && !(startPostprocess && sameSteps(startPostprocess.postprocess, chain.postprocess))) return;
+  await ctx.session.update({ chain: { input_norm: chain.input_norm, postprocess: [] }, appliedOver: [], startPostprocess: null });
+  ctx.log(`Postprocessing reset: the models it was set for are no longer running (it was ${stepNames(chain.postprocess).join(" → ")})`);
+}
+
+/** The name of the first of `entries` whose declared input normalization is
+ * `chain`'s input part (its channel pick aside), step for step, each value
+ * as sameSteps compares it (the chain keeps what the page's Apply sent,
+ * "0.0" for 0); null when none is, or the chain has no input normalizers
+ * (pipeline.py's input_norm_set_by). GET /api/models/loaded answers it
+ * beside the chain, so the page can say where an input normalization a
+ * model's start set came from. Every model here declares its own (its
+ * manifest), so the answer has no input_norm_declared, which the Flask
+ * dashboard's says false for a convention it set; the page reads none as
+ * declared. */
+function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
+  const steps = withoutChannelPick(chain.input_norm);
+  if (!steps.length) return null;
+  return entries.find((entry) => sameSteps(withoutChannelPick(declaredInputNorm(entry)), steps))?.name ?? null;
 }

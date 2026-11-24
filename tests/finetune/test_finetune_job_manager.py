@@ -19,6 +19,7 @@ from cellmap_flow.finetune.model_loading import decode_model_entry
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.site import JANELIA
 from cellmap_flow.jobs.spec import JobStatus as LSF
+from cellmap_flow.models.configs.base import ModelConfig
 from cellmap_flow.serving.protocol import IP_PATTERN
 from tests.threads import patch_sleep
 
@@ -27,6 +28,9 @@ URL = "http://node7:8123"
 
 class _Script:
     cli_name, name, script_path, channels = "script", "m", "/s.py", ["mito"]
+    # What a model that declares nothing answers (a ModelConfig's), which submit asks.
+    finetune_refusal = ModelConfig.finetune_refusal
+    declared_affinity_offsets = ModelConfig.declared_affinity_offsets
 
 
 GEOMETRY = SimpleNamespace(input_voxel_size=[8] * 3, output_voxel_size=[4] * 3, channels=["nuc"])

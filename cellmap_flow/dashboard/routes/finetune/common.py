@@ -225,7 +225,9 @@ def model_target(model_config, channel_names):
     when nothing says.
 
     In turn: the target its type declares (``declared_output_type``:
-    Cellpose's flows); the offsets its script assigns, read by parsing it
+    Cellpose's flows); the affinity offsets it declares
+    (``ModelConfig.declared_affinity_offsets``: a cellmap-models export's
+    metadata.json can); the offsets its script assigns, read by parsing it
     (an affinity model's); the affinity offsets its output channel names
     give (portable/label_it.affinity_offsets: the browser's Python applies
     the same rule to its manifest's names, for training and seeding, so
@@ -243,6 +245,9 @@ def model_target(model_config, channel_names):
     declared = declared_output_type(model_config)
     if declared is not None:
         return declared, None
+    offsets = model_config.declared_affinity_offsets() if model_config is not None else None
+    if offsets:
+        return "affinities", offsets
     if hasattr(model_config, "script_path"):
         script_offsets = read_offsets_from_script(model_config.script_path)
         if script_offsets is not None:
@@ -457,7 +462,8 @@ def write_volume_manifest(volume):
     submit refuses it.
 
     A volume painted before any model gets none (portable/volume.py
-    training_refusal: it is on no model's grid), and any manifest in its
+    is_paint_first: it is on no model's grid, so training's submit carries
+    its paint onto the model's first), and any manifest in its
     corrections dir is removed: one naming the volume before it would keep
     that one the session's, so Rank and Use this model would read the old
     paint while the user paints the new, and a restart or a resumed copy
@@ -466,10 +472,10 @@ def write_volume_manifest(volume):
     from cellmap_flow.finetune.session.manifest import remove_manifest, write_manifest
     from cellmap_flow.finetune.session.volume import build_manifest
 
-    if portable_volume.training_refusal(volume) and volume.get("corrections_dir"):
+    if portable_volume.is_paint_first(volume) and volume.get("corrections_dir"):
         if remove_manifest(str(volume["corrections_dir"])):
             logger.info(f"Removed the manifest in {volume['corrections_dir']}: its volume is now "
-                        f"{volume.get('zarr_path')}, painted before any model, which is not trained on.")
+                        f"{volume.get('zarr_path')}, painted before any model, whose paint a model trains on once carried onto its grid.")
         return None
     try:
         if not volume.get("corrections_dir"):

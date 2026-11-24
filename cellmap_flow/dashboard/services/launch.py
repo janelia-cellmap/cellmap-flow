@@ -3,7 +3,9 @@
 - ``update_run_models()``: stop and forget the models no longer picked,
   start the ones newly picked, each in its own thread. A finetune job's
   server is the Finetune tab's to stop, never this one's. A chain with no
-  input normalizers takes the ones the first model started declares.
+  input normalizers takes the ones the first model started declares. A
+  model whose pixi environment is not installed yet refuses the Submit
+  (``EnvsNotInstalled``) until the Submit agrees to install it.
 - ``run_model()``: start one model's inference server
   (``serving.launch.launch``, which records the job) and add its layer, the
   one Submit would give it. Every model the tab picks goes through it, as a
@@ -21,6 +23,8 @@
   going, and why its last one failed, which the Finetune tab's Use this
   model waits on (routes/finetune/rank_routes.py _served_geometry), and the
   model advice says while any is (routes/model_advice.py).
+  ``others_starting()``: the starts the chain's postprocessing waits on
+  (routes/pipeline.py set_start_postprocess).
 - ``served_at_run_voxel_size()``: the models running or starting at a voxel
   size not their own (``ModelConfig.run_voxel_size``), whose Run at (nm)
   fields the Models tab fills in.
@@ -38,12 +42,12 @@ from cellmap_flow.config.yaml import ConfigError
 from cellmap_flow.dashboard.services.datasets import to_open_dataset
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.serving.launch import launch as launch_server
-from cellmap_flow.jobs.launch import starting_jobs
+from cellmap_flow.jobs.launch import allow_install, install_allowed, starting_jobs
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
 from cellmap_flow.models.models_config import (
-    BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
+    BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig, MiaModelConfig,
 )
 from cellmap_flow.models.registry import build_model
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -176,18 +180,66 @@ def run_model(config, st_data, queue=None):
     Submit, Add a model and the Training tab's Use this model, which gives
     the Training tab's GPU queues as ``queue`` (the Models tab's otherwise).
 
-    A chain with no postprocessing takes what the model's output needs (a
-    sigmoid for logits) once its server's probe says what that is
-    (routes.pipeline.set_needed_postprocess); the redraw that sets it draws
-    this model's layer too."""
-    from cellmap_flow.dashboard.routes.pipeline import set_needed_postprocess
+    A model that runs at the raw data's own voxel size is set to run at the
+    finest of the session's raw first (at_native_voxel_size). A chain with
+    no postprocessing takes the step a model's metadata declares follows
+    it, else the sigmoid a model's logits need, once every model started
+    has its server (routes.pipeline.set_start_postprocess); the redraw that
+    sets it draws this model's layer too. A start that ended without a
+    server is told too, also one that raised: the others may have waited
+    on it."""
+    from cellmap_flow.dashboard.routes.pipeline import set_start_postprocess
 
-    job = _start(config, queue)
+    # Started anew: a chain the user Applied over an earlier run of it no
+    # longer speaks for it (Session.applied_over).
+    get_session().applied_over.discard(config.name)
+    at_native_voxel_size(config)
+    try:
+        job = _start(config, queue)
+    except BaseException:
+        # The others may have waited on this start, and no later one decides
+        # for them. What it raised is still reported (_reported).
+        try:
+            set_start_postprocess()
+        except Exception as e:
+            logger.warning(f"Could not set the postprocessing the models started need: {e}")
+        raise
     # Switched first, should another dataset have been opened while it
-    # started: the redraw set_needed_postprocess makes draws only the models
+    # started: the redraw set_start_postprocess makes draws only the models
     # on the open one.
-    if job is not None and _on_open_dataset(job) and not set_needed_postprocess(job):
+    on_open_dataset = job is not None and _on_open_dataset(job)
+    if not set_start_postprocess() and on_open_dataset:
         _show(job, st_data)
+
+
+def at_native_voxel_size(config, data_path=None):
+    """Have ``config`` run at the finest voxel size of the session's raw when
+    the model runs at the data's own (a cellmap-models export whose metadata
+    says native_voxel_size, as a mia-train model's does), as its server,
+    its trainer and blockwise run it (ModelConfig.adopt_native_voxel_size):
+    then the dashboard's config says the sizes the model is served at, in
+    the entry its server is started with and in what the Finetune tab lists
+    of it while its server is not up, or stopped (its declared_geometry:
+    the training form's sizes, the ranking's facts). The Models tab's Run at
+    (nm) shows it as the voxel size it runs at (served_at_run_voxel_size).
+    A run voxel size its entry gives wins, as it does there.
+
+    Only once what the model declares is known (its declared_geometry
+    answers, from its metadata): asked before that, a mia model converts
+    itself to answer (MiaModelConfig.runs_at_native_voxel_size), which is
+    its server's to do, never the dashboard's. Reading its metadata and the
+    raw's levels may go over the network, so this is never called under a
+    lock. Never raises: a model whose raw cannot be read is left for its
+    server to set. ``data_path`` is the session's raw unless given (a YAML's
+    models, started before the session has its dataset: yaml_cli)."""
+    data_path = data_path or get_session().dataset_path
+    try:
+        if config.run_voxel_size is not None or not data_path or config.declared_geometry() is None:
+            return
+        config.adopt_native_voxel_size(data_path)
+    except Exception as e:
+        logger.warning(f"Could not tell the voxel size {getattr(config, 'name', None)} runs at on "
+                       f"{data_path}; its server works it out: {e}")
 
 
 def _built(entry: dict, label: str):
@@ -333,10 +385,18 @@ def _cellpose_configs(selections) -> list:
 def _settings_changed(config) -> bool:
     """Whether the model named as ``config`` was started with other settings
     than ``config``'s: another run voxel size, or, a Cellpose model, another
-    voxel size or slice linking."""
+    voxel size or slice linking.
+
+    A model that runs at the raw's own voxel size was started at the raw's
+    finest (run_model's at_native_voxel_size); ticked again with no run
+    voxel size typed, it is asked the same before the two are compared, so
+    it is not started again for that, unless the raw it would run on now
+    is another."""
     for mc in get_session().models_config:
         if getattr(mc, "name", None) != config.name:
             continue
+        if getattr(mc, "run_voxel_size", None) is not None and config.run_voxel_size is None:
+            at_native_voxel_size(config)
         if getattr(mc, "run_voxel_size", None) != config.run_voxel_size:
             return True
         if isinstance(mc, CellposeModelConfig) and isinstance(config, CellposeModelConfig):
@@ -432,6 +492,18 @@ def launching(name=None) -> bool:
         return bool(_launching) if name is None else name in _launching
 
 
+def others_starting() -> set:
+    """The models whose start is still going, but for the one the calling
+    thread runs: launched, and with no job of theirs serving yet. A launch
+    whose server is up is not waited on, though its thread has still to
+    draw its layer and return. The postprocessing the starts set waits for
+    them (routes.pipeline.set_start_postprocess)."""
+    current = getattr(_this_launch, "current", None)
+    with _launching_lock:
+        launching = {name for name, launch in _launching.items() if launch is not current}
+    return launching - {job.model_name for job in get_session().jobs if job.host}
+
+
 def start_error(name):
     """Why ``name``'s last start failed, or None: it has not failed, or was
     started again since."""
@@ -495,6 +567,26 @@ def _catalog_groups() -> dict:
     return {name: group for group, models in get_session().model_catalog.items() for name in models}
 
 
+def huggingface_job_name(repo: str, taken=()) -> str:
+    """The job, layer and config name of the Hugging Face model ``repo``:
+    its repo's last part (``_sanitize_job_name``), "setup_53" for
+    cellmap/setup-53, as it has always been. When that name is another
+    repo's, one of ``taken`` (the names of the repos picked ahead of it in
+    this Submit) or a model of the session's from another repo (ai-hhmi/setup-53, running
+    as setup_53), it is named with its organization, cellmap_setup_53, so
+    both run, each with its own job and layer, and the first keeps its name.
+    A repo the session has a model of keeps that model's name, whatever is
+    ticked beside it."""
+    base = _sanitize_job_name(repo.split("/")[-1])
+    configs = configs_by_name()
+    for name, config in configs.items():
+        if listed_repo(config) == repo and name not in taken:
+            return name
+    if base in taken or listed_repo(configs.get(base)) not in (None, repo):
+        return _sanitize_job_name(repo.replace("/", "_"))
+    return base
+
+
 def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) -> list:
     """``[(name, config)]`` for everything ticked, in the order the tab lists
     them: the catalog's models, Hugging Face's, the zoo's, the Cellpose
@@ -512,7 +604,10 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
 
     Each config is built here, before anything is stopped or started, so a
     bad entry refuses the whole Submit (ValueError) rather than half of it.
-    A name picked twice keeps its first config: the Cellpose panel's row
+    Two Hugging Face repos of one name under two organizations (cellmap/X
+    and ai-hhmi/X) are both started, each under a name of its own
+    (``huggingface_job_name``). Any other name picked twice keeps its first
+    config: the Cellpose panel's row
     wins over a YAML's model of the same name (a YAML's "cellpose_sam"
     serving probability, and the panel's cpsam with flows), the panel's
     settings being the ones asked for.
@@ -530,9 +625,16 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
             if name in names:
                 add(name, _built({"type": "cellmap", "folder_path": folder, "name": name,
                                   "run_voxel_size": run_voxel_sizes.get(name)}, name))
+    if hf_repos:
+        from cellmap_flow.models.hf_catalog import cached_huggingface_models, listed_entry
+
+        # As the list has each: a mia-train model's repo is type mia.
+        listed = cached_huggingface_models() or {}
+    hf_names = set()
     for repo in hf_repos:
-        name = _sanitize_job_name(repo.split("/")[-1])
-        add(name, _built({"type": "huggingface", "repo": repo, "name": name,
+        name = huggingface_job_name(repo, hf_names)
+        hf_names.add(name)
+        add(name, _built({**listed_entry(repo, listed.get(repo), name),
                           "run_voxel_size": run_voxel_sizes.get(repo)}, repo))
     for config in _bioimage_configs(bioimage_models) + _cellpose_configs(cellpose_models):
         add(config.name, config)
@@ -544,8 +646,23 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
     return picked
 
 
+class EnvsNotInstalled(Exception):
+    """A Submit whose models run in pixi environments that are not installed
+    yet, and that did not agree to install them: nothing was stopped or
+    started. ``missing`` is ``{env: [model name, ...]}`` (envs.to_install),
+    for the Models tab to ask with."""
+
+    def __init__(self, missing: dict):
+        self.missing = missing
+        super().__init__("; ".join(
+            f"{', '.join(names)} {'runs' if len(names) == 1 else 'run'} in the pixi environment {env!r}, "
+            "which is not installed yet" for env, names in missing.items()
+        ))
+
+
 def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
-                      cellpose_models: List[dict] = None, run_voxel_sizes: dict = None):
+                      cellpose_models: List[dict] = None, run_voxel_sizes: dict = None,
+                      install_envs: List[str] = None) -> List[str]:
     """Run ``names`` (catalog models, and models ticked by name), ``hf_repos``,
     ``bioimage_models`` ({"id", "voxel_size"} each) and ``cellpose_models``
     ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
@@ -558,22 +675,38 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     Cellpose model's settings are missing or wrong, a catalog folder is not
     there, a model that reads its input itself is given a run voxel size.
 
+    A model to start whose pixi environment is not installed yet needs the
+    Submit to agree to install it, by naming it in ``install_envs``; one
+    agreed to before in this process needs nothing more. Otherwise
+    EnvsNotInstalled, before anything changes, which the Models tab asks
+    about. Returns the environments this Submit installs before their
+    models' jobs (jobs.launch._install_env_first), [] for none.
+
     When the chain has no input normalizers, the first model started that
     declares some (an onnx model's manifest) sets them, as part of its start
-    (routes.pipeline.set_declared_input_norm); any other chain is left as it
-    is, and only the page's Apply changes it."""
+    (routes.pipeline.set_declared_input_norm). When it has no
+    postprocessing, the step a model's metadata declares is applied after
+    it (a sigmoid), or else the sigmoid a model's logits need, is set once
+    the servers are up and say what each output is (run_model). Any other
+    chain is left as it is, and only the page's Apply changes it; but for
+    postprocessing the dashboard set (an Apply over models, a start) when
+    none of the models running before this Submit is left after it, which
+    is cleared before the starts
+    (routes.pipeline.reset_postprocess_of_models_gone)."""
     # One Submit at a time, from deciding what starts to its launches being
     # counted as running: two at once (the page's button pressed again while
     # the first's answer was slow to come back) each found the model not
     # started yet, and each submitted a GPU job for it.
     with _submit_lock:
-        _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes)
+        return _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes, install_envs)
 
 
 _submit_lock = threading.Lock()
 
 
-def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes):
+def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes, install_envs):
+    from cellmap_flow.models import envs
+
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [], run_voxel_sizes or {})
 
@@ -595,13 +728,27 @@ def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_vo
     names_running = running_names() - {j.model_name for j in to_be_killed}
     starting = [(name, config) for name, config in picked if name not in names_running]
 
+    to_install = envs.to_install([config for _, config in starting])
+    agreed = set(install_envs or ())
+    unagreed = {env: names for env, names in to_install.items() if env not in agreed and not install_allowed(env)}
+    if unagreed:
+        raise EnvsNotInstalled(unagreed)
+    allow_install(to_install)
+
+    # The models that were running and still are once this Submit's stops and
+    # starts are done, one started again with other settings among them.
+    staying = running_names() & (names_running | {name for name, _ in starting})
     _stop_jobs(to_be_killed)
     # A chain with no input normalizers takes the first starting model's
     # declared ones, before the blob its layers are drawn with is taken, so
     # they are drawn through them (routes.pipeline.set_declared_input_norm).
     # After the stop, so the layers of the models stopped are not redrawn.
-    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
+    from cellmap_flow.dashboard.routes.pipeline import reset_postprocess_of_models_gone, set_declared_input_norm
 
+    # Postprocessing the dashboard set for models none of which is left is
+    # cleared first, so the starts set what these models declare or need.
+    if starting:
+        reset_postprocess_of_models_gone(staying)
     set_declared_input_norm([config for _, config in starting])
     st_data = session.layer_blob()
     for name, config in starting:
@@ -609,6 +756,16 @@ def _update_run_models(names, hf_repos, bioimage_models, cellpose_models, run_vo
         # launch_entry, not to_dict(): a Hugging Face model's to_dict() fetches its metadata.
         logger.info(f"To be submitted: {name} ({config.launch_entry})")
         _launch(name, run_model, config, st_data)
+    return sorted(to_install)
+
+
+def listed_repo(config):
+    """The Hugging Face repo ``config`` serves, as the Hugging Face list
+    lists it: a huggingface model's, or a mia model's from a repo (not one
+    from a folder); None for any other."""
+    if isinstance(config, HuggingFaceModelConfig) or (isinstance(config, MiaModelConfig) and config.repo):
+        return config.repo
+    return None
 
 
 def served_at_run_voxel_size() -> list:
@@ -665,7 +822,7 @@ def _loaded_entry(name, job, config, catalog_group):
         if _owned_by_finetune(job):
             ended, note, confirm = _finetune_note(training)
             entry.update(note=note, confirm=confirm, status="running" if not ended else "ended")
-    elif isinstance(config, HuggingFaceModelConfig):
+    elif listed_repo(config):
         entry.update(source="huggingface", detail=config.repo, hf_id=config.repo)
     elif isinstance(config, BioModelConfig):
         entry.update(source="bioimage", detail=config.model, zoo_id=config.model)

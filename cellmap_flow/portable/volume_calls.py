@@ -59,14 +59,6 @@ def shown_level(args, arrays):
     return {"index": volume.shown_level(args.get("voxel_sizes") or [], args.get("pixel_nm"))}
 
 
-def training_refusal(args, arrays):
-    """``{"error": <the sentence>}`` when ``volume`` (its record) is not
-    trained on (``volume.training_refusal``: a paint-first volume), else
-    ``{}``."""
-    refusal = volume.training_refusal(args.get("volume") or {})
-    return {"error": refusal} if refusal else {}
-
-
 def _grid(volume) -> dict:
     """A browser volume's (or a plan's) grid as ``volume.GRID_FIELDS`` has
     it: its ``chunk_size`` is the model's output block."""

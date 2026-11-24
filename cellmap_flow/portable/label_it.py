@@ -56,6 +56,10 @@ SEED_METHODS = (
 UNIT = "unit"  # [0, 1] -- sigmoid/softmax already applied
 SIGNED_UNIT = "signed_unit"  # [-1, 1] -- tanh already applied
 UNBOUNDED = "unbounded"  # no output activation: logits, distances, affinities...
+# [0, 255] -- a probability x 255 in whole numbers: what a cellmap-models
+# export declaring a uint8 output_dtype serves (configs/cellmap.py). Never
+# read off a graph or a range: its server says it from the declaration.
+BYTE_UNIT = "byte_unit"
 
 # The connectivities in the order the forms list them, with their names.
 CONNECTIVITIES = {1: "faces", 2: "faces and edges", 3: "all neighbours"}
@@ -251,8 +255,9 @@ def probability(prediction, output_class=None, channels=None):
 
     The boundary depends on the output's activation: 0.5 on [0, 1] output
     (a sigmoid already applied; the cellmap distance models end in one, and
-    0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on unbounded
-    output, logits or a signed distance alike. Each is turned into a
+    0.5 is their object boundary), 127.5 on a probability x 255
+    (BYTE_UNIT), 0 on tanh's [-1, 1], and 0 on unbounded output, logits or a
+    signed distance alike. Each is turned into a
     probability, so ``channels`` (a slice: the affinity channels, say) can
     be averaged and one threshold means the same for every model. A slice
     running past the model's channels reads those there are; one starting
@@ -273,6 +278,8 @@ def probability(prediction, output_class=None, channels=None):
     output_class = output_class or classify_output_range(float(prediction.min()), float(prediction.max()))
     if output_class == UNIT:
         return prediction
+    if output_class == BYTE_UNIT:
+        return prediction / 255
     if output_class == SIGNED_UNIT:
         return (prediction + 1) / 2
     return _sigmoid(prediction)

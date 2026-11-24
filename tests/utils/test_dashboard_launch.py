@@ -40,6 +40,22 @@ class _InlineThread:
         self._target(*self._args)
 
 
+def _up(command, job_name, **_):
+    """start_hosts for a job whose server came up: recorded among the jobs, as start_hosts records them."""
+    job = _Job(job_name)
+    get_session().jobs = get_session().jobs + [job]
+    return job
+
+
+def _wait_until(condition, timeout=10.0):
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        time.sleep(0.01)
+
+
 @pytest.mark.parametrize("resample", [True, False])
 def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch,
                                                                      placeholder_cellmap_folders, resample):
@@ -226,6 +242,174 @@ def test_a_hugging_face_model_started_without_input_normalization_sets_minus_one
     assert (loaded["input_norm_from"], loaded["input_norm_declared"]) == (name, declared)
 
 
+# What cellmap/mito-aff-unetiso-setup-53's metadata.json says follows the
+# model (as 54's, 56's, 61's and 67's do): a sigmoid, not in the export.
+DECLARING = "cellmap/mito-aff-unetiso-setup-53"
+SIGMOID_AFTER = {"framework": "torch", "input_normalization": MIN_MAX,
+                 "inference_output_activation": {"name": "sigmoid", "apply_after_model": True, "dim": None}}
+
+
+SIGMOID = [{"name": "SigmoidPostprocessor"}]
+
+
+@pytest.fixture
+def hf_starts(dashboard, monkeypatch):
+    """A session with no models and Hugging Face repos to start, none
+    downloaded: DECLARING's metadata declares its sigmoid after it, any
+    other repo's says nothing. Gives the session."""
+    from cellmap_flow.dashboard.routes import model_advice
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata",
+                        lambda self: SIGMOID_AFTER if self.repo == DECLARING else {})
+    monkeypatch.setattr(model_advice, "raw_dtype_and_range", lambda path: ("uint8", (0.0, 255.0)))
+    monkeypatch.setattr(launch, "_show", lambda job, st_data: None)
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", []
+    return session
+
+
+@pytest.mark.parametrize("chain, served, expected, declared", [
+    pytest.param([], "unbounded", SIGMOID, True, id="no postprocessing"),
+    pytest.param([{"name": "ThresholdPostprocessor", "threshold": 0.3}], "unbounded", None, False, id="the user's"),
+    pytest.param([], "unit", [], False, id="its network ends in the sigmoid"),
+])
+def test_a_cellmap_export_that_declares_its_sigmoid_after_it_gets_it_once_its_server_is_up(dashboard, monkeypatch,
+                                                                                          hf_starts, chain, served,
+                                                                                          expected, declared):
+    """A step a cellmap-models export's metadata.json declares is applied
+    after the model (inference_output_activation, apply_after_model true) is
+    set without asking on a chain with no postprocessing, once its server
+    says what its output is, and the page is told it came from the model's
+    metadata. A chain with steps is left alone, and so is an export whose
+    network ends in the sigmoid already, whatever its metadata says: a
+    second one would flatten it."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", _up)
+    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_class": served})
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = hf_starts
+    session.set_pipeline(PipelineSpec([], chain))
+
+    answer = dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]})
+    assert answer.status_code == 200
+    expected = chain if expected is None else expected
+    assert session.pipeline_spec == PipelineSpec(SIGNED, expected)
+    (name,) = [model.name for model in session.models_config]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert (loaded["postprocess_from"], loaded["postprocess_declared"]) == ((name, True) if declared else (None, None))
+
+
+@pytest.mark.parametrize("other, expected", [
+    pytest.param("unit", [], id="the other's network ends in a sigmoid"),
+    pytest.param("unbounded", SIGMOID, id="the other's output is logits too"),
+    pytest.param(None, SIGMOID, id="the other's start raises"),
+])
+def test_a_declared_sigmoid_waits_for_the_models_submitted_with_it(dashboard, monkeypatch, hf_starts, other, expected):
+    """setup 53's declared sigmoid, submitted with a model whose network ends
+    in one (the MIA team's affinity model), would show that one through a
+    second, which the chain then kept. What the starts set waits until
+    every model started has its server, and is set only when it shows each
+    of them right. A start that raises (not a JobStartError) still decides
+    for the models that waited on it, or 53 stayed raw logits."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    served = {"http://mito_aff_unetiso_setup_53:1": "unbounded", "http://aff:1": other}
+    monkeypatch.setattr(pipeline, "fetch_model_info", lambda host: {"output_class": served[host]})
+    # Each start ends when the test says, the declaring model's first.
+    up = {"mito_aff_unetiso_setup_53": threading.Event(), "aff": threading.Event()}
+
+    def start_hosts(command, job_name, **kwargs):
+        up[job_name].wait(10)
+        if job_name == "aff" and other is None:
+            raise RuntimeError("no such file")
+        return _up(command, job_name)
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", start_hosts)
+    session = hf_starts
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING, "cellmap/aff"]}).status_code == 200
+    up["mito_aff_unetiso_setup_53"].set()
+    _wait_until(lambda: not launch.launching("mito_aff_unetiso_setup_53"))
+    assert session.pipeline_spec.postprocess == ()
+    up["aff"].set()
+    _wait_until(lambda: not launch.launching())
+    assert list(session.pipeline_spec.postprocess) == expected
+
+
+def test_a_later_start_leaves_the_chain_the_user_applied_over_the_models_running(dashboard, monkeypatch, hf_starts):
+    """setup 53 runs through its declared sigmoid; the user Applies a chain
+    with no postprocessing, to look at its logits. A model started after
+    that does not bring 53's sigmoid back: the chain Applied is the last
+    word on the models that were running."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", _up)
+    # The second model's server does not say what its output is.
+    monkeypatch.setattr(pipeline, "fetch_model_info",
+                        lambda host: {"output_class": "unbounded"} if "setup_53" in host else {})
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = hf_starts
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]}).status_code == 200
+    assert list(session.pipeline_spec.postprocess) == SIGMOID
+    assert dashboard.put("/api/pipeline", json={"input_norm": SIGNED, "postprocess": []}).status_code == 200
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING, "cellmap/aff"]}).status_code == 200
+    assert {job.model_name for job in session.jobs} == {"mito_aff_unetiso_setup_53", "aff"}
+    assert session.pipeline_spec.postprocess == ()
+
+
+@pytest.mark.parametrize("how, reset", [
+    pytest.param("removed", True, id="its model was removed first"),
+    pytest.param("unticked", True, id="its model is stopped by this Submit"),
+    pytest.param("kept", False, id="its model keeps running"),
+])
+def test_a_submit_resets_the_postprocessing_applied_over_models_that_are_all_gone(dashboard, monkeypatch, hf_starts,
+                                                                                 how, reset):
+    """The chain Applied over an affinity model, its DefaultPostprocessor
+    clipping to [0, 1], stayed when that model was stopped and a semantic
+    model submitted, whose 0-255 output it clipped to 0-1. A Submit that
+    leaves none of the models running before it clears the postprocessing
+    the dashboard set for them, so the start sets what the new model
+    declares or needs; while one of them keeps running, the chain stays."""
+    from cellmap_flow.dashboard.routes import pipeline
+
+    monkeypatch.setattr(jobs_launch, "start_hosts", _up)
+    # The second model's server does not say what its output is: its start sets nothing.
+    monkeypatch.setattr(pipeline, "fetch_model_info",
+                        lambda host: {"output_class": "unbounded"} if "setup_53" in host else {})
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = hf_starts
+    applied = [{"name": "DefaultPostprocessor", "clip_min": 0.0, "clip_max": 1.0, "bias": 0.0, "multiplier": 255.0}]
+
+    assert dashboard.post("/api/models", json={"selected_hf_models": [DECLARING]}).status_code == 200
+    assert dashboard.put("/api/pipeline", json={"input_norm": SIGNED, "postprocess": applied}).status_code == 200
+    if how == "removed":
+        launch.remove_model("mito_aff_unetiso_setup_53")
+    submitted = [DECLARING, "cellmap/aff"] if how == "kept" else ["cellmap/aff"]
+    assert dashboard.post("/api/models", json={"selected_hf_models": submitted}).status_code == 200
+    assert session.pipeline_spec == PipelineSpec(SIGNED, [] if reset else applied)
+
+
+def test_two_organizations_repos_of_one_name_are_both_started(dashboard, monkeypatch, hf_starts):
+    """cellmap/setup-53 and ai-hhmi/setup-53 ticked together were both named
+    setup_53, and the second silently dropped. The second is named with its
+    organization, and the first keeps the name it always had."""
+    started = []
+    monkeypatch.setattr(launch, "run_model", lambda config, st_data: started.append((config.name, config.repo)))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = hf_starts
+
+    repos = ["cellmap/setup-53", "ai-hhmi/setup-53"]
+    assert dashboard.post("/api/models", json={"selected_hf_models": repos}).status_code == 200
+    assert started == [("setup_53", "cellmap/setup-53"), ("ai_hhmi_setup_53", "ai-hhmi/setup-53")]
+    # Ticked again in the other order, each is still the model it was started as.
+    session.jobs = [_Job(name) for name, _ in started]
+    assert dashboard.post("/api/models", json={"selected_hf_models": repos[::-1]}).status_code == 200
+    assert len(started) == 2
+
+
 def test_submit_runs_a_model_at_the_voxel_size_typed_beside_it(viewer, dashboard, monkeypatch):
     """POST /api/models' run_voxel_sizes: a ticked Hugging Face model's server
     builds it at the voxel size typed in its row, which the listing gives
@@ -257,6 +441,36 @@ def test_submit_runs_a_model_at_the_voxel_size_typed_beside_it(viewer, dashboard
     answer = dashboard.post("/api/models", json={"selected_hf_models": [repo], "run_voxel_sizes": {repo: ""}})
     assert answer.status_code == 200 and running.killed
     assert len(commands) == 2 and "run_voxel_size" not in served()
+
+
+def test_a_model_that_runs_at_the_raws_own_voxel_size_says_so_before_its_server_is_up(dashboard, monkeypatch,
+                                                                                    ome_pyramid):
+    """A model whose metadata says native_voxel_size (a mia-train model's
+    export) runs at the raw's finest level, as its server runs it: the
+    config the dashboard keeps answers at it (the Finetune tab's sizes,
+    before its server is up), its server is started at it, and ticked again
+    it is not started again for that."""
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+
+    repo = "cellmap/native"
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {
+        "framework": "torch", "native_voxel_size": True, "in_channels": 1, "out_channels": 1,
+        "input_voxel_size": [8] * 3, "output_voxel_size": [8] * 3, "input_shape": [8] * 3, "output_shape": [8] * 3})
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], ome_pyramid(levels=((4, 0), (8, 2))), []
+
+    # Real threads: reading the raw's levels starts some of its own.
+    assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
+    _wait_until(lambda: not launch.launching())
+    (config,) = session.models_config
+    assert config.declared_geometry()["input_voxel_size"] == [4, 4, 4]
+    argv = shlex.split(commands[-1])
+    assert json.loads(argv[argv.index("--model") + 1])["run_voxel_size"] == [4, 4, 4]
+    session.jobs = [_Job(config.name)]
+    assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
+    assert len(commands) == 1
 
 
 def test_submit_refuses_another_voxel_size_for_a_model_that_reads_its_input_itself(dashboard, monkeypatch, tmp_path):

@@ -15,10 +15,12 @@ model's inference server, and its finetuning job, run instead::
 
 - the name of an environment in cellmap-flow's ``pixi.toml``. The program
   runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``.
-  A server's launcher refuses to submit the job if the environment is not
-  installed yet (``jobs.launch._install_env_first``), rather than install
-  it as part of submitting: install it explicitly first with
-  ``cellmap_flow envs install <name>``. The
+  An environment not installed yet is installed before the first job that
+  runs in it is submitted, once someone agrees to it: the Models tab's
+  Submit asks, and so do ``cellmap_flow yaml``, ``infer`` and ``add
+  --run`` at a terminal (``jobs.launch._install_env_first``,
+  ``to_install``). ``cellmap_flow envs install <name>`` installs one
+  ahead of time. The
   manifest is the one in the checkout cellmap-flow is installed from, or
   ``CELLMAP_FLOW_PIXI_MANIFEST``; pixi is ``PIXI_EXE`` (which ``pixi run``
   sets), else the ``pixi`` on PATH.
@@ -242,9 +244,51 @@ def prefix(env: str) -> str:
     return str(pixi_manifest().parent / ".pixi" / "envs" / env)
 
 
+# What says a pixi environment's install finished, in its conda-meta: the
+# file pixi writes there once all of it is in, its PyPI packages included
+# (its pixi_env_prefix and the python are there as soon as the conda
+# packages are), or the one mark_installed leaves where pixi wrote none.
+_PIXI_INSTALLED = "pixi"
+_MARKED_INSTALLED = "cellmap_flow_installed"
+
+
 def is_installed(env: str) -> bool:
-    """Whether ``env`` has a python yet (a pixi one must be installed explicitly first)."""
-    return os.path.exists(os.path.join(prefix(env), "bin", "python"))
+    """Whether ``env`` is installed: a directory (a path or an alias) has a
+    python; a pixi environment has one and its install finished.
+
+    A python alone does not say a pixi environment is installed: pixi puts
+    the conda packages in first, python among them, then the PyPI ones, so
+    an install that failed or was killed in between left a python and no
+    cellmap-flow. Taken as installed, its model was submitted, and ``pixi
+    run --frozen`` finished the install in the job, whose time to report a
+    server runs out first (``jobs.launch._install_env_first``). pixi writes
+    ``conda-meta/pixi`` only once the whole environment is in, whoever ran
+    it (``pixi install``, ``pixi run``, a launch here), so that file is what
+    is looked for, else ``mark_installed``'s.
+    """
+    directory = prefix(env)
+    if not os.path.exists(os.path.join(directory, "bin", "python")):
+        return False
+    if _directory(env) is not None:
+        return True
+    return any(os.path.exists(os.path.join(directory, "conda-meta", name))
+               for name in (_PIXI_INSTALLED, _MARKED_INSTALLED))
+
+
+def mark_installed(env: str) -> None:
+    """Record that ``pixi install`` of ``env`` just exited with 0, for a pixi
+    that leaves no ``conda-meta/pixi`` of its own (an old one): without it
+    ``is_installed`` would say no after every install, and each Submit ask
+    again. Nothing is written where pixi's file is, or where there is no
+    environment (a pixi with detached environments installs elsewhere)."""
+    directory = prefix(env)
+    if is_installed(env) or not os.path.exists(os.path.join(directory, "bin", "python")):
+        return
+    try:
+        Path(directory, "conda-meta").mkdir(exist_ok=True)
+        Path(directory, "conda-meta", _MARKED_INSTALLED).write_text("pixi install exited with 0\n")
+    except OSError as e:
+        logger.warning(f"Could not record that the pixi environment {env!r} is installed: {e}")
 
 
 def is_running_in(env: str) -> bool:
@@ -271,9 +315,8 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     without pixi (a conda-only cluster account), the model runs here, as
     it did before its type had a default, and the warning says how to
     provide one (an alias). A pixi environment that is declared but not
-    installed is named anyway: the warning says to install it first, and
-    the actual launch (``jobs.launch._install_env_first``) refuses until it
-    is, rather than installing it as a side effect of submitting. A path or
+    installed is named anyway: the launch installs it once someone agrees
+    to (``jobs.launch._install_env_first``), and refuses until then. A path or
     an alias is the user's own, so one that cannot be used is an error, as
     an explicit ``env`` is.
     """
@@ -289,8 +332,9 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     else:
         if not is_installed(env):
             _warn_once(env, (
-                f"Model '{model_name}' runs in env {env!r}, which is not installed yet. "
-                f"Install it before running this model: cellmap_flow envs install {env}"
+                f"Model '{model_name}' runs in env {env!r}, which is not installed yet: it is "
+                f"installed before the model's first job once you agree to it (or now with "
+                f"cellmap_flow envs install {env})"
             ))
         return env
     _warn_once(env, (
@@ -345,6 +389,26 @@ def install_argv(env: str) -> List[str]:
     """``pixi install`` of ``env`` from pixi.lock as it is (``--frozen``), as
     ``pixi run --frozen`` would install it, so the lock is never rewritten."""
     return [pixi_program(), "install", "--frozen", "--manifest-path", str(pixi_manifest()), "-e", env]
+
+
+def to_install(models) -> Dict[str, List[str]]:
+    """The pixi environments ``models`` (model configs) run in that are not
+    installed yet, each with the names of the models that need it:
+    ``{env: [name, ...]}``, empty when there are none.
+
+    What a launch would install before submitting their jobs, or refuse
+    (``jobs.launch._install_env_first``), found before anything starts, so
+    the person can be asked first: the Models tab's Submit
+    (``dashboard.services.launch.update_run_models``) and the commands that
+    serve models (``cli.common.agree_to_install``). A path or an alias is
+    the user's own environment, with nothing to install.
+    """
+    missing: Dict[str, List[str]] = {}
+    for model in models:
+        env = model_env(model)
+        if env and _directory(env) is None and not is_installed(env):
+            missing.setdefault(env, []).append(getattr(model, "name", None) or type(model).__name__)
+    return missing
 
 
 def pixi_env_of(argv: List[str]) -> Optional[str]:

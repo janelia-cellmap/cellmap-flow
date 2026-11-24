@@ -96,9 +96,9 @@ export interface VolumeOptions { id?: string; now?: Date }
  * finest not coarser than it), as the server's raw_level opens it; with no
  * voxel size, the level the viewer shows at a screen pixel of `pixelNm`
  * (shownVoxelSize; null, the finest). Its model_name and model_id are null:
- * it is not trained on (trainingRefusal), and Which model to start from's
- * Use this model carries its paint onto a model's grid. Refused with the
- * Python's sentence for a voxel size it cannot plan at. */
+ * it is on no model's grid, so Which model to start from's Use this model,
+ * or training's submit for the model picked, carries its paint onto one.
+ * Refused with the Python's sentence for a voxel size it cannot plan at. */
 export async function planPaintVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, voxelSize: number[] | null, chain: Chain, options: VolumeOptions & { pixelNm?: number | null } = {}): Promise<PaintVolume> {
   const size = voxelSize ?? (await shownVoxelSize(infer, dataset, options.pixelNm ?? null));
   const raw = dataset.levels[chooseRawLevel(dataset.levels, size)];
@@ -136,14 +136,6 @@ export function viewPixelNm(viewerUrl: string | null): number | null {
   const scales = pointerNm(Object.keys(state?.dimensions ?? {}).map(() => 1), state?.dimensions);
   if (typeof zoom !== "number" || !Number.isFinite(zoom) || zoom <= 0 || !scales) return null;
   return zoom * Math.min(...scales);
-}
-
-/** Why `volume` is not trained on, or null when it can be: the portable
- * Python's training_refusal (a volume painted before any model), the
- * sentence the server's submit refuses it with. */
-export async function trainingRefusal(infer: Pick<Inference, "python">, volume: PaintVolume): Promise<string | null> {
-  const answer = await infer.python<{ error?: string }>(`${VOLUME_CALLS}:training_refusal`, { volume: { model_name: volume.model_name } });
-  return answer.error ?? null;
 }
 
 /** A raw level as the plans take it: its shape, voxel size and voxel-0 lower corner (the engine's origin is the centre). */

@@ -6,9 +6,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { Chain, DatasetInfo, ModelEntry, ModelInfo, PaintVolume, ServedModel } from "../../src/contracts";
+import { pastedPath } from "../../src/shared/pasted";
 import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
-  DEFAULT_LAYOUT, GPU_MEMORY_LIMIT, initialState, PAINT_TOOL_BINDINGS, paintLayer, paintLayerUrl, predictionLayer, RAW_LAYER_NAME, rawLayer,
+  DEFAULT_LAYOUT, GPU_MEMORY_LIMIT, initialState, PAINT_TOOL_BINDINGS, paintLayer, paintLayerUrl, predictionLayer, RAW_LAYER_NAME, rawChannelShown, rawLayer,
   rawSource,
 } from "../../src/viewer/layers";
 
@@ -86,9 +87,31 @@ describe("rawSource (raw.neuroglancer_source)", () => {
     const n5 = "https://host/volume/em";
     expect(rawSource(n5)).toBe(n5);
   });
-  it("takes a gs:// path with no container as a precomputed volume", () => {
-    expect(rawSource("gs://bucket/volume")).toBe("precomputed://gs://bucket/volume");
+  it("gives a gs:// path with no container bare too, as an N5 or a precomputed volume may be there", () => {
+    expect(rawSource("gs://bucket/volume")).toBe("gs://bucket/volume");
     expect(rawSource("gs://bucket/x.zarr/em")).toBe("zarr://gs://bucket/x.zarr/em");
+  });
+  it("comes back, read as a pasted dataset is, as the dataset it was made for", () => {
+    // A page reloaded on its raw layer takes the dataset from that layer's
+    // source (state.ts datasetUrlFromState): precomputed:// put in front of
+    // a suffixless N5 at gs:// made the tab's dataset one the engine could not open.
+    for (const typed of ["gs://flyem_cns_z0720_07m_dvidcoords_n5", "gs://bucket/root/|n5:", "n5://gs://bucket/root", "https://host/volume/em",
+      DATASET, "gs://bucket/x.zarr|zarr2:em", "precomputed://gs://flyem-male-cns/em/em-clahe-jpeg", "gs://flyem-male-cns/em/em-clahe-jpeg/|neuroglancer-precomputed:"]) {
+      const dataset = pastedPath(typed);
+      expect(pastedPath(rawSource(dataset))).toBe(dataset);
+    }
+  });
+});
+
+describe("rawChannelShown", () => {
+  it("shows a channel as the engine says the volume holds them, whatever the URL says of its format", () => {
+    const raw = { type: "image", name: "data", source: "x" };
+    // A precomputed volume of three at a bare gs:// path: its channels are its own (c^).
+    const precomputed = { ...info, url: "gs://bucket/volume", channels: 3, channelAxis: null };
+    expect(rawChannelShown(raw, precomputed, 2)).toMatchObject({ shaderControls: { normalized: { channel: [2] } } });
+    expect(rawChannelShown(raw, precomputed, 2).localPosition).toBeUndefined();
+    // An OME-Zarr's are on its c axis, a local dimension.
+    expect(rawChannelShown(raw, { ...info, channels: 3, channelAxis: "c" }, 2).localPosition).toBeDefined();
   });
 });
 

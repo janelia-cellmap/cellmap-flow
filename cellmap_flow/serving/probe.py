@@ -20,9 +20,10 @@ from typing import Optional
 # The activation classes and their reading of a range are written once in
 # cellmap_flow.portable, where the browser's Python (a seed's probability)
 # reads them too: UNIT [0, 1], a sigmoid or softmax already applied;
+# BYTE_UNIT [0, 255], a probability x 255 a uint8 export declares;
 # SIGNED_UNIT [-1, 1], a tanh; UNBOUNDED, no output activation (logits,
 # distances, affinities...).
-from cellmap_flow.portable.label_it import SIGNED_UNIT, UNBOUNDED, UNIT, classify_output_range  # noqa: F401
+from cellmap_flow.portable.label_it import BYTE_UNIT, SIGNED_UNIT, UNBOUNDED, UNIT, classify_output_range  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,15 @@ NEIGHBORHOOD_OFFSETS = [
 
 # What each activation class means as a value range. UNBOUNDED stays None:
 # logits and distances share it and imply different parameters.
-_CLASS_RANGE = {UNIT: (0.0, 1.0), SIGNED_UNIT: (-1.0, 1.0)}
+_CLASS_RANGE = {UNIT: (0.0, 1.0), BYTE_UNIT: (0.0, 255.0), SIGNED_UNIT: (-1.0, 1.0)}
 
 
-def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None) -> dict:
+# The steps that give every channel they are given, one for one.
+_KEEPS_CHANNELS = ("SigmoidPostprocessor", "DefaultPostprocessor", "ThresholdPostprocessor")
+
+
+def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None, offsets=None,
+                               class_ids=None) -> dict:
     """Parameter values for a suggested chain, from the range flowing into each step.
 
     The default parameters assume each step sees the range its most common
@@ -93,7 +99,14 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
 
     ``bias`` is the AffinityPostprocessor's: the cut-off the ranking fitted
     to the paint for the model (its row's threshold, a probability), or
-    None for the midpoint, 0.5.
+    None for the midpoint, 0.5. ``offsets`` are its neighborhood when the
+    model declares them (``ModelConfig.declared_affinity_offsets``), else
+    NEIGHBORHOOD_OFFSETS cut to its channels. ``class_ids`` are the
+    ArgmaxPostprocessor's ``ids``, the id each class channel has in CellMap's
+    annotations when the model declares them
+    (``ModelConfig.declared_class_ids``), given when the chain's
+    ArgmaxPostprocessor is reached by all ``out_channels`` of them, one id
+    each; else it numbers the channels from 1.
 
     Returns ``{postprocessor_name: {param: value}}``, containing only the steps
     whose defaults are wrong for this chain, and the AffinityPostprocessor's
@@ -101,6 +114,9 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
     """
     params = {}
     rng = _CLASS_RANGE.get(output_class)  # None while the range is unknown
+    # The channels reaching a step: the model's until a step picks some of
+    # them or makes another count of them, which is not known here.
+    channels = int(out_channels) if out_channels else None
 
     for name in chain:
         if name == "SigmoidPostprocessor":
@@ -128,11 +144,28 @@ def suggest_postprocess_params(chain, output_class, out_channels=None, bias=None
             # ranking fitted, where its score called a painted pair joined,
             # so the objects are cut where the score read the model.
             affinity = {"bias": 0.5 if bias is None else float(bias)}
-            if out_channels:
-                offsets = NEIGHBORHOOD_OFFSETS[: int(out_channels)]
-                affinity["neighborhood"] = str(offsets)
+            if offsets:
+                affinity["neighborhood"] = str([list(offset) for offset in offsets])
+            elif out_channels:
+                affinity["neighborhood"] = str(NEIGHBORHOOD_OFFSETS[: int(out_channels)])
             params[name] = affinity
             rng = None  # labels from here on
+        elif name == "ArgmaxPostprocessor":
+            # Background where a voxel's likeliest class is below a
+            # probability of 0.5, in the output's units (127.5 of a
+            # probability x 255); its best class's everywhere while the range
+            # is not known.
+            argmax = {} if rng is None else {"threshold": (rng[0] + rng[1]) / 2.0}
+            # Each class's id as its model declares it, as the form writes
+            # ids ("50,51,37"), when there is one for each channel it is
+            # given: an ArgmaxPostprocessor refuses any other count.
+            if class_ids and len(class_ids) == channels:
+                argmax["ids"] = ",".join(str(int(label)) for label in class_ids)
+            if argmax:
+                params[name] = argmax
+            rng = None  # labels from here on
+        if name not in _KEEPS_CHANNELS:
+            channels = None
 
     return params
 
@@ -201,6 +234,8 @@ def activation_evidence(output_class_from=None, output_op=None, output_range=Non
     either."""
     if output_class_from == "graph" and output_op:
         return f"its network ends in {'an' if output_op[0] in 'AEIOU' else 'a'} {output_op}"
+    if output_class_from == "declared":
+        return "its metadata declares it"
     if output_range is None or None in tuple(output_range):
         return ""
     lo, hi = (float(v) for v in output_range)
@@ -217,6 +252,8 @@ def review_postprocess(
     channels_names=None,
     evidence="",
     threshold=None,
+    affinity_offsets=None,
+    class_ids=None,
 ) -> dict:
     """Compare a model's output class against the configured postprocessors.
 
@@ -239,6 +276,10 @@ def review_postprocess(
     AffinityPostprocessor it is a "warn": the watershed then has no
     affinities to join objects by.
 
+    A DefaultPostprocessor on a probability x 255 (a uint8 export's) is a
+    "warn" too: it clips the 0-255 to 0-1. The chain is suggested back
+    without it, or as the argmax of several class channels.
+
     ``evidence`` (``activation_evidence``'s) is what says the class, which
     each message gives. ``output_class`` None, when neither the network nor
     its output on noise says what the output is, is "unknown", with what
@@ -249,6 +290,14 @@ def review_postprocess(
     affinity chain suggested cuts its objects there (the watershed's bias),
     where the score called a painted pair joined, and says so; at 0.5
     without one.
+
+    ``affinity_offsets``, the ones the model declares
+    (``ModelConfig.declared_affinity_offsets``), make it an affinity model
+    whatever its channels are named, and are the watershed's neighborhood.
+
+    ``class_ids``, the ones the model declares
+    (``ModelConfig.declared_class_ids``), are the ids a suggested
+    ArgmaxPostprocessor gives its classes (suggest_postprocess_params).
     """
     names = list(postprocess_names or [])
     said = f" ({evidence})" if evidence else ""
@@ -264,7 +313,8 @@ def review_postprocess(
             "level": level,
             "message": message,
             "suggest": suggest,
-            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold),
+            "params": suggest_postprocess_params(suggest, output_class, out_channels, threshold, affinity_offsets,
+                                                 class_ids),
         }
 
     if output_class is None:
@@ -277,11 +327,11 @@ def review_postprocess(
             [],
         )
 
-    if looks_like_affinities(out_channels, model_name, channels_names):
+    if affinity_offsets or looks_like_affinities(out_channels, model_name, channels_names):
         if "AffinityPostprocessor" in names:
             # Whether the affinities reach it in [0, 1], or the 0-255 of a
             # DefaultPostprocessor.
-            scaled = has_default or has_sigmoid or output_class == UNIT
+            scaled = has_default or has_sigmoid or output_class in (UNIT, BYTE_UNIT)
             # The watershed joins neighbours by how far their affinity is
             # above its bias: a threshold ahead of it leaves 0s and 1s, which
             # it reads as DefaultPostprocessor's 0-255 and divides by 255, and
@@ -322,7 +372,7 @@ def review_postprocess(
         # Unless the activation needs setting first, which the checks below
         # suggest or warn of: the sigmoid logits with nothing set need, a
         # second one taken away.
-        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, SIGNED_UNIT) and has_sigmoid)):
+        if not ((output_class == UNBOUNDED and not names) or (output_class in (UNIT, BYTE_UNIT, SIGNED_UNIT) and has_sigmoid)):
             return verdict(
                 "optional",
                 (
@@ -332,20 +382,59 @@ def review_postprocess(
                 suggest_affinity_chain(output_class),
             )
 
-    if output_class == UNIT:
+    if output_class in (UNIT, BYTE_UNIT):
+        # A probability: in [0, 1], or x 255 in a uint8 export's whole numbers.
+        what = "in [0, 1], a sigmoid's" if output_class == UNIT else "a probability x 255, in [0, 255]"
         if has_sigmoid:
             return verdict(
                 "warn",
                 (
-                    f"This model's output is already in [0, 1], a sigmoid's{said}. "
+                    f"This model's output is already {what}{said}. "
                     "SigmoidPostprocessor would apply a second one, flattening "
                     "the contrast."
                 ),
                 [n for n in names if n != "SigmoidPostprocessor"],
             )
+        several = bool(out_channels) and int(out_channels) > 1
+        # DefaultPostprocessor clips to [-1, 1], or to the [0, 1] an affinity
+        # chain's is set to, and scales that onto 0-255: a probability x 255
+        # is 0-255 already, and comes out of it 0 or the top value nearly
+        # everywhere. The review is given the steps' names alone, so any
+        # DefaultPostprocessor here is taken for one; an affinity model's,
+        # set to clip 0-255 ahead of its watershed, was answered above. The
+        # chain is suggested back without it, or as the argmax of several
+        # class channels when the chain has none.
+        if output_class == BYTE_UNIT and has_default:
+            rest = [n for n in names if n != "DefaultPostprocessor"]
+            classes = several and "ArgmaxPostprocessor" not in names
+            return verdict(
+                "warn",
+                (
+                    f"This model's output is already {what}{said}. DefaultPostprocessor clips it "
+                    "to 0-1, so nearly every voxel shows the same: take it out"
+                    + (f", and ArgmaxPostprocessor labels each voxel with the likeliest of its {out_channels} "
+                       "classes, background where none reaches 0.5." if classes else ".")
+                ),
+                ["ArgmaxPostprocessor"] if classes else rest,
+            )
+        # A uint8 export's channels, when there are several, are classes,
+        # each a probability x 255 (cellmap_models writes a semantic model's
+        # so: a class's summed softmax, model_export.mia_model), which
+        # exclude each other: their segmentation is each voxel's likeliest
+        # class, background where none reaches 0.5. Offered as the affinity
+        # chain is: the probabilities show right without it.
+        if output_class == BYTE_UNIT and not names and several:
+            return verdict(
+                "optional",
+                (
+                    f"Its {out_channels} channels are classes, each {what}{said}: ArgmaxPostprocessor "
+                    "labels each voxel with its likeliest class, background where none reaches 0.5."
+                ),
+                ["ArgmaxPostprocessor"],
+            )
         return verdict(
             "ok",
-            f"Model output is already in [0, 1]{said}; no activation needed.",
+            f"Model output is already {what}{said}; no activation needed.",
             [],
         )
 

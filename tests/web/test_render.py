@@ -64,7 +64,7 @@ def test_the_page_renders_in_both_modes(page, dashboard):
 
 def test_the_page_data_island_parses(page):
     # mode is what the finetune tab's scripts ask (lib/page-data isBrowserMode).
-    assert _page_data(page) == {"default_hf_repos": [], "default_bioimage_models": [], "resample": False, "mode": "browser"}
+    assert _page_data(page) == {"default_hf_repos": [], "hf_orgs": ["cellmap"], "default_bioimage_models": [], "resample": False, "mode": "browser"}
 
 
 def _rows(html, row_class, checkbox_class):

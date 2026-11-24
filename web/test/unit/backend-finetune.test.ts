@@ -721,11 +721,11 @@ describe.skipIf(!python)("downloads and deletion", () => {
 });
 
 describe.skipIf(!python)("a volume painted before any model", () => {
-  it("is made on the raw's grid at the size asked, ranked and carried by Use this model, and not trained on", async () => {
+  it("is made on the raw's grid at the size asked, ranked and carried by Use this model", async () => {
     // The raw at 8 and 16 nm, and no model served yet.
     const levels = [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [4, 4, 4] }, { shape: [500, 500, 500], voxel: [16, 16, 16], origin: [8, 8, 8] }];
     const ctx = fakeContext({ dataset: { ...DATASET, levels } });
-    const { run, calls } = fakeRun();
+    const { run } = fakeRun();
     const router = new Router();
     finetuneRoutes(router, { run });
     rankRoutes(router);
@@ -756,12 +756,6 @@ describe.skipIf(!python)("a volume painted before any model", () => {
     await serve(ctx, nuc);
     ctx.infer.outputAt = (_view, _c, z, y, x) => (inside(z, y, x) ? 4 : -4);
 
-    // Training on it is refused, saying where to go.
-    const refused = await handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name })));
-    expect(refused.status).toBe(400);
-    expect(body(refused).paint_first).toBe(true);
-    expect(calls).toEqual([]);
-
     // The rank: no model is the volume's; the served one is scored on it, then used.
     const listed = body(await handle(request("GET", "/api/finetune/rank/candidates")));
     expect(listed.volume).toMatchObject({ id: volume.id, model_name: null });
@@ -770,7 +764,32 @@ describe.skipIf(!python)("a volume painted before any model", () => {
     const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: nuc.name })));
     expect(used).toMatchObject({ success: true, from_volume: volume.id, painted_voxels: 20 ** 3, source_voxels: 20 ** 3, conflicts: 0 });
     expect(await readVolume(ctx.paint, ctx.session.state.paintVolume!)).toMatchObject({ model_name: nuc.name, model_id: nuc.id });
-    expect(body(await handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name })))).paint_first).toBeUndefined();
+    // On the model's grid now: trained as it is.
+    const trained = body(await handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name }))));
+    expect(trained).toMatchObject({ success: true });
+    expect(trained.carried).toBeUndefined();
+  });
+
+  it("is carried onto a running model's grid by Start Finetuning, with no ranking first", async () => {
+    // Painted with no model loaded, then a model started: submit refused the
+    // volume until the models were ranked and one was used.
+    const levels = [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [4, 4, 4] }, { shape: [500, 500, 500], voxel: [16, 16, 16], origin: [8, 8, 8] }];
+    const ctx = fakeContext({ dataset: { ...DATASET, levels } });
+    const { run, calls } = fakeRun();
+    const h = harness(ctx, { run });
+    const from = body(await h.handle(request("POST", "/api/finetune/create-volume", { voxel_size: [16, 16, 16] }))).volume_id as string;
+    await writeBox(ctx.paint, (await readVolume(ctx.paint, from))!, [0, 0, 0], [10, 10, 10], new Uint8Array(1000).map((_, i) => (i < 500 ? 2 : 1)));
+    const nuc = entry("setup_60", "nuc", ["nuc"], 16);
+    await serve(ctx, nuc);
+
+    const submitted = body(await h.handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name }))));
+    expect(submitted).toMatchObject({ success: true, carried: { from_model: null, from_volume: from, chunks: 1 } });
+    expect(submitted.note).toEqual(expect.any(String));
+    const to = submitted.carried.volume_id as string;
+    expect(await readVolume(ctx.paint, to)).toMatchObject({ model_name: nuc.name, model_id: nuc.id });
+    expect(ctx.session.state.paintVolume).toBe(to);
+    await h.jobs.get(submitted.job_id)!.settled();
+    expect(calls[0].volume.id).toBe(to);
   });
 });
 

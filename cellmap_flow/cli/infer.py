@@ -22,8 +22,7 @@ from cellmap_flow.models import registry
 from cellmap_flow.serving.launch import launch, remembered
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.config.yaml import ConfigError, resolve_data_path
-from cellmap_flow.portable.pasted import pasted_path
-from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice, resample_option
+from cellmap_flow.cli.common import ModelTypeGroup, agree_to_install, dataset_path, deprecation_notice, resample_option
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +84,9 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
     """A click command for one model type: its constructor arguments as
     options, built into a model entry and served through ``launch``."""
     def command_func(**kwargs):
-        # A path copied from Neuroglancer is read without the format it names.
-        data_path = pasted_path(kwargs.pop("data_path"))
+        # A path copied from Neuroglancer is read without the format it names,
+        # and one that is not there stops here.
+        data_path = dataset_path(kwargs.pop("data_path"))
         queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
@@ -110,6 +110,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             check_server(make_server(data_path, model_config, resample=resample))
             click.echo("Server check passed")
             return
+        agree_to_install([model_config])
         # Ctrl+C or SIGTERM from here on kills the job this starts.
         install_cleanup_handlers()
         try:

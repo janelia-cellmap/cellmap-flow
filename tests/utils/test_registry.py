@@ -77,7 +77,7 @@ def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
     assert isinstance(get_session().models_config[-1], TfliteModelConfig)
 
 
-def test_one_entry_gives_one_config_from_the_cli_a_yaml_and_the_form(dashboard, monkeypatch):
+def test_one_entry_gives_one_config_from_the_cli_a_yaml_and_the_form(dashboard, monkeypatch, tmp_path):
     """The same model described as `infer` options (strings), as a YAML entry
     (numbers and lists) and as the form posts it (strings, blanks for the
     rest) is the same config: ints from one and floats from another once
@@ -95,7 +95,7 @@ def test_one_entry_gives_one_config_from_the_cli_a_yaml_and_the_form(dashboard, 
 
     result = CliRunner().invoke(cli, ["infer", "fly", "--checkpoint-path", "/c.ts", "--channels", "mito,er",
                                       "--input-voxel-size", "5.24,4,4", "--input-size", "20", "--output-size", "10",
-                                      "--name", "m", "-d", "/data"])
+                                      "--name", "m", "-d", str(tmp_path)])
     assert result.exit_code == 0, result.output + repr(result.exception)
     from_yaml = registry.build_model({"type": "fly", "checkpoint": "/c.ts", "classes": ["mito", "er"],
                                       "resolution": [5.24, 4, 4], "input_size": 20, "output_size": 10}, "m")

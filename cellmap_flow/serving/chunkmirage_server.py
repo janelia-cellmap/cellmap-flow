@@ -54,6 +54,7 @@ and pipelines to what the server holds.
 import itertools
 import logging
 import os
+import re
 import secrets
 import socket
 import threading
@@ -106,8 +107,9 @@ PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
 # centred on chunks, (6 + 1)^2 x 2 = 98 on their corners, and Neuroglancer's
 # default layout shows three slices. Blocks of 12 uint8 channels of 256^3 are
 # 200 MB each: 103 GB for 512. A GPU queue's slot comes with 40 GB (15 GB on
-# the L4 and T4 queues) and a server's job has 4, so the cache is held to
-# OVERLAP_CACHE_SHARE of the memory the process may use (memory_limit_bytes).
+# the RTX 6000, L4 and T4 queues: 61 GB a job) and a server's job has 4, so
+# the cache is held to OVERLAP_CACHE_SHARE of the memory the process may use
+# (memory_limit_bytes), which is LSF's grant where the cgroup states none.
 OVERLAP_BLOCKS_CACHED = 512
 OVERLAP_CACHE_SHARE = 0.5
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
@@ -129,10 +131,31 @@ def _env_count(name, default):
         raise ValueError(f"{name} must be a number, got {value!r}") from None
 
 
-def memory_limit_bytes():
-    """The memory this process may use: its cgroup's limit (an LSF job's
-    memory, under cgroup v2 or v1), else the machine's; None when neither can
-    be read."""
+# LSF's own statement of a job's memory, in MB: ``rusage[mem=61440.00,...]``
+# in the resource requirement it ran the job under (else the one submitted).
+LSF_RESOURCE_ENVS = ("LSB_EFFECTIVE_RSRCREQ", "LSB_SUB_RES_REQ")
+_LSF_MEMORY = re.compile(r"rusage\[[^\]]*?\bmem=([0-9.]+)")
+
+
+def lsf_memory_limit_bytes():
+    """The memory LSF gave this job (its ``rusage[mem=...]``, in MB), or None
+    outside a job or when the job states none.
+
+    Janelia's LSF does not put that limit in the job's cgroup (``memory.max``
+    is ``max`` all the way up): it watches the job's memory itself and kills
+    the job past it (TERM_MEMLIMIT). A server that read only the cgroup took
+    the node's 2 TB for its own, sized a 103 GB cache in a 61 GB job, and was
+    killed 50 minutes in."""
+    for name in LSF_RESOURCE_ENVS:
+        found = _LSF_MEMORY.search(os.environ.get(name, ""))
+        if found:
+            return int(float(found.group(1)) * (1 << 20))
+    return None
+
+
+def _cgroup_memory_limit_bytes():
+    """This process's cgroup's memory limit (v2 or v1), or None when it has
+    none of its own or it cannot be read."""
     try:
         with open("/proc/self/cgroup") as f:
             lines = f.read().splitlines()
@@ -154,6 +177,16 @@ def memory_limit_bytes():
         # "max" (v2) or a huge number (v1) is no limit of its own.
         if value.isdigit() and int(value) < 1 << 60:
             return int(value)
+    return None
+
+
+def memory_limit_bytes():
+    """The memory this process may use: the smaller of what LSF gave its job
+    (lsf_memory_limit_bytes) and its cgroup's limit, else the machine's; None
+    when none can be read."""
+    limits = [limit for limit in (lsf_memory_limit_bytes(), _cgroup_memory_limit_bytes()) if limit]
+    if limits:
+        return min(limits)
     try:
         return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
     except (ValueError, OSError, AttributeError):
@@ -275,14 +308,19 @@ class ChunkmirageServer:
         DevicePostprocessOp.slots = device_slots.n
         self.geometry = model_config.geometry
         self.has_channel = self.geometry.has_channel_axis
-        # chunkmirage ignores an op's block_phase and blend before 0.1.0a7,
-        # which has them: serving a model declaring others on an older one
-        # would quietly lay and weight its blocks otherwise.
-        if (self.geometry.block_phase, self.geometry.blend) != ("centred", "tent") and not hasattr(Op, "block_phase"):
+        # cellmap-flow requires chunkmirage 0.1.0a7, the first whose ops have a
+        # block_phase and a blend, but an environment made before that and not
+        # installed again still has an older one, which ignores both: it would
+        # quietly lay the model's blocks centred and weight them by the tent.
+        if (self.geometry.block_phase, self.geometry.blend) != ("centred", "tent") and not (
+            hasattr(Op, "block_phase") and hasattr(Op, "blend")
+        ):
             raise ValueError(
                 f"{getattr(model_config, 'name', None) or 'The model'} declares block_phase "
                 f"{self.geometry.block_phase!r} and blend {self.geometry.blend!r}, which need chunkmirage 0.1.0a7 "
-                f"or later; this one ({_chunkmirage_version()}) lays every model's blocks centred, with the tent"
+                f"or later; the one installed here ({_chunkmirage_version()}) lays every model's blocks centred, "
+                f"with the tent. Update this environment's chunkmirage (pixi install -e <its environment>, or "
+                f"pip install -U chunkmirage)."
             )
         declared = self.geometry.output_dtype
         self._stage_dtype = np.dtype(declared) if np.dtype(declared).kind in "iub" else np.dtype(np.float32)

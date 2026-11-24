@@ -140,7 +140,7 @@ def index():
 
     # The Hugging Face and zoo rows to tick: the loaded models', running or starting.
     from cellmap_flow.dashboard.services.launch import configs_by_name, loaded_models, served_at_run_voxel_size
-    from cellmap_flow.models.hf_catalog import folder_facts
+    from cellmap_flow.models.hf_catalog import HUGGING_FACE_ORGS, folder_facts
 
     loaded, configs = loaded_models(), configs_by_name()
     default_hf_repos = [model["hf_id"] for model in loaded if model["hf_id"]]
@@ -170,6 +170,8 @@ def index():
         # for its Run at (nm): {name: [z, y, x]}.
         run_voxel_sizes={mc.name: list(mc.run_voxel_size) for mc in served_at_run_voxel_size()},
         default_hf_repos=default_hf_repos,
+        # The organizations the Hugging Face section lists, its group's title.
+        hf_orgs=list(HUGGING_FACE_ORGS),
         default_bioimage_models=default_bioimage_models,
         cellpose_panel=cellpose_panel,
         resample=session.resample,

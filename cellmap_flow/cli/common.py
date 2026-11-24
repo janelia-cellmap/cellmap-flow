@@ -7,9 +7,14 @@
 - ``deprecated``: a command under the name it had before 0.3.0, which says
   what replaces it and then runs it.
 - ``resample_option``: ``--resample``, of ``infer <type>`` and ``serve``.
+- ``dataset_path``: the dataset a person gave as ``-d``, checked.
+- ``agree_to_install``: whether to install the pixi environments the models
+  to serve need, asked at a terminal.
 """
 
 import logging
+import os
+import sys
 
 import click
 
@@ -66,6 +71,29 @@ def resample_option():
     )
 
 
+def dataset_path(text: str) -> str:
+    """The dataset ``text``, given as ``-d`` to ``view``, ``infer <type>`` or
+    ``add --run``, as cellmap-flow reads it (``portable.pasted.pasted_path``:
+    a path copied from Neuroglancer without the format it names).
+
+    A local path that is not there is a usage error that says so, before
+    anything starts: otherwise it surfaces as worldarray's list of the
+    metadata files it did not find, at the bottom of a traceback, which reads
+    as if the data were there but malformed. A URL is left to the reader.
+    """
+    from cellmap_flow.io.paths import normalize_path
+    from cellmap_flow.portable.pasted import pasted_path
+
+    path = pasted_path(text)
+    if "://" not in path and not os.path.exists(normalize_path(path)):
+        raise click.BadParameter(
+            f"{path} does not exist. Give a zarr or N5 directory, or an http(s), s3 or gs URL "
+            "(https://janelia-cellmap.github.io/cellmap-flow/data_paths.html).",
+            param_hint="'-d'",
+        )
+    return path
+
+
 class ModelTypeGroup(click.Group):
     """A group with a subcommand for each model type, besides its own.
 
@@ -111,3 +139,46 @@ def deprecated(command: click.Command, old_name: str, old: str, new: str) -> cli
         hidden=True,
         context_settings=command.context_settings,
     )
+
+
+def _can_ask() -> bool:
+    """Whether a question on the terminal can be answered: stdin is one, and
+    this process is in its foreground. A command put in the background from
+    an interactive shell (``cellmap_flow yaml cfg.yaml &``) still has the
+    terminal as its stdin, and reading from it stops the process (SIGTTIN)."""
+    try:
+        if not sys.stdin.isatty():
+            return False
+        if not hasattr(os, "tcgetpgrp"):  # Windows has no process groups to ask about
+            return True
+        return os.tcgetpgrp(sys.stdin.fileno()) == os.getpgrp()
+    except (OSError, ValueError):
+        return False
+
+
+def agree_to_install(models) -> None:
+    """Settle, before ``models`` (model configs) are launched, whether to
+    install the pixi environments they run in that are not installed yet
+    (``envs.to_install``), as the dashboard's Models tab asks before its
+    Submit: ``yaml``, ``infer <type>`` and ``add --run``.
+
+    At a terminal it asks, once for each; declined, that model's launch is
+    refused, saying how to install it. With no terminal to ask (a
+    Fileglancer app's run of a YAML, or a command run in the background of
+    a shell: ``_can_ask``), the environment is installed: the run asked for
+    these models, and nobody could answer. Either way it is
+    installed before the model's job is submitted, never in it
+    (``jobs.launch._install_env_first``).
+    """
+    from cellmap_flow.jobs.launch import allow_install
+    from cellmap_flow.models import envs
+
+    for env, names in envs.to_install(models).items():
+        what = (f"{', '.join(names)} {'runs' if len(names) == 1 else 'run'} in the pixi environment "
+                f"{env!r}, which is not installed yet")
+        if _can_ask():
+            if not click.confirm(f"{what}. Install it now (several minutes, once)?", default=True, err=True):
+                continue
+        else:
+            click.echo(f"{what}: installing it before its job (several minutes, once)", err=True)
+        allow_install([env])

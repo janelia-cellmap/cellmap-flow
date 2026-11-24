@@ -39,7 +39,7 @@ describe("listFacts", () => {
     const entry = entryFixture("setup_53_2d");
     expect(listFacts(entry)).toEqual({
       formats: ["ONNX"], finetune_modes: ["head", "full"], size_mb: 7.75, browser_copy: entry.id,
-      variants: [{ variant: "fp32", file_mb: 7.75 }, { variant: "fp16", file_mb: 3.9 }], params: 1927907,
+      variants: [{ variant: "fp32", file_mb: 7.75 }, { variant: "fp16", file_mb: 3.9 }], params: 1927907, last_modified: null,
     });
     // A model finetuned in this browser is one file, the one it trained.
     const finetuned = finetunedEntry(entryFixture("setup_54"), "mito_aff_setup54_16nm-ft1", 42.9);

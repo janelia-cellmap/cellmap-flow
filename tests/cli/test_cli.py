@@ -86,6 +86,21 @@ def test_app_opens_the_dashboard_alone_under_either_name(name, monkeypatch):
     assert "no data and no model" in CliRunner().invoke(cli, [name, "--help"]).output
 
 
+@pytest.mark.parametrize("command", [["view"], PER_TYPE[:-2], ["add", SCRIPT, "--run"]])
+def test_a_dataset_that_is_not_there_is_a_usage_error_before_anything_starts(command, monkeypatch, tmp_path):
+    """`-d data_path` pasted from an example stops with the path named, not
+    a traceback out of worldarray; no viewer, no job."""
+    viewers = []
+    monkeypatch.setattr("cellmap_flow.viewer.bootstrap.new_viewer", lambda *a, **k: viewers.append(a))
+    missing = str(tmp_path / "data_path")
+
+    result = CliRunner().invoke(cli, [*command, "-d", missing])
+
+    assert result.exit_code == 2, result.output
+    assert missing in result.output
+    assert viewers == [] and started_jobs() == []
+
+
 def test_an_old_console_script_says_what_replaces_it_and_runs_it(capsys):
     """An environment installed before 0.3.0 still has `cellmap_flow_yaml`
     and the other console scripts (cli/aliases.py) until the release after."""

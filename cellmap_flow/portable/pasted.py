@@ -16,7 +16,7 @@ path or a URL (``gs://``, ``s3://``, ``https://``, ``file://``) or a format
 cellmap-flow does not read (``graphene://``), is left as it is.
 
 Called where a person gives a dataset: the CLIs' ``-d`` (``view``,
-``infer <type>``, ``add --run``), a YAML's ``data_path`` (``config/yaml.py``
+``infer <type>``, ``add --run``, through ``cli/common.py`` ``dataset_path``), a YAML's ``data_path`` (``config/yaml.py``
 ``load_config``, for ``cellmap_flow yaml`` and blockwise tasks), and the
 dashboard's dataset field and box tool (``dashboard/requests.py`` SetData
 and BbxGenerator). The browser's twin, ``web/src/shared/pasted.ts``

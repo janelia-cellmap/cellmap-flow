@@ -9,7 +9,7 @@
 // stitch_threshold}.
 import { h, hint } from "../../lib/dom.js";
 import { pageData } from "../../lib/page-data.js";
-import { tag, untickBox } from "../../shared/model-list.js";
+import { descriptionLine, tag, untickBox } from "../../shared/model-list.js";
 
 const OUTPUTS = [
   ["flows", "Flows + probability", "Three channels: flow_y and flow_x (the flows towards each cell's centre) and cell (the cell probability, 0 to 1). Not masks: for those, add the CellposeMasksPostprocessor (it makes masks of these on the server, with thresholds you can change live) or choose Masks. The layer shows the three together: each cell coloured by its flows' direction, dimmed by the probability (untick the shader's flows box for the probability alone)."],
@@ -89,7 +89,7 @@ function row(model, settings, extra) {
     h("label", { class: "form-check-label", for: id, title: model.model }, model.label),
     tag(model.model, "Cellpose's name for it (pretrained_model)"),
     another,
-    h("div", { class: "zoo-desc", title: model.description }, model.description),
+    descriptionLine(model.description),
     settingsRow, note);
 
   another.addEventListener("click", () => {

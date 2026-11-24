@@ -62,12 +62,17 @@ With [pixi](https://pixi.sh) 0.68 or later, on Linux (x86-64) or an Apple-silico
 git clone https://github.com/janelia-cellmap/cellmap-flow.git
 cd cellmap-flow
 pixi install
-pixi run cellmap_flow view -d data_path
+pixi run cellmap_flow view -d https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8
 ```
+
+That opens OpenOrganelle's mouse-liver volume, which needs no login; give
+`-d` your own zarr, N5 or precomputed volume, a path or an `s3://`, `gs://` or
+`https://` URL (see [data paths](https://janelia-cellmap.github.io/cellmap-flow/data_paths.html)).
 
 Model families whose dependencies clash (Cellpose, the BioImage Model Zoo,
 fly_organelles) run in pixi environments of their own, installed the first time
-a model needs one. Or `pip install cellmap-flow`, with the extras `[dacapo]`,
+a model needs one: Submit asks first, as the install takes a few minutes. Or
+`pip install cellmap-flow`, with the extras `[dacapo]`,
 `[bioimageio]` and `[finetune]`. See
 [Installation](https://janelia-cellmap.github.io/cellmap-flow/install.html) for
 Macs, pip and installing from GitHub, and
@@ -76,10 +81,10 @@ Macs, pip and installing from GitHub, and
 ## Usage
 
 ```bash
-cellmap_flow view -d data_path
+cellmap_flow view -d /path/to/data.zarr
 cellmap_flow yaml config.yaml
 cellmap_flow add conscientious-dromedary
-cellmap_flow add cpsam_v2 -v 64 --run -d data_path
+cellmap_flow add cpsam_v2 -v 64 --run -d /path/to/data.zarr
 cellmap_flow blockwise blockwise.yaml
 ```
 

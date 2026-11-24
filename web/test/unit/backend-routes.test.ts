@@ -171,6 +171,80 @@ describe("POST /api/models", () => {
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: null, postprocess_fitted: null });
   }, 120_000);  // Pyodide and numpy load the first time, a few seconds
 
+  it("leaves a chain the user Applied with no postprocessing as it is when another model starts", async (t) => {
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    // The second model's manifest does not say what its output is.
+    ctx.catalog.entries[1].manifest.output = "";
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    expect(ctx.session.state.chain.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    // The user looks at setup_54's logits: its sigmoid does not come back with the next start.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: [] }));
+    expect((await backend.handle(submit([HF54, HF56]))).status).toBe(200);
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54, NAME_56]);
+    expect(ctx.session.state.chain.postprocess).toEqual([]);
+  }, 120_000);
+
+  it("resets the postprocessing Applied over a model once it is gone and another is submitted, and keeps a chain that was never Applied over a model", async (t) => {
+    // The chain Applied over an affinity model stayed for the model submitted
+    // after that one was stopped, whose output it showed wrong.
+    if (!(await portablePython())) t.skip();
+    const inputNorm = entry("setup_54").manifest.input_norm;
+    const theirs = [{ name: "SigmoidPostprocessor" }, { name: "ThresholdPostprocessor", threshold: 0.3 }];
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: [] } } });
+    // The second model's manifest does not say what its output is: its start sets nothing.
+    ctx.catalog.entries[1].manifest.output = "";
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: inputNorm, postprocess: theirs }));
+    // While the model it was Applied over stays, so does the chain.
+    await backend.handle(submit([HF54, HF56]));
+    expect(ctx.session.state.chain.postprocess).toEqual(theirs);
+    await backend.handle(request("POST", "/api/models/remove", { name: NAME_54 }));
+    await backend.handle(request("POST", "/api/models/remove", { name: NAME_56 }));
+    expect((await backend.handle(submit([HF56]))).status).toBe(200);
+    expect(ctx.session.state.chain.postprocess).toEqual([]);
+    expect(ctx.infer.served().map((s) => decodeArgs(s.view.split(ARGS_KEY)[1]).chain.postprocess)).toEqual([[]]);
+    // A chain there before any model, never Applied over one, is not the dashboard's to clear.
+    const kept = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess: theirs } } });
+    await createBackend(kept).handle(submit([HF54]));
+    expect(kept.session.state.chain.postprocess).toEqual(theirs);
+  }, 120_000);
+
+  it("sets the sigmoid a model's manifest declares is applied after it, saying it came from the model's metadata", async (t) => {
+    // The rule is the portable Python's (rank.declared_postprocess), the server's Submit's too.
+    if (!(await portablePython())) t.skip();
+    const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
+    // Declared as a cellmap-models export's metadata.json declares it.
+    ctx.catalog.entries[0].manifest.inference_output_activation = { name: "sigmoid", apply_after_model: true };
+    const backend = createBackend(ctx);
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    expect(ctx.session.state.chain.postprocess).toEqual([{ name: "SigmoidPostprocessor" }]);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toMatchObject({ postprocess_from: NAME_54, postprocess_fitted: false, postprocess_declared: true });
+  }, 120_000);
+
+  it("leaves an affinity model's chain into a segmentation to the advice to suggest, setting nothing for its probabilities, a declared sigmoid its network has already included", async (t) => {
+    if (!(await portablePython())) t.skip();
+    const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
+    // setup_54's manifest says its sigmoid is in it, and its bytes do not say
+    // otherwise; the sigmoid it declares applied after it would be a second one.
+    ctx.catalog.entries[0].manifest.output = "probabilities (sigmoid applied)";
+    ctx.catalog.entries[0].manifest.inference_output_activation = { name: "sigmoid", apply_after_model: true };
+    const backend = createBackend(ctx);
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    expect(ctx.session.state.chain.postprocess).toEqual([]);
+    expect(body(await backend.handle(request("GET", "/api/model_advice"))).models[0].postprocess_review).toMatchObject({
+      level: "optional",
+      suggest: ["DefaultPostprocessor", "AffinityPostprocessor"],
+      params: {
+        DefaultPostprocessor: { clip_min: 0, clip_max: 1, bias: 0, multiplier: 255 },
+        AffinityPostprocessor: { bias: 0.5, neighborhood: "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]" },
+      },
+    });
+  }, 120_000);
+
   it("reads what a model starting needs off its network, over a manifest that says otherwise", async (t) => {
     if (!(await portablePython())) t.skip();
     const ctx = fakeContext({ state: { chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } } });
@@ -244,7 +318,7 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
     const backend = createBackend(ctx);
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
       success: true, models: [], pipeline: defaultChain(), input_norm_from: null, postprocess_from: null, postprocess_fitted: null,
-      deleted_in_viewer: [],
+      postprocess_declared: null, deleted_in_viewer: [],
     });
     await backend.handle(submit([HF56, HF54]));
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
@@ -256,6 +330,7 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
       // the default's sigmoid was there before either started
       postprocess_from: null,
       postprocess_fitted: null,
+      postprocess_declared: null,
       deleted_in_viewer: [],
     });
   });
@@ -351,6 +426,29 @@ describe("the model lists: GET /api/huggingface-models and /api/finetune/rank/ca
     };
     expect(listing[e.id]).toMatchObject(facts);
     expect(candidates.find((c: { name: string }) => c.name === NAME_54)).toMatchObject(facts);
+  });
+});
+
+describe("the Hugging Face list's sections: where each model comes from", () => {
+  it("tags cellmap's models and an added repo's apart, and forgets the repo unless one of its models runs", async () => {
+    // A repo added on an earlier visit, which the catalog remembers: it was
+    // listed in cellmap's section, as if it were one of cellmap's models.
+    const ctx = fakeContext();
+    const mine = { ...entry("setup_54"), id: "alice/models/setup_54", repo: "alice/models", name: "mine_setup54" };
+    ctx.catalog.entries = [...ctx.catalog.entries, mine];
+    const backend = createBackend(ctx);
+    const listing = body(await backend.handle(request("GET", "/api/huggingface-models")));
+    expect(listing[HF54]).toMatchObject({ group: "cellmap", repo: "cellmap/onnx-web-models" });
+    expect(listing[mine.id]).toMatchObject({ group: "Added", repo: "alice/models" });
+
+    const forget = (repo: string) => backend.handle(request("POST", "/api/huggingface-models/forget", { repo }));
+    expect((await forget("cellmap/onnx-web-models")).status).toBe(400);
+    await backend.handle(submit([mine.id]));
+    expect((await forget("alice/models")).status).toBe(409);
+    await backend.handle(submit([]));
+    expect(body(await forget("alice/models"))).toMatchObject({ success: true, models: [mine.id] });
+    expect(ctx.catalog.forgotten).toEqual(["alice/models"]);
+    expect(body(await backend.handle(request("GET", "/api/huggingface-models")))[mine.id]).toBeUndefined();
   });
 });
 
