@@ -313,6 +313,35 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(tmp_path):
     assert chain.input_norms == [] and [type(p) for p in chain.postprocess] == [Plus], "nothing leaks into it"
 
 
+def test_a_step_that_holds_pythons_lock_is_computed_in_worker_processes(monkeypatch):
+    """The affinity watershed keeps Python's lock, so a server's threads ran
+    it one chunk at a time. With workers its chunks are computed in other
+    processes, each the chunk the server's own process computes, ids and
+    all; with none, in the server's own."""
+    from cellmap_flow.serving import post_pool
+
+    step = {"name": "AffinityPostprocessor", "bias": 0.5, "neighborhood": "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"}
+    post = PipelineSpec((), (step,)).build()[1][0]
+    assert post.separate_process
+    affinities = np.zeros((3, 8, 8, 8), np.float32)
+    affinities[:, 1:4, 1:4, 1:4] = affinities[:, 5:7, 5:7, 5:7] = 0.9
+    kwargs = {"chunk_corner": (1, 2, 3), "chunk_num_voxels": 512}
+    here = post(affinities, **kwargs)
+    assert len(np.unique(here)) > 2  # objects, and background
+
+    monkeypatch.setattr(post_pool, "_executor", None)
+    monkeypatch.setenv(post_pool.WORKERS_ENV, "2")
+    try:
+        np.testing.assert_array_equal(post_pool.run(step, post, affinities, **kwargs), here)
+        assert post_pool._executor is not None
+    finally:
+        post_pool._executor.shutdown()
+    monkeypatch.setattr(post_pool, "_executor", None)
+    monkeypatch.setenv(post_pool.WORKERS_ENV, "0")
+    np.testing.assert_array_equal(post_pool.run(step, post, affinities, **kwargs), here)
+    assert post_pool._executor is None
+
+
 def test_merged_ids_go_to_the_dashboard_without_holding_up_chunks(tmp_path, monkeypatch):
     """The POST ran inside the chunk request with no timeout, and the refresh
     time was set only once it returned: a slow dashboard held up the chunk,

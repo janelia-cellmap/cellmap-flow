@@ -35,6 +35,7 @@ from pydantic import PrivateAttr
 from cellmap_flow.inference import timing
 from cellmap_flow.io.raw import apply_norms
 from cellmap_flow.pipeline_spec import _output_info, chain_output_dtype
+from cellmap_flow.serving import post_pool
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,8 @@ class PostprocessOp(Op):
         from cellmap_flow.pipeline_spec import PipelineSpec
 
         self._step = PipelineSpec((), (self.step,)).build()[1][0]
+        if getattr(self._step, "separate_process", False):
+            post_pool.warm(self.step)
 
     def for_dashboard(self, dashboard_url, dataset):
         """Send merged ids to ``dashboard_url`` as those of layer ``dataset``."""
@@ -341,7 +344,13 @@ class PostprocessOp(Op):
         corner = tuple(int(v) for v in np.asarray(box.start[-3:]) // block_shape)
         began = time.perf_counter()
         with timing.stage("postprocess"):
-            result = self._step(block, chunk_corner=corner, chunk_num_voxels=int(np.prod(block_shape)))
+            kwargs = {"chunk_corner": corner, "chunk_num_voxels": int(np.prod(block_shape))}
+            # A step that holds Python's lock runs in a process of its own,
+            # so the chunks of a view are not computed one at a time.
+            if getattr(self._step, "separate_process", False):
+                result = post_pool.run(self.step, self._step, block, **kwargs)
+            else:
+                result = self._step(block, **kwargs)
         self._chunks += 1
         logger.log(
             logging.INFO if self._chunks <= 20 else logging.DEBUG,

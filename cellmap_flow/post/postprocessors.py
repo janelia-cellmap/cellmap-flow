@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 class PostProcessor(SerializableInterface):
     """Base class for post-processing methods."""
 
+    # True on a step that keeps Python's lock while it works and has no state
+    # of its own: a model server runs it in a worker process, so the chunks
+    # of a view are computed on every core rather than one at a time
+    # (serving/post_pool.py). The worker builds its own copy from the step's
+    # parameters, so a step that learns from the chunks it sees (a blockwise
+    # merger) must leave it False.
+    separate_process = False
+
     def __init__(self):
         # Explicit empty __init__ so the GUI doesn't introspect *args/**kwargs
         # for subclasses that don't define their own signature.
@@ -380,6 +388,9 @@ class AffinityPostprocessor(PostProcessor):
     """
 
     browser = True
+    # mwatershed keeps Python's lock: four 128-voxel chunks took 17 s on four
+    # threads, 4.3 s each as one alone does.
+    separate_process = True
 
     def __init__(
         self,

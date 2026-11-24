@@ -21,6 +21,9 @@ import tempfile
 from types import SimpleNamespace
 
 os.environ["HOME"] = tempfile.mkdtemp(prefix="cellmap_flow_test_home_")
+# A model server's postprocessing workers (serving/post_pool.py) are processes
+# started per server: none in tests, but for the one that asks for them.
+os.environ.setdefault("CELLMAP_FLOW_POSTPROCESS_WORKERS", "0")
 
 # A process has one libstdc++, the first one anything loads. torch's pip
 # wheel finds it on the system's library path, while numpy, zarr and the
