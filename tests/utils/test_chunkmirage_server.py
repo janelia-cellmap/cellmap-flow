@@ -167,6 +167,26 @@ def test_an_overlap_models_cache_is_held_to_half_the_memory_the_job_may_use(monk
     assert chunkmirage_server.prediction_cache_bytes(geometry, np.uint8) == 512 * 12 * 256**3
 
 
+def test_the_memory_a_server_may_use_is_what_lsf_gave_its_job(monkeypatch):
+    """Janelia's LSF kills a job past its memory but leaves the job's cgroup
+    unlimited, so the cgroup alone said the node's 2 TB: an overlapping
+    model's server sized a 103 GB cache in a 61 GB job and was killed
+    (TERM_MEMLIMIT)."""
+    from cellmap_flow.models.geometry import ModelGeometry
+    from cellmap_flow.serving import chunkmirage_server
+
+    monkeypatch.setattr(chunkmirage_server, "_cgroup_memory_limit_bytes", lambda: None)
+    monkeypatch.delenv("LSB_SUB_RES_REQ", raising=False)
+    monkeypatch.setenv(
+        "LSB_EFFECTIVE_RSRCREQ",
+        "select[((ngpus>0)) && (type == local)] order[-slots] rusage[mem=61440.00,ngpus_physical=1.00] span[hosts=1]",
+    )
+    assert chunkmirage_server.memory_limit_bytes() == 61440 << 20
+
+    geometry = ModelGeometry((8, 8, 8), (8, 8, 8), (2048,) * 3, (2048,) * 3, 12, overlap=64)
+    assert chunkmirage_server.prediction_cache_bytes(geometry, np.uint8) == (61440 << 20) // 2
+
+
 def test_a_server_on_a_chunkmirage_without_block_phase_refuses_a_model_declaring_one(tmp_path, monkeypatch):
     """An environment not installed again since cellmap-flow took chunkmirage
     0.1.0a7 still has an older one, which ignores an op's block_phase and
