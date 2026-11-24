@@ -169,8 +169,9 @@ def test_an_overlap_models_cache_is_held_to_half_the_memory_the_job_may_use(monk
 
 def test_the_memory_a_server_may_use_is_what_lsf_gave_its_job(monkeypatch):
     """Janelia's LSF kills a job past its memory but leaves the job's cgroup
-    unlimited, so the cgroup alone said the node's 2 TB: a ViT's server sized
-    a 103 GB cache in a 61 GB RTX 6000 job and was killed (TERM_MEMLIMIT)."""
+    unlimited, so the cgroup alone said the node's 2 TB: an overlapping
+    model's server sized a 103 GB cache in a 61 GB job and was killed
+    (TERM_MEMLIMIT)."""
     from cellmap_flow.models.geometry import ModelGeometry
     from cellmap_flow.serving import chunkmirage_server
 
