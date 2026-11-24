@@ -40,7 +40,7 @@ from cellmap_flow.portable import rank
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, view_of
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.viewer.layers import prediction_layer, prediction_url, raw_layer, replace_layer
+from cellmap_flow.viewer.layers import limit_downloads, prediction_layer, prediction_url, raw_layer, replace_layer
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +312,7 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 info=fetch_model_info(host), channel=session.shown_channel(model),
             ))
             drawn.append(model)
+        limit_downloads(s)
 
     logger.debug(f"Input normalizers: {session.input_norms}")
     return drawn

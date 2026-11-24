@@ -342,6 +342,38 @@ def test_a_step_that_holds_pythons_lock_is_computed_in_worker_processes(monkeypa
     assert post_pool._executor is None
 
 
+def test_an_affinity_layer_is_served_through_the_workers_queue(tmp_path):
+    """A step that runs in the workers is an op with slots, so its chunks
+    wait in chunkmirage's queue, where one nobody waits for any more is
+    dropped; the layer is served as any other."""
+    from cellmap_flow.post.postprocessors import AffinityPostprocessor
+
+    server, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
+    name = layer(posts=[AffinityPostprocessor(bias=0.5, neighborhood="[[1, 0, 0]]")])
+    (op,) = chunkmirage_ops.layer_ops(server.served.name, [], [{"name": "AffinityPostprocessor"}])[1:2]
+    assert isinstance(op, chunkmirage_ops.WorkerPostprocessOp) and op.slots >= 1
+
+    assert get_json(client, f"/{name}/{FORMAT}/s0/.zarray")["dtype"] == "<u8"
+    assert read_chunk(client, name, (0, 0, 0)).any(), "one object: every affinity is above the bias"
+
+
+def test_the_viewer_asks_for_as_many_chunks_at_once_as_the_browser_sends():
+    """Six a model server, so nothing waits in the browser's line behind a
+    view's chunks: a layer an Apply has just drawn asks for its own next."""
+    import neuroglancer
+
+    from cellmap_flow.viewer.layers import limit_downloads, prediction_url
+
+    state = neuroglancer.ViewerState()
+    state.layers["data"] = neuroglancer.ImageLayer(source="zarr://http://files/raw.zarr")
+    limit_downloads(state)
+    assert state.concurrent_downloads == 6
+    for model, host in (("mito", "http://10.0.0.1:1"), ("er", "http://10.0.0.2:2"), ("er2", "http://10.0.0.2:2")):
+        state.layers[model] = neuroglancer.ImageLayer(source=prediction_url(host, model, "blob"))
+    limit_downloads(state)
+    assert state.concurrent_downloads == 12
+
+
 def test_merged_ids_go_to_the_dashboard_without_holding_up_chunks(tmp_path, monkeypatch):
     """The POST ran inside the chunk request with no timeout, and the refresh
     time was set only once it returned: a slow dashboard held up the chunk,

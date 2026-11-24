@@ -30,7 +30,7 @@ from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.viewer.layers import prediction_layer, replace_layer
+from cellmap_flow.viewer.layers import limit_downloads, prediction_layer, replace_layer
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ def add_finetuned_layer(job, model_name):
         if old_layer_name and old_layer_name != model_name and old_layer_name in s.layers:
             logger.info(f"Replacing old finetuned layer: {old_layer_name}")
         replace_layer(s.layers, model_name, layer, replacing=old_layer_name)
+        limit_downloads(s)
 
     logger.info(f"Successfully added neuroglancer layer: {model_name}")
 

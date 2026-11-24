@@ -43,7 +43,7 @@ from cellmap_flow.models.models_config import (
     BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig, MiaModelConfig,
 )
 from cellmap_flow.models.registry import build_model
-from cellmap_flow.viewer.layers import deleted_layers, prediction_layer, replace_layer
+from cellmap_flow.viewer.layers import deleted_layers, limit_downloads, prediction_layer, replace_layer
 import copy
 import threading
 from typing import List
@@ -116,6 +116,7 @@ def _show(job, st_data):
     with session.viewer.txn() as s:
         # A model started again keeps what the user set on its layer.
         replace_layer(s.layers, job.model_name, layer)
+        limit_downloads(s)
 
 
 def _reported(launch):
