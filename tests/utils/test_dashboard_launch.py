@@ -745,6 +745,43 @@ def test_opening_another_dataset_shows_each_running_model_on_it_as_its_server_sw
     assert nuc["status"] == "not on this volume" and "it could not read new.zarr" in nuc["note"]
 
 
+def test_a_model_running_at_its_datas_own_voxel_size_is_not_switched_to_data_of_another(dashboard, monkeypatch,
+                                                                                      ome_pyramid):
+    """Started on 4 nm data, it runs at 4 nm. Its server is not asked to open
+    data whose finest is 8 nm, where it would go on running at 4 nm: the
+    Loaded models list says why, and Submit starts it again, at 8 nm. Data
+    of the same finest voxel size it is switched to."""
+    from cellmap_flow.dashboard.services import datasets
+    from cellmap_flow.models.configs.huggingface import HuggingFaceModelConfig
+    from cellmap_flow.serving import client
+
+    repo = "cellmap/native"
+    monkeypatch.setattr(HuggingFaceModelConfig, "_load_metadata", lambda self: {
+        "framework": "torch", "native_voxel_size": True, "in_channels": 1, "out_channels": 1,
+        "input_voxel_size": [8] * 3, "output_voxel_size": [8] * 3, "input_shape": [8] * 3, "output_shape": [8] * 3})
+    commands, asked = [], []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(client, "switch_dataset", lambda url, path, token: asked.append(path) or {"success": True})
+    fine, fine_too, coarse = (ome_pyramid(levels=levels, name=name) for name, levels in (
+        ("fine.zarr", ((4, 0), (8, 2))), ("fine_too.zarr", ((4, 0),)), ("coarse.zarr", ((8, 0),))))
+    session = get_session()
+    session.jobs, session.dataset_path, session.models_config = [], fine, []
+    assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
+    _wait_until(lambda: not launch.launching())
+    (config,) = session.models_config
+    job = _Job(config.name)
+    job.dataset_path, session.jobs = fine, [job]
+
+    assert datasets.switch_job(job, fine_too) is None and asked == [fine_too]
+    assert "8.0, 8.0, 8.0] nm" in datasets.switch_job(job, coarse) and asked == [fine_too]
+
+    session.dataset_path = coarse
+    assert dashboard.post("/api/models", json={"selected_hf_models": [repo]}).status_code == 200
+    _wait_until(lambda: not launch.launching())
+    argv = shlex.split(commands[-1])
+    assert len(commands) == 2 and json.loads(argv[argv.index("--model") + 1])["run_voxel_size"] == [8, 8, 8]
+
+
 def test_submit_starts_again_a_model_whose_server_serves_another_dataset(viewer, monkeypatch, tmp_path):
     """Its server could not switch (one from before switching, or started
     without a token): Submit is the way to bring it back on this dataset."""

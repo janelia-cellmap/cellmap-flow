@@ -55,6 +55,30 @@ def _lock_of(job) -> threading.RLock:
         return lock
 
 
+def _another_native_voxel_size(job, path) -> Optional[str]:
+    """Why ``job``'s model cannot be switched to ``path`` for running at the
+    data's own voxel size, or None: its server runs it at the finest voxel
+    size of the raw it was started on (ModelConfig.follows_native_voxel_size),
+    and ``path``'s finest is another. Switched, it would run there at the
+    old one (16 nm on 8 nm data), which a server started there does not;
+    Submit starts it again, at ``path``'s. A raw whose levels cannot be read
+    is left for the server to refuse."""
+    config = next((mc for mc in get_session().models_config if getattr(mc, "name", None) == job.model_name), None)
+    if config is None or not getattr(config, "follows_native_voxel_size", lambda: False)():
+        return None
+    from cellmap_flow.finetune.session.volume import raw_voxel_sizes
+
+    try:
+        finest = raw_voxel_sizes(path)[0]
+    except Exception:
+        return None
+    started_at = list(config.adopted_native_voxel_size)
+    if list(finest) == started_at:
+        return None
+    return (f"it runs at the data's own voxel size, and was started at {started_at} nm; "
+            f"this data's finest is {list(finest)} nm")
+
+
 def _switch(job, path):
     """``(error, model_info)``: ``switch_job``'s answer, and the model_info
     its server answered with (None when not asked, or it gave none), which
@@ -62,6 +86,10 @@ def _switch(job, path):
     with _lock_of(job):
         if getattr(job, "dataset_path", None) == path:
             return None, None
+        refusal = _another_native_voxel_size(job, path)
+        if refusal:
+            job.switch_error = refusal
+            return refusal, None
         job.switching_to = path
         try:
             # The address the dashboard reaches the server by: a finetune

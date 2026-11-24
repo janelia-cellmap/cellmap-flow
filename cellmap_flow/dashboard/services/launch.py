@@ -234,6 +234,11 @@ def at_native_voxel_size(config, data_path=None):
     models, started before the session has its dataset: yaml_cli)."""
     data_path = data_path or get_session().dataset_path
     try:
+        # A voxel size it took from the raw it was started on before is
+        # asked again: the raw open now may be another (a model started
+        # again after another dataset was opened).
+        if data_path and config.follows_native_voxel_size():
+            config.run_voxel_size = None
         if config.run_voxel_size is not None or not data_path or config.declared_geometry() is None:
             return
         config.adopt_native_voxel_size(data_path)
