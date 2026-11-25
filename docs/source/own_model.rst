@@ -8,32 +8,70 @@ Quick start
 -----------
 
 **1. Write a script.** A script builds the network and states what it reads
-and writes. This one is complete and runs as it is (it is also in the
-repository, as ``example/minimal_model.py``):
+and writes. The one below is a complete demo model that needs no weights: it
+marks voxels that are clearly darker than their surroundings. Save it as
+``my_model.py`` (it is also in the repository, as
+``example/minimal_model.py``):
 
 .. code-block:: python
 
-    # my_model.py
     import torch
+    import torch.nn.functional as F
 
     # What the network reads and writes.
     input_voxel_size = (8, 8, 8)     # nm, in z, y, x order
     output_voxel_size = (8, 8, 8)
     input_size = (64, 64, 64)        # voxels in
-    output_size = (60, 60, 60)       # voxels out
+    output_size = (40, 40, 40)       # voxels out
     output_channels = 1
-    channels = ["example"]           # optional channel names
+    channels = ["dark"]              # optional channel names
+
+
+    class DarkStructures(torch.nn.Module):
+        """Whether each voxel is clearly darker than the 25-voxel cube around it, as a probability."""
+
+        def forward(self, x):
+            nearby = F.avg_pool3d(x, 5, stride=1)[..., 10:-10, 10:-10, 10:-10]
+            surroundings = F.avg_pool3d(x, 25, stride=1)
+            darker = (surroundings - nearby) / (surroundings.abs() + 1e-6)
+            return torch.sigmoid(30 * (darker - 0.1))
+
 
     # The network. Replace this with your own network and weights.
-    model = torch.nn.Sequential(
-        torch.nn.Conv3d(1, 8, 3), torch.nn.ReLU(),
-        torch.nn.Conv3d(8, 1, 3), torch.nn.Sigmoid(),
-    )
+    model = DarkStructures()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
-For your own model, change the six values at the top and replace the
-network, keeping the last two lines:
+**2. Test it.** This runs the model on one block of the data, on the current
+machine, and prints ``Server check passed``. The data here is a public
+mouse-liver volume; any zarr, N5 or precomputed path or URL works:
+
+.. code-block:: bash
+
+    DATA=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8
+    cellmap_flow infer script -s my_model.py -d $DATA --server-check
+
+**3. Run it.** This starts the model and opens the viewer and dashboard:
+
+.. code-block:: bash
+
+    cellmap_flow infer script -s my_model.py -d $DATA -q gpu_h100 -P your_charge_group
+
+On a machine without a cluster, such as a Mac, omit ``-q`` and ``-P``. In a
+dashboard that is already open, enter the script's path in **Add a model**
+on the **Models** tab instead, and click *Resolve*, then *Run*.
+
+The prediction appears as a layer over the data. The demo model on the
+mouse-liver volume (left: the data; right: its prediction in orange):
+
+.. image:: _static/minimal_model.png
+   :alt: A slice of the mouse-liver volume, and the demo model's prediction over it
+
+Your own model
+--------------
+
+In the script, change the six values at the top and replace the network,
+keeping the last two lines:
 
 .. code-block:: python
 
@@ -42,44 +80,24 @@ network, keeping the last two lines:
     model = MyNetwork()
     model.load_state_dict(torch.load("/path/to/weights.pt", map_location="cpu", weights_only=True))
 
-**2. Test it.** This runs the model on one block of the data, on the current
-machine, and prints ``Server check passed``:
-
-.. code-block:: bash
-
-    cellmap_flow infer script -s my_model.py -d /path/to/data.zarr/raw --server-check
-
-**3. Run it.** In the dashboard, open the **Models** tab, enter the script's
-path in **Add a model**, and click *Resolve*, then *Run*. Or start it from
-the command line:
-
-.. code-block:: bash
-
-    cellmap_flow infer script -s my_model.py -d /path/to/data.zarr/raw -q gpu_h100 -P your_charge_group
-
-On a machine without a cluster, such as a Mac, omit ``-q`` and ``-P``.
-
-The predictions appear as a layer in the viewer. A model that runs from a
-script can also be finetuned in cellmap-flow.
-
-What the script must get right
-------------------------------
+Then check the following:
 
 - **Sizes.** cellmap-flow calls ``model`` with one block at a time: a float32
   tensor of shape ``(1, 1, *input_size)``. The model must return
   ``(1, output_channels, *output_size)``. The two sizes may be equal.
-- **Input normalization.** The script does not say how the input was scaled
-  during training. Select the same normalization (for example, to [0, 1] or
-  [-1, 1]) on the dashboard's **Processing** tab.
-- **Output activation.** If the network outputs logits, add a sigmoid, either
-  in the script (as above) or as a step on the **Processing** tab.
+- **Output activation.** If the network outputs logits, add a sigmoid in the
+  script: ``model = torch.nn.Sequential(MyNetwork(), torch.nn.Sigmoid())``.
 - **Dependencies.** The script runs in the cellmap-flow environment. If the
   model needs other packages, set ``env`` on the model entry to an
   environment that contains both those packages and cellmap-flow
   (:ref:`model-env`).
+- **Input normalization.** This is not part of the script. Once the model is
+  running, select the scaling that the network was trained with (for
+  example, to [0, 1] or [-1, 1]) on the dashboard's **Processing** tab.
 
-For every script variable, voxel sizes that are not whole numbers, and
-networks with several input channels, see :doc:`custom_script`.
+A model that runs from a script can also be finetuned in cellmap-flow. For
+every script variable, voxel sizes that are not whole numbers, and networks
+with several input channels, see :doc:`custom_script`.
 
 Models that need no script
 --------------------------

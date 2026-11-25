@@ -72,4 +72,5 @@ html_static_path = ["_static"]
 html_favicon = "_static/favicon.ico"
 html_css_files = [
     "css/custom.css",
+    "tables.css",
 ]
