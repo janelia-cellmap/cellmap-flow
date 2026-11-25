@@ -46,3 +46,10 @@ dt em.sig-param:last-of-type::after {
 dl.class > dt:first-of-type {
     display: block !important;
 }
+
+/* Wrap text in table cells. The theme keeps each cell on one line, which
+   pushes wide tables off the page behind a horizontal scrollbar. */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+    white-space: normal;
+}
