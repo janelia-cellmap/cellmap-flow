@@ -2,7 +2,18 @@ Use your own model
 ==================
 
 This page describes how to run a model that you trained yourself in
-cellmap-flow. For a PyTorch network, it takes one short Python file.
+cellmap-flow. Start from the section that matches your model:
+
+- **A PyTorch network with a weights file:** it takes one short Python
+  script. Follow `Quick start`_.
+- **An ONNX or TorchScript file, or a model from DaCapo, Cellpose,
+  fly_organelles, mia-train or the BioImage Model Zoo:** no script is needed.
+  Go to `Models that need no script`_.
+- **A model in another framework, such as TensorFlow:** see `Models that are
+  not PyTorch`_.
+
+If the model needs Python packages that cellmap-flow does not install, also
+read `Models that need their own packages`_.
 
 Quick start
 -----------
@@ -87,10 +98,8 @@ Then check the following:
   ``(1, output_channels, *output_size)``. The two sizes may be equal.
 - **Output activation.** If the network outputs logits, add a sigmoid in the
   script: ``model = torch.nn.Sequential(MyNetwork(), torch.nn.Sigmoid())``.
-- **Dependencies.** The script runs in the cellmap-flow environment. If the
-  model needs other packages, set ``env`` on the model entry to an
-  environment that contains both those packages and cellmap-flow
-  (:ref:`model-env`).
+- **Packages.** If the network needs packages that cellmap-flow does not
+  install, see `Models that need their own packages`_.
 - **Input normalization.** This is not part of the script. Once the model is
   running, select the scaling that the network was trained with (for
   example, to [0, 1] or [-1, 1]) on the dashboard's **Processing** tab.
@@ -132,6 +141,39 @@ that is needed, such as the voxel size, **Add a model** asks for it.
 A file of PyTorch weights alone is not accepted, because it does not define
 the network: use a script. For the complete list of accepted paths and
 names, see :ref:`resolving-models`.
+
+Models that need their own packages
+-----------------------------------
+
+By default a model runs in the cellmap-flow environment. The built-in types
+that need something else (Cellpose, fly_organelles, the BioImage Model Zoo,
+ONNX, mia-train) each run in an environment of their own, which cellmap-flow
+installs when it is first needed. Nothing has to be set for them.
+
+A script whose network needs other packages runs in an environment that you
+provide:
+
+1. Create a conda environment or virtualenv that contains your packages.
+2. Install cellmap-flow into it: ``pip install cellmap-flow``.
+3. Pass the environment's path when starting the model, on the command line:
+
+   .. code-block:: bash
+
+       cellmap_flow infer script -s my_model.py -d $DATA --env /path/to/my_env
+
+   or in a YAML configuration:
+
+   .. code-block:: yaml
+
+       models:
+         my_model:
+           type: script
+           script_path: /path/to/my_model.py
+           env: /path/to/my_env
+
+Only the model runs in that environment; the dashboard keeps running in its
+own. **Add a model** has no field for an environment, so start such a model
+from the command line or from a YAML. For details, see :ref:`model-env`.
 
 Share a model
 -------------
