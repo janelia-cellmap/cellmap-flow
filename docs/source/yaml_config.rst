@@ -154,7 +154,7 @@ Available Model Types
      - ``model_name`` or ``model_path`` (required), ``voxel_size`` (required)
    * - ``cellmap``
      - CellMapModelConfig
-     - ``config_folder`` (required)
+     - ``folder_path`` (required): a cellmap-models export's folder
    * - ``huggingface``
      - HuggingFaceModelConfig
      - ``repo`` (required), ``revision`` (optional). See :doc:`huggingface`.
