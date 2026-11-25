@@ -48,7 +48,7 @@ You can test your script locally using:
     cellmap_flow infer script --script-path /path/to/your_script.py -d /path/to/input.zarr --server-check
 
 This loads the script and runs the model on a single output chunk (chunk index
-2, 2, 2) in the current process, without submitting a job, and prints
+0, 0, 0) in the current process, without submitting a job, and prints
 ``Server check passed`` when the chunk comes back.
 
 

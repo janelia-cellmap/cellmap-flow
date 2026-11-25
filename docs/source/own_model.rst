@@ -7,9 +7,11 @@ cellmap-flow.
 Supported formats
 -----------------
 
-Models in the following formats need no code. Enter the value from the
-second column in **Add a model** on the dashboard's **Models** tab, or pass
-it to ``cellmap_flow add`` on the command line (see `Adding a model`_).
+These formats run without writing any code. Enter the value from the second
+column in **Add a model** on the dashboard's **Models** tab, or pass it to
+``cellmap_flow add`` on the command line (see `Adding a model`_). Some
+formats also need a voxel size or channel names, which **Add a model** asks
+for.
 
 .. list-table::
    :header-rows: 1
@@ -23,21 +25,26 @@ it to ``cellmap_flow add`` on the command line (see `Adding a model`_).
      - its folder, ``/path/to/exports/my_model``, or its Hugging Face repo,
        ``<you>/my-model``
      - yes
-     - if exported for the web
+     - no; see `In the browser app`_
    * - fly_organelles checkpoint
      - ``/path/to/run08/model_checkpoint_438000``
      - yes
      - no
+   * - TorchScript file (``.ts``)
+     - ``/path/to/my_network.ts``, with its channels and input voxel size
+     - whole network only
+     - no
    * - DaCapo run
-     - ``dacapo:my_run@100000``
+     - ``dacapo:my_run@100000`` (needs an environment with DaCapo installed)
      - yes
      - no
    * - mia-train model (:doc:`huggingface`)
      - its Hugging Face repo, ``ai-hhmi/lmd-vitl-p8-cellmap-lvd``
-     - yes
+     - affinity models only
      - no
    * - Cellpose weights
-     - the path of the weights, or a built-in name such as ``cpsam``
+     - ``cellpose:/path/to/weights``, or a built-in name such as ``cpsam``,
+       with a voxel size
      - yes
      - no
    * - BioImage Model Zoo package (:doc:`bioimage`)
@@ -45,9 +52,9 @@ it to ``cellmap_flow add`` on the command line (see `Adding a model`_).
      - if it has PyTorch weights
      - no
    * - ONNX file (:ref:`onnx`)
-     - ``/path/to/my_model.onnx``
+     - ``/path/to/my_model.onnx``, with its input voxel size
      - only in the browser app
-     - yes
+     - with a ``manifest.json``, if small enough
 
 Other models need a short script or a plugin:
 
@@ -59,18 +66,20 @@ Other models need a short script or a plugin:
      - What to do
      - Can be finetuned
      - Runs in the browser app
-   * - PyTorch network with a weights file
+   * - PyTorch network with a weights file (a weights file alone is not
+       accepted, because it does not define the network)
      - Write a script (`A script`_). To share the model, export it (`An
        export`_).
      - yes
      - no
-   * - TensorFlow model, or a model with custom prediction code
-     - Write a script that defines ``process_chunk`` (:doc:`custom_script`).
+   * - TensorFlow or another framework
+     - Convert it to ONNX, or write a script that defines ``process_chunk``
+       (`Models that are not PyTorch`_).
      - no
      - no
    * - A family of models in a format not listed here
      - Add a model type as a plugin (:doc:`plugins`).
-     - if it is PyTorch
+     - if the type sets ``finetunable = True`` and provides a PyTorch network
      - no
 
 Adding a model
@@ -100,21 +109,24 @@ checkpoint contains neither channel names nor a voxel size:
         type: fly
         checkpoint_path: /path/to/run08/model_checkpoint_438000
 
-To start the model instead of printing the entry, add ``--run -d
-/path/to/data.zarr/raw``. For the complete list of accepted paths, names and
+To also start the model, add ``--run -d /path/to/data.zarr/raw``. A model
+that still requires values, as in this example, is started from the
+dashboard or from a YAML configuration that contains the completed entry
+(``cellmap_flow yaml``). For the complete list of accepted paths, names and
 prefixes, see :ref:`resolving-models`.
 
 A script
 --------
 
-A script is a Python file that loads the network and defines the variables
-below. The variable names are fixed:
+A script is a Python file that builds the network and sets the variables
+below at the top level. The variable names are fixed; ``channels`` is
+optional:
 
 .. code-block:: python
 
     # my_model.py
     import torch
-    from my_package import MyNetwork        # your own code
+    from my_package import MyNetwork        # must be an installed package
 
     input_voxel_size = (8, 8, 8)            # nm, in array axis order (z, y, x)
     output_voxel_size = (8, 8, 8)
@@ -129,12 +141,15 @@ below. The variable names are fixed:
     model.to(device).eval()
 
 cellmap-flow calls ``model`` with one input block at a time, after input
-normalization. In this example the input is a float tensor of shape
-``(1, 1, 178, 178, 178)``, and the model must return a tensor of shape
-``(1, 2, 56, 56, 56)``.
+normalization: a float32 tensor with a batch of one and one input channel.
+In this example the input has shape ``(1, 1, 178, 178, 178)``, and the model
+must return a tensor of shape ``(1, 2, 56, 56, 56)``. The input and output
+sizes may be equal.
 
 Test the script on a single block before submitting a job. This command runs
-locally and prints ``Server check passed`` on success:
+locally, in the current environment, and prints ``Server check passed`` on
+success. It checks that the model loads and returns the declared shape, not
+that the prediction is good:
 
 .. code-block:: bash
 
@@ -145,9 +160,11 @@ command line:
 
 .. code-block:: bash
 
-    cellmap_flow infer script -s my_model.py -d /path/to/data.zarr/raw -q gpu_h100 -P <charge group>
+    cellmap_flow infer script -s my_model.py -d /path/to/data.zarr/raw -q gpu_h100 -P your_charge_group
 
-or add it to a YAML configuration (:doc:`yaml_config`):
+On a machine without a cluster, such as a Mac, omit ``-q`` and ``-P``: the
+model then runs on that machine. Alternatively, add the script to a YAML
+configuration (:doc:`yaml_config`):
 
 .. code-block:: yaml
 
@@ -162,14 +179,24 @@ Notes:
   environment. If the model requires other packages, set ``env`` on the
   model entry to the path of a conda environment or virtualenv that contains
   both those packages and cellmap-flow (:ref:`model-env`).
+- **Imports.** The script's folder is not on the Python path, so code that
+  the script imports must be installed as a package.
 - **Input normalization.** A script does not specify how the input is
   normalized. Select the normalization that the network was trained with
   (for example, scaling to [0, 1] or [-1, 1]) on the **Processing** tab, or
-  set ``input_normalizers`` in the YAML.
+  set ``input_norm`` under ``json_data`` in the YAML (:doc:`yaml_config`).
 - **Output activation.** If the network outputs logits, apply a sigmoid,
   either in the script
   (``model = torch.nn.Sequential(network, torch.nn.Sigmoid())``) or as a
   step on the **Processing** tab.
+- **Voxel sizes that are not whole numbers.** Give ``read_shape`` and
+  ``write_shape`` in nm instead of ``input_size`` and ``output_size``.
+- **Several input channels.** ``model`` receives one channel of the data. A
+  network that takes several needs its own ``predict`` or ``process_chunk``
+  (:doc:`custom_script`).
+- **Affinities.** Channels whose names contain ``_aff`` are treated as
+  affinities, which the affinity postprocessing steps turn into a
+  segmentation (:doc:`post`).
 
 For all script variables and a TensorFlow example, see :doc:`custom_script`.
 
@@ -179,14 +206,14 @@ An export
 An export is a folder that contains the network and a ``metadata.json``
 file. It runs without your source code, so it can be shared. The metadata
 contains the same information as the script variables above, plus the input
-normalization and output activation, which the dashboard applies
-automatically. Create an export with
+normalization and output activation, which the dashboard applies when the
+model starts unless you have already set them. Create an export with
 `cellmap-models <https://github.com/janelia-cellmap/cellmap-models>`_:
 
 .. code-block:: python
 
     import cellmap_models.model_export.config as c
-    from cellmap_models.model_export import ModelMetadata, export_torch_model
+    from cellmap_models.model_export import ModelMetadata, export_metadata, export_torch_model
 
     c.EXPORT_FOLDER = "/path/to/exports"
 
@@ -201,8 +228,9 @@ automatically. Create an export with
         in_channels=1,
         out_channels=2,
         channels_names=["mito", "er"],
-        input_shape=[1, 1, 178, 178, 178],
-        output_shape=[1, 2, 56, 56, 56],
+        iteration=100000,
+        input_shape=[178, 178, 178],
+        output_shape=[56, 56, 56],
         inference_input_shape=[178, 178, 178],
         inference_output_shape=[56, 56, 56],
         input_voxel_size=[8, 8, 8],
@@ -213,7 +241,10 @@ automatically. Create an export with
         description="Mitochondria and ER, trained on ...",
     )
 
-    export_torch_model(model, (1, 1, 178, 178, 178), "/path/to/exports/my_model", metadata=metadata)
+    # Writes /path/to/exports/my_model/metadata.json (EXPORT_FOLDER/model_name).
+    export_metadata(metadata, overwrite=True)
+    # Writes the network into the same folder.
+    export_torch_model(model, (1, 1, 178, 178, 178), "/path/to/exports/my_model")
 
 To run the export, enter the folder's path in **Add a model**, or add it to
 a YAML configuration:
@@ -226,7 +257,8 @@ a YAML configuration:
         folder_path: /path/to/exports/my_model
 
 To share the export, upload the folder to a Hugging Face model repository.
-Log in with ``huggingface-cli login`` first:
+Log in first, with ``hf auth login`` (``huggingface-cli login`` in older
+versions of ``huggingface_hub``):
 
 .. code-block:: python
 
@@ -235,13 +267,34 @@ Log in with ``huggingface-cli login`` first:
     push_to_huggingface(folder_path="/path/to/exports/my_model", repo_id="<you>/my-model")
 
 Other users can then run the model by entering ``<you>/my-model`` in **Add
-a model** (:doc:`huggingface`). After a repository has been added, the
-dashboard lists it in the Hugging Face section of the **Models** tab.
+a model** (:doc:`huggingface`).
 
 .. note::
 
    An export runs only at the input size that it was exported with
-   (178 voxels per side in this example).
+   (178 voxels per side in this example), so export at the size that the
+   model should run at.
+
+Models that are not PyTorch
+---------------------------
+
+A model from another framework runs in one of two ways:
+
+- **Convert it to ONNX.** cellmap-flow runs an ``.onnx`` file with ONNX
+  Runtime. Enter its path and input voxel size in **Add a model**
+  (:ref:`onnx`).
+- **Write a script with its own prediction function.** Instead of ``model``,
+  the script defines ``process_chunk``, which reads a block of the data and
+  returns the prediction using any library. ``example/tensorflow_lsd.py`` in
+  the repository is a TensorFlow example (:doc:`custom_script`). Set ``env``
+  on the model entry to an environment that contains the framework and
+  cellmap-flow (:ref:`model-env`).
+
+Limitations compared with a PyTorch model:
+
+- The model cannot be finetuned on the cluster, which trains PyTorch
+  networks only. An ONNX model can be finetuned in the browser app.
+- A script that defines ``process_chunk`` runs only at its own voxel size.
 
 In the browser app
 ------------------
@@ -255,27 +308,34 @@ to run in a browser. Add a model from **Add a model** on the app's
   repository that has the same layout as
   `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-models>`_:
   one folder per model, containing a ``manifest.json`` and the ``.onnx``
-  files that it lists. The ``export_onnx_web`` function in cellmap-models
-  creates this layout.
+  files that it lists. The app lists added repositories under *Added* and
+  remembers them.
 - **From a local file.** Click *Open an .onnx file…* and select the ``.onnx``
   file together with its ``manifest.json``. The file is not uploaded.
 
-Models that are finetuned in cellmap-flow can be published with *Publish to
-Hugging Face* on the Finetune tab. This uploads the server export and, if
-the model is small enough, the browser export to your Hugging Face account
+The supported way to create this layout is *Publish to Hugging Face* on the
+Finetune tab, for a model finetuned in cellmap-flow. It uploads the server
+export and, if the model is small enough, the browser export with its
+manifest to your Hugging Face account
 (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__).
 
 Troubleshooting
 ---------------
 
 - **The model fails to start.** Run the ``--server-check`` command above. It
-  runs one block locally and prints the error in the terminal.
+  runs one block locally and prints the error in the terminal. A "shape
+  validation failed" error means that ``output_size`` or ``output_channels``
+  does not match what the network returns.
+- **"Script contains unsafe elements".** This is a warning for scripts that
+  import ``os``, ``sys`` or ``subprocess``, or call ``eval`` or ``exec``. The
+  script still runs, unless ``FORCE_SAFE_CONFIG=1`` is set.
 - **The job fails on the cluster.** Open **Job Logs** in the dashboard to see
   the job's output. An import error means that a required package is missing
   from the environment that the model runs in (:ref:`model-env`).
 - **The prediction is blank, constant or noisy.** Check that the input
   normalization on the **Processing** tab matches the normalization that the
-  network was trained with.
+  network was trained with, that a network that outputs logits has its
+  sigmoid, and that the voxel sizes are in z, y, x order.
 - **The data has a different voxel size from the model.** No action is
-  needed: the data is resampled to the model's input voxel size
+  needed: by default the data is resampled to the model's input voxel size
   (:ref:`resampling`, :ref:`run-voxel-size`).

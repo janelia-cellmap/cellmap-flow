@@ -248,13 +248,13 @@ Quick Start
 
    .. code-block:: yaml
 
-       input_normalizers:
-         - name: MyNewNormalizer
-           coef: 2.5
-
-       postprocess:
-         - name: SigmoidPostprocessor
-           scale: 1.0
+       json_data:
+         input_norm:
+           MyNewNormalizer:
+             coef: 2.5
+         postprocess:
+           SigmoidPostprocessor:
+             scale: 1.0
 
 Notes
 -----
