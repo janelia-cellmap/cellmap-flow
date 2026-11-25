@@ -1,11 +1,12 @@
 Use your own model
 ==================
 
-You trained a model and want to see its predictions on your data in
-cellmap-flow. This page tells you what to do, depending on what form your
-model is in, and links to the page with the details of each.
+This page shows how to run a model you trained yourself in cellmap-flow. The
+steps depend on the form the model is in (a PyTorch network with weights, an
+ONNX file, a checkpoint from a training framework), and each section links
+to a page with the details.
 
-For any model, cellmap-flow has to know:
+For any model, cellmap-flow needs to know:
 
 - how to load it;
 - the voxel size of the data it expects, and of what it predicts (in nm);
@@ -14,8 +15,8 @@ For any model, cellmap-flow has to know:
   in: 178 voxels a side in and 56 out, say;
 - how many channels it predicts, and ideally what each one is.
 
-Some model files say all of this themselves. For the others, you say it in a
-short script.
+Some model files already contain all of this. For the others, a short
+script provides it.
 
 First, try pasting it
 ---------------------
@@ -71,8 +72,8 @@ entry you can paste into a YAML file. For a script, nothing is missing:
         type: script
         script_path: /path/to/my_model.py
 
-A training checkpoint, on the other hand, does not say what its channels are
-or what voxel size it was trained at, so you are asked for them:
+A training checkpoint, on the other hand, does not record its channels or
+the voxel size it was trained at, so the answer lists them as still needed:
 
 .. code-block:: text
 
@@ -98,9 +99,9 @@ entry, add ``--run`` and the data:
 If what you typed is not recognised, the error says what was tried.
 :ref:`resolving-models` has the full list of what is recognised.
 
-If your model is just a PyTorch network and a file of weights, it is not
-recognised by itself: nothing in a weights file says what network it belongs
-to. Write a script (next section).
+A PyTorch network with a file of weights is not recognised this way,
+because a weights file does not say which network it belongs to. For that
+case, write a script, as described in the next section.
 
 Which route
 -----------
