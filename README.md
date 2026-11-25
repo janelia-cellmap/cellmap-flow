@@ -31,6 +31,8 @@
   a zoo nickname, a Hugging Face repo, a Cellpose model name) into the
   dashboard's *Add a model*, or run `cellmap_flow add REF`: it works out the
   model's type, the environment it runs in and anything it still needs.
+  For a model you trained yourself, see
+  [Use your own model](https://janelia-cellmap.github.io/cellmap-flow/own_model.html).
 - **Any volume.** zarr (v2 or v3, OME-Zarr), N5 or Neuroglancer precomputed,
   on disk or at an `s3://`, `gs://` or `https://` URL. Each model reads the
   level at its own voxel size, resampled when the volume has none.

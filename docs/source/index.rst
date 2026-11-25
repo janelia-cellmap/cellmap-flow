@@ -9,6 +9,7 @@
    scripts
    yaml_config
    data_paths
+   own_model
    huggingface
    bioimage
    custom_script
