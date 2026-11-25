@@ -4,8 +4,13 @@ Use your own model
 This page describes how to run a model that you trained yourself in
 cellmap-flow. Start from the section that matches your model:
 
-- **A PyTorch network with a weights file:** it takes one short Python
-  script. Follow `Quick start`_.
+- **A PyTorch network with a weights file.** There are two ways:
+
+  - Write one short Python script. This is the quickest way to see the
+    model. Follow `Quick start`_.
+  - Export it once with cellmap-models. The export then runs without a
+    script, records its own normalization, and can be shared on Hugging
+    Face. See `Export a model with cellmap-models`_.
 - **An ONNX or TorchScript file, or a model from DaCapo, Cellpose,
   fly_organelles, mia-train or the BioImage Model Zoo:** no script is needed.
   Go to `Models that need no script`_.
@@ -14,6 +19,10 @@ cellmap-flow. Start from the section that matches your model:
 
 If the model needs Python packages that cellmap-flow does not install, also
 read `Models that need their own packages`_.
+
+.. contents:: On this page
+   :local:
+   :depth: 1
 
 Quick start
 -----------
@@ -121,7 +130,7 @@ that is needed, such as the voxel size, **Add a model** asks for it.
 
    * - Model
      - What to enter
-   * - cellmap-models export (`Share a model`_)
+   * - cellmap-models export (`Export a model with cellmap-models`_)
      - its folder, or its Hugging Face repo, ``<you>/my-model``
    * - TorchScript file
      - ``/path/to/my_network.ts``
@@ -175,15 +184,20 @@ Only the model runs in that environment; the dashboard keeps running in its
 own. **Add a model** has no field for an environment, so start such a model
 from the command line or from a YAML. For details, see :ref:`model-env`.
 
-Share a model
--------------
+Export a model with cellmap-models
+----------------------------------
 
-A script only works where your code and weights are. To share a model,
-export it: an export is a folder that contains the network and a
-``metadata.json`` file, and runs without your code. The metadata holds the
-same information as the script variables, plus the input normalization and
-output activation, which the dashboard then applies for you. An exported
-model can also be finetuned. Create an export with
+An export is the alternative to a script for a PyTorch network. It is a
+folder that contains the network and a ``metadata.json`` file. Compared with
+a script:
+
+- it runs without your code, so it can be shared;
+- its metadata records the input normalization and output activation, which
+  the dashboard then applies for you;
+- it needs no script: its folder or Hugging Face repo is entered directly in
+  **Add a model**.
+
+Like a script model, it can be finetuned. Create an export with
 `cellmap-models <https://github.com/janelia-cellmap/cellmap-models>`_:
 
 .. code-block:: python
