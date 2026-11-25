@@ -1,0 +1,26 @@
+cellmap_flow.dashboard.services
+===============================
+
+.. py:module:: cellmap_flow.dashboard.services
+
+.. autoapi-nested-parse::
+
+   What the dashboard's routes do beyond answering a request.
+
+   - ``launch``: start the models picked on the Models tab, show each in the
+     viewer, and stop the ones unpicked.
+   - ``startup``: the CLIs' last step, the viewer with their models, then the
+     dashboard itself.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/dashboard/services/launch/index
+   /autoapi/cellmap_flow/dashboard/services/startup/index
+
+

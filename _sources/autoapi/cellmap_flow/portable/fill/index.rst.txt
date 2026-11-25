@@ -1,0 +1,172 @@
+cellmap_flow.portable.fill
+==========================
+
+.. py:module:: cellmap_flow.portable.fill
+
+.. autoapi-nested-parse::
+
+   Labelling a box of an annotation volume: the decisions behind the Finetune
+   tab's Seed, All Background and Split Objects and an accepted AI annotation
+   (``finetune/session/fill.py`` says what each is for), on arrays alone, so the
+   server makes them over MinIO's zarr and the browser over its paint store's
+   chunks (``portable/fill_calls.py`` for the Label it tools,
+   ``portable/ai_annotate_calls.py`` for an accept).
+
+   - ``box_voxels``: the annotation voxels a box in world nm covers.
+   - ``seed_labels``: the ids a box gets from a segmentation: the id the user
+     painted on an object kept, fresh ones for the rest (``fresh_ids``).
+   - ``relabel_objects``: the box's foreground relabelled by connected component.
+   - ``paint``, ``rewrite`` and ``restore``: which voxels a write changes and
+     an undo puts back, with the counts the routes answer.
+
+   Nothing here reads or writes a volume: the callers read the box, hand it in
+   and write back what comes out (``finetune/session/fill.py`` through zarr
+   over MinIO, ``web/src/backend/routes/view-labels.ts`` and
+   ``web/src/backend/ai-annotate-job.ts`` through the paint store's
+   ``web/src/ai-annotate/fill.ts``).
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.fill.volume_corner_nm
+   cellmap_flow.portable.fill.box_voxels
+   cellmap_flow.portable.fill.fresh_ids
+   cellmap_flow.portable.fill.counts_up
+   cellmap_flow.portable.fill.seed_labels
+   cellmap_flow.portable.fill.connected_components
+   cellmap_flow.portable.fill.relabel_objects
+   cellmap_flow.portable.fill.paint
+   cellmap_flow.portable.fill.rewrite
+   cellmap_flow.portable.fill.restore
+
+
+Module Contents
+---------------
+
+.. py:function:: volume_corner_nm(dataset_offset_nm, output_voxel_size) -> numpy.ndarray
+
+   The world position of an annotation volume's voxel-0 lower corner, in nm.
+
+   ``dataset_offset_nm`` is voxel 0's *centre*, the OME translation, as
+   ``finetune.session.volume.volume_corner_nm`` reads it (its docstring says
+   why), so the corner is half a voxel before it; voxel 0's corner is at
+   minus half a voxel when the volume has no offset.
+
+
+.. py:function:: box_voxels(volume, offset_nm, shape_nm, volume_shape)
+
+   ``(lo, hi)``: the annotation voxels whose centres lie in a box, clipped to the volume.
+
+   ``offset_nm`` and ``shape_nm`` are the box's lower corner and size in
+   world nm, as a good region records them; ``volume`` is the volume's
+   record, for its grid (``output_voxel_size``, ``dataset_offset_nm``).
+   None when no voxel of the volume is in the box.
+
+
+.. py:function:: fresh_ids(existing, count, count_up)
+
+   ``count`` ids for new objects in a box that holds ``existing``.
+
+   ``count_up``: from one past the box's largest label, so an affinity
+   target's objects stay apart from every object nearby (ids elsewhere in
+   the volume are not looked at: affinities only compare nearby voxels).
+   Else the lowest ids the box does not use, so a uint8 volume's 254 ids
+   are never run through: a repeat in another box is only a repeated
+   colour, which a binary or distance target does not see. Raises
+   ValueError when the dtype has no room.
+
+
+.. py:function:: counts_up(instance_target, dtype) -> bool
+
+   Whether new objects' ids count up from the box's largest (``fresh_ids``):
+   for a model trained on instances (``instance_target``: affinities, or
+   Cellpose's flows) whose volume holds more than 8-bit ids. A uint8 volume
+   reuses the ids its box leaves free, whatever the model, or its 254 would
+   soon run out.
+
+
+.. py:function:: seed_labels(objects, existing, count_up=False)
+
+   Labels for a box from a segmentation: an id per object inside, 1 outside.
+
+   ``objects`` is a segmenter's output over the box (0 background, objects
+   1..n), ``existing`` what the box holds now. Each object gets an id of
+   its own (``fresh_ids``; ``count_up`` for an instance target), so
+   neighbouring objects are told apart, and a merge the model made shows
+   as one colour to split; but an object the user has already painted part
+   of takes the id painted there most, or the unpainted rest of it would be
+   taught as a different object from its painted part. A binary or distance
+   target reads every id as foreground, so the ids cost it nothing.
+
+
+.. py:function:: connected_components(mask, connectivity=1, per_slice=False)
+
+   An id per connected object of ``mask`` (its nonzero voxels), 1..n, 0 elsewhere.
+
+   ``scipy.ndimage.label`` with the structure of ``connectivity`` (1 face
+   neighbours, 2 and edges, 3 every neighbour, at most the array's
+   dimensions), numbered as it numbers them: by the raster order of each
+   object's first voxel. ``per_slice``: each z slice of a (z, y, x) mask is
+   labelled on its own, in 2D, its ids following the slice before's. As
+   ``post.segment.connected_components`` labels a seed's objects, without
+   its minimum size.
+
+
+.. py:function:: relabel_objects(existing, count_up=False, connectivity=1, per_slice=False)
+
+   The box's foreground (labels 2 and up) relabelled by connected component.
+
+   Each component takes the id most of its voxels hold, so a stroke that
+   joins two objects merges them into the id of the bigger. An id left on
+   several components, an object a background wall cut in two, stays on the
+   largest and the others get fresh ids (``fresh_ids``). Background (1)
+   and unpainted (0) voxels are left alone. Returns ``(labels, counts)``:
+   ``counts`` has ``objects``, ``split`` (components given a fresh id) and
+   ``merged`` (components that held more than one id).
+
+   A cut has to go through every slice the object spans: the brush paints
+   one slice, and an object cut in one slice is still one object above and
+   below it. ``split`` is 0 then, which the page says. With ``per_slice``
+   each z slice's pieces are components on their own, so a wall in one
+   slice splits that slice, and every slice of an object gets its own id.
+   ``connectivity``: as for ``connected_components``.
+
+
+.. py:function:: paint(existing, labels, overwrite=False)
+
+   The box after ``labels`` are written over ``existing``, and what that wrote.
+
+   A label of 0 leaves its voxel as it is. Without ``overwrite`` only
+   unannotated voxels (0) are written, as for a seed: what the user painted
+   stays. With it every voxel the labels cover is written, painted or not,
+   for a result the user has looked at and prefers to what is there.
+   Returns ``(after, (n_foreground, n_background, n_overwritten))``: the
+   box as it is then, of ``existing``'s dtype, or None when nothing would
+   change; how many voxels were written with foreground (2 and up) and with
+   background, and how many of those held a label before.
+
+
+.. py:function:: rewrite(existing, labels)
+
+   The box after ``labels`` are written over its foreground voxels, and how many changed.
+
+   Only foreground voxels (2 and up) whose label changed are written, so a
+   stroke painted meanwhile elsewhere in the box is kept (Split Objects
+   relabels the box it read). Returns ``(after, n_changed)``, ``after``
+   None when none changed.
+
+
+.. py:function:: restore(current, before, after)
+
+   The box put back to ``before`` where it still holds ``after``: an undo.
+
+   Only voxels the action changed and nobody has touched since go back, so
+   a stroke painted in the box after the action is kept. Returns
+   ``(restored, n)``: the box then, or None when nothing goes back, and how
+   many voxels did.
+
+

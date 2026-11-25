@@ -1,0 +1,56 @@
+cellmap_flow.dashboard.routes.finetune.annotation_sessions
+==========================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.annotation_sessions
+
+.. autoapi-nested-parse::
+
+   Earlier sessions: listing them, and resuming one's volume in a new session.
+
+   Routes: POST ``/api/finetune/list-existing-sessions``, POST
+   ``/api/finetune/load-existing-volume`` (the resume) and GET
+   ``/api/finetune/load-existing-volume-progress`` (how far a resume has got).
+
+   A session is its current volume (``_current_volume_dir``: the one its
+   manifest trains on), as for every other route (SessionStore.session_volume):
+   the list counts that volume's chunks and names its model, and a resume
+   copies and registers that one alone. The other volumes in a session's
+   directory -- those Use this model retired lie in its ``superseded/``, out of
+   the way already -- are neither counted nor copied: they are the same paint
+   on other models' grids, and a resume of every volume would make the oldest
+   of them the resumed session's volume.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.load_existing_volume_progress
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.list_existing_sessions
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.load_existing_volume
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: load_existing_volume_progress()
+
+   How far the resume with this load_id has got.
+
+
+.. py:function:: list_existing_sessions()
+
+.. py:function:: load_existing_volume()
+

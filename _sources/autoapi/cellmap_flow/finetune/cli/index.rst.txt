@@ -1,0 +1,128 @@
+cellmap_flow.finetune.cli
+=========================
+
+.. py:module:: cellmap_flow.finetune.cli
+
+.. autoapi-nested-parse::
+
+   The finetune training job's command line: its flags, and what they describe.
+
+   - ``build_arg_parser`` and ``parse_args``: every flag of
+     ``python -m cellmap_flow.finetune.finetune_cli``. The training settings'
+     flags are made from ``options.TrainingOptions``, one per field, and
+     ``options_of`` reads them back into one; ``training_flags`` is the
+     inverse, which the job manager builds the command with. A running job
+     outlives a dashboard upgrade, so flags only ever change compatibly.
+   - ``model_config_from_args`` and ``build_target_transform``: the model and
+     the training target the flags describe.
+   - ``RESTARTABLE_ARGS`` and ``apply_restart_params``: which settings a
+     restart may change, and how a restart request changes them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.cli.logger
+   cellmap_flow.finetune.cli.RESTART_ALIASES
+   cellmap_flow.finetune.cli.RESTARTABLE_ARGS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.cli.add_training_flags
+   cellmap_flow.finetune.cli.options_of
+   cellmap_flow.finetune.cli.training_flags
+   cellmap_flow.finetune.cli.build_arg_parser
+   cellmap_flow.finetune.cli.parse_args
+   cellmap_flow.finetune.cli.build_target_transform
+   cellmap_flow.finetune.cli.model_config_from_args
+   cellmap_flow.finetune.cli.apply_restart_params
+   cellmap_flow.finetune.cli.update_run_metadata
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: add_training_flags(parser)
+
+   A flag per ``TrainingOptions`` field: ``--<name>`` with the field's default and its
+   description as help, ``--<name>``/``--no-<name>`` for a boolean. The manifest's fields
+   have none (see options.MANIFEST_FIELDS).
+
+
+.. py:function:: options_of(args) -> cellmap_flow.finetune.options.TrainingOptions
+
+   The training settings the parsed command line ``args`` carries.
+
+
+.. py:function:: training_flags(options: cellmap_flow.finetune.options.TrainingOptions) -> list
+
+   ``options`` as the flags ``build_arg_parser`` takes, every setting said so the command
+   stands on its own: ``--<name> <value>``, ``--<name>`` or ``--no-<name>`` for a boolean;
+   a blank value and the manifest's fields have no flag.
+
+
+.. py:function:: build_arg_parser()
+
+.. py:function:: parse_args(argv=None) -> argparse.Namespace
+
+   The job's flags, the training settings checked and completed as TrainingOptions
+   checks them (a rank of 0 is mode full; alpha is twice the rank unless given).
+
+
+.. py:function:: build_target_transform(options: cellmap_flow.finetune.options.TrainingOptions, model_config, output_voxel_size_nm=None, script=None)
+
+   The TargetTransform ``options`` describe (output_type, loss_type, select_channel, offsets).
+
+   ``output_voxel_size_nm`` is the annotation patches' voxel size, which
+   the distance bounds of ``--loss-type interval`` are measured in; the
+   model's output voxel size when not given. ``script`` is the model script
+   an affinity model's offsets are read from when the options name none;
+   the model config's own otherwise.
+
+
+.. py:function:: model_config_from_args(args) -> cellmap_flow.models.models_config.ModelConfig
+
+   The ModelConfig the command line describes.
+
+
+.. py:data:: RESTART_ALIASES
+
+.. py:data:: RESTARTABLE_ARGS
+
+.. py:function:: apply_restart_params(args, signal_data: dict)
+
+   Update args with parameters from restart signal and persist to metadata.json.
+
+   Each value is checked as TrainingOptions checks it, so one that cannot
+   train (0 epochs, a learning rate of 0, two-value offsets) is refused
+   here, with its reason, and the job keeps the setting it has; found only
+   once training ran, it failed a job that was serving. A rank for a full
+   finetune, or a rank of 0 for a LoRA job, is refused too: the model is
+   built once, so a job never switches between the two.
+
+   :param args: argparse Namespace to update
+   :param signal_data: Dict from restart signal file
+
+
+.. py:function:: update_run_metadata(output_dir, change) -> bool
+
+   Apply ``change(metadata)`` to the run's metadata.json; False if the run has none.
+
+   The dashboard's job monitor updates the same file from its own host,
+   within seconds of every restart. The file is read just before it is
+   replaced, and replaced whole (write_json_atomically), so neither side
+   can read the other's write half done, and the window in which both
+   update it at once, and one loses the other's change, is kept short.
+   A run that the job manager did not start has no metadata.json, and gets
+   none.
+
+

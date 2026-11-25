@@ -1,0 +1,196 @@
+cellmap_flow.finetune.target_transforms
+=======================================
+
+.. py:module:: cellmap_flow.finetune.target_transforms
+
+.. autoapi-nested-parse::
+
+   Target transforms for converting user annotations to training targets.
+
+   Each transform takes a raw annotation tensor (B, 1, Z, Y, X) with values:
+     0 = unannotated (ignored in loss)
+     1 = background
+     2 = first foreground object
+     3 = second foreground object, etc.
+
+   And produces:
+     target: (B, C, Z, Y, X) — training target matching model output channels
+     mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
+
+   except IntervalTargetTransform, whose "target" is a lower and an upper bound
+   on a distance model's output, for losses.IntervalLoss.
+
+   The maths is ``cellmap_flow/portable/targets.py``, numpy functions the
+   browser runs too (in chunkmirage's Pyodide worker, on one painted chunk);
+   the classes here hold a transform's settings and move the trainer's tensors
+   to and from them, so both modes make the same targets from the same paint.
+
+   A flow model's target (Cellpose's: flows towards each instance's centre and
+   a foreground channel, with a mask per channel) is made by
+   ``instance_flows.FlowTargetTransform``, beside the loss it goes with.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.TargetTransform
+   cellmap_flow.finetune.target_transforms.BinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.BroadcastBinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.AffinityTargetTransform
+   cellmap_flow.finetune.target_transforms.DistanceTargetTransform
+   cellmap_flow.finetune.target_transforms.IntervalTargetTransform
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.read_offsets_from_script
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: read_offsets_from_script(script_path) -> Optional[list]
+
+   The ``offsets`` a model script assigns, read by parsing it (not running it); None if none.
+
+   An affinity model's script names its neighbour offsets, which the
+   affinity target needs. The dashboard reads them too, to tell an affinity
+   model when a session is set up.
+
+
+.. py:class:: TargetTransform
+
+   Base class for target transforms.
+
+
+.. py:class:: BinaryTargetTransform
+
+
+
+   Standard binary segmentation transform (current default behavior).
+
+   Produces single-channel binary target: bg=0, fg=1.
+   Mask marks annotated regions (``targets.binary``).
+
+
+.. py:class:: BroadcastBinaryTargetTransform(num_channels: int)
+
+
+
+   Binary target broadcast to N channels.
+
+   All output channels receive the same fg/bg target.
+   Useful for treating multi-channel models (affinities, distances)
+   as simple binary segmentation (``targets.binary`` on N channels).
+
+
+   .. py:attribute:: num_channels
+
+
+.. py:class:: AffinityTargetTransform(offsets: List[List[int]], num_channels: int = None)
+
+
+
+   Compute affinity targets from instance labels (``targets.affinity``).
+
+   For each offset, affinity is:
+     1 if both voxels belong to the same foreground object (same label > 1)
+     0 if different objects, or either is background
+
+   The loss mask requires both voxels in each pair to be annotated (label > 0),
+   producing a per-channel mask since each offset shifts differently. An
+   offset as long as the patch along its axis or longer pairs no voxel, and
+   its channel's mask is empty.
+
+   :param offsets: List of [dz, dy, dx] offset tuples defining neighbor relationships.
+   :param num_channels: Total number of model output channels. If greater than
+                        len(offsets), extra channels (e.g. LSDs) are masked out
+                        (mask=0) so they receive no gradient. If None, defaults
+                        to len(offsets).
+
+
+   .. py:attribute:: offsets
+
+
+   .. py:attribute:: num_channels
+
+
+.. py:class:: DistanceTargetTransform(sigma_voxels: float = 6.0, num_channels: int = 1)
+
+
+
+   Soft signed-distance target for models trained the fly_organelles way
+   (``targets.distance``, which says how it is made and masked).
+
+   The target is ``(tanh((edt(fg) - edt(not fg)) / sigma) + 1) / 2`` with
+   distances in voxels, 0.5 on the object boundary, so sigmoid(model output)
+   is comparable to it voxel for voxel. Use it with a BCE-with-logits loss,
+   which accepts soft targets; margin and dice do not. A voxel is
+   supervised only where no boundary unseen in the patch can be nearer than
+   the one it measures, or where tanh has saturated anyway.
+
+   :param sigma_voxels: tanh scale in output voxels (6 for the cellmap
+                        distance models).
+   :param num_channels: model output channels; the target is broadcast to all
+                        of them, as BroadcastBinaryTargetTransform does.
+
+
+   .. py:attribute:: sigma
+
+
+   .. py:attribute:: num_channels
+      :value: 1
+
+
+
+.. py:class:: IntervalTargetTransform(sigma_voxels: float = 6.0, voxel_size_nm=None)
+
+
+
+   Bounds on a distance model's output at each painted voxel, for scribbles
+   (``targets.interval``, with ``targets.distance_bounds``, says how).
+
+   A stroke does not say where the object boundary is, but it bounds it:
+   no further than the nearest voxel painted as the other class, no nearer
+   than the nearest voxel not painted as the voxel's own. Where the paint is
+   dense the two meet at the distance DistanceTargetTransform would give.
+   Distances are Euclidean in nm (``voxel_size_nm``), sigma is in the finest
+   axis's output voxels, and the bounds are in the model's logit space.
+
+   Returns ``(bounds, mask)``: bounds (B, 2, Z, Y, X), the lower and upper
+   bound on the logit (0 off the paint), and mask (B, 1, Z, Y, X), the
+   painted voxels. Both have one channel per bound whatever the model's
+   channels: losses.IntervalLoss broadcasts them over its output.
+
+
+   .. py:attribute:: voxel_size_nm
+
+
+   .. py:attribute:: sigma_voxels
+
+
+   .. py:attribute:: sigma_nm
+
+
+   .. py:method:: distance_bounds(ann)
+
+      (L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.
+
+
+

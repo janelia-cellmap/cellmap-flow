@@ -1,0 +1,65 @@
+cellmap_flow.ai_annotate.audit
+==============================
+
+.. py:module:: cellmap_flow.ai_annotate.audit
+
+.. autoapi-nested-parse::
+
+   A record of every AI annotation: what was sent where, and what became of it.
+
+   Each event is one JSON line in ``<corrections_dir>/ai_annotate_log.jsonl``,
+   next to the volumes it concerns, so whoever reviews a dataset's annotations
+   can see which labels a hosted model drew, with which prompt, and that data
+   left the building for it. A line holds the time, the user, the event and
+   the fields the caller gives, nothing else: callers pass ids, the provider
+   and model, the plane and counts, never a credential. As a second guard each
+   line goes through ``secrets.redact`` before it is written.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.audit.logger
+   cellmap_flow.ai_annotate.audit.LOG_NAME
+   cellmap_flow.ai_annotate.audit.EVENTS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.audit.log_path
+   cellmap_flow.ai_annotate.audit.record
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: LOG_NAME
+   :value: 'ai_annotate_log.jsonl'
+
+
+.. py:data:: EVENTS
+   :value: ('requested', 'staged', 'failed', 'resent', 'accepted', 'rejected')
+
+
+.. py:function:: log_path(corrections_dir) -> pathlib.Path
+
+   The audit log of the volumes in ``corrections_dir``.
+
+
+.. py:function:: record(corrections_dir, event: str, **fields) -> None
+
+   Append ``{"time", "user", "event", **fields}`` to the audit log.
+
+   ``event`` is one of ``EVENTS``. Values that are not JSON (numpy numbers,
+   paths) are written as their ``str``. Raises OSError when the log cannot
+   be written: the caller decides whether that stops the action.
+
+

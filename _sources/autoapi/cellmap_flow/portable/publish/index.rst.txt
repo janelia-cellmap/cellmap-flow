@@ -1,0 +1,231 @@
+cellmap_flow.portable.publish
+=============================
+
+.. py:module:: cellmap_flow.portable.publish
+
+.. autoapi-nested-parse::
+
+   A model published to Hugging Face: its model card, its manifest's
+   "published" block and the links that open it in the app, written once for
+   both modes.
+
+   The browser (web/src/backend/routes/publish.ts, through publish_calls.py)
+   and the server (dashboard/routes/finetune/publish.py) upload, in one commit,
+   what ``publication_files`` gives and the model's own files beside them:
+
+       README.md                  the model card (model_card)
+       <folder>/manifest.json     the model's manifest in the catalog's format
+                                  (web/src/models/manifest.ts parseManifest, the
+                                  server's models/resolve.py), with a
+                                  "published" block on top (published_manifest)
+       <folder>/<file>.onnx       one per variant of the manifest: the one file
+                                  a browser trained, or each precision a
+                                  server's export wrote (fp32, fp16, int8w)
+       metadata.json, model.ts,   a server's publish only: the network as
+       model.pt2, ...             cellmap-models exports one, as cellmap's own
+                                  model repositories hold it (finetune.export_web)
+       <folder>-small/...         a server's publish, when asked: a smaller copy
+                                  for the browser (finetune.distill), its
+                                  manifest and .onnx files, a commit of its own
+                                  once its training is done, with the card again
+
+   <folder> is the model's name. The manifest is the catalog's format, so the
+   folder is a model like any of cellmap/onnx-web-models': both modes load it
+   by its ref, ``<owner>/<repo>/<folder>``. The "published" block says what the
+   manifest alone would not: the model's own name (a manifest finetuned in the
+   browser keeps its base's task and model, after which the catalog would
+   name it), what it was finetuned from (a ref) and how, and when. A server
+   opens the export at the root by the repository's name, ``<owner>/<repo>``
+   (type huggingface). A server's publish of a model the browser cannot run
+   (too big for an .onnx file, a 2D model) has that export alone: no folder,
+   no browser links, and a card that says why.
+
+   A publish, ``pub``, is plain JSON, which each mode builds from its own
+   records of the model:
+
+       repo, folder, published_at   where it goes (``owner/name``, the folder in
+                                    it) and when (ISO 8601)
+       manifest                     the catalog-format manifest, whose variants
+                                    are the model's files uploaded
+       origin                       "trained" where it was published from, or
+                                    weights that came there in a "link" or a "file"
+       where                        "browser" or "server": where that was
+       finetuned_from               the ref of the model it was finetuned from, or None
+       finetune_mode                "head" (its last layer), "full" (its whole
+                                    network), "lora" (adapters, merged into the
+                                    network) or None
+       epochs, final_loss,          the training's, or None where not known
+       trained_at
+       app_version                  cellmap-flow's release
+       dataset                      the dataset's URL, or None: only when the
+                                    user asked for it, since a dataset's URL can
+                                    be internal
+       server                       a server's publish only: its export at the
+                                    root, ``{"files": [names], "input_size",
+                                    "output_size": [voxels], "no_browser": why
+                                    there is no browser form, or None}``; with
+                                    no browser form the manifest has no variants
+                                    and only describes the model
+       small                        a smaller copy distilled from the model, or
+                                    None: ``{"folder", "manifest", "published_at"}``,
+                                    the manifest finetune.distill's export
+                                    wrote, its ``distillation`` block saying how
+
+   Nothing here reads or writes a file or the network: the callers upload.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.publish.PUBLIC_APP
+   cellmap_flow.portable.publish.HUB
+   cellmap_flow.portable.publish.HF_OAUTH_CLIENT_ID
+   cellmap_flow.portable.publish.HF_OAUTH_SCOPES
+   cellmap_flow.portable.publish.SMALL_SUFFIX
+   cellmap_flow.portable.publish.MODEL_PARAM
+   cellmap_flow.portable.publish.DATASET_PARAM
+   cellmap_flow.portable.publish.SIGN_IN_FIRST
+   cellmap_flow.portable.publish.TOKEN_REFUSED
+   cellmap_flow.portable.publish.READ_ONLY
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.publish.ref_of
+   cellmap_flow.portable.publish.app_links
+   cellmap_flow.portable.publish.published_links
+   cellmap_flow.portable.publish.repo_refusal
+   cellmap_flow.portable.publish.hub_refusal
+   cellmap_flow.portable.publish.published_manifest
+   cellmap_flow.portable.publish.model_card
+   cellmap_flow.portable.publish.small_manifest
+   cellmap_flow.portable.publish.publication_files
+
+
+Module Contents
+---------------
+
+.. py:data:: PUBLIC_APP
+   :value: 'https://janelia-cellmap.github.io/cellmap-flow/app/'
+
+
+.. py:data:: HUB
+   :value: 'https://huggingface.co'
+
+
+.. py:data:: HF_OAUTH_CLIENT_ID
+   :value: 'https://janelia-cellmap.github.io/cellmap-flow/app/.well-known/oauth-cimd'
+
+
+.. py:data:: HF_OAUTH_SCOPES
+   :value: ('openid', 'profile', 'contribute-repos')
+
+
+.. py:data:: SMALL_SUFFIX
+   :value: '-small'
+
+
+.. py:data:: MODEL_PARAM
+   :value: 'model'
+
+
+.. py:data:: DATASET_PARAM
+   :value: 'dataset'
+
+
+.. py:data:: SIGN_IN_FIRST
+   :value: 'Sign in with Hugging Face, or paste an access token with write access, first: the model is...
+
+
+.. py:data:: TOKEN_REFUSED
+   :value: 'Hugging Face does not accept this token: check that it was copied whole and has not expired or...
+
+
+.. py:data:: READ_ONLY
+   :value: 'This token can only read. Make one with write access at https://huggingface.co/settings/tokens...
+
+
+.. py:function:: ref_of(repo: str, folder: str) -> str
+
+   The ref of ``folder`` in ``repo``, as links and *Add a model* take it.
+
+
+.. py:function:: app_links(app: str, ref: str, dataset: Optional[str]) -> dict
+
+   The links that open the model ``ref`` in the app at ``app`` (a page's
+   own address, or PUBLIC_APP in a card), whatever query or hash ``app``
+   has: ``try_link``, the model alone, which the app opens with the model
+   chosen for whatever volume the user connects; and ``dataset_link``, the
+   Share button's link of ``dataset`` with the model, None without a
+   dataset.
+
+
+.. py:function:: published_links(repo: str, folder: Optional[str], app: str, dataset: Optional[str]) -> dict
+
+   Where a published model is, as both modes' publish routes answer once
+   it is done: its ``ref``, its repository's page (``url``), and
+   ``app_links`` on ``app`` (the page's own address) with ``dataset``.
+   ``folder`` None: a server's publish with no browser form, which no ref
+   of a folder and no link opens (null).
+
+
+.. py:function:: repo_refusal(repo: str, user: str, orgs: List[str]) -> Optional[dict]
+
+   Why a publish to ``repo`` is refused before it starts, as both modes'
+   routes answer: ``{"status", "error"}``, 400 for a name Hugging Face would
+   not take (``owner/name``), 403 for an owner that is neither ``user`` nor
+   one of ``orgs``; None for a repository they may publish to.
+
+
+.. py:function:: hub_refusal(status: int, repo: str, via: str) -> Optional[str]
+
+   What a publish to ``repo`` says when Hugging Face refuses its token
+   (401) or its writing there (403), by how the token was given (``via``:
+   "oauth", a sign-in, whose scope reaches only the repositories made
+   through the app; "token", pasted; "saved", on the server). None for any
+   other answer, which each mode words with the Hub's own reason.
+
+
+.. py:function:: published_manifest(pub: dict) -> dict
+
+   The manifest uploaded as ``<folder>/manifest.json``: ``pub``'s, its
+   variants as they are, and the "published" block in place of any it had
+   (a model opened from a published file brings that one's). What is not
+   known is left out of the block, and the dataset is in it only when
+   ``pub`` names one.
+
+
+.. py:function:: model_card(pub: dict) -> str
+
+   The model card, README.md: Hugging Face's front matter (the library,
+   and tags that find it), then what the model predicts, at what voxel
+   size and in what blocks, what it was finetuned from and how, how to
+   open it, and what its files are. A server's publish says first how a
+   server opens its TorchScript, at the root, by the repository's name;
+   and, when it has no browser form, why not.
+
+
+.. py:function:: small_manifest(pub: dict) -> dict
+
+   The manifest uploaded as ``<small folder>/manifest.json``: the
+   smaller copy's, as distill's export wrote it, with a "published" block
+   that names it, the model it was distilled from (its browser ref, or the
+   repository a server opens it by) and what that one was finetuned from.
+
+
+.. py:function:: publication_files(pub: dict) -> List[dict]
+
+   The card and the browser forms' manifests of the publish ``pub``, by
+   their path in the repository, in the order they are uploaded: ``[{"path",
+   "text"}]``. The model's files are the caller's to add after them, from
+   its own bytes: a server's export's at the root (``pub["server"]``'s
+   files), ``<folder>/<file>`` for each variant of ``pub["manifest"]``, and
+   the smaller copy's in its folder.
+
+

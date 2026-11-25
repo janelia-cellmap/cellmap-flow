@@ -1,0 +1,193 @@
+cellmap_flow.models.registry
+============================
+
+.. py:module:: cellmap_flow.models.registry
+
+.. autoapi-nested-parse::
+
+   The model types cellmap-flow knows, and how a model config is built from an entry.
+
+   Every ModelConfig subclass is a model type: the built-in ones in
+   ``models/configs`` (imported from models_config) and any that a plugin
+   defines. The model CLIs
+   (``cellmap_flow infer``, ``cellmap_flow serve``, ``cellmap_flow yaml``), YAML
+   configs, the dashboard's model form and the finetune CLI's model entries
+   all look types up here, so a plugin type is a type everywhere.
+
+   Nothing is cached. Plugins are loaded when ``cellmap_flow`` is imported, and
+   a plugin or a test can define a type at any time, so each call walks the
+   subclasses as they are at that moment.
+
+   A model entry (``models.entry``) becomes a config in one place,
+   ``build_model``: the entry's keys are matched to the constructor's arguments
+   (``YAML_ALIASES`` first), its values coerced by the constructor's
+   annotations (``entry.coerce``), its ``env`` checked, and the required
+   arguments checked before the constructor, which may load files, runs. Every
+   launcher and the server build models through it, so the same entry gives
+   the same config from a YAML, ``cellmap_flow infer``, the dashboard's form,
+   its pickers and ``serve``; ``build_models`` builds a YAML's whole ``models``.
+
+   A bad YAML entry or type name is a ``config.yaml.ConfigError``.
+
+   A model entry's ``env`` (the environment its server runs in, see
+   ``models.envs``) is not a constructor argument: ``build_model`` checks it
+   and sets it on the built config, and the dashboard's form offers it beside
+   each type's arguments. Left out, the type's ``default_env`` applies
+   (``ModelConfig.effective_env``). Its ``run_voxel_size`` (the voxel size the
+   model is run at, when not its own) is not one either, and is set alike
+   (``ModelConfig.run_voxel_size``).
+
+   Importing this module imports neither torch, flask, huggingface_hub nor
+   ``cellmap_flow.globals``. The model config classes, which bring numpy and
+   funlib (most of a second), are imported only when a function needs them.
+   ``describe_types`` reads constructor signatures only, so it never imports
+   bioimageio, dacapo or cellmap_models either.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.registry.logger
+   cellmap_flow.models.registry.YAML_ALIASES
+   cellmap_flow.models.registry.ENV_KEY
+   cellmap_flow.models.registry.RUN_VOXEL_SIZE_KEY
+   cellmap_flow.models.registry.ENTRY_KEYS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.registry.cli_name_of
+   cellmap_flow.models.registry.model_types
+   cellmap_flow.models.registry.model_type
+   cellmap_flow.models.registry.required_params
+   cellmap_flow.models.registry.build_model
+   cellmap_flow.models.registry.build_models
+   cellmap_flow.models.registry.click_options
+   cellmap_flow.models.registry.print_available_models
+   cellmap_flow.models.registry.parameter_info
+   cellmap_flow.models.registry.describe_types
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: YAML_ALIASES
+
+.. py:data:: ENV_KEY
+   :value: 'env'
+
+
+.. py:data:: RUN_VOXEL_SIZE_KEY
+   :value: 'run_voxel_size'
+
+
+.. py:data:: ENTRY_KEYS
+
+.. py:function:: cli_name_of(cls: type) -> str
+
+   The name ``cls`` is registered under: its own ``cli_name``, else one from its class name.
+
+   Only a ``cli_name`` the class sets itself counts. A plugin's
+   ``class MyScript(ScriptModelConfig)`` inherits ``cli_name = "script"``;
+   taking that as its name would either replace the script type or lose
+   the name clash and leave MyScript without a type, and its ``command``
+   would ask the server for a plain ScriptModelConfig. It is "myscript".
+
+
+.. py:function:: model_types() -> Dict[str, type]
+
+   Every model type, by the name the CLIs and YAML ``type:`` use.
+
+   Plugins included, subclasses of subclasses too. When two classes claim a
+   name the first one found keeps it, and the other is left out with a
+   warning.
+
+
+.. py:function:: model_type(name: str) -> type
+
+   The class registered as ``name``: a type name as a YAML ``type:``
+   gives it, or a class name.
+
+   :raises ConfigError: no type has that name; the message lists the valid ones.
+
+
+.. py:function:: required_params(cls) -> List[str]
+
+   The constructor arguments a user must give: no default, and not name or scale.
+
+
+.. py:function:: build_model(entry: Dict[str, Any], name: str = None, base_dir: str = None)
+
+   The model config a model entry describes (``models.entry``).
+
+   ``name`` is the model's name when the entry gives none: its key under a
+   YAML's ``models``, or what a launcher calls it. ``base_dir`` is the YAML
+   file's folder, when there is one: a relative path in one of the type's
+   ``config_relative_paths`` is taken from there rather than from the
+   working directory.
+
+   :raises ConfigError: the entry does not describe a model that can be built.
+
+
+.. py:function:: build_models(model_entries, base_dir: str = None) -> list
+
+   The model configs for a YAML's ``models``: ``build_model`` for each entry.
+
+   ``base_dir``, the YAML file's folder, is where a relative path of a
+   type's ``config_relative_paths`` is taken from.
+
+   ``model_entries`` maps each model's name to its entry, or is a list of
+   entries that each have a ``name``::
+
+       models:
+         my_model_1:
+           type: cellmap
+           checkpoint_path: /path/to/checkpoint
+         my_model_2:
+           type: dacapo
+           run_name: my_run
+           iteration: 50000
+
+   :raises ConfigError: an entry does not describe a model that can be built.
+
+
+.. py:function:: click_options(cls, reserved_short) -> List[dict]
+
+   The ``click.option`` arguments for each of ``cls``'s constructor arguments.
+
+   In signature order, which is also the order short flags are handed out
+   in: an argument gets its first letter unless an earlier argument has it
+   already (``script -s`` is ``--script-path``, and ``--scale`` has no short
+   flag). ``reserved_short`` holds the command's own short flags (``-d`` and
+   so on), which no argument gets.
+
+
+.. py:function:: print_available_models(cli_command_name: str = 'cellmap_flow')
+
+   Print every model type and its constructor arguments, for ``list-models``.
+
+   ``cli_command_name`` is the command the closing hint names.
+
+
+.. py:function:: parameter_info(cls) -> Dict[str, Any]
+
+   Each constructor argument of ``cls``: name, required, description, type and default.
+
+
+.. py:function:: describe_types() -> Dict[str, Dict[str, Any]]
+
+   What the dashboard's model form offers, by type name (``model_types``).
+
+   Each type's ``display_name``, ``description``, ``parameters``
+   (``parameter_info`` with the form control for each), its ``type``, the
+   name the form posts, and its ``class_name``.
+
+

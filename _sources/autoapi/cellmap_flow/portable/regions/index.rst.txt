@@ -1,0 +1,107 @@
+cellmap_flow.portable.regions
+=============================
+
+.. py:module:: cellmap_flow.portable.regions
+
+.. autoapi-nested-parse::
+
+   Good regions on numbers alone: the region a mark makes, its size, which
+   stored entries are regions, and where a region anchors the model on a
+   volume's grid, so that the server and the browser make, draw and place a
+   region the same way. ``dashboard/routes/finetune/good_regions.py`` says what
+   good regions are for; its routes and the server's trainer
+   (``finetune/data/sampler.py``) call these in their process, and the
+   browser's routes and trainer (``web/src/backend/routes/good-regions.ts``,
+   ``web/src/finetune/run.ts``) call them through ``volume_calls.py``.
+
+   A region is ``{"id", "label", "offset_nm", "shape_nm"}``: a box in world nm,
+   z, y, x, its lower corner and its size, as ``good_regions.json`` keeps it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.regions.DEFAULT_REGION_SIZE_NM
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.regions.default_size_nm
+   cellmap_flow.portable.regions.region_size_nm
+   cellmap_flow.portable.regions.new_region
+   cellmap_flow.portable.regions.region_box_nm
+   cellmap_flow.portable.regions.region_centre_voxels
+   cellmap_flow.portable.regions.anchor_boxes
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_REGION_SIZE_NM
+   :value: 896.0
+
+
+.. py:function:: default_size_nm(output_size=None, output_voxel_size=None) -> list
+
+   One model output patch of a volume, in nm (see DEFAULT_REGION_SIZE_NM):
+   ``output_size`` voxels of ``output_voxel_size`` nm, or 896 nm a side when
+   either is missing or not numbers.
+
+
+.. py:function:: region_size_nm(size_nm, output_size=None, output_voxel_size=None) -> list
+
+   The size a mark asks for, in nm, z, y, x.
+
+   No size (None, 0, an empty list) is one output patch of the volume
+   (``default_size_nm`` of ``output_size`` and ``output_voxel_size``);
+   one number, alone or in a list, is the same along every axis; else three
+   numbers. ValueError ("size_nm must be positive") for anything else: a
+   size that is not a number, not finite or not positive, or of another
+   length.
+
+
+.. py:function:: new_region(centre_nm, size_nm, count: int, label=None, region_id: Optional[str] = None) -> dict
+
+   The region a mark makes: a box of ``size_nm`` centred on ``centre_nm``,
+   labelled ``label`` (a non-empty string), or ``good-<count + 1>`` after
+   ``count`` regions; its id eight hex digits unless ``region_id`` is given.
+
+
+.. py:function:: region_box_nm(region) -> Optional[tuple]
+
+   ``(offset_nm, shape_nm)`` of a stored region, as float arrays, or None
+   when the entry is not a region: a mapping whose offset_nm and shape_nm
+   are three finite numbers each, its shape positive. Its id and label are
+   not needed to place it.
+
+
+.. py:function:: region_centre_voxels(region, corner_nm, voxel_nm, shape_voxels) -> tuple
+
+   Where a region's centre lies on a volume's grid: ``(where, centre)``.
+
+   ``corner_nm`` is the volume's voxel-0 lower corner (``volume_corner_nm``),
+   ``voxel_nm`` its output voxel size and ``shape_voxels`` its shape. The
+   centre is in voxels from the corner (voxel v spans [v, v + 1)). ``where``
+   is "malformed" (not a region, ``region_box_nm``; the centre is None),
+   "outside" (a region marked on another volume, which would anchor the
+   model to padding) or "inside".
+
+
+.. py:function:: anchor_boxes(regions, corner_nm, voxel_nm, shape_voxels, block) -> dict
+
+   The box of the volume's voxels each region anchors, and which were skipped.
+
+   The box is the rehearsal patch the server's trainer cuts for the region:
+   one output ``block`` whose start is the region's centre snapped so that
+   the block is whole voxels (``PatchReader.snap``: ``floor(c - block/2 +
+   1/2)``), clipped to the volume. Answers ``{"boxes": [{"region", "lo",
+   "hi"}], "malformed": [...], "outside": [...]}``, each region by its
+   index in ``regions`` and each box [lo, hi) in voxels, z, y, x.
+
+

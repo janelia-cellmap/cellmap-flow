@@ -1,0 +1,124 @@
+cellmap_flow.ai_annotate.backends.base
+======================================
+
+.. py:module:: cellmap_flow.ai_annotate.backends.base
+
+.. autoapi-nested-parse::
+
+   What every provider takes and gives back, so the pipeline does not know which one ran.
+
+   A provider turns one RGB EM plane and a prompt into a mask of the same size.
+   How it gets there is its own business: an image model asked to paint the
+   structure (Vertex Gemini), a local stand-in (fake), or later a model that
+   takes the click itself as a point prompt (``click_px``).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.backends.base.SegmentRequest
+   cellmap_flow.ai_annotate.backends.base.SegmentResult
+   cellmap_flow.ai_annotate.backends.base.Backend
+
+
+Module Contents
+---------------
+
+.. py:class:: SegmentRequest
+
+   One plane to segment.
+
+   ``image`` is exactly what is sent: the RGB EM plane at the resolution the
+   prompt states. ``target_rgb`` is the colour the prompt asks for, and
+   ``click_px`` the (row, col) the user pointed at in ``image``, or None.
+
+
+   .. py:attribute:: image
+      :type:  PIL.Image.Image
+
+
+   .. py:attribute:: prompt
+      :type:  str
+
+
+   .. py:attribute:: target_rgb
+      :type:  tuple
+
+
+   .. py:attribute:: click_px
+      :type:  tuple | None
+      :value: None
+
+
+
+.. py:class:: SegmentResult
+
+   A provider's answer.
+
+   ``mask`` is bool with ``image``'s (height, width). ``model_image`` is
+   what the model drew, resized to ``image``'s size, for the review preview
+   (None for a provider that draws nothing). ``usage`` holds whatever token
+   counts the provider reports, possibly none.
+
+
+   .. py:attribute:: mask
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: model_image
+      :type:  PIL.Image.Image | None
+
+
+   .. py:attribute:: model
+      :type:  str
+
+
+   .. py:attribute:: usage
+      :type:  dict
+
+
+.. py:class:: Backend
+
+
+
+   Base class for protocol classes.
+
+   Protocol classes are defined as::
+
+       class Proto(Protocol):
+           def meth(self) -> int:
+               ...
+
+   Such classes are primarily used with static type checkers that recognize
+   structural subtyping (static duck-typing).
+
+   For example::
+
+       class C:
+           def meth(self) -> int:
+               return 0
+
+       def func(x: Proto) -> int:
+           return x.meth()
+
+       func(C())  # Passes static type check
+
+   See PEP 544 for details. Protocol classes decorated with
+   @typing.runtime_checkable act as simple-minded runtime protocols that check
+   only the presence of given attributes, ignoring their type signatures.
+   Protocol classes can be generic, they are defined as::
+
+       class GenProto(Protocol[T]):
+           def meth(self) -> T:
+               ...
+
+
+   .. py:method:: segment(request: SegmentRequest, model: str) -> SegmentResult
+
+      Segment ``request`` with ``model``, raising ``AIAnnotateError`` on failure.
+
+
+

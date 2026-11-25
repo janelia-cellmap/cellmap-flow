@@ -1,0 +1,121 @@
+cellmap_flow.jobs.queues
+========================
+
+.. py:module:: cellmap_flow.jobs.queues
+
+.. autoapi-nested-parse::
+
+   Which GPU queues are actually usable, and the order to try them in.
+
+   gpu_queue_availability() feeds the dashboard's queue pickers; candidates()
+   is the order a job is tried on the queues it may run on, which start_hosts
+   and the finetune job manager submit in; queue_list() reads those queues
+   wherever they are given (a YAML, a command line, the saved settings, a
+   request).
+
+   Picking a queue blind is how a job ends up behind nine thousand pending ones:
+   at the time this was written ``gpu_h200`` had 9224 jobs pending while
+   ``gpu_h100`` had none, and nothing in the UI said so. LSF already knows --
+   ``bqueues`` for the backlog, ``bhosts`` for whether the nodes behind the queue
+   are up at all -- so ask it, cache the answer, and let the UI show it next to
+   each option.
+
+   Host state matters separately from queue state. A queue reports ``Open:Active``
+   while its nodes are individually closed: ``closed_Adm`` when an admin has taken
+   them out for maintenance, ``closed_Full`` when they are merely saturated. Those
+   mean different things to someone deciding where to submit -- the first will not
+   clear on its own -- so they are counted separately rather than lumped into one
+   "busy" number. Neither has a free GPU, however idle its GPUs are: only the
+   idle GPUs of hosts that are "ok" are counted as free.
+
+   Nothing here raises. A dashboard running somewhere without LSF should show a
+   queue picker that still works, just without the annotations.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.queues.logger
+   cellmap_flow.jobs.queues.GPU_QUEUES
+   cellmap_flow.jobs.queues.CACHE_TTL_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.queues.gpu_queue_availability
+   cellmap_flow.jobs.queues.queue_list
+   cellmap_flow.jobs.queues.candidates
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GPU_QUEUES
+
+.. py:data:: CACHE_TTL_SECONDS
+   :value: 60
+
+
+.. py:function:: gpu_queue_availability(force=False)
+
+   Current GPU queue availability, cached for ``CACHE_TTL_SECONDS``.
+
+   The UI polls this about once a minute; the cache means several open
+   dashboards don't multiply into an LSF query storm, since the answer is the
+   same for all of them.
+
+
+.. py:function:: queue_list(value)
+
+   The queues ``value`` names, as a list, each once, in its order.
+
+   A job may run on several GPU queues (the dashboard's pickers tick them),
+   so wherever a queue is read it is a list; one name is a list of one, so
+   a YAML's ``queue: gpu_h200`` and a command line's ``--queue gpu_h200``
+   name the one queue. A string may name several, separated by commas
+   or spaces, as a text field holds them (the pipeline builder's Queue).
+   None and "" name none: [].
+
+   :raises ValueError: ``value`` is neither a name nor a list of names.
+
+
+.. py:function:: candidates(queues, cycle=True)
+
+   The order to try ``queues``, the queues a job may run on, in.
+
+   ``queues`` is read by queue_list; none named is every GPU queue
+   offered (the site's default_queues).
+
+   With ``cycle=False`` the first of them is the only candidate: the job
+   waits for it however long that takes, rather than being moved to
+   whatever is free. Some work is pinned to a queue on purpose -- a
+   benchmark that must run on one GPU model, or a charge group only valid
+   on one queue -- and silently landing somewhere else is worse than
+   waiting.
+
+   Otherwise every one of them and no other, ordered by what LSF says is
+   free right now: the most free GPUs first, ties broken on the shorter
+   pending queue. So the job goes first to the queue likeliest to start it,
+   and each fallback after a pending timeout is the next likeliest of the
+   ones asked for; a queue that was not asked for is never tried, however
+   free it is.
+
+   A queue LSF says is not accepting work goes last: it takes submissions
+   and never runs them, which is indistinguishable from a very slow job, so
+   trying it before the others would cost a pending timeout of dead wait.
+   It stays on the list -- a queue can reopen, and it was asked for -- just
+   not ahead of queues that can run the job now. A queue LSF says nothing
+   about (a YAML naming gpu_l4) is unknown, not closed: it comes after the
+   ones known to accept work and before the closed ones.
+
+   When LSF cannot be queried at all, ``queues`` are tried in their order.
+
+

@@ -1,0 +1,235 @@
+cellmap_flow.finetune.crop_loader
+=================================
+
+.. py:module:: cellmap_flow.finetune.crop_loader
+
+.. autoapi-nested-parse::
+
+   YAML manifest schema and helpers for importing externally annotated crops.
+
+   Each manifest entry points at a 3D zarr (typically OME-NGFF) of instance
+   labels or class IDs. The dashboard's YAML loader (see
+   ``cellmap_flow.dashboard.routes.finetune.yaml_crops``) reads these crops,
+   remaps their values into the trainer's
+   ``0 = unannotated, 1 = background, >=2 = foreground instance`` convention,
+   and writes them into the session's annotation_volume.zarr at the crops'
+   physical offsets.
+
+   This module owns:
+       - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
+       - The label remap function (:func:`remap_labels`).
+       - Where a crop sits (:func:`_read_voxel_size_and_offset`): its voxel
+         size, the corner of its voxel 0 and the array's sub-path inside a
+         group, read by worldarray from the crop's documents (the array itself
+         is read with worldarray too, opened by ``io.metadata.open_level``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.logger
+   cellmap_flow.finetune.crop_loader.YAML_SUFFIXES
+   cellmap_flow.finetune.crop_loader.YAML_SIZE_LIMIT
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.YamlFileRefused
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.CropEntry
+   cellmap_flow.finetune.crop_loader.CropsConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.read_yaml_file
+   cellmap_flow.finetune.crop_loader.parse_crops_yaml
+   cellmap_flow.finetune.crop_loader.remap_labels
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: CropEntry(/, **data: Any)
+
+
+
+   One annotation crop to import.
+
+   Fields other than ``path`` are optional with sensible defaults:
+       - ``fg_ids=None`` means "every nonzero source value is foreground"
+       - ``bg_ids=[]`` means "no explicit BG ids, see mode for what 0 means"
+       - ``mode='dense'`` treats unmatched voxels (incl. 0) as background
+       - ``mode='sparse'`` treats unmatched voxels as unannotated
+       - ``connected_components=False`` keeps source ids as instance ids;
+         set True with a single-id ``fg_ids`` to split same-id blobs into
+         per-instance ids for affinity-style training.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: fg_ids
+      :type:  Optional[List[int]]
+      :value: None
+
+
+
+   .. py:attribute:: bg_ids
+      :type:  List[int]
+
+
+   .. py:attribute:: mode
+      :type:  Literal['dense', 'sparse']
+      :value: 'dense'
+
+
+
+   .. py:attribute:: connected_components
+      :type:  bool
+      :value: False
+
+
+
+.. py:class:: CropsConfig(/, **data: Any)
+
+
+
+   Top-level YAML schema.
+
+   ``patches_per_epoch``, ``jitter_voxels``, and ``seed`` are passed through
+   to the :class:`VirtualPatchDataset` manifest the loader writes — they
+   govern epoch length, patch-center jitter (in voxels), and the per-worker
+   RNG base seed for reproducible patch sampling across runs.
+
+   ``patches_per_epoch=None`` (the default) means "cover every annotated
+   chunk roughly once per epoch" — the dataset substitutes the number of
+   chunks holding a voxel of either pool at index build time. Override
+   with an explicit int to cap the epoch length.
+
+   ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
+   half the patches are centred in the dense pool (foreground inside the
+   imported crops) and half in the sparse one (every annotated voxel
+   outside them, background included: the painted scribbles) when both
+   have voxels, and all in the one that has when only one does (see
+   ``finetune.data.sampler``).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: crops
+      :type:  List[CropEntry]
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  Optional[int]
+      :value: None
+
+
+
+   .. py:attribute:: jitter_voxels
+      :type:  Optional[List[int]]
+      :value: None
+
+
+
+   .. py:attribute:: seed
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: dense_to_sparse_ratio
+      :type:  Optional[float]
+      :value: None
+
+
+
+.. py:data:: YAML_SUFFIXES
+   :value: ('.yaml', '.yml')
+
+
+.. py:data:: YAML_SIZE_LIMIT
+   :value: 1000000
+
+
+.. py:exception:: YamlFileRefused
+
+
+
+   A path :func:`read_yaml_file` will not read; the message says why.
+
+
+.. py:function:: read_yaml_file(path: str) -> str
+
+   Return the text of the YAML file at ``path``, or raise :class:`YamlFileRefused`.
+
+   The dashboard listens on every interface without authentication, and two
+   of its routes read a file the request names: read-yaml, for the editor,
+   and load-crops. Both used to read any file the dashboard's user could, so
+   this reads only a regular file that is YAML by name once symlinks are
+   resolved, and at most 1 MB of it.
+
+   A file that is missing, is not YAML, is not a regular file or cannot be
+   opened is refused with the same message, so the answer does not tell a
+   caller which paths exist either.
+
+
+.. py:function:: parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig
+
+   Parse YAML text, or the path to a YAML file, into a validated config.
+
+   A single line that ends in ``.yaml`` or ``.yml`` is a path, read through
+   :func:`read_yaml_file`; anything else is YAML text. Deciding by the name
+   rather than by whether the file exists is what keeps load-crops from
+   opening arbitrary files, or answering differently for one that exists.
+
+
+.. py:function:: remap_labels(source: numpy.ndarray, fg_ids: Optional[Iterable[int]], bg_ids: Iterable[int], mode: Literal['dense', 'sparse'], connected_components: bool) -> numpy.ndarray
+
+   Map source label values to ``0=unannotated, 1=BG, >=2=FG instance``.
+
+   Mapping rules:
+       - source value in ``fg_ids`` (or any nonzero if ``fg_ids is None``)
+         becomes a unique instance id >=2. If ``connected_components`` is True,
+         each connected blob within an fg_id class gets its own instance.
+         Otherwise, source ids map to consecutive 2,3,... in order.
+       - source value in ``bg_ids`` -> 1 (background).
+       - everything else -> 1 if ``mode='dense'``, else 0 (unannotated).
+
+   Returns ``uint8``. If the number of distinct instances would overflow
+   ``uint8``, all FG voxels collapse to id=2 and a warning is emitted.
+
+

@@ -1,0 +1,233 @@
+cellmap_flow.finetune.options
+=============================
+
+.. py:module:: cellmap_flow.finetune.options
+
+.. autoapi-nested-parse::
+
+   Every setting a finetune trains with, and its default, in one place.
+
+   ``TrainingOptions`` is what the Finetune tab's form sends
+   (``dashboard/requests.FinetuneSubmit`` adds the request's own fields to
+   it), what the job manager turns into the job's command line
+   (``cli.training_flags``), what that command line parses back into
+   (``cli.build_arg_parser`` makes a flag of every field, ``cli.options_of``
+   reads them), and what the trainer is built from
+   (``trainer.Finetuner``). Each default is written here once:
+   ``cellmap_flow.schema`` exports the form's to the browser as
+   ``FINETUNE_DEFAULTS``, so the browser's form starts from the same values.
+
+   The settings are kept as they are asked for. ``for_session`` says what a
+   job can train with given its session (sparse annotations, a distance or a
+   flow target); the trainer applies the rest of its own rules (label
+   smoothing means nothing to the margin loss, say) when it is built.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.options.LOSS_TYPES
+   cellmap_flow.finetune.options.OUTPUT_TYPES
+   cellmap_flow.finetune.options.MODES
+   cellmap_flow.finetune.options.OUTPUT_CLASSES
+   cellmap_flow.finetune.options.MANIFEST_FIELDS
+   cellmap_flow.finetune.options.LEARNING_RATE_FLOOR
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.options.TrainingOptions
+
+
+Module Contents
+---------------
+
+.. py:data:: LOSS_TYPES
+   :value: ('dice', 'bce', 'combined', 'mse', 'margin', 'interval', 'flow')
+
+
+.. py:data:: OUTPUT_TYPES
+   :value: ('binary', 'binary_broadcast', 'affinities', 'distance', 'flows')
+
+
+.. py:data:: MODES
+   :value: ('lora', 'full', 'head')
+
+
+.. py:data:: OUTPUT_CLASSES
+
+.. py:data:: MANIFEST_FIELDS
+   :value: ('patches_per_epoch', 'rehearsal_fraction')
+
+
+.. py:data:: LEARNING_RATE_FLOOR
+   :value: 0.1
+
+
+.. py:class:: TrainingOptions(/, **data: Any)
+
+
+
+   The settings of one finetune, each with its default.
+
+   The defaults are the server form's (``_finetune_tab.html``, checked by
+   tests/web/test_schema.py): a LoRA adapter of rank 64, 20 epochs of
+   batches of 8 from 1e-4 eased down to a tenth of it, the margin loss
+   with class balance and a light distillation (0.01) on the unlabeled
+   voxels, no augmentation. The browser's form overrides a few for the
+   last layer (web/src/finetune/types.ts DEFAULT_OPTIONS).
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: mode
+      :type:  Mode
+
+
+   .. py:attribute:: lora_r
+      :type:  int
+
+
+   .. py:attribute:: lora_alpha
+      :type:  Optional[int]
+
+
+   .. py:attribute:: lora_dropout
+      :type:  float
+
+
+   .. py:attribute:: lora_min_channels
+      :type:  int
+
+
+   .. py:attribute:: num_epochs
+      :type:  int
+
+
+   .. py:attribute:: batch_size
+      :type:  int
+
+
+   .. py:attribute:: learning_rate
+      :type:  float
+
+
+   .. py:attribute:: learning_rate_schedule
+      :type:  LearningRateSchedule
+
+
+   .. py:attribute:: gradient_accumulation_steps
+      :type:  int
+
+
+   .. py:attribute:: loss_type
+      :type:  LossType
+
+
+   .. py:attribute:: label_smoothing
+      :type:  float
+
+
+   .. py:attribute:: distillation_lambda
+      :type:  Optional[float]
+
+
+   .. py:attribute:: distillation_scope
+      :type:  DistillationScope
+
+
+   .. py:attribute:: margin
+      :type:  float
+
+
+   .. py:attribute:: balance_classes
+      :type:  bool
+
+
+   .. py:attribute:: slope_weight
+      :type:  float
+
+
+   .. py:attribute:: augment
+      :type:  bool
+
+
+   .. py:attribute:: mixed_precision
+      :type:  bool
+
+
+   .. py:attribute:: num_workers
+      :type:  int
+
+
+   .. py:attribute:: tensorboard
+      :type:  bool
+
+
+   .. py:attribute:: mask_unannotated
+      :type:  bool
+
+
+   .. py:attribute:: output_type
+      :type:  OutputType
+
+
+   .. py:attribute:: distance_sigma
+      :type:  float
+
+
+   .. py:attribute:: select_channel
+      :type:  Optional[int]
+
+
+   .. py:attribute:: offsets
+      :type:  Optional[str]
+
+
+   .. py:attribute:: output_class
+      :type:  Optional[OutputClass]
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  Optional[int]
+
+
+   .. py:attribute:: rehearsal_fraction
+      :type:  Optional[float]
+
+
+   .. py:method:: replaced(**changes) -> TrainingOptions
+
+      A copy with ``changes`` applied, validated as a whole.
+
+
+
+   .. py:method:: for_session(*, sparse: bool) -> TrainingOptions
+
+      What a job trains with, given whether its session is sparse (painted).
+
+      Some combinations cannot train, or would train the wrong thing, so
+      they are replaced here, where the dashboard shows it in submit's
+      answer, rather than failing on the cluster:
+      - sparse annotations with mse: the margin loss, with distillation to
+        the base model at 0.5, which is how sparse annotations train (see
+        the distance case below);
+      - a distance target with sparse annotations: the interval loss, on the
+        bounds the paint sets on each voxel's distance, with distillation of
+        at least 0.5 (below);
+      - a distance target otherwise: bce, without label smoothing;
+      - a flow target (Cellpose): the flow loss, the only one it goes with,
+        without label smoothing, sparse or not (it masks per channel itself).
+      A sparse session also masks its unannotated voxels out of the loss.
+
+
+

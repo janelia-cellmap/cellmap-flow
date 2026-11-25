@@ -1,0 +1,76 @@
+cellmap_flow.blockwise.max_block_size_cache
+===========================================
+
+.. py:module:: cellmap_flow.blockwise.max_block_size_cache
+
+.. autoapi-nested-parse::
+
+   Remembering a model's probed max block size for a GPU queue.
+
+   Mirrors ``models.geometry_cache``'s pattern (a self-invalidating key, an
+   atomically-rewritten JSON file), but keyed by the model *and* the GPU queue:
+   a bigger GPU fits a bigger block, so the same model gets a different answer
+   on ``gpu_h100`` than on ``gpu_l4``. ``models.geometry_cache.cache_key`` only
+   covers script and HuggingFace models (the only ones it was written for);
+   this one also covers a checkpoint-file model (Fly) and a folder-based export
+   (CellMap), since a GPU-block-size probe is exactly as useful for those.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size_cache.logger
+   cellmap_flow.blockwise.max_block_size_cache.CACHE_PATH
+   cellmap_flow.blockwise.max_block_size_cache.MAX_ENTRIES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.blockwise.max_block_size_cache.cache_key
+   cellmap_flow.blockwise.max_block_size_cache.load_cached
+   cellmap_flow.blockwise.max_block_size_cache.stored_at
+   cellmap_flow.blockwise.max_block_size_cache.store
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: CACHE_PATH
+
+.. py:data:: MAX_ENTRIES
+   :value: 200
+
+
+.. py:function:: cache_key(model_config, queue: str) -> str
+
+   A key that changes when the model or the queue does, or None if we
+   cannot make one (no identifying path, and no repo+revision).
+
+
+.. py:function:: load_cached(model_config, queue: str) -> dict
+
+   The cached probe result for this exact model on this queue, as a
+   plain dict (``MaxBlockSizeResult.from_dict`` reads it), or None.
+
+
+.. py:function:: stored_at(model_config, queue: str)
+
+   When the cached result for this model and queue was stored (epoch
+   seconds), or None: no entry, or one from before entries said.
+
+
+.. py:function:: store(model_config, queue: str, result) -> None
+
+   Remember a probe ``result`` (a MaxBlockSizeResult) we just paid for,
+   and when: a dashboard polling a probe job takes an entry stored since
+   it submitted the job as that job's answer (routes.blockwise).
+
+
