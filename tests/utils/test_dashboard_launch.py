@@ -738,6 +738,14 @@ def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_c
     launch.update_run_models(["mine"])  # running already: not started twice
     assert started == ["mine"]
 
+    # Removed with its ✕, it is out of the session's models (Export Config
+    # leaves it out), and its row, ticked again, still starts it.
+    launch.remove_model("mine")
+    assert session.models_config == [] and session.jobs == []
+    launch.update_run_models(["mine"])
+    assert started == ["mine", "mine"]
+    assert [mc.name for mc in session.models_config] == ["mine"]
+
 
 def test_two_submits_at_once_start_a_model_once(viewer, monkeypatch, tmp_path):
     """Two Submits a second apart (the button pressed again while the first's
