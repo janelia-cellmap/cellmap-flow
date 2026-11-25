@@ -493,6 +493,14 @@ def configs_by_name() -> dict:
     return {getattr(mc, "name", None): mc for mc in get_session().models_config}
 
 
+# The configs a ✕ took out of the session's models, by name (remove_model).
+# A model that no catalog names (Add a model's, the YAML's) keeps its row on
+# the Models tab after its ✕, and only its config can start it: ticked
+# again, it is started from here (_picked). Export Config and the pipeline
+# builder read the session's models, so they still leave it out.
+_removed_configs: dict = {}
+
+
 def drop_config(name):
     """Take the model config named ``name`` out of the session's models;
     nothing when none is. Export Config and the pipeline builder list what
@@ -515,6 +523,7 @@ def _keep_config(config):
     else:
         models.append(config)
     session.models_config = models
+    _removed_configs.pop(config.name, None)
 
 
 def _catalog_groups() -> dict:
@@ -547,8 +556,8 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
     panel's, then the models ticked by name alone (one that Add a model
     started, or that the YAML the dashboard was started with did, stopped
     since and ticked again: no catalog entry names them, so their config
-    starts them; not a finetuned model's, whose server is its finetune
-    job's).
+    starts them, the one a ✕ put aside when it removed the model; not a
+    finetuned model's, whose server is its finetune job's).
 
     A catalog model, a Hugging Face one and one ticked by name is run at its
     ``run_voxel_sizes`` entry, by the name or repo it is ticked by, and at
@@ -594,7 +603,7 @@ def _picked(names, hf_repos, bioimage_models, cellpose_models, run_voxel_sizes) 
         add(config.name, config)
     configs = configs_by_name()
     for name in names:
-        config = configs.get(name)
+        config = configs.get(name) or _removed_configs.get(name)
         if name not in taken and config is not None and not isinstance(config, FinetuneModelConfig):
             add(name, _at_run_voxel_size(config, run_voxel_sizes.get(name)))
     return picked
@@ -839,7 +848,8 @@ def remove_model(name: str, *, cancel_finetune=True) -> list:
     deleted in the viewer, which cannot ask first (``_layers_deleted``).
     The model's config goes with it, so Export Config no longer lists a
     model taken off (a model unticked on Submit keeps its config, for the
-    Models tab's rows and the pipeline builder).
+    Models tab's rows and the pipeline builder). It is kept aside
+    (``_removed_configs``) for the model's row, ticked again, to start it.
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -876,6 +886,9 @@ def remove_model(name: str, *, cancel_finetune=True) -> list:
                 job.kill()
     _stop_jobs(jobs)
     session.forget_layer(name)
+    config = configs_by_name().get(name)
+    if config is not None and not isinstance(config, FinetuneModelConfig):
+        _removed_configs[name] = config
     drop_config(name)
     logger.info(f"Removed model {name}")
     return loaded_models()
