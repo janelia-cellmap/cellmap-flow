@@ -35,6 +35,7 @@ from pydantic import PrivateAttr
 from cellmap_flow.inference import timing
 from cellmap_flow.io.raw import apply_norms
 from cellmap_flow.pipeline_spec import _output_info, chain_output_dtype
+from cellmap_flow.serving import post_pool
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,8 @@ class PostprocessOp(Op):
         from cellmap_flow.pipeline_spec import PipelineSpec
 
         self._step = PipelineSpec((), (self.step,)).build()[1][0]
+        if getattr(self._step, "separate_process", False):
+            post_pool.warm(self.step)
 
     def for_dashboard(self, dashboard_url, dataset):
         """Send merged ids to ``dashboard_url`` as those of layer ``dataset``."""
@@ -341,7 +344,13 @@ class PostprocessOp(Op):
         corner = tuple(int(v) for v in np.asarray(box.start[-3:]) // block_shape)
         began = time.perf_counter()
         with timing.stage("postprocess"):
-            result = self._step(block, chunk_corner=corner, chunk_num_voxels=int(np.prod(block_shape)))
+            kwargs = {"chunk_corner": corner, "chunk_num_voxels": int(np.prod(block_shape))}
+            # A step that holds Python's lock runs in a process of its own,
+            # so the chunks of a view are not computed one at a time.
+            if getattr(self._step, "separate_process", False):
+                result = post_pool.run(self.step, self._step, block, **kwargs)
+            else:
+                result = self._step(block, **kwargs)
         self._chunks += 1
         logger.log(
             logging.INFO if self._chunks <= 20 else logging.DEBUG,
@@ -378,9 +387,24 @@ class DevicePostprocessOp(PostprocessOp):
     slots: ClassVar[Optional[int]] = 1
 
 
+class WorkerPostprocessOp(PostprocessOp):
+    """A postprocessing step that runs in the worker processes (its
+    ``separate_process``; serving/post_pool.py), as many chunks at once as
+    there are workers (``slots``, set as a layer's ops are made), the
+    nearest first. The rest wait in chunkmirage's queue rather than each on
+    a thread of its own, and a chunk whose request was given up on (the
+    layer an Apply replaced, a view moved away from) is dropped from it
+    rather than computed for nobody: a view of 40 chunks at 5 s each had
+    the next Apply's chunks wait for all of them."""
+
+    name: ClassVar[str] = "cellmap_flow.postprocess_in_workers"
+    slots: ClassVar[Optional[int]] = 1
+
+
 def layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset=""):
     """The ops of a layer's pipeline: the model on ``input_norm``, then one op
-    per step of ``postprocess``, then, if the chain leaves another dtype than
+    per step of ``postprocess`` (on the GPU's queue, or the workers', when
+    the step says so), then, if the chain leaves another dtype than
     the one served, chunkmirage's ``cast`` to it (as ``astype``)."""
     from chunkmirage_contrib.ops import Cast
 
@@ -390,6 +414,11 @@ def layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset=""):
         op = PostprocessOp(model=model, step=step)
         if getattr(op._step, "uses_device", False):
             op = DevicePostprocessOp(model=model, step=step)
+        elif getattr(op._step, "separate_process", False):
+            # With no workers the step runs in this process, one chunk at a
+            # time whatever the threads: one slot.
+            WorkerPostprocessOp.slots = max(1, post_pool.worker_count())
+            op = WorkerPostprocessOp(model=model, step=step)
         ops.append(op.for_dashboard(dashboard_url, dataset))
     steps = [op._step for op in ops[1:]]
     served_dtype = np.dtype(chain_output_dtype(steps, served.output_dtype))

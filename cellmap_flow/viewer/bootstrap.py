@@ -16,7 +16,7 @@ import worldarray as wa
 
 from cellmap_flow.utils.address import this_machine_ip
 from cellmap_flow.viewer import VIEWER_AXES
-from cellmap_flow.viewer.layers import raw_layer
+from cellmap_flow.viewer.layers import limit_downloads, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
         s.layers[raw_name] = raw_layer(dataset_path) if raw is None else raw
         for name, layer in (layers or {}).items():
             s.layers[name] = layer
+        limit_downloads(s)
     return viewer
 
 

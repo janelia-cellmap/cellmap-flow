@@ -14,6 +14,8 @@ they all place and shade it the same way:
   ends in labels and an image otherwise, open on the channel
   ``display_channel()`` gives, at ``channel_position()``.
 - ``raw_layer()``: the raw data, with the user's shader put back.
+- ``limit_downloads()``: the viewer asks for as many chunks at once as the
+  browser sends, so a new layer's requests do not wait behind a view's.
 - ``replace_layer()``: a layer drawn again in place of one of the same name,
   keeping what the user set on that one (``carried_layer_json()``).
 - ``deleted_layers()``: the layers gone from one viewer state to the next,
@@ -287,6 +289,37 @@ def _source_urls(source):
     if isinstance(source, dict) and isinstance(source.get("url"), str):
         return [source["url"]]
     return []
+
+
+# The requests a browser sends one server at once (HTTP/1.1); the rest it is
+# given wait in its line, in the order they were given.
+REQUESTS_PER_SERVER = 6
+
+
+def limit_downloads(state):
+    """Have the viewer of ``state`` ask for only as many chunks at once as
+    the browser sends: REQUESTS_PER_SERVER for each model server its layers
+    read (and as many with none).
+
+    Neuroglancer asks for 32 chunks at once by default, and a browser sends
+    six of them to a server and holds the rest in line. Where a chunk takes
+    seconds (an affinity model's watershed over a 128-voxel chunk), a view's
+    chunks then arrive in the order they were first asked for, not nearest
+    the centre first, and what is asked for next waits behind them all: the
+    layer an Apply had just drawn sent its first request 30 s to a minute
+    later, once the old layer's chunks were through, or once a zoom
+    cancelled them. Asking for no more than are sent, neuroglancer picks
+    the next chunk each time one arrives, and a new layer's requests go out
+    with the next. Called wherever a prediction layer is drawn."""
+    servers = set()
+    for layer in state.layers:
+        # A viewer's own layers; a stand-in's (a test's) may be anything.
+        to_json = getattr(layer, "to_json", None)
+        for url in _source_urls(to_json().get("source")) if to_json else ():
+            found = re.match(r"(?:\w+://)?(https?://[^/]+)/.*" + re.escape(ARGS_KEY), url)
+            if found:
+                servers.add(found.group(1))
+    state.concurrent_downloads = REQUESTS_PER_SERVER * max(1, len(servers))
 
 
 def carried_layer_json(old, new):
